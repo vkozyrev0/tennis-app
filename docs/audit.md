@@ -1,4 +1,4 @@
-# CorpOps Tennis — Audit & Findings Register
+# CourtOps Tennis — Audit & Findings Register
 
 The single register of everything that needs a decision or a fix. Audits the
 vision for **validity** (is it buildable / well-defined?), **internal
@@ -68,10 +68,11 @@ The doc uses both interchangeably. **Applied (default):** same role; **single TD
 now**, multi-user/staff shared access deferred (D8).
 
 ### 1.4 ✅ Product / repo name
-The source named no product; early docs invented "CortOps" and referenced a repo
-"adks-tennis" that didn't match the working dir (`tennis-app`). **Resolved:**
-unified to **CorpOps** across all docs; the ADK choice (D6) no longer rests on the
-old repo name.
+The source named no product; early drafts used "CortOps", then "CorpOps", and the
+repo "adks-tennis" didn't match the working dir (`tennis-app`). **Resolved:** the
+TD confirmed the product name is **CourtOps** — unified across all docs (corrected
+from the earlier "CorpOps" typo). The stack choice (D6) doesn't rest on the repo
+name.
 
 ---
 
@@ -280,7 +281,7 @@ human review.
 | D3 | Mileage distance source: manual / auto / both | Officials app | ✅ Google Maps geocoding, manual fallback (U2) |
 | D4 | Email ingestion: API mailbox / forwarding address / IMAP | Entire player side | ✅ Dedicated forwarding address (§3.3) |
 | D5 | LLM for parsing: cloud API vs local (minors' PII) | Player side + privacy | ✅ **No automated parsing now — human review.** Cloud-vs-local is moot until extraction is automated later (§5.1) |
-| D6 | Tech stack / which "ADK" (if any) | Everything | ✅ Recommended shape adopted (roadmap §Stack); confirm exact ADK at Phase 0 |
+| D6 | Tech stack | Everything | ✅ POC stack: **Postgres** (localhost, default admin creds), **Python API server**, **pure HTML/CSS** frontend; no agent (roadmap §Stack) |
 | D7 | USTA: manual only, no API | Doubles/late-entry scope | ✅ Manual only (§3.5) |
 | D8 | Single TD vs multi-user access | Auth model | ✅ Single TD now, multi later (§1.3) |
 

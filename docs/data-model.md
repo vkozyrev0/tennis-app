@@ -1,4 +1,4 @@
-# CorpOps Tennis — Data Model
+# CourtOps Tennis — Data Model
 
 Proposed entities derived from the vision, with the collisions from
 [audit.md](audit.md) already resolved (e.g., split avoidances, split hotels).

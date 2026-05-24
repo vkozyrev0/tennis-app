@@ -1,6 +1,6 @@
-# CorpOps Tennis — Planning Docs
+# CourtOps Tennis — Planning Docs
 
-Planning and audit for the CorpOps tennis project, derived from
+Planning and audit for the CourtOps tennis project, derived from
 `Tennis information for Claude.docx` (the TD's vision).
 
 ## What's here
@@ -37,9 +37,13 @@ open items**. Notable confirmed requirements:
   filed; the triage agent is a future enhancement (audit §5.1).
 - **Roster ingestion = spreadsheet (CSV/XLSX) upload** mapped to `TournamentEntry`
   (audit §3.8).
+- **POC stack (D6):** **Postgres** (localhost, default admin creds for the POC),
+  a **Python API server**, and a **pure HTML/CSS** frontend (roadmap §Stack).
 
 ## What's still open
 - **Nothing.** All decisions D1–D8 are made. Remaining work is execution.
+  (POC uses default DB creds — harden before any shared deployment; see roadmap
+  §Stack security note.)
 
 ## Other solid points
 - 🟢 The email→classify→extract→list spine is sound; for now it runs as **human
@@ -49,5 +53,6 @@ open items**. Notable confirmed requirements:
 See [audit.md §7](audit.md) for the full decision table (D1–D8).
 
 ## Recommended next step
-Pick the web stack, then execute Phase 0 + the CRUD slice of Phase 1 (officials
-admin tool + roster import) — the fastest path to something usable.
+Execute Phase 0 — scaffold the POC stack (Postgres + Python API + HTML/CSS) and
+the core schema — then the CRUD slice of Phase 1 (officials admin tool + roster
+import). The fastest path to something usable.

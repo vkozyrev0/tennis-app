@@ -1,4 +1,4 @@
-# CorpOps Tennis — Build Roadmap
+# CourtOps Tennis — Build Roadmap
 
 A phased plan to go from the vision to a working system. Ordered so that each
 phase delivers something usable on its own and de-risks the next. Cross-refs:
@@ -20,23 +20,29 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 
 ---
 
-## Stack decision (D6)
-Both halves are, for the **initial build**, a **conventional web app + relational
-DB** (e.g., Postgres/SQLite) — CRUD, calculations, reports, and human-reviewed
-email filing. There is **no agent in the initial scope** (D5/§5.1: email is
-human-reviewed, not parsed). Recommended shape:
+## Stack decision (D6) — POC stack confirmed
+The proof-of-concept (POC) is a small, conventional 3-tier app. **No agent/LLM in
+scope** (D5/§5.1: email is human-reviewed, not parsed).
 
-- **Part A (officials):** web app + DB — CRUD + calculations + reports.
+- **Database:** **PostgreSQL**, running on **localhost** with the **default admin
+  credentials** for the POC. *(POC convenience only — see the security note below.)*
+- **Frontend:** **pure HTML/CSS** (no JS framework). Plain pages that call the API
+  via `fetch`; keep it dependency-free for the POC.
+- **Backend / API:** a **Python server** exposing JSON endpoints the HTML pages
+  call (e.g., FastAPI or Flask — pick one at Phase 0), talking to Postgres.
+- **Part A (officials):** these pages + API — CRUD, calculations, reports.
 - **Part B (player ops):** the same app — forwarded email lands in a **review
   inbox**; the TD/staff file each message into the right list. **No automated
   parsing.**
 - **Future enhancement:** an **email-triage agent** (Claude Agent SDK or Google
   ADK) that auto-classifies/extracts into the same tables — added only if/when
   automated parsing is approved (revisits D5 cloud-vs-local then).
-- Shared persistence layer so both halves see one `Tournament`/`Player` model.
 
-> ⚠️ Confirm the web stack before Phase 1. The data model and roadmap are
-> stack-agnostic, so this doesn't block planning.
+> ⚠️ **Security (post-POC):** localhost Postgres on default admin credentials is
+> acceptable *only* for a local POC. Before any shared/hosted deployment, move to a
+> dedicated DB user with a strong secret (env-var/secret manager, not in code),
+> least-privilege grants, and TLS — this is required to honor the encryption /
+> non-public constraints for minors' and officials' data (audit §5.1/§5.3).
 
 ---
 
@@ -44,8 +50,9 @@ human-reviewed, not parsed). Recommended shape:
 - [ ] **All decisions D1–D8 are made** ([audit.md](audit.md) §7) — no open items.
       D5 resolved: **no automated parsing; email is human-reviewed** (the agent is
       a future enhancement).
-- [ ] Pick the web stack (D6 — conventional web app + DB, no agent in initial
-      scope); scaffold repo (app + DB + migrations + test harness).
+- [ ] Scaffold the POC stack (D6): **Postgres** on localhost (default admin creds
+      for now), a **Python API server** (FastAPI/Flask), and **pure HTML/CSS**
+      pages that call it. Set up DB migrations + a test harness.
 - [ ] Implement core schema: `Tournament` (with `registration_deadline`,
       `late_entry_deadline`, `play_start_date`/`play_end_date` — audit §2.5),
       `Site`, `Player`, `TournamentEntry` (TD roster), `Official`.
