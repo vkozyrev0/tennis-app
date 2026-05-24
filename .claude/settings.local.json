@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(extract-text \"Tennis information for Claude.docx\")",
+      "Read(//c/Users/vkozy/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/620010b9-6618-4abb-83f7-9760284b82a1/fbaf8bb7-af9f-4480-b039-213a30116b63/skills/docx/**)",
+      "Bash(ls bin *)"
+    ]
+  }
+}
