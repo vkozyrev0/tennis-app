@@ -1,0 +1,86 @@
+import psycopg
+from fastapi import APIRouter, Depends, HTTPException, Response
+
+from ..db import db_dep
+from ..models import RoomBlockCreate, RoomBlockOut
+
+router = APIRouter(prefix="/api/room-blocks", tags=["room-blocks"])
+
+_COLS = (
+    "id, hotel_id, tournament_id, confirmation_number, cancellation_info, "
+    "check_in, check_out, room_count"
+)
+
+_INSERT = f"""
+INSERT INTO room_block
+    (hotel_id, tournament_id, confirmation_number, cancellation_info,
+     check_in, check_out, room_count)
+VALUES
+    (%(hotel_id)s, %(tournament_id)s, %(confirmation_number)s,
+     %(cancellation_info)s, %(check_in)s, %(check_out)s, %(room_count)s)
+RETURNING {_COLS}
+"""
+
+_UPDATE = f"""
+UPDATE room_block SET
+    hotel_id = %(hotel_id)s, tournament_id = %(tournament_id)s,
+    confirmation_number = %(confirmation_number)s,
+    cancellation_info = %(cancellation_info)s, check_in = %(check_in)s,
+    check_out = %(check_out)s, room_count = %(room_count)s
+WHERE id = %(id)s
+RETURNING {_COLS}
+"""
+
+
+@router.get("", response_model=list[RoomBlockOut])
+def list_room_blocks(tournament_id: int | None = None, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        if tournament_id is None:
+            cur.execute(f"SELECT {_COLS} FROM room_block ORDER BY id")
+        else:
+            cur.execute(
+                f"SELECT {_COLS} FROM room_block WHERE tournament_id = %s ORDER BY id",
+                (tournament_id,),
+            )
+        return cur.fetchall()
+
+
+@router.post("", response_model=RoomBlockOut, status_code=201)
+def create_room_block(body: RoomBlockCreate, conn=Depends(db_dep)):
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_INSERT, body.model_dump())
+            return cur.fetchone()
+    except psycopg.errors.ForeignKeyViolation as e:
+        raise HTTPException(status_code=400, detail=_fk_detail(e))
+
+
+@router.put("/{block_id}", response_model=RoomBlockOut)
+def update_room_block(block_id: int, body: RoomBlockCreate, conn=Depends(db_dep)):
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_UPDATE, {**body.model_dump(), "id": block_id})
+            row = cur.fetchone()
+    except psycopg.errors.ForeignKeyViolation as e:
+        raise HTTPException(status_code=400, detail=_fk_detail(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="room block not found")
+    return row
+
+
+@router.delete("/{block_id}", status_code=204)
+def delete_room_block(block_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM room_block WHERE id = %s", (block_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="room block not found")
+    return Response(status_code=204)
+
+
+def _fk_detail(e: Exception) -> str:
+    msg = str(e)
+    if "hotel" in msg:
+        return "hotel_id does not exist"
+    if "tournament" in msg:
+        return "tournament_id does not exist"
+    return "invalid reference"

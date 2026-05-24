@@ -19,12 +19,20 @@ The central entity linking both halves of the system.
 | `play_start_date`, `play_end_date` | match-play window, 3–6 days |
 | `registration_deadline` | normal registration cutoff; withdrawals happen after this |
 | `late_entry_deadline` | **distinct** date for late entries (§2.5) |
-| `site_id` | FK → Site |
 
+> A tournament can be held at **more than one site**, so Site is a
+> **many-to-many** via `tournament_site` (not a single `site_id`).
+>
 > All three dates (`registration_deadline`, `late_entry_deadline`, and the
 > `play_start_date`/`play_end_date` match-play window) are supplied by the TD at
 > tournament setup. Registration and late-entry deadlines are **different dates**
 > (audit §2.5).
+
+### tournament_site  (Tournament ↔ Site, M2M)
+| Field | Notes |
+|-------|-------|
+| `tournament_id` | FK → Tournament (PK part) |
+| `site_id` | FK → Site (PK part) |
 
 ### Site
 | Field | Notes |
@@ -95,36 +103,44 @@ Official declares available dates per tournament.
 | `date` | one row per available day (or store a date range) |
 | `hotel_needed` | bool |
 
-### HotelRoomBlock
-Officials lodging inventory the TD manages (audit §1.2, §3.4).
+### Hotel  (property)  and  RoomBlock  (inventory)
+Hotels are **split** from room blocks (the property vs. the allocation at it).
+
+**Hotel** — the property:
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
-| `hotel_name`, `website` | |
+| `name`, `website` | |
 | `street`, `city`, `state`, `zip`, `phone` | |
+
+**RoomBlock** — an inventory allocation at a hotel (audit §1.2, §3.4):
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `hotel_id` | FK → Hotel |
+| `tournament_id` | FK → Tournament (nullable); scopes the block for the per-tournament report |
 | `confirmation_number`, `cancellation_info` | |
 | `check_in`, `check_out` | block window |
 | `room_count` | total rooms in the block |
 
-**Allocation rules (§3.4):** `rooms_remaining = room_count − count(active assignments
-on the block)`. Room-count is a **hard guard** — no booking past `room_count`. The
-**date check is a report alert, not a block**: if the official's
-`needed_check_in` / `needed_check_out` fall outside `[check_in, check_out]`, flag
-it on the roster report so the TD can adjust the reservation with the hotel and
-update the inventory.
+**Allocation rules (§3.4):** Room-count is a **hard guard** — no booking past
+`room_count`. The **date check is a report alert, not a block**: if an assignment's
+worked dates fall outside `[check_in, check_out]`, flag it (the assignment summary
+returns `hotel_date_mismatch`) so the TD can adjust the reservation.
 
-### Assignment
-TD confirms an official for a tournament + hotel. The **role and rate are per day**
-(see `AssignmentDay`), because an official can work different positions on
-different days (audit §3.2).
+### Assignment  (Tournament ↔ Official)
+TD assigns an official to a tournament, with a **venue site** (for mileage) and an
+optional **room block**. The **role and rate are per day** (see `AssignmentDay`).
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
-| `official_id`, `tournament_id` | FK |
-| `hotel_block_id` | FK → HotelRoomBlock (nullable) |
-| `needed_check_in`, `needed_check_out` | what the official actually needs; compared to the block window for the mismatch alert (§3.4) |
-| `computed_pay`, `computed_mileage` | snapshot of calc (audit §5.3) |
-| `rule_version` | mileage/pay rule version used, for reproducibility (§5.3) |
+| `tournament_id`, `official_id` | FK; UNIQUE together (one assignment per official per tournament) |
+| `site_id` | FK → Site (nullable); the venue the official travels to → mileage via `OfficialSiteDistance` |
+| `room_block_id` | FK → RoomBlock (nullable) |
+
+> Pay, mileage, and the `hotel_date_mismatch` flag are **computed** in the
+> assignment summary endpoint (not stored), from `AssignmentDay.rate_applied`, the
+> official↔site distance, and the room-block window.
 
 ### AssignmentDay
 One row per assigned day; the role worked that day picks the rate (audit §3.2).
@@ -132,9 +148,9 @@ One row per assigned day; the role worked that day picks the rate (audit §3.2).
 |-------|-------|
 | `id` | PK |
 | `assignment_id` | FK → Assignment |
-| `date` | a single day within the tournament's match-play window |
-| `working_as` | certification/position worked **that day** (`roving` \| `chair` \| `referee`) |
-| `rate_applied` | per-day rate for that role, snapshotted at confirm time (§5.3) |
+| `work_date` | a single worked day; UNIQUE per `(assignment_id, work_date)` |
+| `working_as` | position worked **that day** (`roving` \| `chair` \| `referee`) |
+| `rate_applied` | per-day rate for that role, snapshotted when the day is added (§5.3) |
 
 **Derived — Pay** = `Σ over AssignmentDay of rate_applied`
 (i.e. each day priced at the rate for the role worked that day — e.g. Friday

@@ -46,43 +46,55 @@ scope** (D5/§5.1: email is human-reviewed, not parsed).
 
 ---
 
-## Phase 0 — Foundations  *(prereq for everything)*
-- [ ] **All decisions D1–D8 are made** ([audit.md](audit.md) §7) — no open items.
+## Phase 0 — Foundations  *(prereq for everything)*  ✅ DONE
+- [x] **All decisions D1–D8 are made** ([audit.md](audit.md) §7) — no open items.
       D5 resolved: **no automated parsing; email is human-reviewed** (the agent is
       a future enhancement).
-- [ ] Scaffold the POC stack (D6): **Postgres** on localhost (default admin creds
-      for now), a **Python API server** (FastAPI/Flask), and **pure HTML/CSS**
-      pages that call it. Set up DB migrations + a test harness.
-- [ ] Implement core schema: `Tournament` (with `registration_deadline`,
+- [x] Scaffold the POC stack (D6): **Postgres** on localhost (default admin creds
+      for now), a **Python API server** (FastAPI + uvicorn), and **pure HTML/CSS**
+      pages that call it. DB migration runner + pytest harness in place (`backend/`).
+- [x] Implement core schema: `Tournament` (with `registration_deadline`,
       `late_entry_deadline`, `play_start_date`/`play_end_date` — audit §2.5),
-      `Site`, `Player`, `TournamentEntry` (TD roster), `Official`.
-- [ ] Seed/fixtures + a smoke test.
+      `Site`, `Player`, `TournamentEntry` (TD roster), `Official`
+      (`backend/migrations/0001_core_schema.sql`).
+- [x] Seed/fixtures + a smoke test (`backend/seed.py`, `backend/tests/test_smoke.py`).
 
 **Done when:** schema migrates cleanly and a tournament + site can be created.
+**✅ Verified:** `migrate.py` creates the `courtops` DB and applies the schema;
+4 smoke tests pass; the server serves the API + HTML page and creates sites/
+tournaments end-to-end.
 
 ---
 
-## Phase 1 — Officials app, administrator side  *(highest, clearest value)*
-- [ ] TD CRUD: tournaments (name, type, the three dates above + match-play
-      window, site), sites.
+## Phase 1 — Officials app, administrator side  *(highest, clearest value)*  🚧 IN PROGRESS
+- [x] TD CRUD: tournaments (name, type, the three dates above + match-play
+      window, site), sites. *(full CRUD + filters, master-detail UI)*
 - [ ] **Per-tournament roster import** (`TournamentEntry`): TD supplies players by
       USTA ID with selection status, t-shirt size, dietary preference (audit §4.1).
       Default ingestion = **CSV/XLSX upload** mapped to `TournamentEntry`, plus
       manual add/edit for late entries; confirm the USTA export format (audit §3.8).
       Foundation for the alternate list, t-shirt history, and Part B lists.
-- [ ] `CertificationRate` management (**per-day rate per certification** — D2).
-- [ ] `HotelRoomBlock` inventory with `room_count`.
-- [ ] Official records (created by TD initially; self-service in Phase 2).
-- [ ] **Assignment** flow: confirm official for a tournament + hotel, with a
-      **per-day role** (`AssignmentDay`) so the position can change day-to-day
-      (audit §3.2). Room-count is a hard guard; **hotel date mismatches surface as
-      a report alert**, not a block (audit §3.4).
-- [ ] **Pay & mileage calc**: pay = Σ per-day rate for the role worked each day
-      (audit §3.2); mileage = `clamp((miles−50)×0.65, 0, 100)` where `miles` =
-      round-trip total and the $100 cap is a **hard ceiling** (D1/§3.1). Manual
-      entry first; **Google Maps
-      geocoding is the intended primary** with manual as fallback — added in Phase 2 (D3/U2).
-      **Block pay computation on a missing address / unverified placeholder distance (audit §3.7 S4).**
+- [x] `CertificationRate` management (**per-day rate per certification** — D2).
+      *(migration 0002, `/api/rates` CRUD, Rates tab, seeded roving/chair/referee)*
+- [x] `HotelRoomBlock` inventory with `room_count`. *(migration 0002,
+      `/api/hotels` CRUD, Hotels tab; block scoped to a tournament via
+      `tournament_id`)*
+- [x] Official records (created by TD initially; self-service in Phase 2).
+      *(Officials tab, full CRUD)*
+- [x] **Tournament hub + mappings**: tournament can use **>1 site**
+      (`tournament_site` M2M); per-tournament **roster** (`tournament_entry`);
+      hotels **split** into `hotel` + `room_block`. Managed in a tournament-centric
+      detail view. *(migration 0003; nested APIs; hub UI)*
+- [x] **Assignment** flow: assign official to a tournament with a venue **site**
+      and optional **room block**, with a **per-day role** (`AssignmentDay`) so the
+      position can change day-to-day (audit §3.2). Hotel date mismatches surface as
+      a `hotel_date_mismatch` flag, not a block (audit §3.4).
+- [x] **Pay & mileage calc**: pay = Σ per-day rate for the role worked each day
+      (audit §3.2); mileage = `clamp((2·one_way−50)×0.65, 0, 100)` with the $100 cap
+      a **hard ceiling** (D1/§3.1); mileage is null/blocked when no
+      `OfficialSiteDistance` is on file (`missing_distance`, audit §3.7 S4).
+      *(computed in the assignment summary; verified pay 350 + mileage 97.5 = 447.5)*
+      Google Maps geocoding remains the Phase 2 auto-source (D3/U2).
 - [ ] **Seed/backfill the `OfficialSiteDistance` matrix** from the existing
       `Officials Mileage Workbook.xlsx` where trustworthy, and surface officials
       missing a distance. Sample reality: 18/47 had no distance, and a `182`
