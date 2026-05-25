@@ -7,6 +7,17 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — summaries, T-shirts & tournament Sites** (phase 4) — the
+  last hand-built tables move to a new read-only `makeReadGrid` helper (sortable +
+  native ⬇ CSV, registered for redraw-on-tab-show): the **T-shirts** Setup list
+  (keeps its order-summary badges + filter, now via `setFilter`), the three
+  **Player-hotels** aggregates (**Hotel summary**, **Lodging-plan summary**, **CVB
+  totals** — right-aligned counts), and the tournament **Sites** membership grid
+  (the Add / ✓ In toggle lives in an action column; members keep the row highlight
+  via a `rowFormatter`). With that, **every list/summary is a Tabulator grid except
+  the Inbox** (interactive per-row File/Suggest/classify controls) and the print
+  **report**. Dead CSV-scrape plumbing (`EXPORTABLE` down to just the Inbox,
+  `templateTable`/`TEMPLATE_HEADERS`) removed.
 - **✅ In-grid inline editing** (phase 3) — Tabulator cells now edit in place
   (**double-click** to edit; single-click still selects the row / drives Prev-Next),
   committing straight to the API. `wireEntity` columns opt in via `edit: { editor,

@@ -657,24 +657,31 @@ async function loadTSites() {
   tSitesSelected = new Set((await api(`/tournaments/${active.id}/sites`)).map((s) => s.id));
   renderTSites();
 }
-function renderTSites() {
-  const tbody = document.querySelector("#t-sites-table tbody");
+// Membership grid: the "Add / ✓ In" toggle lives in an action column; members
+// get the row-selected highlight via a rowFormatter (re-runs on every redraw).
+const tSitesGrid = makeReadGrid("t-sites-table", [
+  { title: "", field: "_toggle", headerSort: false, width: 90, cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const s = cell.getData(); const inSet = tSitesSelected.has(s.id);
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn-link" + (inSet ? "" : " add"); b.textContent = inSet ? "✓ In" : "Add";
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); toggleSite(s.id); });
+      return b;
+    } },
+  { title: "Code", field: "code" },
+  { title: "Name", field: "name" },
+  { title: "City", field: "city" },
+], null, "No sites match.", {
+  index: "id",
+  rowFormatter: (row) => row.getElement().classList.toggle("row-selected", tSitesSelected.has(row.getData().id)),
+});
+function tSitesMatches(s) {
   const q = document.getElementById("t-sites-filter").value.trim().toLowerCase();
-  const rows = Object.values(sitesById).filter((s) => !q || siteLabel(s).toLowerCase().includes(q) || (s.city || "").toLowerCase().includes(q));
-  tbody.innerHTML = "";
-  for (const s of rows) {
-    const inSet = tSitesSelected.has(s.id);
-    const tr = document.createElement("tr");
-    if (inSet) tr.className = "selected";
-    tr.innerHTML = `<td class="toggle"></td><td>${esc(s.code)}</td><td>${esc(s.name)}</td><td>${esc(s.city)}</td>`;
-    const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "btn-link" + (inSet ? "" : " add");
-    btn.textContent = inSet ? "✓ In" : "Add";
-    btn.addEventListener("click", () => toggleSite(s.id));
-    tr.querySelector(".toggle").appendChild(btn);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="4">No matches</td></tr>';
+  return !q || siteLabel(s).toLowerCase().includes(q) || (s.city || "").toLowerCase().includes(q);
+}
+function renderTSites() {
+  tSitesGrid.setData(Object.values(sitesById));
+  tSitesGrid.setFilter(tSitesMatches);
 }
 async function toggleSite(id) {
   if (tSitesSelected.has(id)) tSitesSelected.delete(id); else tSitesSelected.add(id);
@@ -684,7 +691,7 @@ async function toggleSite(id) {
     renderTSites();
   } catch (e) { setMsg("t-sites-msg", e.message, false); loadTSites(); }
 }
-document.getElementById("t-sites-filter").addEventListener("input", renderTSites);
+document.getElementById("t-sites-filter").addEventListener("input", () => tSitesGrid.setFilter(tSitesMatches));
 
 // --- Roster (master/detail, like the Setup entities) ---
 const rosterForm = document.getElementById("roster-form");
@@ -1361,6 +1368,40 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete) {
   if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
 }
+
+// Read-only Tabulator list (summaries / reference tables): sortable + optional
+// CSV, no row actions. Replaces the <table id> in place and registers for the
+// redraw-on-tab-show pass. Returns { grid, setData, setFilter }.
+function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
+  const tableEl = document.getElementById(tableId);
+  const panelId = tableEl.closest(".panel")?.id;
+  const mount = document.createElement("div"); mount.className = "grid-mount";
+  tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
+  if (exportName) {
+    const csv = document.createElement("button");
+    csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
+    csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
+    mount.parentElement.insertBefore(csv, mount);
+  }
+  let built = false, pending = null, pendingFilter = null;
+  const grid = new Tabulator(mount, {
+    layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
+    columnDefaults: { headerSortTristate: true, resizable: false }, columns,
+    ...(opts.index ? { index: opts.index } : {}),
+    ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
+  });
+  grid.on("tableBuilt", () => {
+    built = true;
+    if (pending) { grid.setData(pending); pending = null; }
+    if (pendingFilter) { grid.setFilter(pendingFilter); pendingFilter = null; }
+  });
+  if (panelId) (GRIDS[panelId] ||= []).push(grid);
+  return {
+    grid,
+    setData: (rows) => { if (built) grid.setData(rows); else pending = rows; },
+    setFilter: (fn) => { if (built) grid.setFilter(fn); else pendingFilter = fn; },
+  };
+}
 const lateGrid = makeListGrid("late-table", [
   { title: "Date", field: "request_date",
     formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn">⚠ past deadline</span>' : ""); } },
@@ -1493,36 +1534,33 @@ const divflexList = wirePlayerList({
   ],
 });
 
+const cvbGrid = makeReadGrid("cvb-table", [
+  { title: "Hotel", field: "hotel_name" },
+  { title: "Stays", field: "stays", hozAlign: "right", width: 110 },
+], "cvb-hotel-totals", "No player hotel data yet.");
 async function loadCvb() {
-  const tbody = document.querySelector("#cvb-table tbody");
-  try {
-    const rows = await api("/hotel-analytics");
-    tbody.innerHTML = rows.length
-      ? rows.map((r) => `<tr><td>${esc(r.hotel_name)}</td><td>${r.stays}</td></tr>`).join("")
-      : '<tr><td class="empty" colspan="2">No player hotel data yet.</td></tr>';
-  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
+  try { cvbGrid.setData(await api("/hotel-analytics")); }
+  catch (e) { cvbGrid.setData([]); setMsg("photel-msg", e.message, false); }
 }
 // Per-tournament hotel summary: players per hotel (selected only, alphabetical).
+const hotelSummaryGrid = makeReadGrid("hotel-summary-table", [
+  { title: "Hotel", field: "hotel_name" },
+  { title: "Players", field: "players", hozAlign: "right", width: 110 },
+], "hotel-summary", "No hotels entered for selected players yet.");
 async function loadHotelSummary() {
   if (!active) return;
-  const tbody = document.querySelector("#hotel-summary-table tbody");
-  try {
-    const rows = await api(`/tournaments/${active.id}/hotel-summary`);
-    tbody.innerHTML = rows.length
-      ? rows.map((r) => `<tr><td>${esc(r.hotel_name)}</td><td>${r.players}</td></tr>`).join("")
-      : '<tr><td class="empty" colspan="2">No hotels entered for selected players yet.</td></tr>';
-  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
+  try { hotelSummaryGrid.setData(await api(`/tournaments/${active.id}/hotel-summary`)); }
+  catch (e) { hotelSummaryGrid.setData([]); setMsg("photel-msg", e.message, false); }
 }
 // Per-tournament lodging-plan summary: players per plan (Hotel/Commuter/…).
+const lodgingSummaryGrid = makeReadGrid("lodging-summary-table", [
+  { title: "Lodging plan", field: "lodging_plan" },
+  { title: "Players", field: "players", hozAlign: "right", width: 110 },
+], "lodging-summary", "No lodging plans entered for selected players yet.");
 async function loadLodgingSummary() {
   if (!active) return;
-  const tbody = document.querySelector("#lodging-summary-table tbody");
-  try {
-    const rows = await api(`/tournaments/${active.id}/lodging-summary`);
-    tbody.innerHTML = rows.length
-      ? rows.map((r) => `<tr><td>${esc(r.lodging_plan)}</td><td>${r.players}</td></tr>`).join("")
-      : '<tr><td class="empty" colspan="2">No lodging plans entered for selected players yet.</td></tr>';
-  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
+  try { lodgingSummaryGrid.setData(await api(`/tournaments/${active.id}/lodging-summary`)); }
+  catch (e) { lodgingSummaryGrid.setData([]); setMsg("photel-msg", e.message, false); }
 }
 const photelList = wirePlayerList({
   formId: "photel-form", msgId: "photel-msg", tableId: "photel-table",
@@ -1586,18 +1624,24 @@ async function tshirtOrderExport() {
   if (tshirtOrderRows.length > 1) _csvDownload(tshirtOrderRows, "tshirt-order");
   else toast("No t-shirt sizes recorded yet", false);
 }
+const tshirtGrid = makeReadGrid("tshirt-table", [
+  { title: "Player", field: "last_name", formatter: _playerCell },
+  { title: "USTA #", field: "usta_number" },
+  { title: "Division", field: "age_division" },
+  { title: "Tournament", field: "tournament_name" },
+  { title: "Size", field: "t_shirt_size" },
+], "tshirts", "No t-shirt sizes recorded yet.");
+function tshirtMatches(data) {
+  const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
+  return !q || JSON.stringify(data).toLowerCase().includes(q);
+}
 function renderTshirts() {
   renderTshirtSummary();
-  const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
-  const rows = tshirtRows.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q));
-  const tbody = document.querySelector("#tshirt-table tbody");
-  tbody.innerHTML = rows.length
-    ? rows.map((r) => `<tr><td>${esc([r.last_name, r.first_name].filter(Boolean).join(", "))}</td>` +
-        `<td>${esc(r.usta_number)}</td><td>${esc(r.age_division)}</td><td>${esc(r.tournament_name)}</td><td>${esc(r.t_shirt_size)}</td></tr>`).join("")
-    : '<tr><td class="empty" colspan="5">No t-shirt sizes recorded yet.</td></tr>';
+  tshirtGrid.setData(tshirtRows);
+  tshirtGrid.setFilter(tshirtMatches);
 }
 async function loadTshirts() { tshirtRows = await api("/tshirts"); renderTshirts(); }
-document.getElementById("tshirt-filter").addEventListener("input", renderTshirts);
+document.getElementById("tshirt-filter").addEventListener("input", () => tshirtGrid.setFilter(tshirtMatches));
 
 // --- Pairing avoidances (juniors; group of 2+ players) ---
 const pairingForm = document.getElementById("pairing-form");
@@ -1962,25 +2006,11 @@ function exportTable(table, name) {
     .map((tr) => [...tr.children].filter((_, i) => keep[i]).map((td) => td.textContent.replace(/\s+/g, " ").trim()));
   _csvDownload([headers, ...rows], name);
 }
-// An empty CSV with just the header row, for the user to fill in and (where
-// supported) import. Roster uses the importer's canonical field names so the
-// downloaded template can be re-imported as-is.
-const TEMPLATE_HEADERS = {
-  "roster-table": ["usta_number", "first_name", "last_name", "age_division",
-    "events", "selection_status", "t_shirt_size", "dietary_preference"],
-};
-function templateTable(table, name) {
-  const headers = TEMPLATE_HEADERS[table.id] || _visibleHeaders(table).headers;
-  _csvDownload([headers], name + "-template");
-}
-// --- Per-page CSV export: one "⬇ CSV" above each list/summary table ---
+// --- Per-page CSV export for the remaining hand-built tables ---
+// Every list/summary is now a Tabulator grid with its own native ⬇ CSV; only the
+// Inbox (interactive per-row controls) stays a plain table and scrapes for CSV.
 const EXPORTABLE = {
-  "late-table": "late-entries", "withdrawal-table": "withdrawals",
-  "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
-  "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
-  "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
-  "cvb-table": "cvb-hotel-totals", "hotel-summary-table": "hotel-summary",
-  "lodging-summary-table": "lodging-summary", "tshirt-table": "tshirts", "inbox-table": "inbox",
+  "inbox-table": "inbox",
 };
 for (const [id, name] of Object.entries(EXPORTABLE)) {
   const table = document.getElementById(id);
