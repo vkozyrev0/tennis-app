@@ -7,14 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
-- **✅ Centralized Import / Export** — a new top-level **Import / Export** menu group
-  with two pages. **Import** holds the roster CSV/XLSX upload + template (moved off
-  the Roster tab). **Export** is the single place for every CSV download, grouped:
-  *This tournament* (roster, sign-in sheet, officials report, t-shirt order, hotel/
-  lodging summaries, all Part B lists, inbox), *All tournaments* (t-shirts, CVB), and
-  *Blank templates*. The per-page ⬇ CSV / Template / Sign-in / Order buttons were
-  removed from every individual page (Print stays on the report). Per-tournament
-  exports read the already-loaded tables; cross-tournament ones refresh on demand.
+- **✅ Central Export page** — a single **Data → Export** page is the one place for
+  every CSV download. **Import stays on its own page** (roster upload is back on the
+  Roster tab). The Export page lists **one section per export** (17 of them), each
+  with a **title**, an **explanation**, and two buttons: **⬇ Export CSV** and **⬇
+  Download template** (blank, headers-only). The per-page ⬇ CSV / Template / Sign-in /
+  Order buttons were removed from every individual page (Print stays on the report).
+  Per-tournament exports read the already-loaded tables; cross-tournament ones (t-shirts,
+  CVB) refresh on demand.
 - **✅ Roster → master/detail** — the Tournament → Roster tab now uses the same
   master/detail layout as the Setup entities: a wide filterable list (own scrollbar)
   on the left, a sticky edit form with **Prev/Next** record nav on the right, row-

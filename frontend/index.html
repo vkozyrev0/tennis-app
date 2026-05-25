@@ -45,8 +45,7 @@
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
     </div>
     <div class="menu-group" data-group="data">
-      <span class="menu-label">Import / Export</span>
-      <button class="tab" data-target="panel-import">Import</button>
+      <span class="menu-label">Data</span>
       <button class="tab" data-target="panel-export">Export</button>
     </div>
     <div class="menu-group tgroup" data-group="tournament">
@@ -265,27 +264,13 @@
       </div>
     </section>
 
-    <!-- ============ IMPORT / EXPORT ============ -->
-    <section class="panel" id="panel-import">
-      <div class="card">
-        <h3>Import</h3>
-        <p class="muted">Bulk-load data from a spreadsheet. Roster import targets the
-          <strong>active tournament</strong> (choose one in the bar above).</p>
-        <div class="import-row">
-          <label>Roster (CSV/XLSX) <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
-          <button type="button" id="roster-import">Import roster</button>
-          <button type="button" id="roster-template" class="ghost" title="Download an empty CSV with the importer's columns">⬇ Template</button>
-          <span class="msg" id="roster-import-msg"></span>
-        </div>
-      </div>
-    </section>
-
+    <!-- ============ EXPORT ============ -->
     <section class="panel" id="panel-export">
       <div class="card">
         <h3>Export</h3>
-        <p class="muted">Download any list as CSV (opens in Excel). Per-tournament
-          exports use the <strong>active tournament</strong>; "All tournaments" exports
-          are cumulative. Blank <em>templates</em> are for filling in / re-importing.</p>
+        <p class="muted">Each export below downloads a CSV (opens in Excel). Per-tournament
+          exports use the <strong>active tournament</strong> chosen in the bar above.
+          <strong>Download template</strong> gives a blank, headers-only CSV to fill in.</p>
         <div id="export-groups"></div>
       </div>
     </section>
@@ -308,7 +293,12 @@
     <section class="panel tpanel" id="panel-t-roster">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
-        <h3>Roster — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(import &amp; export on the Import / Export menu)</span></h3>
+        <h3>Roster — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(exports on the Data → Export page)</span></h3>
+        <div class="import-row">
+          <label>Import roster (CSV/XLSX) <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
+          <button type="button" id="roster-import">Import</button>
+          <span class="msg" id="roster-import-msg"></span>
+        </div>
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">

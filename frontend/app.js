@@ -710,10 +710,11 @@ onSubmit(rosterForm, async () => {
 rosterForm.querySelector(".cancel").addEventListener("click", rosterShowNew);
 document.getElementById("roster-new").addEventListener("click", rosterShowNew);
 document.getElementById("roster-filter").addEventListener("input", renderRoster);
-document.getElementById("roster-template").addEventListener("click", () =>
-  _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template"));
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
 // joining the loaded roster with this tournament's player-hotel rows.
+const SIGNIN_HEADERS = ["Status", "Events", "Player", "USTA #", "City", "State",
+  "Division", "T-shirt", "Hotel", "Lodging plan", "Dietary"];
+function rosterSignInTemplate() { _csvDownload([SIGNIN_HEADERS], "sign-in-sheet-template"); }
 async function rosterSignInExport() {
   if (!active) { toast("Select a tournament first", false); return; }
   let hotelByPlayer = {};
@@ -722,7 +723,7 @@ async function rosterSignInExport() {
       hotelByPlayer[r.player_id] = { hotel: r.hotel_name || "", lodging: r.lodging_plan || "" };
     }
   } catch (e) { /* hotels optional — sheet still useful without them */ }
-  const rows = [["Status", "Events", "Player", "USTA #", "City", "State", "Division", "T-shirt", "Hotel", "Lodging plan", "Dietary"]];
+  const rows = [SIGNIN_HEADERS.slice()];
   for (const e of [...rosterRows].sort((a, b) =>
     (a.last_name || "").localeCompare(b.last_name || "") || (a.first_name || "").localeCompare(b.first_name || ""))) {
     const h = hotelByPlayer[e.player_id] || {};
@@ -1737,52 +1738,58 @@ function _exTable(id, name) {
   exportTable(document.getElementById(id), name);
 }
 function _tmplTable(id, name) { templateTable(document.getElementById(id), name); }
+// One section per export: title + explanation + Export CSV + Download template.
+const _tEx = (id, name) => () => _exTable(id, name);
+const _tTmpl = (id, name) => () => _tmplTable(id, name);
 const EXPORTS = [
-  ["This tournament (uses the active tournament)", [
-    ["Roster", () => _exTable("roster-table", "roster")],
-    ["Sign-in sheet", rosterSignInExport],
-    ["Officials report (staffing plan)", reportCsvExport],
-    ["T-shirt order (qty by size)", tshirtOrderExport],
-    ["Hotel summary", () => _exTable("hotel-summary-table", "hotel-summary")],
-    ["Lodging summary", () => _exTable("lodging-summary-table", "lodging-summary")],
-    ["Late entries", () => _exTable("late-table", "late-entries")],
-    ["Withdrawals", () => _exTable("withdrawal-table", "withdrawals")],
-    ["Scheduling avoidances", () => _exTable("sched-table", "scheduling-avoidances")],
-    ["Division flexibility", () => _exTable("divflex-table", "division-flexibility")],
-    ["Pairing avoidances", () => _exTable("pairing-table", "pairing-avoidances")],
-    ["Doubles requests", () => _exTable("doubles-req-table", "doubles-requests")],
-    ["Doubles pairs", () => _exTable("doubles-pair-table", "doubles-pairs")],
-    ["Player hotels", () => _exTable("photel-table", "player-hotels")],
-    ["Review inbox", () => _exTable("inbox-table", "inbox")],
-  ]],
-  ["All tournaments (cumulative)", [
-    ["T-shirts (all)", async () => { await loadTshirts(); exportTable(document.getElementById("tshirt-table"), "tshirts"); }],
-    ["CVB hotel totals", async () => { await loadCvb(); exportTable(document.getElementById("cvb-table"), "cvb-hotel-totals"); }],
-  ]],
-  ["Blank templates (fill in / re-import)", [
-    ["Roster", () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template")],
-    ["Officials report", reportTemplateExport],
-    ["Late entries", () => _tmplTable("late-table", "late-entries")],
-    ["Withdrawals", () => _tmplTable("withdrawal-table", "withdrawals")],
-    ["Scheduling avoidances", () => _tmplTable("sched-table", "scheduling-avoidances")],
-    ["Division flexibility", () => _tmplTable("divflex-table", "division-flexibility")],
-    ["Pairing avoidances", () => _tmplTable("pairing-table", "pairing-avoidances")],
-    ["Player hotels", () => _tmplTable("photel-table", "player-hotels")],
-  ]],
+  { title: "Roster", desc: "All players entered for the active tournament — division, status, t-shirt and dietary. The template uses the importer's column names, so a filled-in copy can be re-imported on the Roster tab.",
+    ex: _tEx("roster-table", "roster"), tmpl: () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template") },
+  { title: "Sign-in sheet", desc: "Check-in roster in the TD's format — status, events, city/state, t-shirt, hotel and lodging for every player, sorted by last name.",
+    ex: rosterSignInExport, tmpl: rosterSignInTemplate },
+  { title: "Officials report (staffing plan)", desc: "Assigned officials with per-day roles, site/hotel, pay, mileage and flags for the active tournament (the printable Staffing Plan).",
+    ex: reportCsvExport, tmpl: reportTemplateExport },
+  { title: "T-shirt order", desc: "Quantity to order per size for selected players (no withdrawals/alternates), smallest size to largest — hand this to the vendor.",
+    ex: tshirtOrderExport, tmpl: () => _csvDownload([["Size", "Quantity"]], "tshirt-order-template") },
+  { title: "Hotel summary", desc: "Number of selected players per hotel for the active tournament, alphabetical.",
+    ex: _tEx("hotel-summary-table", "hotel-summary"), tmpl: _tTmpl("hotel-summary-table", "hotel-summary") },
+  { title: "Lodging summary", desc: "Number of selected players per lodging plan (Hotel / Commuter / …) for the active tournament.",
+    ex: _tEx("lodging-summary-table", "lodging-summary"), tmpl: _tTmpl("lodging-summary-table", "lodging-summary") },
+  { title: "Late entries", desc: "Players who entered after the deadline for the active tournament, with request date/time.",
+    ex: _tEx("late-table", "late-entries"), tmpl: _tTmpl("late-table", "late-entries") },
+  { title: "Withdrawals", desc: "Players withdrawn from the active tournament, with reason and alternate flag.",
+    ex: _tEx("withdrawal-table", "withdrawals"), tmpl: _tTmpl("withdrawal-table", "withdrawals") },
+  { title: "Scheduling avoidances", desc: "Day/time conflicts a player asked to avoid (adult events).",
+    ex: _tEx("sched-table", "scheduling-avoidances"), tmpl: _tTmpl("sched-table", "scheduling-avoidances") },
+  { title: "Division flexibility", desc: "Players willing to play other divisions if theirs is undersubscribed.",
+    ex: _tEx("divflex-table", "division-flexibility"), tmpl: _tTmpl("divflex-table", "division-flexibility") },
+  { title: "Pairing avoidances", desc: "Groups of juniors (same club / siblings) who should not meet in the first round.",
+    ex: _tEx("pairing-table", "pairing-avoidances"), tmpl: _tTmpl("pairing-table", "pairing-avoidances") },
+  { title: "Doubles requests", desc: "Pending doubles requests + the random-pairing queue for the active tournament.",
+    ex: _tEx("doubles-req-table", "doubles-requests"), tmpl: _tTmpl("doubles-req-table", "doubles-requests") },
+  { title: "Doubles pairs", desc: "Verified doubles partnerships (mutual or random) for the active tournament.",
+    ex: _tEx("doubles-pair-table", "doubles-pairs"), tmpl: _tTmpl("doubles-pair-table", "doubles-pairs") },
+  { title: "Player hotels", desc: "Each player's reported hotel and lodging plan for the active tournament.",
+    ex: _tEx("photel-table", "player-hotels"), tmpl: _tTmpl("photel-table", "player-hotels") },
+  { title: "Review inbox", desc: "Forwarded player/parent emails in the review inbox with their classification and status.",
+    ex: _tEx("inbox-table", "inbox"), tmpl: _tTmpl("inbox-table", "inbox") },
+  { title: "T-shirts — all tournaments", desc: "Cumulative t-shirt list across every tournament (latest size per player). Not tied to the active tournament.",
+    ex: async () => { await loadTshirts(); exportTable(document.getElementById("tshirt-table"), "tshirts"); },
+    tmpl: _tTmpl("tshirt-table", "tshirts") },
+  { title: "CVB hotel totals — all tournaments", desc: "Players per hotel across all tournaments, for CVB / convention-bureau negotiations.",
+    ex: async () => { await loadCvb(); exportTable(document.getElementById("cvb-table"), "cvb-hotel-totals"); },
+    tmpl: _tTmpl("cvb-table", "cvb-hotel-totals") },
 ];
 (function buildExportPage() {
   const root = document.getElementById("export-groups");
   if (!root) return;
-  for (const [group, items] of EXPORTS) {
-    const h = document.createElement("h4"); h.textContent = group; root.appendChild(h);
+  for (const s of EXPORTS) {
+    const sec = document.createElement("section"); sec.className = "export-section";
+    const h = document.createElement("h4"); h.textContent = s.title; sec.appendChild(h);
+    const p = document.createElement("p"); p.className = "muted"; p.textContent = s.desc; sec.appendChild(p);
     const grid = document.createElement("div"); grid.className = "export-grid";
-    for (const [label, fn] of items) {
-      const b = document.createElement("button");
-      b.type = "button"; b.className = "export-btn"; b.textContent = "⬇ " + label;
-      b.addEventListener("click", fn);
-      grid.appendChild(b);
-    }
-    root.appendChild(grid);
+    const ex = document.createElement("button"); ex.type = "button"; ex.className = "export-btn"; ex.textContent = "⬇ Export CSV"; ex.addEventListener("click", s.ex);
+    const tm = document.createElement("button"); tm.type = "button"; tm.className = "export-btn"; tm.textContent = "⬇ Download template"; tm.addEventListener("click", s.tmpl);
+    grid.append(ex, tm); sec.appendChild(grid); root.appendChild(sec);
   }
 })();
 
