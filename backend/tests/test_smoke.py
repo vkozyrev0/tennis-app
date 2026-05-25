@@ -223,6 +223,15 @@ def test_roster_import_normalizes_tshirt_sizes():
     assert roster[ids[4]] == "Adult Small"
 
 
+def test_player_city_state():
+    p = _ok(client.post("/api/players", json={
+        "usta_number": "CS" + uuid.uuid4().hex[:6], "city": "Atlanta", "state": "GA"}))
+    assert p["city"] == "Atlanta" and p["state"] == "GA"
+    upd = client.put(f"/api/players/{p['id']}", json={
+        "usta_number": p["usta_number"], "city": "Macon", "state": "GA"}).json()
+    assert upd["city"] == "Macon"
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()

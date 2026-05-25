@@ -7,10 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Player City/State** — migration `0019` adds `city`/`state` to `player`
+  (not name-history-tracked); the Players form has City/State fields and the sign-in
+  sheet now includes them, fully matching the workbook's columns.
 - **✅ Sign-in sheet export** — the Roster tab has a **⬇ Sign-in sheet (CSV)** button
-  that emits the workbook's sign-in format (Status / Events / Player / USTA # /
-  Division / T-shirt / Hotel / Lodging plan / Dietary), joining the roster with this
-  tournament's player-hotel rows, sorted by last name, including all statuses.
+  that emits the workbook's sign-in format (Status / Events / Player / USTA # / City /
+  State / Division / T-shirt / Hotel / Lodging plan / Dietary), joining the roster
+  with this tournament's player-hotel rows, sorted by last name, including all statuses.
 - **🔒 PII purged from git history** — the two sample workbooks (Officials Mileage +
   Full Tournament Data, which held officials'/minors' data) were committed earlier
   and pushed. History was rewritten (`git filter-branch`) to remove them from all

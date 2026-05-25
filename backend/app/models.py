@@ -70,6 +70,8 @@ class PlayerCreate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     birthdate: Optional[date] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
 
 
 class PlayerOut(PlayerCreate):
