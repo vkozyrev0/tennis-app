@@ -604,8 +604,10 @@ async function toggleSite(id) {
 }
 document.getElementById("t-sites-filter").addEventListener("input", renderTSites);
 
-// --- Roster ---
+// --- Roster (master/detail, like the Setup entities) ---
 const rosterForm = document.getElementById("roster-form");
+const rosterTitle = document.getElementById("roster-title");
+const rosterSubmit = rosterForm.querySelector('button[type="submit"]');
 let rosterRows = [];
 let rosterEditId = null;
 async function loadRoster() {
@@ -613,50 +615,103 @@ async function loadRoster() {
   rosterRows = await api(`/tournaments/${active.id}/players`);
   renderRoster();
 }
+const rosterName = (e) => [e.last_name, e.first_name].filter(Boolean).join(", ") || e.usta_number;
+function rosterShown() {
+  const q = document.getElementById("roster-filter").value.trim().toLowerCase();
+  return rosterRows.filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q));
+}
+function rosterSelect(e) {
+  rosterEditId = e.id;
+  rosterForm.player_id.value = e.player_id;
+  rosterForm.age_division.value = e.age_division || "";
+  rosterForm.events.value = e.events || "";
+  rosterForm.selection_status.value = e.selection_status;
+  rosterForm.t_shirt_size.value = e.t_shirt_size || "";
+  rosterForm.dietary_preference.value = e.dietary_preference || "";
+  rosterTitle.textContent = "Edit: " + rosterName(e);
+  rosterSubmit.textContent = "Update player";
+  if (typeof syncCombos === "function") syncCombos();
+  renderRoster();
+}
+function rosterShowNew() {
+  rosterEditId = null; rosterForm.reset();
+  rosterTitle.textContent = "New roster entry";
+  rosterSubmit.textContent = "Add player";
+  if (typeof syncCombos === "function") syncCombos();
+  renderRoster();
+}
 function renderRoster() {
   const tbody = document.querySelector("#roster-table tbody");
-  const q = document.getElementById("roster-filter").value.trim().toLowerCase();
-  const rows = rosterRows.filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q));
+  const shown = rosterShown();
   tbody.innerHTML = "";
-  for (const e of rows) {
+  for (const e of shown) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc([e.last_name, e.first_name].filter(Boolean).join(", "))} <span class="muted">(${esc(e.usta_number)})</span></td>` +
+    tr.className = e.id === rosterEditId ? "selected" : "";
+    tr.innerHTML = `<td>${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span></td>` +
       `<td>${esc(e.age_division)}</td><td>${chip(e.selection_status)}</td><td>${esc(e.t_shirt_size)}</td><td>${esc(e.dietary_preference)}</td><td class="actions"></td>`;
+    tr.addEventListener("click", () => rosterSelect(e));
     const cell = tr.querySelector(".actions");
     const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
-    ed.addEventListener("click", () => {
-      rosterEditId = e.id;
-      rosterForm.player_id.value = e.player_id;
-      rosterForm.age_division.value = e.age_division || "";
-      rosterForm.events.value = e.events || "";
-      rosterForm.selection_status.value = e.selection_status;
-      rosterForm.t_shirt_size.value = e.t_shirt_size || "";
-      rosterForm.dietary_preference.value = e.dietary_preference || "";
-      rosterForm.querySelector('button[type="submit"]').textContent = "Update player";
-      openForm(rosterForm);
-    });
+    ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); });
     const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
-    dl.addEventListener("click", async () => {
+    dl.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
       if (!(await confirmDialog("Remove player from roster?"))) return;
-      try { await api(`/roster/${e.id}`, { method: "DELETE" }); loadRoster(); } catch (err) { setMsg("roster-msg", err.message, false); }
+      try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) rosterShowNew(); await loadRoster(); }
+      catch (err) { setMsg("roster-msg", err.message, false); }
     });
     cell.append(ed, dl);
     tbody.appendChild(tr);
   }
   if (rosterRows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">No players on this roster yet.</td></tr>';
+  else if (shown.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">No matches</td></tr>';
+  rosterUpdateNav();
 }
-function rosterReset() { rosterEditId = null; rosterForm.reset(); rosterForm.querySelector('button[type="submit"]').textContent = "Add player"; }
-onSubmit(rosterForm, async (e) => {
-  e.preventDefault();
+// Prev/Next record navigation (parity with the Setup master/detail forms).
+const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
+const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn"; rosterPrev.textContent = "‹ Prev";
+const rosterNext = document.createElement("button"); rosterNext.type = "button"; rosterNext.className = "nav-btn"; rosterNext.textContent = "Next ›";
+const rosterPos = document.createElement("span"); rosterPos.className = "nav-pos";
+rosterNav.append(rosterPrev, rosterPos, rosterNext);
+rosterTitle.parentNode.insertBefore(rosterNav, rosterTitle);
+function rosterUpdateNav() {
+  const shown = rosterShown();
+  const idx = shown.findIndex((e) => e.id === rosterEditId);
+  const have = rosterEditId != null && idx >= 0;
+  rosterPos.textContent = shown.length ? `${have ? idx + 1 : "–"} / ${shown.length}` : "";
+  rosterPrev.disabled = !have || idx <= 0;
+  rosterNext.disabled = !have || idx >= shown.length - 1;
+}
+function rosterNavTo(delta) {
+  const shown = rosterShown();
+  const idx = shown.findIndex((e) => e.id === rosterEditId);
+  if (idx < 0) return;
+  const t = shown[idx + delta];
+  if (!t) return;
+  rosterSelect(t);
+  const r = document.querySelector("#roster-table tr.selected");
+  if (r) r.scrollIntoView({ block: "nearest" });
+}
+rosterPrev.addEventListener("click", () => rosterNavTo(-1));
+rosterNext.addEventListener("click", () => rosterNavTo(1));
+onSubmit(rosterForm, async () => {
   const b = formObj(rosterForm); b.player_id = Number(b.player_id);
   try {
-    if (rosterEditId) await api(`/roster/${rosterEditId}`, { method: "PUT", body: JSON.stringify(b) });
-    else await api(`/tournaments/${active.id}/players`, { method: "POST", body: JSON.stringify(b) });
-    setMsg("roster-msg", rosterEditId ? "saved" : "added", true); rosterReset(); loadRoster();
+    const editing = rosterEditId != null;
+    const saved = editing
+      ? await api(`/roster/${rosterEditId}`, { method: "PUT", body: JSON.stringify(b) })
+      : await api(`/tournaments/${active.id}/players`, { method: "POST", body: JSON.stringify(b) });
+    setMsg("roster-msg", editing ? "saved" : "added", true);
+    await loadRoster();
+    const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
+    if (row) rosterSelect(row); else rosterShowNew();
   } catch (err) { setMsg("roster-msg", err.message, false); }
 });
-rosterForm.querySelector(".cancel").addEventListener("click", rosterReset);
+rosterForm.querySelector(".cancel").addEventListener("click", rosterShowNew);
+document.getElementById("roster-new").addEventListener("click", rosterShowNew);
 document.getElementById("roster-filter").addEventListener("input", renderRoster);
+document.getElementById("roster-csv").addEventListener("click", () =>
+  exportTable(document.getElementById("roster-table"), "roster"));
 document.getElementById("roster-template").addEventListener("click", () =>
   _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template"));
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
@@ -1673,7 +1728,7 @@ function templateTable(table, name) {
   _csvDownload([headers], name + "-template");
 }
 const EXPORTABLE = {
-  "roster-table": "roster", "late-table": "late-entries", "withdrawal-table": "withdrawals",
+  "late-table": "late-entries", "withdrawal-table": "withdrawals",
   "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
   "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
   "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
@@ -1683,7 +1738,7 @@ const EXPORTABLE = {
 // Export-only here: derived/aggregate lists, plus roster (its template lives in
 // the import row next to the upload control).
 const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "hotel-summary-table",
-  "lodging-summary-table", "inbox-table", "tshirt-table", "roster-table"]);
+  "lodging-summary-table", "inbox-table", "tshirt-table"]);
 for (const [id, name] of Object.entries(EXPORTABLE)) {
   const table = document.getElementById(id);
   if (!table) continue;
@@ -1703,7 +1758,7 @@ for (const [id, name] of Object.entries(EXPORTABLE)) {
 // =================== Collapse workspace add-forms (list stays primary) ===================
 // Wrap each workspace add-form in a <details> at runtime (no HTML changes).
 const COLLAPSIBLE = {
-  "roster-form": "Add player", "withdrawal-form": "Add withdrawal",
+  "withdrawal-form": "Add withdrawal",
   "sched-form": "Add scheduling avoidance", "divflex-form": "Add division flexibility",
   "pairing-form": "Add pairing group", "doubles-form": "File doubles request",
   "photel-form": "Add player hotel", "late-form": "Add late entry", "trb-form": "Add room block",

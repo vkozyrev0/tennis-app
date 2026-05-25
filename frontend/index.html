@@ -278,41 +278,54 @@
     <!-- T: Roster -->
     <section class="panel tpanel" id="panel-t-roster">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
-      <div class="t-content card">
+      <div class="t-content">
         <h3>Roster — <span class="t-name"></span></h3>
         <div class="import-row">
           <label>Import roster <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
           <button type="button" id="roster-import">Import</button>
           <button type="button" id="roster-template" class="ghost" title="Download an empty CSV with the importer's columns">⬇ Template</button>
+          <button type="button" id="roster-csv" class="ghost" title="Export the roster as CSV">⬇ CSV</button>
+          <button type="button" id="roster-signin-csv" class="ghost" title="Download a sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in sheet</button>
           <span class="msg" id="roster-import-msg"></span>
         </div>
-        <form id="roster-form" autocomplete="off" class="inline-form">
-          <div class="row">
-            <label>Player <select name="player_id" id="roster-player" required></select></label>
-            <label>Division <input name="age_division" /></label>
-            <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
+        <div class="master-detail">
+          <div class="list-pane">
+            <div class="list-toolbar">
+              <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" />
+              <button type="button" id="roster-new" class="new-btn">+ New</button>
+            </div>
+            <div class="list-scroll"><table id="roster-table" class="list-table"><thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table></div>
           </div>
-          <div class="row">
-            <label>Events <input name="events" /></label>
-            <label>T-shirt
-              <select name="t_shirt_size">
-                <option value="">— none —</option>
-                <option>Youth Small</option>
-                <option>Youth Medium</option>
-                <option>Youth Large</option>
-                <option>Adult Small</option>
-                <option>Adult Medium</option>
-                <option>Adult Large</option>
-                <option>Adult Extra Large</option>
-              </select>
-            </label>
-            <label>Dietary <input name="dietary_preference" /></label>
+          <div class="detail-pane">
+            <h3 class="detail-title" id="roster-title">New roster entry</h3>
+            <form id="roster-form" autocomplete="off">
+              <div class="row">
+                <label>Player <select name="player_id" id="roster-player" required></select></label>
+                <label>Division <input name="age_division" /></label>
+              </div>
+              <div class="row">
+                <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
+                <label>Events <input name="events" /></label>
+              </div>
+              <div class="row">
+                <label>T-shirt
+                  <select name="t_shirt_size">
+                    <option value="">— none —</option>
+                    <option>Youth Small</option>
+                    <option>Youth Medium</option>
+                    <option>Youth Large</option>
+                    <option>Adult Small</option>
+                    <option>Adult Medium</option>
+                    <option>Adult Large</option>
+                    <option>Adult Extra Large</option>
+                  </select>
+                </label>
+                <label>Dietary <input name="dietary_preference" /></label>
+              </div>
+              <div class="actions-row"><button type="submit">Add player</button><button type="button" class="cancel">New</button><span class="msg" id="roster-msg"></span></div>
+            </form>
           </div>
-          <div class="actions-row"><button type="submit">Add player</button><button type="button" class="cancel">Clear</button><span class="msg" id="roster-msg"></span></div>
-        </form>
-        <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" />
-        <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Download a sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in sheet (CSV)</button>
-        <table id="roster-table" class="list-table"><thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
       </div>
     </section>
 

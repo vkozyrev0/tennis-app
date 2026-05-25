@@ -7,6 +7,12 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Roster → master/detail** — the Tournament → Roster tab now uses the same
+  master/detail layout as the Setup entities: a wide filterable list (own scrollbar)
+  on the left, a sticky edit form with **Prev/Next** record nav on the right, row-
+  click-to-edit + **+ New**, and a selected-row highlight. Bulk-data actions (Import /
+  Template / CSV / Sign-in sheet) sit in one row above the grid. Replaces the old
+  add-form-on-top + table layout for consistency.
 - **✅ Player City/State** — migration `0019` adds `city`/`state` to `player`
   (not name-history-tracked); the Players form has City/State fields and the sign-in
   sheet now includes them, fully matching the workbook's columns.
