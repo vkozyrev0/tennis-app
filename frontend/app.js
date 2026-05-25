@@ -658,14 +658,60 @@ let rosterRows = [];
 let rosterEditId = null;
 async function loadRoster() {
   if (!active) return;
-  rosterRows = await api(`/tournaments/${active.id}/players`);
-  renderRoster();
+  rosterRows = await api(`/tournaments/${active.id}/players`);  // kept for the sign-in export
+  if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
+  applyRosterSel();
 }
 const rosterName = (e) => [e.last_name, e.first_name].filter(Boolean).join(", ") || e.usta_number;
-function rosterShown() {
+
+// Tabulator grid for the roster (master/detail like the Setup entities).
+const rosterTableEl = document.getElementById("roster-table");
+const rosterMount = rosterTableEl.closest(".list-scroll") || rosterTableEl.parentElement;
+rosterMount.classList.remove("list-scroll"); rosterMount.innerHTML = ""; rosterMount.classList.add("grid-mount");
+let rosterBuilt = false, rosterPending = null;
+const rosterGrid = new Tabulator(rosterMount, {
+  index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
+  placeholder: "No players on this roster yet.",
+  columnDefaults: { headerSortTristate: true, resizable: false },
+  columns: [
+    { title: "Player", field: "last_name",
+      formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; } },
+    { title: "Div", field: "age_division" },
+    { title: "Status", field: "selection_status", formatter: (cell) => chip(cell.getData().selection_status) },
+    { title: "Shirt", field: "t_shirt_size" },
+    { title: "Dietary", field: "dietary_preference" },
+    { title: "", field: "_act", headerSort: false, width: 108, cssClass: "grid-actions-cell",
+      formatter: (cell) => {
+        const e = cell.getData();
+        const wrap = document.createElement("div"); wrap.className = "grid-actions";
+        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
+        ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); });
+        const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
+        dl.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          if (!(await confirmDialog("Remove player from roster?"))) return;
+          try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) rosterShowNew(); await loadRoster(); }
+          catch (err) { setMsg("roster-msg", err.message, false); }
+        });
+        wrap.append(ed, dl); return wrap;
+      } },
+  ],
+});
+GRIDS["panel-t-roster"] = rosterGrid;
+rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
+rosterGrid.on("rowClick", (e, row) => rosterSelect(row.getData()));
+rosterGrid.on("dataFiltered", applyRosterSel);
+rosterGrid.on("dataSorted", applyRosterSel);
+function rosterMatches(data) {
   const q = document.getElementById("roster-filter").value.trim().toLowerCase();
-  return rosterRows.filter((e) => !q || JSON.stringify(e).toLowerCase().includes(q));
+  return !q || JSON.stringify(data).toLowerCase().includes(q);
 }
+function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("active").map((r) => r.getData()) : rosterRows; }
+function rosterMarkRows() {
+  if (!rosterBuilt) return;
+  for (const r of rosterGrid.getRows()) r.getElement().classList.toggle("row-selected", r.getData().id === rosterEditId);
+}
+function applyRosterSel() { rosterMarkRows(); rosterUpdateNav(); }
 function rosterSelect(e) {
   rosterEditId = e.id;
   rosterForm.player_id.value = e.player_id;
@@ -677,41 +723,14 @@ function rosterSelect(e) {
   rosterTitle.textContent = "Edit: " + rosterName(e);
   rosterSubmit.textContent = "Update player";
   if (typeof syncCombos === "function") syncCombos();
-  renderRoster();
+  applyRosterSel();
 }
 function rosterShowNew() {
   rosterEditId = null; rosterForm.reset();
   rosterTitle.textContent = "New roster entry";
   rosterSubmit.textContent = "Add player";
   if (typeof syncCombos === "function") syncCombos();
-  renderRoster();
-}
-function renderRoster() {
-  const tbody = document.querySelector("#roster-table tbody");
-  const shown = rosterShown();
-  tbody.innerHTML = "";
-  for (const e of shown) {
-    const tr = document.createElement("tr");
-    tr.className = e.id === rosterEditId ? "selected" : "";
-    tr.innerHTML = `<td>${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span></td>` +
-      `<td>${esc(e.age_division)}</td><td>${chip(e.selection_status)}</td><td>${esc(e.t_shirt_size)}</td><td>${esc(e.dietary_preference)}</td><td class="actions"></td>`;
-    tr.addEventListener("click", () => rosterSelect(e));
-    const cell = tr.querySelector(".actions");
-    const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
-    ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); });
-    const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
-    dl.addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      if (!(await confirmDialog("Remove player from roster?"))) return;
-      try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) rosterShowNew(); await loadRoster(); }
-      catch (err) { setMsg("roster-msg", err.message, false); }
-    });
-    cell.append(ed, dl);
-    tbody.appendChild(tr);
-  }
-  if (rosterRows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">No players on this roster yet.</td></tr>';
-  else if (shown.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">No matches</td></tr>';
-  rosterUpdateNav();
+  applyRosterSel();
 }
 // Prev/Next record navigation (parity with the Setup master/detail forms).
 const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
@@ -721,7 +740,7 @@ const rosterPos = document.createElement("span"); rosterPos.className = "nav-pos
 rosterNav.append(rosterPrev, rosterPos, rosterNext);
 rosterTitle.parentNode.insertBefore(rosterNav, rosterTitle);
 function rosterUpdateNav() {
-  const shown = rosterShown();
+  const shown = rosterActiveData();
   const idx = shown.findIndex((e) => e.id === rosterEditId);
   const have = rosterEditId != null && idx >= 0;
   rosterPos.textContent = shown.length ? `${have ? idx + 1 : "–"} / ${shown.length}` : "";
@@ -729,14 +748,11 @@ function rosterUpdateNav() {
   rosterNext.disabled = !have || idx >= shown.length - 1;
 }
 function rosterNavTo(delta) {
-  const shown = rosterShown();
+  const shown = rosterActiveData();
   const idx = shown.findIndex((e) => e.id === rosterEditId);
-  if (idx < 0) return;
-  const t = shown[idx + delta];
-  if (!t) return;
-  rosterSelect(t);
-  const r = document.querySelector("#roster-table tr.selected");
-  if (r) r.scrollIntoView({ block: "nearest" });
+  if (idx < 0 || !shown[idx + delta]) return;
+  rosterSelect(shown[idx + delta]);
+  if (rosterBuilt) try { rosterGrid.scrollToRow(rosterEditId, "nearest", false); } catch (_) {}
 }
 rosterPrev.addEventListener("click", () => rosterNavTo(-1));
 rosterNext.addEventListener("click", () => rosterNavTo(1));
@@ -755,7 +771,7 @@ onSubmit(rosterForm, async () => {
 });
 rosterForm.querySelector(".cancel").addEventListener("click", rosterShowNew);
 document.getElementById("roster-new").addEventListener("click", rosterShowNew);
-document.getElementById("roster-filter").addEventListener("input", renderRoster);
+document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
 // joining the loaded roster with this tournament's player-hotel rows.
 const SIGNIN_HEADERS = ["Status", "Events", "Player", "USTA #", "City", "State",
@@ -1906,8 +1922,7 @@ for (const [id, name] of Object.entries(EXPORTABLE)) {
   anchor.parentNode.insertBefore(btn, anchor);
 }
 // Bespoke per-page exports (data isn't a plain table scrape).
-document.getElementById("roster-csv").addEventListener("click", () =>
-  exportTable(document.getElementById("roster-table"), "roster"));
+document.getElementById("roster-csv").addEventListener("click", () => rosterGrid.download("csv", "roster.csv"));
 document.getElementById("roster-signin-csv").addEventListener("click", rosterSignInExport);
 document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);

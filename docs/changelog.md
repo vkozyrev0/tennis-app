@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — Roster** (phase 2b) — the roster master-detail list is now a
+  Tabulator grid: sortable columns, status **chip** formatter, themed light/dark,
+  row-click → edit form, filter, Prev/Next over active rows, Edit/Delete actions,
+  selection highlight; **⬇ CSV** via Tabulator download and the **Sign-in sheet**
+  export unchanged (still built from the roster data array).
 - **✅ Tabulator grid — workspace player lists** (phase 2a) — the `wirePlayerList`
   trio (Scheduling avoidances, Division flexibility, Player hotels) now render as
   Tabulator grids (sortable, themed, per-grid ⬇ CSV via Tabulator's native download,
