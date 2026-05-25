@@ -7,6 +7,28 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Assignment Edit fixed (bug)** — the Assignments "Edit" button set the native
+  `<select>` values but, since those fields are now comboboxes, the visible inputs
+  didn't update — so Edit looked dead and you couldn't change site/hotel after adding
+  cert/days. Edit now **resyncs the comboboxes**, scrolls the form into view, and shows
+  an "editing #N" hint; updating site/hotel keeps the existing days.
+- **✅ Inbox forwarding-address note** — the Review inbox now states plainly that a
+  live forwarding address / auto-ingest isn't wired in the POC (deferred, needs mail
+  infra) and that messages are pasted manually — answering "where do I send email?".
+- **✅ Dark theme** — a header **🌙 Dark / ☀ Light** toggle (persisted in
+  `localStorage`, applied before first paint to avoid a flash). The palette is driven
+  entirely by CSS variables; introduced `--field-bg / --zebra / --elev` and pointed the
+  remaining hardcoded light backgrounds (inputs, zebra rows, cards, dropdowns,
+  add-boxes, invalid fields) at them, with a full `:root[data-theme="dark"]` override.
+  Verified: body bg + ink invert, toggle label flips, choice persists.
+- **✅ Report buttons compacted + template** — the Reports toolbar buttons were
+  oversized (1rem); now compact (0.8rem, `⬇ CSV`) and joined by a **⬇ Template**
+  button that downloads the report's column headers. Also normalized the one remaining
+  oversized button (`#work-on-btn`) to the standard compact size.
+- **✅ "Work on →" from the tournament row** — the Setup → Tournaments list now has a
+  per-row **Work on →** action (via a new `wireEntity` `rowAction` hook) that sets the
+  active tournament, switches to the **Tournament** group, and opens its workspace in
+  one click — no need to open the detail and use the form's "Work on this" button.
 - **✅ Structured assignment card** — the dense run-on line (`name · site · hotel ·
   pay · mileage · total · flags`) is replaced by a small layout: **name** + Edit/Delete
   (top-right), a muted **meta** line (site / hotel / dietary), then **pay / mileage /

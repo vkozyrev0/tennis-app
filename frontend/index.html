@@ -10,6 +10,7 @@
   <div id="progress" class="progress"></div>
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
+      <button type="button" id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
       <span id="user-box" hidden><span id="username-label"></span>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
@@ -372,6 +373,7 @@
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
         <p class="muted">Parent/player email is human-reviewed (no auto-parsing). Add a message, classify it, then file it into a list.</p>
+        <p class="muted"><strong>Forwarding address:</strong> not live in this POC — a dedicated inbox + auto-ingest is on the roadmap (deferred, needs mail infrastructure). For now, <strong>paste each forwarded email below</strong> (From / Subject / Body).</p>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>From <input name="from_address" /></label>
@@ -586,7 +588,8 @@
         <div class="report-toolbar no-print">
           <h3 style="margin:0;flex:1">Officials confirmation &amp; pay — <span class="t-name"></span></h3>
           <button type="button" id="report-print">Print</button>
-          <button type="button" id="report-csv">Export CSV</button>
+          <button type="button" id="report-csv">⬇ CSV</button>
+          <button type="button" id="report-template" title="Download an empty CSV with the report's column headers">⬇ Template</button>
         </div>
         <div id="report-meta" class="muted"></div>
         <table id="report-table" class="list-table">

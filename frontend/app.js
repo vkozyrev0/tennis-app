@@ -4,6 +4,24 @@
 //  * Tournament workspace — an active tournament (shown in the context bar,
 //    persisted) scopes Sites / Roster / Assignments / Room blocks.
 
+// ---- theme (light/dark) — applied ASAP to avoid a flash, persisted locally ----
+function applyTheme(t) {
+  const dark = t === "dark";
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) { /* ignore */ }
+  const btn = document.getElementById("theme-toggle");
+  if (btn) btn.textContent = dark ? "☀ Light" : "🌙 Dark";
+}
+applyTheme((() => { try { return localStorage.getItem("theme"); } catch (e) { return null; } })() || "light");
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("theme-toggle");
+  if (btn) {
+    applyTheme(document.documentElement.getAttribute("data-theme"));  // sync label
+    btn.addEventListener("click", () =>
+      applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"));
+  }
+});
+
 let _inflight = 0;
 function _progress(delta) {
   _inflight = Math.max(0, _inflight + delta);
@@ -483,6 +501,10 @@ function wireEntity(cfg) {
       tr.innerHTML = cfg.columns.map((c) => `<td>${esc(c.fmt ? c.fmt(item) : item[c.key])}</td>`).join("") + '<td class="actions"></td>';
       tr.addEventListener("click", () => select(item));
       const cell = tr.querySelector(".actions");
+      if (cfg.rowAction) {
+        const extra = cfg.rowAction(item);  // optional per-row button (e.g. "Work on →")
+        if (extra) cell.append(extra);
+      }
       const e = document.createElement("button"); e.type = "button"; e.className = "btn-link"; e.textContent = "Edit";
       e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); });
       const d = document.createElement("button"); d.type = "button"; d.className = "btn-link danger"; d.textContent = "Delete";
@@ -716,6 +738,10 @@ function renderAssignment(a, availDates) {
     asgForm.site_id.value = a.site_id || "";
     asgForm.room_block_id.value = a.room_block_id || "";
     asgForm.querySelector('button[type="submit"]').textContent = "Update assignment";
+    // The fields are comboboxes — a direct .value set needs a display resync.
+    if (typeof syncCombos === "function") syncCombos();
+    asgForm.scrollIntoView({ block: "nearest" });
+    setMsg("asg-msg", `editing assignment #${a.id} — change site/hotel, then Update`, true);
   });
   const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
   dl.addEventListener("click", async () => {
@@ -1356,10 +1382,12 @@ async function loadReports() {
       }).join("")
     : '<tr><td class="empty" colspan="3">No officials have a hotel assignment yet.</td></tr>';
 }
+const REPORT_HEADERS = ["Official", "Days", "Site", "Hotel", "Dietary", "Pay", "Mileage", "Total", "Flags"];
 document.getElementById("report-print").addEventListener("click", () => window.print());
+document.getElementById("report-template").addEventListener("click", () => _csvDownload([REPORT_HEADERS], "officials-report-template"));
 document.getElementById("report-csv").addEventListener("click", () => {
   if (!reportData) return;
-  const rows = [["Official", "Days", "Site", "Hotel", "Dietary", "Pay", "Mileage", "Total", "Flags"]];
+  const rows = [REPORT_HEADERS.slice()];
   for (const o of reportData.officials) {
     rows.push([
       o.official_name, o.days.map((d) => `${d.work_date} ${certLabel(d.working_as)}`).join("; "),
@@ -1398,6 +1426,19 @@ const tournamentsCrud = wireEntity({
   },
   onSelect: (t) => { lastSelectedTournamentId = t.id; workOnBtn.hidden = false; },
   onNew: () => { lastSelectedTournamentId = null; workOnBtn.hidden = true; },
+  // "Work on →" right on the row: jump straight into the workspace for that tournament.
+  rowAction: (t) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn-link"; b.textContent = "Work on →";
+    b.title = "Make this the active tournament and open its workspace";
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      setActive(t.id);
+      activateGroup("tournament");
+      document.querySelector('.tab[data-target="panel-t-sites"]').click();
+    });
+    return b;
+  },
 });
 
 const sitesCrud = wireEntity({

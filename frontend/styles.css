@@ -9,6 +9,26 @@
   --ok: #2e7d32;
   --bad: #c62828;
   --sel: #e7f1ea;
+  --field-bg: #ffffff;   /* input/select/textarea background */
+  --zebra: #f7f9fa;      /* even table rows */
+  --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
+}
+
+/* Dark theme — toggled via data-theme on <html> (persisted in localStorage). */
+:root[data-theme="dark"] {
+  --bg: #11161b;
+  --card: #1a2027;
+  --ink: #e6edf3;
+  --muted: #9aa7b4;
+  --accent: #2e7d46;
+  --accent-ink: #ffffff;
+  --border: #2d363f;
+  --ok: #5bbf6a;
+  --bad: #e26d6d;
+  --sel: #25313a;
+  --field-bg: #11161b;
+  --zebra: #1f262e;
+  --elev: #1e252d;
 }
 
 * { box-sizing: border-box; }
@@ -80,6 +100,11 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .pill.ok { background: var(--ok); }
 .pill.bad { background: var(--bad); }
 
+#theme-toggle {
+  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
+}
+#theme-toggle:hover { background: rgba(255, 255, 255, 0.32); }
 #user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
 #logout-btn {
   background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
@@ -236,7 +261,7 @@ input, select, textarea {
   text-transform: none;
   letter-spacing: normal;
   color: var(--ink);
-  background: #fff;
+  background: var(--field-bg);
 }
 
 /* type-in dropdowns (searchable comboboxes) */
@@ -254,14 +279,14 @@ input, select, textarea {
 .combo-list {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
   margin-top: 2px; max-height: 240px; overflow-y: auto;
-  background: #fff; color: var(--ink);
+  background: var(--elev); color: var(--ink);
   border: 1px solid var(--border); border-radius: 6px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
   /* reset inherited casing/spacing from <label>/header so options read normally */
   text-transform: none; letter-spacing: normal; font-weight: 400;
 }
 /* Explicit colors so items never inherit the header's white or a label's grey. */
-.combo-item { padding: 0.3rem 0.5rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap; color: var(--ink); background: #fff; }
+.combo-item { padding: 0.3rem 0.5rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap; color: var(--ink); background: var(--elev); }
 .combo-item:hover, .combo-item.hi { background: var(--sel); color: var(--ink); }
 .combo-item.sel { font-weight: 600; }
 .combo-empty { padding: 0.4rem 0.5rem; color: var(--muted); font-size: 0.8rem; }
@@ -272,7 +297,7 @@ input, select, textarea {
 input:user-invalid, select:user-invalid, textarea:user-invalid,
 .combo:has(select:user-invalid) .combo-input {
   border-color: var(--bad);
-  background: #fdf5f5;
+  background: rgba(198, 40, 40, 0.10);
 }
 
 .actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
@@ -330,7 +355,7 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   color: var(--muted); font-weight: 600;
   position: sticky; top: 0; background: var(--card); z-index: 1;
 }
-.list-table tbody tr:nth-of-type(even) { background: #f7f9fa; }  /* zebra */
+.list-table tbody tr:nth-of-type(even) { background: var(--zebra); }  /* zebra */
 .list-table tbody tr { cursor: pointer; }
 .list-table tbody tr:hover { background: var(--bg); }
 .list-table tbody tr.selected { background: var(--sel); }
@@ -397,13 +422,13 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   padding: 1rem 1.25rem;
 }
 #work-on-btn {
-  padding: 0.5rem 0.9rem; background: #245733; color: #fff; border: 0;
-  border-radius: 6px; font: inherit; cursor: pointer;
+  padding: 0.32rem 0.75rem; background: #245733; color: #fff; border: 0;
+  border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
 }
 .inline-form .row { margin-bottom: 0.5rem; }
 
 /* Collapsible workspace add-forms (list stays primary) */
-details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: #fbfdfc; }
+details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: var(--elev); }
 details.addbox > summary {
   cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--accent);
   list-style: none; user-select: none;
@@ -441,7 +466,7 @@ td.toggle { white-space: nowrap; }
   border-radius: 6px;
   padding: 0.6rem 0.75rem;
   margin-bottom: 0.6rem;
-  background: #fff;
+  background: var(--elev);
 }
 .asg-head { font-size: 0.9rem; position: relative; }
 .asg-name { font-size: 0.95rem; padding-right: 5rem; }
@@ -461,11 +486,16 @@ td.toggle { white-space: nowrap; }
 .add-day input, .add-day select { padding: 0.3rem 0.4rem; }
 
 /* ---- reports ---- */
-.report-toolbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+.report-toolbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
 #report-print, #report-csv {
-  padding: 0.4rem 0.8rem; background: var(--accent); color: var(--accent-ink);
-  border: 0; border-radius: 6px; font: inherit; cursor: pointer;
+  padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
 }
+#report-template {
+  padding: 0.3rem 0.7rem; background: transparent; color: var(--accent);
+  border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+#report-template:hover { background: var(--bg); border-color: var(--accent); }
 #report-table tfoot th { border-top: 2px solid var(--ink); font-weight: 700; text-align: left; }
 #report-meta { margin-bottom: 0.6rem; }
 
