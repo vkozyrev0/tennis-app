@@ -659,6 +659,28 @@ rosterForm.querySelector(".cancel").addEventListener("click", rosterReset);
 document.getElementById("roster-filter").addEventListener("input", renderRoster);
 document.getElementById("roster-template").addEventListener("click", () =>
   _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template"));
+// Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
+// joining the loaded roster with this tournament's player-hotel rows.
+document.getElementById("roster-signin-csv").addEventListener("click", async () => {
+  if (!active) return;
+  let hotelByPlayer = {};
+  try {
+    for (const r of await api(`/tournaments/${active.id}/player-hotels`)) {
+      hotelByPlayer[r.player_id] = { hotel: r.hotel_name || "", lodging: r.lodging_plan || "" };
+    }
+  } catch (e) { /* hotels optional — sheet still useful without them */ }
+  const rows = [["Status", "Events", "Player", "USTA #", "Division", "T-shirt", "Hotel", "Lodging plan", "Dietary"]];
+  for (const e of [...rosterRows].sort((a, b) =>
+    (a.last_name || "").localeCompare(b.last_name || "") || (a.first_name || "").localeCompare(b.first_name || ""))) {
+    const h = hotelByPlayer[e.player_id] || {};
+    rows.push([
+      e.selection_status, e.events || "",
+      [e.last_name, e.first_name].filter(Boolean).join(", "), e.usta_number,
+      e.age_division || "", e.t_shirt_size || "", h.hotel || "", h.lodging || "", e.dietary_preference || "",
+    ]);
+  }
+  _csvDownload(rows, `sign-in-sheet-${(active.name || "").replace(/\s+/g, "_")}`);
+});
 document.getElementById("roster-import").addEventListener("click", async () => {
   if (!active) return;
   const f = document.getElementById("roster-file").files[0];

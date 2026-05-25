@@ -7,6 +7,16 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Sign-in sheet export** — the Roster tab has a **⬇ Sign-in sheet (CSV)** button
+  that emits the workbook's sign-in format (Status / Events / Player / USTA # /
+  Division / T-shirt / Hotel / Lodging plan / Dietary), joining the roster with this
+  tournament's player-hotel rows, sorted by last name, including all statuses.
+- **🔒 PII purged from git history** — the two sample workbooks (Officials Mileage +
+  Full Tournament Data, which held officials'/minors' data) were committed earlier
+  and pushed. History was rewritten (`git filter-branch`) to remove them from all
+  refs and force-pushed (`app-poc`, `main`); `*.xlsx` stays gitignored. *(GitHub may
+  retain cached commit views by old SHA and any forks/clones still have copies —
+  out-of-band GitHub steps may be needed for full remediation.)*
 - **✅ Player lodging plan** (matches the workbook's "Lodging Plans" column) —
   migration `0018` adds `lodging_plan` to `player_hotel_stay`; the Player-hotels form
   gains a **Lodging plan** dropdown (Hotel / Commuter / Commuter 1-2 hrs / Commuter
