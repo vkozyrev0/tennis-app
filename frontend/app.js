@@ -381,9 +381,9 @@ _menuEl.addEventListener("click", (e) => {
   if (active && loaders[tab.dataset.target]) loaders[tab.dataset.target]();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-import") buildImportPage();
-  // Tabulator can't lay out columns while hidden — redraw the grid when shown.
-  const grid = GRIDS[tab.dataset.target];
-  if (grid) requestAnimationFrame(() => { try { grid.redraw(true); } catch (_) {} });
+  // Tabulator can't lay out columns while hidden — redraw the grid(s) when shown.
+  const grids = GRIDS[tab.dataset.target];
+  if (grids) requestAnimationFrame(() => grids.forEach((g) => { try { g.redraw(true); } catch (_) {} }));
   sizeLists();
 });
 
@@ -506,7 +506,7 @@ function wireEntity(cfg) {
     columnDefaults: { headerSortTristate: true, resizable: false },
     columns,
   });
-  GRIDS[cfg.panelId] = table;
+  (GRIDS[cfg.panelId] ||= []).push(table);
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
   table.on("rowClick", (e, row) => select(row.getData()));
   table.on("dataFiltered", () => { markRows(); updateNav(); });
@@ -702,7 +702,7 @@ const rosterGrid = new Tabulator(rosterMount, {
       } },
   ],
 });
-GRIDS["panel-t-roster"] = rosterGrid;
+(GRIDS["panel-t-roster"] ||= []).push(rosterGrid);
 rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
 rosterGrid.on("rowClick", (e, row) => rosterSelect(row.getData()));
 rosterGrid.on("dataFiltered", applyRosterSel);
@@ -1303,7 +1303,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete) {
     columnDefaults: { headerSortTristate: true, resizable: false }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
-  if (panelId) GRIDS[panelId] = grid;
+  if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
 }
 const lateGrid = makeListGrid("late-table", [
@@ -1394,7 +1394,7 @@ function wirePlayerList(cfg) {
     columnDefaults: { headerSortTristate: true, resizable: false }, columns,
   });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
-  if (panelId) GRIDS[panelId] = table;
+  if (panelId) (GRIDS[panelId] ||= []).push(table);
 
   async function load() {
     if (!active) return;
@@ -1560,21 +1560,16 @@ function pairingMemberRow() {
 }
 function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
 document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
+const pairingGrid = makeListGrid("pairing-table", [
+  { title: "Division", field: "age_division" },
+  { title: "Relationship", field: "relationship" },
+  { title: "Players", field: "_players",
+    formatter: (c) => esc((c.getData().members || []).map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ")) },
+], "pairing-avoidances", "No pairing avoidances yet.",
+  async (g) => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } });
 async function loadPairing() {
   if (!active) return;
-  const rows = await api(`/tournaments/${active.id}/pairing-avoidances`);
-  const tbody = document.querySelector("#pairing-table tbody");
-  tbody.innerHTML = "";
-  for (const g of rows) {
-    const names = g.members.map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ");
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(g.age_division)}</td><td>${esc(g.relationship)}</td><td>${esc(names)}</td><td class="actions"></td>`;
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } });
-    tr.querySelector(".actions").appendChild(del);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="4">No pairing avoidances yet.</td></tr>';
+  pairingGrid.setData(await api(`/tournaments/${active.id}/pairing-avoidances`));
 }
 onSubmit(pairingForm, async (e) => {
   e.preventDefault(); if (!active) return;
@@ -1603,35 +1598,27 @@ function doublesSyncRandom() {
 }
 document.getElementById("doubles-random").addEventListener("change", doublesSyncRandom);
 function doublesReset() { doublesForm.reset(); doublesForm.source_email_id.value = ""; doublesSyncRandom(); }
+const doublesReqGrid = makeListGrid("doubles-req-table", [
+  { title: "Player", field: "last_name", formatter: _playerCell },
+  { title: "USTA #", field: "usta_number" },
+  { title: "Division", field: "age_division" },
+  { title: "Type", field: "_type", formatter: (c) => chip(c.getData().wants_random ? "random" : "mutual") },
+  { title: "Partner status", field: "_info",
+    formatter: (c) => { const r = c.getData(); return r.status === "paired" ? "paired" : r.wants_random ? "queued (waiting)" : `→ ${esc(r.partner_usta || "?")} (awaiting partner)`; } },
+], "doubles-requests", "No doubles requests yet.",
+  async (r) => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
+const doublesPairGrid = makeListGrid("doubles-pair-table", [
+  { title: "Division", field: "age_division" },
+  { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
+  { title: "Player 1", field: "player1" },
+  { title: "Player 2", field: "player2" },
+], "doubles-pairs", "No verified pairs yet.",
+  async (d) => { if (!(await confirmDialog("Delete pair?"))) return; try { await api(`/doubles-pairs/${d.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
 async function loadDoubles() {
   if (!active) return;
   const data = await api(`/tournaments/${active.id}/doubles`);
-  const rt = document.querySelector("#doubles-req-table tbody");
-  rt.innerHTML = "";
-  for (const r of data.requests) {
-    const nm = [r.last_name, r.first_name].filter(Boolean).join(", ");
-    const type = r.wants_random ? "random" : "mutual";
-    const info = r.status === "paired" ? "paired"
-      : r.wants_random ? "queued (waiting)" : `→ ${esc(r.partner_usta || "?")} (awaiting partner)`;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.age_division)}</td><td>${chip(type)}</td><td>${info}</td><td class="actions"></td>`;
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
-    tr.querySelector(".actions").appendChild(del);
-    rt.appendChild(tr);
-  }
-  if (data.requests.length === 0) rt.innerHTML = '<tr><td class="empty" colspan="6">No doubles requests yet.</td></tr>';
-  const pt = document.querySelector("#doubles-pair-table tbody");
-  pt.innerHTML = "";
-  for (const d of data.pairs) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(d.age_division)}</td><td>${chip(d.pairing_type)}</td><td>${esc(d.player1)}</td><td>${esc(d.player2)}</td><td class="actions"></td>`;
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete pair?"))) return; try { await api(`/doubles-pairs/${d.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
-    tr.querySelector(".actions").appendChild(del);
-    pt.appendChild(tr);
-  }
-  if (data.pairs.length === 0) pt.innerHTML = '<tr><td class="empty" colspan="5">No verified pairs yet.</td></tr>';
+  doublesReqGrid.setData(data.requests);
+  doublesPairGrid.setData(data.pairs);
 }
 onSubmit(doublesForm, async (e) => {
   e.preventDefault(); if (!active) return;

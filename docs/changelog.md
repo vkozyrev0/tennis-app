@@ -7,6 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — Pairing avoidances & Doubles** (phase 2d) — the last
+  workspace lists move off hand-built tables onto `makeListGrid`: Pairing
+  avoidances (Division / Relationship / Players-joined), Doubles **requests**
+  (Player / USTA # / Division / Type chip / Partner status) and verified
+  **pairs** (Division / Type chip / Player 1 / Player 2). Both Doubles grids share
+  one panel, so `GRIDS[panelId]` holds an **array** and redraw-on-tab-show fans out
+  to each. Add-forms, file-from-email and `loadInbox` refresh unchanged. (**Inbox**
+  and the **report/summary** tables stay custom — interactive per-row controls and a
+  print artifact, respectively.)
 - **✅ Tabulator grid — Late entries & Withdrawals** (phase 2c) — a generic
   `makeListGrid` helper (delete-only list: Tabulator grid + Delete action + per-grid
   CSV download) now backs both: Late entries (with the ⚠ past-deadline flag) and
