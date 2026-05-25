@@ -16,7 +16,7 @@
     </h1>
     <div id="context-bar">
       <span class="ctx-label">Working on:</span>
-      <select id="active-tournament"><option value="">— select a tournament —</option></select>
+      <select id="active-tournament" aria-label="Active tournament"><option value="">— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
     </div>
   </header>
@@ -603,7 +603,8 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Hotel <input name="hotel_name" /></label>
+            <label>Hotel <input name="hotel_name" list="known-hotels" autocomplete="off" /></label>
+            <datalist id="known-hotels"></datalist>
             <label>Lodging plan
               <select name="lodging_plan">
                 <option value="">— none —</option>

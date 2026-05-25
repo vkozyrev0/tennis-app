@@ -30,10 +30,14 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        # Normalize whitespace so "Hilton " and "Hilton" don't drift apart in the
+        # raw list (the summaries also group case-insensitively).
+        hotel = " ".join((body.hotel_name or "").split()) or None
+        lodging = " ".join((body.lodging_plan or "").split()) or None
         cur.execute(
             "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_name, lodging_plan, source_email_id) "
             "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (tournament_id, pid, body.hotel_name, body.lodging_plan, body.source_email_id),
+            (tournament_id, pid, hotel, lodging, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
         mark_email_filed(cur, body.source_email_id, "hotel")

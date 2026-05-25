@@ -153,11 +153,23 @@ function enhanceSelect(sel) {
   wrap.className = "combo";
   sel.parentNode.insertBefore(wrap, sel);
   wrap.appendChild(sel);
+  const listId = "combo-list-" + (enhanceSelect._n = (enhanceSelect._n || 0) + 1);
   const input = document.createElement("input");
   input.type = "text"; input.className = "combo-input"; input.autocomplete = "off";
-  input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("aria-haspopup", "listbox");
+  input.setAttribute("aria-controls", listId);
+  // Label the overlay input from the wrapping <label>'s leading text (the native
+  // select is tabindex=-1, so AT reads the input).
+  const lbl = sel.closest("label");
+  const lblText = lbl && [...lbl.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+  input.setAttribute("aria-label",
+    (sel.getAttribute("aria-label") || (lblText ? lblText.textContent : sel.name) || "select").trim());
   const list = document.createElement("div");
-  list.className = "combo-list"; list.hidden = true;
+  list.className = "combo-list"; list.hidden = true; list.id = listId;
+  list.setAttribute("role", "listbox");
   wrap.append(input, list);
   let shown = [], hi = -1;
 
@@ -180,6 +192,9 @@ function enhanceSelect(sel) {
     shown.forEach((o, i) => {
       const it = document.createElement("div");
       it.className = "combo-item" + (o.value === sel.value ? " sel" : "") + (i === hi ? " hi" : "");
+      it.id = listId + "-opt-" + i;
+      it.setAttribute("role", "option");
+      it.setAttribute("aria-selected", o.value === sel.value ? "true" : "false");
       it.textContent = o.textContent;
       it.addEventListener("mousedown", (e) => { e.preventDefault(); choose(o); });
       list.appendChild(it);
@@ -187,13 +202,17 @@ function enhanceSelect(sel) {
   }
   function paintHi() {
     [...list.children].forEach((c, i) => c.classList.toggle("hi", i === hi));
-    if (list.children[hi]) list.children[hi].scrollIntoView({ block: "nearest" });
+    const cur = list.children[hi];
+    if (cur) { cur.scrollIntoView({ block: "nearest" }); input.setAttribute("aria-activedescendant", cur.id); }
+    else input.removeAttribute("aria-activedescendant");
   }
-  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; }
+  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; input.setAttribute("aria-expanded", "true"); }
   // commit=true: if the text was cleared, clear the selection (for optional fields
   // that have a blank "" option). Otherwise just restore the displayed value.
   function close(commit) {
     list.hidden = true; hi = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
     if (commit && input.value.trim() === "" && sel.value !== "" && [...sel.options].some((o) => o.value === "")) {
       sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true }));
     }
@@ -204,7 +223,7 @@ function enhanceSelect(sel) {
   // Select existing text on focus so the first keystroke overtypes a prior choice.
   input.addEventListener("focus", () => { open(); input.select(); });
   input.addEventListener("click", open);
-  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; });
+  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
@@ -256,6 +275,10 @@ function refreshAllSelects() {
   // one of THIS tournament's sites), so it is intentionally not filled here.
   fillSelect(document.getElementById("trb-hotel"), Object.values(hotelsById), (h) => h.name, false);
   fillPlayerRefs();
+  // Suggest known hotel names on the player-hotel input (free text still allowed).
+  const dl = document.getElementById("known-hotels");
+  if (dl) dl.innerHTML = Object.values(hotelsById)
+    .map((h) => `<option value="${esc(h.name)}"></option>`).join("");
 }
 
 // Part B forms reference the existing Players list instead of free-typing a

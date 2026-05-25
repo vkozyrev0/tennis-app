@@ -7,6 +7,18 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Design-critique fixes (moderate, non-security)** — from the `design-critique`
+  review:
+  - **Accessibility**: field labels bumped 0.68→0.72rem (~11.5px) and light `--muted`
+    darkened `#647280`→`#556070` (~6:1) so small helper/label text clears WCAG AA.
+  - **Combobox ARIA**: the type-in dropdowns now expose `role=combobox/listbox/option`
+    with `aria-expanded / controls / haspopup / activedescendant / selected` and an
+    `aria-label` (honors an explicit one on the select, e.g. "Active tournament") —
+    usable by screen readers.
+  - **Hotel-name drift**: `hotel_name`/`lodging_plan` whitespace-normalized on write,
+    and the player-hotel field offers a **datalist of known hotels** (free text still
+    allowed) so entries stay consistent without a rigid FK.
+  - *(CSRF, Secure-cookie, default DB creds deferred as security/hardening.)*
 - **✅ Central Export page** — a single **Data → Export** page is the one place for
   every CSV download. **Import stays on its own page** (roster upload is back on the
   Roster tab). The Export page lists **one section per export** (17 of them), each
