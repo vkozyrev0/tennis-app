@@ -16,9 +16,11 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
   Excel-openable) and the **Template** matches. Backend now exposes the room block's
   check-in/out on the assignment summary. *(Non-official staff — Site Director, Trainer,
   Operations, Stringer — aren't modeled yet, so only assigned officials appear.)*
-- **✅ Dark-mode date picker** — the calendar icon was invisible on dark fields; set
-  `color-scheme: light/dark` per theme (native controls adapt) + a webkit filter
-  fallback on the picker indicator.
+- **✅ Dark-mode date picker** — the calendar icon was invisible on dark fields.
+  Set `color-scheme: light/dark` per theme, and in dark mode **replace the
+  `::-webkit-calendar-picker-indicator` with an explicit light SVG calendar** (the
+  earlier `invert()` cancelled `color-scheme`'s already-light glyph, hence "almost
+  invisible"). The SVG approach doesn't depend on the UA's faint glyph.
 - **✅ Assignment Edit fixed (bug)** — the Assignments "Edit" button set the native
   `<select>` values but, since those fields are now comboboxes, the visible inputs
   didn't update — so Edit looked dead and you couldn't change site/hotel after adding

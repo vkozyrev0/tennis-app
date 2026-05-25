@@ -32,8 +32,16 @@
   --elev: #1e252d;
   color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
 }
-/* Belt-and-suspenders: lighten the webkit calendar icon in dark mode. */
-:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(1.4); }
+/* The UA calendar glyph is too faint on our very dark field, so in dark mode we
+   replace it with an explicit light SVG calendar — guaranteed visible. */
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e6edf3' stroke-width='2' stroke-linecap='round'><rect x='3' y='4.5' width='18' height='17' rx='2'/><line x1='8' y1='2.5' x2='8' y2='6.5'/><line x1='16' y1='2.5' x2='16' y2='6.5'/><line x1='3' y1='9.5' x2='21' y2='9.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px 15px;
+}
 
 * { box-sizing: border-box; }
 
