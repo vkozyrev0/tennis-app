@@ -278,7 +278,8 @@
         <h3>Roster — <span class="t-name"></span></h3>
         <div class="import-row">
           <label>Import roster <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
-          <button type="button" id="roster-import">Import CSV/XLSX</button>
+          <button type="button" id="roster-import">Import</button>
+          <button type="button" id="roster-template" class="ghost" title="Download an empty CSV with the importer's columns">⬇ Template</button>
           <span class="msg" id="roster-import-msg"></span>
         </div>
         <form id="roster-form" autocomplete="off" class="inline-form">
@@ -395,9 +396,7 @@
         <form id="late-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Age division <input name="age_division" /></label>
@@ -425,9 +424,7 @@
         <form id="withdrawal-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Events <input name="events" /></label>
@@ -452,9 +449,7 @@
         <form id="sched-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Avoid day <input name="avoid_day" placeholder="e.g. Sat" /></label>
@@ -478,9 +473,7 @@
         <form id="divflex-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Home division <input name="home_division" /></label>
@@ -533,14 +526,12 @@
         <form id="doubles-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Age division <input name="age_division" /></label>
             <label>Random pairing <input type="checkbox" id="doubles-random" name="wants_random" /></label>
-            <label id="doubles-partner-wrap">Partner USTA # <input name="partner_usta" /></label>
+            <label id="doubles-partner-wrap">Partner <select name="partner_ref" class="player-ref"></select></label>
           </div>
           <div class="actions-row"><button type="submit">File request</button><button type="button" class="cancel">Clear</button><span class="msg" id="doubles-msg"></span></div>
         </form>
@@ -568,9 +559,7 @@
         <form id="photel-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>USTA # <input name="usta_number" required /></label>
-            <label>First name <input name="first_name" /></label>
-            <label>Last name <input name="last_name" /></label>
+            <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
             <label>Hotel <input name="hotel_name" /></label>

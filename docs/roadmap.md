@@ -247,9 +247,17 @@ Critical review of the running POC UI. Ordered by impact.
   assignment change (migration `0005`); the report shows the pay-rule version.
 - **✅ DONE — Assignment role constrained**: `working_as` must be a certification
   the official holds (409 otherwise), once any are on file (`Certification`).
-- **Assignment site unconstrained**: the mileage `site` can be any site, not just
-  one of the tournament's sites — restrict the dropdown to the tournament's sites.
-- **Work-date bounds**: a work day can fall outside the play window with no warning.
+- **✅ DONE — Assignment site constrained**: the Assignments mileage-`site`
+  dropdown now lists **only the active tournament's sites** (filled per-tournament in
+  `loadAssignments`, not from the global site list). Verified: a tournament with 1
+  linked site shows 1 option (+ none), down from 4 global sites. *(Kept UI-side; the
+  API still accepts any site so existing informational-mismatch behavior + tests are
+  unchanged.)*
+- **✅ DONE — Work-date bounds warning**: work days outside the play window are now
+  **flagged** (a ⚠ marker on the day chip) and adding such a day triggers a
+  **confirm** ("N day(s) fall outside the play window … Add anyway?") — a warning,
+  not a block (consistent with audit §3.4). Verified: `_outOfWindow` is true before
+  `play_start`/after `play_end`, false inside.
 
 ### 🟢 UX / polish
 - **Inline mileage fix**: when an assignment shows "no distance", offer an inline
@@ -415,6 +423,105 @@ First batch from the UI review (frontend only; backend/tests unchanged):
   Verified: 17 comboboxes; the officials picker filters 51→5 on "z" and writes the
   chosen value back to the select; no console errors.
 
-Still open from the review: a full button-style **utility-class system**, busy-on-
-submit on the remaining bespoke forms (roster/assignment/doubles/etc.), and a
-sidebar nav for very narrow screens.
+## UI/UX pass 11 (2026-05-25) — applied
+- **✅ Part B forms reference the existing Players list** — every Staffing /
+  Player-request form now **picks an existing player** instead of free-typing a
+  name + USTA #. The three free-text fields (USTA #, first, last) collapsed into a
+  single **Player** picker (`select.player-ref`, a type-in combobox) on late
+  entries, withdrawals, scheduling avoidances, division flexibility, player hotels,
+  doubles (player **and** partner), and each **pairing-group member** row.
+  (Staffing's Assignments already used an officials picker.) On submit the chosen
+  player is resolved back to USTA #/first/last, so the **backend is unchanged**
+  (it still upserts/matches by USTA #). The file-from-email flow focuses the new
+  player picker. Verified end-to-end: filing a scheduling avoidance via the picker
+  created the row against the active tournament for the referenced player; 9 player
+  pickers populate (14 players + blank); no console errors.
+
+## UI/UX pass 12 (2026-05-25) — applied
+- **✅ Combobox placeholder fix** — the "— select … —" prompt was sitting in the
+  input as a real value, so you had to delete it before typing a search. It's now
+  rendered as the input's grey **`placeholder`** (the field starts empty), and the
+  input **selects its text on focus** so an existing choice can be typed over too.
+  Verified: an unset player picker shows empty value + "— select player —"
+  placeholder, and typing "jon" filters straight to "Jones, Sam" with no clearing.
+
+## UI/UX pass 13 (2026-05-25) — applied
+- **✅ CSV template downloads** — next to each list's **⬇ CSV** export button there
+  is now a **⬇ Template** button that downloads an **empty CSV with just the
+  headers** for the user to fill in. **Roster's** template uses the importer's
+  **canonical field names** (`usta_number, first_name, last_name, age_division,
+  events, selection_status, t_shirt_size, dietary_preference`) so the filled file
+  re-imports as-is; other lists use their visible column headers. Derived/aggregate
+  lists (verified doubles pairs, CVB totals, inbox, cumulative t-shirts) are
+  export-only and get no template. Verified: 8 template + 12 export buttons; roster
+  template emits the canonical header row; no console errors.
+
+## UI/UX pass 14 (2026-05-25) — applied
+- **✅ Full-width layout** — dropped the centered **1200px cap** on `main` (which
+  left large empty margins on wide screens) in favour of a **fluid full-window**
+  layout with comfortable side padding (1.75rem). The reclaimed space goes to the
+  **list** (1fr) and the **detail form** (cap nudged 380→420px). Verified at a
+  1421px viewport: `main` 1421px, list pane 925px (was ~752px), form 420px; no
+  console errors.
+  - **Rebalanced** (follow-up): the lists were too wide and the form too narrow, so
+    the detail column was widened to `minmax(420px, 600px)` — at 1421px the form is
+    now 600px and the list 745px.
+
+## UI/UX pass 15 (2026-05-25) — applied
+- **✅ Combobox dropdown contrast fix (bug)** — dropdown items were **inheriting**
+  their text colour from the surroundings: the header (active-tournament) combobox
+  showed **white text on the white list** (invisible), and form comboboxes inherited
+  the muted-grey label colour (low contrast). The `.combo-list`/`.combo-item` now
+  set explicit `color: var(--ink)` on `#fff` (and reset inherited uppercase/letter-
+  spacing), with highlighted/selected rows keeping dark ink on the light `--sel`
+  green. Verified: item text is `rgb(31,41,51)` in both header and form dropdowns.
+
+## UI/UX pass 16 (2026-05-25) — applied
+- **✅ Placeholder no longer a dropdown row** — the blank "— select … —" / "— none —"
+  option was appearing as a selectable item in the combobox list. It's now excluded
+  from the rendered list (it already shows as the input's grey placeholder). Optional
+  fields are still clearable: empty the text and commit (Enter / click-away) and the
+  selection resets to none; required fields simply have no blank row. Verified:
+  active-tournament shows only the 2 tournaments, an optional site picker shows only
+  real sites yet still clears to none, and the required player picker lists only
+  players — no "— … —" rows anywhere.
+
+## UI/UX pass 17 (2026-05-25) — applied
+- **✅ Roster import row tidied** — the oversized **Import CSV/XLSX** button is now a
+  compact **Import** (0.8rem), and a **⬇ Template** button sits right beside the
+  upload control (secondary `.ghost` style) so the importer's template is where you
+  need it. The template emits the importer's **canonical columns**
+  (`usta_number … dietary_preference`) — fill it in and re-upload. The redundant
+  table-side roster template was removed (roster added to `NO_TEMPLATE`); the roster
+  table keeps its **⬇ CSV** export. Verified: Import 12.8px/compact padding, template
+  emits the canonical header row, only the CSV export remains by the table; no
+  console errors.
+
+## UI/UX pass 18 (2026-05-25) — applied (roadmap correctness gaps)
+Reviewed the roadmap and executed the two outstanding **🟡 correctness gaps** that
+need no external service:
+- **✅ Assignment site constrained** to the active tournament's sites (dropdown
+  filled per-tournament in `loadAssignments`). Verified: 1 linked site shown vs 4
+  global.
+- **✅ Work-date bounds warning** — ⚠ flag on out-of-window day chips + an
+  "Add anyway?" confirm when adding a day outside the play window (warning, not a
+  block — audit §3.4). Verified via `_outOfWindow`.
+
+### Deferred — need an external service or an explicit decision (not executed)
+These remaining roadmap items can't be completed inside the local POC without new
+infrastructure or a privacy decision, so they're intentionally left open:
+- **Google Maps geocoding** for auto-distance (Phase 2) — needs a Maps API key +
+  network egress; **manual distance entry is the working fallback** today (D3/U2).
+- **Dedicated forwarding-address email auto-ingest** (Phase 3, D4) — needs real
+  mail infra; **manual add to the review inbox** is the working POC path.
+- **LLM triage upgrade** (D5) — the local rule-based suggester ships; an LLM that
+  reads minors' email content requires the **cloud-vs-local privacy call first**.
+- **PII encryption at rest / retention** + **DB hardening** (Phase 5, audit §5) —
+  tied to the post-POC deployment switch (dedicated DB user, secrets, TLS).
+- **Money audit trail** beyond the current snapshot (store all calc *inputs*),
+  **correction-handling** for amending emails, and **multi-user TD access** (D8) —
+  lower-priority polish.
+
+Still open from the UI review (no external dep, just not yet done): a full
+button-style **utility-class system**, busy-on-submit on the remaining bespoke
+forms (assignment/doubles/pairing), and a **sidebar nav** for very narrow screens.

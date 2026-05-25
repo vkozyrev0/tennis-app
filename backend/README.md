@@ -100,12 +100,16 @@ Two areas (see `app.js`), pure HTML/CSS + vanilla JS:
   are collapsible (`<details>`, closed by default; auto-open on file/edit).
 
 UX: status **color chips**, corner **toasts**, a styled **confirm modal**, a
-global request **progress bar**, busy-on-submit, **CSV export** per list, keyboard
+global request **progress bar**, busy-on-submit, **CSV export** + **CSV template**
+(empty, headers-only — roster's matches the importer's fields) per list, keyboard
 **ARIA tablist** + `:focus-visible`, zebra/sticky tables, right-aligned numerics.
 Navigation is a **two-level menu** — a level-1 bar of sections (Setup / Tournament
 / Staffing / Player requests) reveals only the chosen group's tabs — and every
 `<select>` is a **type-in searchable dropdown** (native select kept as the form's
-source of truth; no JS dependency).
+source of truth; no JS dependency). Staffing and Player-request forms **reference
+the existing Officials / Players lists** via these pickers rather than re-typing a
+person; the chosen player is resolved back to USTA #/name on submit (backend
+upsert-by-USTA # unchanged).
 Setup lists each have **their own scrollbar** (`.list-scroll` container, pinned
 header) whose height is **bounded to the viewport dynamically** (a `sizeLists()`
 helper sets `--list-max` from the list's real top offset on tab-switch/resize/load),

@@ -135,12 +135,18 @@ function enhanceSelect(sel) {
 
   function syncDisplay() {
     const o = sel.selectedOptions[0];
-    input.value = o ? o.textContent : "";
+    const blank = [...sel.options].find((x) => x.value === "");
+    // A blank/placeholder option becomes the input's grey placeholder (not its
+    // value), so the field starts empty and you can type a search immediately.
+    input.placeholder = blank ? blank.textContent : "";
+    input.value = (o && o.value !== "") ? o.textContent : "";
     input.disabled = sel.disabled;
   }
   function render(q) {
     const t = (q || "").trim().toLowerCase();
-    shown = [...sel.options].filter((o) => o.textContent.trim() !== "" && (!t || o.textContent.toLowerCase().includes(t)));
+    // The blank/placeholder option (value "") is shown as the input placeholder,
+    // not as a selectable row. Optional fields are cleared by emptying the text.
+    shown = [...sel.options].filter((o) => o.value !== "" && (!t || o.textContent.toLowerCase().includes(t)));
     list.innerHTML = "";
     if (!shown.length) { list.innerHTML = '<div class="combo-empty">No matches</div>'; return; }
     shown.forEach((o, i) => {
@@ -156,19 +162,28 @@ function enhanceSelect(sel) {
     if (list.children[hi]) list.children[hi].scrollIntoView({ block: "nearest" });
   }
   function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; }
-  function close() { list.hidden = true; hi = -1; syncDisplay(); }
-  function choose(o) { sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true })); syncDisplay(); close(); }
+  // commit=true: if the text was cleared, clear the selection (for optional fields
+  // that have a blank "" option). Otherwise just restore the displayed value.
+  function close(commit) {
+    list.hidden = true; hi = -1;
+    if (commit && input.value.trim() === "" && sel.value !== "" && [...sel.options].some((o) => o.value === "")) {
+      sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    syncDisplay();
+  }
+  function choose(o) { sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true })); syncDisplay(); close(false); }
 
-  input.addEventListener("focus", open);
+  // Select existing text on focus so the first keystroke overtypes a prior choice.
+  input.addEventListener("focus", () => { open(); input.select(); });
   input.addEventListener("click", open);
   input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
-    else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } }
-    else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(); } }
+    else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } else { e.preventDefault(); close(true); } }
+    else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(false); } }
   });
-  document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) close(); });
+  document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) close(true); });
 
   // Keep the visible text in sync when options/value/disabled change in code.
   new MutationObserver(() => requestAnimationFrame(syncDisplay))
@@ -209,8 +224,35 @@ function refreshAllSelects() {
   fillSelect(document.getElementById("dist-site"), Object.values(sitesById), siteLabel, false);
   fillSelect(document.getElementById("roster-player"), Object.values(playersById), playerLabel, false);
   fillSelect(document.getElementById("asg-official"), Object.values(officialsById), officialLabel, false);
-  fillSelect(document.getElementById("asg-site"), Object.values(sitesById), siteLabel);
+  // asg-site is filled per-tournament in loadAssignments() (mileage site must be
+  // one of THIS tournament's sites), so it is intentionally not filled here.
   fillSelect(document.getElementById("trb-hotel"), Object.values(hotelsById), (h) => h.name, false);
+  fillPlayerRefs();
+}
+
+// Part B forms reference the existing Players list instead of free-typing a
+// player. Fill any `select.player-ref` and resolve the choice back to the
+// player's identity fields on submit (backend upserts by USTA #, unchanged).
+function fillPlayerRef(sel) {
+  if (!sel) return;
+  const cur = sel.value;
+  const blank = sel.name === "partner_ref" ? "— none —" : "— select player —";
+  sel.innerHTML = `<option value="">${blank}</option>`;
+  for (const p of Object.values(playersById)) {
+    const o = document.createElement("option");
+    o.value = p.id; o.textContent = playerLabel(p);
+    sel.appendChild(o);
+  }
+  sel.value = cur;
+}
+function fillPlayerRefs() { document.querySelectorAll("select.player-ref").forEach(fillPlayerRef); }
+// Expand a chosen player id (field) into usta_number/first_name/last_name on `b`.
+function expandPlayerRef(b, field = "player_ref") {
+  const id = b[field];
+  delete b[field];
+  const p = id ? playersById[id] : null;
+  if (p) { b.usta_number = p.usta_number; b.first_name = p.first_name || null; b.last_name = p.last_name || null; }
+  return b;
 }
 
 // ---- tabs ----
@@ -583,6 +625,8 @@ rosterForm.addEventListener("submit", async (e) => {
 });
 rosterForm.querySelector(".cancel").addEventListener("click", rosterReset);
 document.getElementById("roster-filter").addEventListener("input", renderRoster);
+document.getElementById("roster-template").addEventListener("click", () =>
+  _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template"));
 document.getElementById("roster-import").addEventListener("click", async () => {
   if (!active) return;
   const f = document.getElementById("roster-file").files[0];
@@ -603,8 +647,15 @@ document.getElementById("roster-import").addEventListener("click", async () => {
 // --- Assignments ---
 const asgForm = document.getElementById("asg-form");
 let asgEditId = null;
+// True when a work date falls outside the active tournament's play window.
+function _outOfWindow(d) {
+  return !!(active && d && (d < active.play_start_date || d > active.play_end_date));
+}
 async function loadAssignments() {
   if (!active) return;
+  // Mileage site must be one of THIS tournament's sites (audit §3 — not any site).
+  const tSites = await api(`/tournaments/${active.id}/sites`);
+  fillSelect(document.getElementById("asg-site"), tSites, siteLabel);
   const rbList = await api(`/room-blocks?tournament_id=${active.id}&kind=official`);
   fillSelect(document.getElementById("asg-room-block"), rbList, (b) => {
     const hn = hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : "hotel " + b.hotel_id;
@@ -648,11 +699,14 @@ function renderAssignment(a, availDates) {
   });
   actions.append(ed, dl); head.appendChild(actions); card.appendChild(head);
 
-  // Confirmed days, grouped chips (cert + date with weekday).
+  // Confirmed days, grouped chips (cert + date with weekday). Days outside the
+  // tournament's play window are flagged (a warning, not a block — audit §3.4).
   const days = document.createElement("div"); days.className = "days";
   for (const d of a.days) {
     const chip = document.createElement("span"); chip.className = "chip";
-    chip.innerHTML = `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
+    const oow = _outOfWindow(d.work_date);
+    chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
+      `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
     x.addEventListener("click", async () => { try { await api(`/assignment-days/${d.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); } });
     chip.appendChild(x); days.appendChild(chip);
@@ -699,6 +753,10 @@ function renderAssignment(a, availDates) {
       ? (manualIn.value ? [manualIn.value] : [])
       : [...pickWrap.querySelectorAll("input.dpick:checked")].map((c) => c.value);
     if (!dates.length) { setMsg("asg-msg", "pick day(s)", false); return; }
+    const oow = dates.filter(_outOfWindow);
+    if (oow.length && !(await confirmDialog(
+      `${oow.length} day(s) fall outside the play window (${active.play_start_date} → ${active.play_end_date}). Add anyway?`,
+      "Add anyway"))) return;
     try {
       for (const d of dates) {
         await api(`/assignments/${a.id}/days`, { method: "POST", body: JSON.stringify({ work_date: d, working_as: certSel.value }) });
@@ -902,7 +960,8 @@ async function loadInbox() {
       document.querySelector(`.tab[data-target="${t.tab}"]`).click();
       openForm(t.form);
       setMsg(t.msg, `filing from email #${m.id}`, true);
-      t.form.usta_number.focus();
+      const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
+      if (focusEl) focusEl.focus();
     });
     const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
     sgBtn.addEventListener("click", async () => {
@@ -949,7 +1008,7 @@ async function loadLate() {
 function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
 lateForm.addEventListener("submit", async (e) => {
   e.preventDefault(); if (!active) return;
-  const b = formObj(lateForm);
+  const b = expandPlayerRef(formObj(lateForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
     await api(`/tournaments/${active.id}/late-entries`, { method: "POST", body: JSON.stringify(b) });
@@ -979,7 +1038,7 @@ async function loadWithdrawals() {
 function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
 wdForm.addEventListener("submit", async (e) => {
   e.preventDefault(); if (!active) return;
-  const b = formObj(wdForm);
+  const b = expandPlayerRef(formObj(wdForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
     await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
@@ -1013,7 +1072,7 @@ function wirePlayerList(cfg) {
     e.preventDefault(); if (!active) return;
     const btn = form.querySelector('button[type="submit"]');
     btn.disabled = true;
-    const b = formObj(form); b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
+    const b = expandPlayerRef(formObj(form)); b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
     try { await api(`/tournaments/${active.id}${cfg.path}`, { method: "POST", body: JSON.stringify(b) }); setMsg(cfg.msgId, "added", true); reset(); load(); loadInbox(); }
     catch (err) { setMsg(cfg.msgId, err.message, false); }
     finally { btn.disabled = false; }
@@ -1070,11 +1129,14 @@ const pairingForm = document.getElementById("pairing-form");
 const pairingMembersBox = document.getElementById("pairing-members");
 function pairingMemberRow() {
   const div = document.createElement("div"); div.className = "row pmember";
-  div.innerHTML = '<label>USTA # <input class="pm-usta" /></label>' +
-    '<label>First <input class="pm-first" /></label><label>Last <input class="pm-last" /></label>';
+  const lbl = document.createElement("label"); lbl.textContent = "Player ";
+  const sel = document.createElement("select"); sel.className = "pm-player player-ref";
+  lbl.appendChild(sel); div.appendChild(lbl);
   const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "×";
   del.addEventListener("click", () => { div.remove(); if (!pairingMembersBox.children.length) pairingMemberRow(); });
   div.appendChild(del); pairingMembersBox.appendChild(div);
+  fillPlayerRef(sel);     // reference the existing Players list
+  enhanceSelect(sel);     // type-in searchable dropdown
 }
 function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
 document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
@@ -1096,12 +1158,11 @@ async function loadPairing() {
 }
 pairingForm.addEventListener("submit", async (e) => {
   e.preventDefault(); if (!active) return;
-  const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => ({
-    usta_number: r.querySelector(".pm-usta").value.trim(),
-    first_name: r.querySelector(".pm-first").value.trim() || null,
-    last_name: r.querySelector(".pm-last").value.trim() || null,
-  })).filter((m) => m.usta_number);
-  if (members.length < 2) { setMsg("pairing-msg", "add at least two players", false); return; }
+  const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => {
+    const p = playersById[r.querySelector(".pm-player").value];
+    return p ? { usta_number: p.usta_number, first_name: p.first_name || null, last_name: p.last_name || null } : null;
+  }).filter(Boolean);
+  if (members.length < 2) { setMsg("pairing-msg", "select at least two players", false); return; }
   const body = {
     age_division: pairingForm.age_division.value || null,
     relationship: pairingForm.relationship.value,
@@ -1154,13 +1215,16 @@ async function loadDoubles() {
 }
 doublesForm.addEventListener("submit", async (e) => {
   e.preventDefault(); if (!active) return;
+  const me = playersById[doublesForm.player_ref.value];
+  if (!me) { setMsg("doubles-msg", "select a player", false); return; }
+  const partner = doublesForm.partner_ref.value ? playersById[doublesForm.partner_ref.value] : null;
   const b = {
-    usta_number: doublesForm.usta_number.value.trim(),
-    first_name: doublesForm.first_name.value.trim() || null,
-    last_name: doublesForm.last_name.value.trim() || null,
+    usta_number: me.usta_number,
+    first_name: me.first_name || null,
+    last_name: me.last_name || null,
     age_division: doublesForm.age_division.value.trim() || null,
     wants_random: doublesForm.wants_random.checked,
-    partner_usta: doublesForm.partner_usta.value.trim() || null,
+    partner_usta: partner ? partner.usta_number : null,
     source_email_id: doublesForm.source_email_id.value ? Number(doublesForm.source_email_id.value) : null,
   };
   try {
@@ -1367,20 +1431,38 @@ const distancesCrud = wireEntity({
 });
 
 // =================== Generic CSV export for list tables ===================
-function exportTable(table, name) {
-  const ths = [...table.querySelectorAll("thead th")];
-  const keep = ths.map((th) => th.textContent.trim() !== "");  // skip the actions column
-  const headers = ths.filter((_, i) => keep[i]).map((th) => th.textContent.trim());
-  const rows = [...table.querySelectorAll("tbody tr")]
-    .filter((tr) => !tr.querySelector(".empty"))
-    .map((tr) => [...tr.children].filter((_, i) => keep[i]).map((td) => td.textContent.replace(/\s+/g, " ").trim()));
-  const csv = [headers, ...rows]
+function _csvDownload(matrix, filename) {
+  const csv = matrix
     .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
     .join("\r\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
   const a = document.createElement("a");
-  a.href = url; a.download = name + ".csv"; a.click();
+  a.href = url; a.download = filename + ".csv"; a.click();
   URL.revokeObjectURL(url);
+}
+// Visible column headers (skipping the trailing actions/blank column).
+function _visibleHeaders(table) {
+  const ths = [...table.querySelectorAll("thead th")];
+  const keep = ths.map((th) => th.textContent.trim() !== "");
+  return { keep, headers: ths.filter((_, i) => keep[i]).map((th) => th.textContent.trim()) };
+}
+function exportTable(table, name) {
+  const { keep, headers } = _visibleHeaders(table);
+  const rows = [...table.querySelectorAll("tbody tr")]
+    .filter((tr) => !tr.querySelector(".empty"))
+    .map((tr) => [...tr.children].filter((_, i) => keep[i]).map((td) => td.textContent.replace(/\s+/g, " ").trim()));
+  _csvDownload([headers, ...rows], name);
+}
+// An empty CSV with just the header row, for the user to fill in and (where
+// supported) import. Roster uses the importer's canonical field names so the
+// downloaded template can be re-imported as-is.
+const TEMPLATE_HEADERS = {
+  "roster-table": ["usta_number", "first_name", "last_name", "age_division",
+    "events", "selection_status", "t_shirt_size", "dietary_preference"],
+};
+function templateTable(table, name) {
+  const headers = TEMPLATE_HEADERS[table.id] || _visibleHeaders(table).headers;
+  _csvDownload([headers], name + "-template");
 }
 const EXPORTABLE = {
   "roster-table": "roster", "late-table": "late-entries", "withdrawal-table": "withdrawals",
@@ -1389,9 +1471,19 @@ const EXPORTABLE = {
   "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
   "cvb-table": "cvb-hotel-totals", "tshirt-table": "tshirts", "inbox-table": "inbox",
 };
+// Export-only here: derived/aggregate lists, plus roster (its template lives in
+// the import row next to the upload control).
+const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "inbox-table", "tshirt-table", "roster-table"]);
 for (const [id, name] of Object.entries(EXPORTABLE)) {
   const table = document.getElementById(id);
   if (!table) continue;
+  if (!NO_TEMPLATE.has(id)) {
+    const tpl = document.createElement("button");
+    tpl.type = "button"; tpl.className = "export-btn no-print"; tpl.textContent = "⬇ Template";
+    tpl.title = "Download an empty CSV with just the headers";
+    tpl.addEventListener("click", () => templateTable(table, name));
+    table.parentNode.insertBefore(tpl, table);
+  }
   const btn = document.createElement("button");
   btn.type = "button"; btn.className = "export-btn no-print"; btn.textContent = "⬇ CSV";
   btn.addEventListener("click", () => exportTable(table, name));
