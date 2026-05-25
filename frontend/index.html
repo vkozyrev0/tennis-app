@@ -578,16 +578,31 @@
           </div>
           <div class="row">
             <label>Hotel <input name="hotel_name" /></label>
+            <label>Lodging plan
+              <select name="lodging_plan">
+                <option value="">— none —</option>
+                <option>Hotel</option>
+                <option>Commuter</option>
+                <option>Commuter 1-2 hrs</option>
+                <option>Commuter 2+ hrs</option>
+                <option>Local / family</option>
+              </select>
+            </label>
           </div>
           <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="photel-msg"></span></div>
         </form>
         <table id="photel-table" class="list-table">
-          <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th></th></tr></thead>
+          <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th>Lodging plan</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <h4>Hotel summary — this tournament (selected players)</h4>
         <table id="hotel-summary-table" class="list-table">
           <thead><tr><th>Hotel</th><th>Players</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h4>Lodging plan summary — this tournament (selected players)</h4>
+        <table id="lodging-summary-table" class="list-table">
+          <thead><tr><th>Lodging plan</th><th>Players</th></tr></thead>
           <tbody></tbody>
         </table>
         <h4>CVB hotel totals (all tournaments)</h4>

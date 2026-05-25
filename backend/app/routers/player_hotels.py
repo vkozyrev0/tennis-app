@@ -9,8 +9,8 @@ from ..playerops import mark_email_filed, upsert_player
 router = APIRouter(tags=["player-ops"])
 
 _PH = """
-SELECT s.id, s.tournament_id, s.player_id, s.hotel_name, s.source_email_id,
-       p.usta_number, p.first_name, p.last_name
+SELECT s.id, s.tournament_id, s.player_id, s.hotel_name, s.lodging_plan,
+       s.source_email_id, p.usta_number, p.first_name, p.last_name
 FROM player_hotel_stay s JOIN player p ON p.id = s.player_id
 """
 
@@ -31,9 +31,9 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
             raise HTTPException(status_code=404, detail="tournament not found")
         pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
         cur.execute(
-            "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_name, source_email_id) "
-            "VALUES (%s,%s,%s,%s) RETURNING id",
-            (tournament_id, pid, body.hotel_name, body.source_email_id),
+            "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_name, lodging_plan, source_email_id) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (tournament_id, pid, body.hotel_name, body.lodging_plan, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
         mark_email_filed(cur, body.source_email_id, "hotel")
@@ -72,6 +72,27 @@ def hotel_summary(tournament_id: int, conn=Depends(db_dep)):
     """Per-tournament: players per hotel (selected only, alphabetical, consistent)."""
     with conn.cursor() as cur:
         cur.execute(_HOTEL_SUMMARY.format(extra="AND s.tournament_id = %s"), (tournament_id,))
+        return cur.fetchall()
+
+
+@router.get("/api/tournaments/{tournament_id}/lodging-summary")
+def lodging_summary(tournament_id: int, conn=Depends(db_dep)):
+    """Per-tournament: players per lodging plan (Hotel/Commuter/…), selected only."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT min(TRIM(s.lodging_plan)) AS lodging_plan,
+                   count(DISTINCT s.player_id) AS players
+            FROM player_hotel_stay s
+            JOIN tournament_entry e
+              ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
+            WHERE s.tournament_id = %s AND e.selection_status = 'selected'
+              AND NULLIF(TRIM(s.lodging_plan), '') IS NOT NULL
+            GROUP BY lower(TRIM(s.lodging_plan))
+            ORDER BY lower(TRIM(s.lodging_plan))
+            """,
+            (tournament_id,),
+        )
         return cur.fetchall()
 
 

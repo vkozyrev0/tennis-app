@@ -1189,12 +1189,23 @@ async function loadHotelSummary() {
       : '<tr><td class="empty" colspan="2">No hotels entered for selected players yet.</td></tr>';
   } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
 }
+// Per-tournament lodging-plan summary: players per plan (Hotel/Commuter/…).
+async function loadLodgingSummary() {
+  if (!active) return;
+  const tbody = document.querySelector("#lodging-summary-table tbody");
+  try {
+    const rows = await api(`/tournaments/${active.id}/lodging-summary`);
+    tbody.innerHTML = rows.length
+      ? rows.map((r) => `<tr><td>${esc(r.lodging_plan)}</td><td>${r.players}</td></tr>`).join("")
+      : '<tr><td class="empty" colspan="2">No lodging plans entered for selected players yet.</td></tr>';
+  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
+}
 const photelList = wirePlayerList({
   formId: "photel-form", msgId: "photel-msg", tableId: "photel-table",
-  path: "/player-hotels", del: "/player-hotels", cols: 4,
+  path: "/player-hotels", del: "/player-hotels", cols: 5,
   empty: "No player hotels reported yet.",
-  cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.hotel_name)}</td>`,
-  after: () => { loadCvb(); loadHotelSummary(); },
+  cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.hotel_name)}</td><td>${esc(r.lodging_plan)}</td>`,
+  after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
@@ -1643,12 +1654,12 @@ const EXPORTABLE = {
   "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
   "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
   "cvb-table": "cvb-hotel-totals", "hotel-summary-table": "hotel-summary",
-  "tshirt-table": "tshirts", "inbox-table": "inbox",
+  "lodging-summary-table": "lodging-summary", "tshirt-table": "tshirts", "inbox-table": "inbox",
 };
 // Export-only here: derived/aggregate lists, plus roster (its template lives in
 // the import row next to the upload control).
 const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "hotel-summary-table",
-  "inbox-table", "tshirt-table", "roster-table"]);
+  "lodging-summary-table", "inbox-table", "tshirt-table", "roster-table"]);
 for (const [id, name] of Object.entries(EXPORTABLE)) {
   const table = document.getElementById(id);
   if (!table) continue;

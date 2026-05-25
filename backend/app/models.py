@@ -366,6 +366,7 @@ class PlayerHotelCreate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     hotel_name: Optional[str] = None
+    lodging_plan: Optional[str] = None
     source_email_id: Optional[int] = None
 
 
@@ -377,6 +378,7 @@ class PlayerHotelOut(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     hotel_name: Optional[str] = None
+    lodging_plan: Optional[str] = None
     source_email_id: Optional[int] = None
 
 

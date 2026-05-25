@@ -7,6 +7,12 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Player lodging plan** (matches the workbook's "Lodging Plans" column) —
+  migration `0018` adds `lodging_plan` to `player_hotel_stay`; the Player-hotels form
+  gains a **Lodging plan** dropdown (Hotel / Commuter / Commuter 1-2 hrs / Commuter
+  2+ hrs / Local-family), the list shows it, and a new per-tournament **Lodging plan
+  summary** (players per plan, selected only) sits beside the hotel summary — both
+  CSV-exportable.
 - **✅ Workspace layout consistency** (validation follow-up). After auditing all 22
   panels (the 7 Setup list/detail panels were already 100% consistent): (1) the
   **Inbox** and **Assignments** add-forms are now **collapsible** like the other 9
