@@ -440,12 +440,12 @@ def test_summaries_exclude_withdrawn_and_alternates():
     assert sel["usta_number"] in mine
     assert alt["usta_number"] not in mine and wd["usta_number"] not in mine
 
-    # t-shirt cumulative list picks up a roster entry's size
+    # t-shirt cumulative list picks up a roster entry's size (normalized to canonical)
     p2 = _player()
     client.post(f"/api/tournaments/{t['id']}/players",
                 json={"player_id": p2["id"], "age_division": "G12", "t_shirt_size": "YM"})
     shirts = client.get("/api/tshirts").json()
-    assert any(r["usta_number"] == p2["usta_number"] and r["t_shirt_size"] == "YM" for r in shirts)
+    assert any(r["usta_number"] == p2["usta_number"] and r["t_shirt_size"] == "Youth Medium" for r in shirts)
 
 
 def test_scheduling_and_division_lists():

@@ -204,6 +204,7 @@ def list_roster(tournament_id: int, conn=Depends(db_dep)):
 @router.post("/api/tournaments/{tournament_id}/players",
              response_model=RosterEntryOut, status_code=201)
 def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(db_dep)):
+    body.t_shirt_size = _norm_shirt(body.t_shirt_size)  # canonical size (DB CHECK)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -228,6 +229,7 @@ def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(d
 
 @router.put("/api/roster/{entry_id}", response_model=RosterEntryOut)
 def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_dep)):
+    body.t_shirt_size = _norm_shirt(body.t_shirt_size)  # canonical size (DB CHECK)
     try:
         with conn.cursor() as cur:
             cur.execute(
