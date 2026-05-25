@@ -60,6 +60,7 @@ backend/
     main.py            FastAPI app; mounts API + static frontend
     security.py        pbkdf2 hashing + cookie-session auth dependencies
     triage.py          local rule-based email classifier (agent v0, no LLM)
+    importer.py        spreadsheet import registry (parse/validate/merge, CSV+XLSX templates)
     routers/           health, auth (login/logout/me), me (official self-service),
                        sites, tournaments (+ /sites M2M), officials (+ /account),
                        players (+ /history), rates, hotels, room_blocks, distances,
@@ -76,7 +77,8 @@ backend/
                        0007_availability, 0008_auth, 0009_certification_types,
                        0010_room_block_kind, 0011_player_ops, 0012_withdrawals,
                        0013_avoid_divflex, 0014_player_hotels, 0015_pairing_avoidances,
-                       0016_doubles, 0017_session_expiry
+                       0016_doubles, 0017_session_expiry, 0018_lodging_plan,
+                       0019_player_city_state, 0020_import_staging, 0021_perf_indexes
   migrate.py           migration runner (creates DB, tracks schema_migrations)
   seed.py              demo data (sites, a tournament + site link, cert rates)
   reset_demo.py        wipe + re-seed the working DB

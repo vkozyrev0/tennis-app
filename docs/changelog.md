@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Performance indexes** (migration `0021`) — added `IF NOT EXISTS` indexes on the
+  per-tournament / foreign-key columns the hot queries filter on (assignment,
+  room_block, availability, email_message, late_entry, withdrawal, scheduling/
+  division, pairing, doubles, player_hotel_stay(tournament,player), certification,
+  official_site_distance) — addresses the design-critique DB item.
 - **✅ Import pipeline with staging** (migration `0020`) — the **Data → Import** page
   imports each data type from **CSV or Excel** through a **staging area**: upload →
   rows land in `import_batch`/`import_row` (parsed + per-row validated, *nothing written
