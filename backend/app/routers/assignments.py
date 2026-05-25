@@ -73,17 +73,12 @@ def _summary(cur, a: dict) -> dict:
             reimbursable = max(2 * float(dist["one_way_miles"]) - FREE_MILES, 0.0)
             mileage = round(min(reimbursable * MILEAGE_RATE, MILEAGE_CAP), 2)
 
+    check_in = a["hotel_check_in"].isoformat() if a.get("hotel_check_in") else None
+    check_out = a["hotel_check_out"].isoformat() if a.get("hotel_check_out") else None
     hotel_date_mismatch = False
-    if a["room_block_id"] is not None and days:
-        cur.execute(
-            "SELECT check_in, check_out FROM room_block WHERE id = %s",
-            (a["room_block_id"],),
-        )
-        blk = cur.fetchone()
-        if blk and blk["check_in"] and blk["check_out"]:
-            wd = [d["work_date"] for d in days]
-            ci, co = blk["check_in"].isoformat(), blk["check_out"].isoformat()
-            hotel_date_mismatch = any(d < ci or d > co for d in wd)
+    if a["room_block_id"] is not None and days and check_in and check_out:
+        wd = [d["work_date"] for d in days]
+        hotel_date_mismatch = any(d < check_in or d > check_out for d in wd)
 
     # A worked day outside the tournament's play window is surfaced as a flag, not
     # a block (consistent with the hotel-date-mismatch policy, audit §3.4).
@@ -102,6 +97,8 @@ def _summary(cur, a: dict) -> dict:
         "site_label": a["site_label"],
         "room_block_id": a["room_block_id"],
         "hotel_name": a["hotel_name"],
+        "check_in": check_in,
+        "check_out": check_out,
         "days": days,
         "pay": pay,
         "mileage": mileage,
@@ -120,7 +117,7 @@ SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        o.first_name, o.last_name, o.dietary_restrictions,
        t.play_start_date, t.play_end_date,
        COALESCE(s.code, s.name) AS site_label,
-       h.name AS hotel_name
+       h.name AS hotel_name, rb.check_in AS hotel_check_in, rb.check_out AS hotel_check_out
 FROM assignment a
 JOIN official o ON o.id = a.official_id
 JOIN tournament t ON t.id = a.tournament_id

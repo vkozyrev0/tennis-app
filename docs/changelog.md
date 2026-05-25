@@ -7,6 +7,18 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Report = TD "Staffing Plan" format** — the officials report was reshaped to the
+  layout the TD uses: **Name · Position · Dietary · Hotel? · Check-in · Check-out ·
+  one column per play-day weekday (✓) · Pay · Mileage**, titled "<Tournament> —
+  Staffing Plan". Weekday columns are generated from the tournament's play window;
+  ✓ marks the days each official works; flags (no-distance / off-window / hotel-date)
+  collapse into a ⚠ next to the name. **CSV export** emits the same columns (X marks,
+  Excel-openable) and the **Template** matches. Backend now exposes the room block's
+  check-in/out on the assignment summary. *(Non-official staff — Site Director, Trainer,
+  Operations, Stringer — aren't modeled yet, so only assigned officials appear.)*
+- **✅ Dark-mode date picker** — the calendar icon was invisible on dark fields; set
+  `color-scheme: light/dark` per theme (native controls adapt) + a webkit filter
+  fallback on the picker indicator.
 - **✅ Assignment Edit fixed (bug)** — the Assignments "Edit" button set the native
   `<select>` values but, since those fields are now comboboxes, the visible inputs
   didn't update — so Edit looked dead and you couldn't change site/hotel after adding
@@ -15,6 +27,9 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
 - **✅ Inbox forwarding-address note** — the Review inbox now states plainly that a
   live forwarding address / auto-ingest isn't wired in the POC (deferred, needs mail
   infra) and that messages are pasted manually — answering "where do I send email?".
+- **✅ Print forces light** — printing the officials report while the dark theme is
+  active now overrides the palette to white/black in `@media print` (saves ink, stays
+  legible), regardless of the on-screen theme.
 - **✅ Dark theme** — a header **🌙 Dark / ☀ Light** toggle (persisted in
   `localStorage`, applied before first paint to avoid a flash). The palette is driven
   entirely by CSS variables; introduced `--field-bg / --zebra / --elev` and pointed the

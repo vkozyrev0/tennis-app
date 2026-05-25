@@ -1339,36 +1339,43 @@ async function loadReports() {
   document.getElementById("report-meta").textContent =
     `${t.type} · ${t.play_start_date} → ${t.play_end_date} · ${totals.official_count} official(s)` +
     (rule ? ` · pay rule ${rule.rule_version}` : "");
+  // TD "Staffing Plan" layout: flat roster with a weekday X column per play day.
+  const cols = _reportColumns(t);
+  document.querySelector("#report-table thead").innerHTML =
+    "<tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th>" +
+    "<th>Check-in</th><th>Check-out</th>" +
+    cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") +
+    '<th class="num">Pay</th><th class="num">Mileage</th></tr>';
   const tbody = document.querySelector("#report-table tbody");
   tbody.innerHTML = "";
   for (const o of reportData.officials) {
-    // Group the assigned days by certification, then list dates (with weekday).
-    const byCert = {};
-    for (const d of o.days) (byCert[d.working_as] ||= []).push(d.work_date);
-    const daysHtml = Object.keys(byCert).sort().map((c) =>
-      `<div><strong>${esc(certLabel(c))}:</strong> ${byCert[c].sort().map(fmtDOW).map(esc).join(", ")}</div>`
-    ).join("") || '<span class="muted">no days</span>';
+    const worked = new Set(o.days.map((d) => d.work_date));
+    const roles = [...new Set(o.days.map((d) => d.working_as))].map(certLabel).join(", ");
     const flags = [
       o.missing_distance ? "no distance" : "",
-      o.hotel_date_mismatch ? "⚠ hotel dates" : "",
-      o.work_date_out_of_window ? "⚠ off-window day" : "",
-    ].filter(Boolean).join(", ");
+      o.hotel_date_mismatch ? "hotel dates" : "",
+      o.work_date_out_of_window ? "off-window day" : "",
+    ].filter(Boolean);
+    const warn = flags.length ? ` <span class="warn" title="${esc(flags.join(", "))}">⚠</span>` : "";
+    const dayCells = cols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
     const tr = document.createElement("tr");
     tr.innerHTML =
-      `<td>${esc(o.official_name)}</td><td>${daysHtml}</td><td>${esc(o.site_label)}</td>` +
-      `<td>${esc(o.hotel_name)}</td><td>${esc(o.dietary_restrictions)}</td>` +
-      `<td>${money(o.pay)}</td><td>${money(o.mileage)}</td><td>${money(o.total)}</td>` +
-      `<td class="${flags ? "warn" : ""}">${esc(flags)}</td>`;
+      `<td>${esc(o.official_name)}${warn}</td><td>${esc(roles)}</td>` +
+      `<td>${esc(o.dietary_restrictions)}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
+      `<td>${esc(_fmtMDY(o.check_in))}</td><td>${esc(_fmtMDY(o.check_out))}</td>` +
+      dayCells +
+      `<td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td>`;
     tbody.appendChild(tr);
   }
+  const lead = 6 + cols.length;  // columns before Pay
   if (reportData.officials.length === 0)
-    tbody.innerHTML = '<tr><td class="empty" colspan="9">No officials assigned yet.</td></tr>';
+    tbody.innerHTML = `<tr><td class="empty" colspan="${lead + 2}">No officials assigned yet.</td></tr>`;
   const note = (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
     (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "");
   document.getElementById("report-totals").innerHTML =
-    `<th colspan="5">Totals${note}</th><th>${money(totals.pay)}</th>` +
-    `<th>${money(totals.mileage)}</th><th>${money(totals.total)}</th><th></th>`;
+    `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
+    `<th class="num">${money(totals.mileage)}</th>`;
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
@@ -1382,28 +1389,44 @@ async function loadReports() {
       }).join("")
     : '<tr><td class="empty" colspan="3">No officials have a hotel assignment yet.</td></tr>';
 }
-const REPORT_HEADERS = ["Official", "Days", "Site", "Hotel", "Dietary", "Pay", "Mileage", "Total", "Flags"];
+// Weekday columns for the tournament's play window (TD staffing-plan format).
+function _reportColumns(t) {
+  return _datesInRange(t.play_start_date, t.play_end_date).map((d) => ({ date: d, head: _dowLong(d) }));
+}
+function _dowLong(iso) { return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long" }); }
+function _fmtMDY(iso) {
+  return iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }) : "";
+}
+// Build the staffing-plan rows (header always; data rows when includeData).
+function _reportMatrix(includeData) {
+  const cols = _reportColumns(reportData.tournament);
+  const header = ["Name", "Position", "Dietary", "Hotel?", "Check-in", "Check-out",
+    ...cols.map((c) => c.head), "Pay", "Mileage"];
+  const rows = [header];
+  if (includeData) {
+    for (const o of reportData.officials) {
+      const worked = new Set(o.days.map((d) => d.work_date));
+      const roles = [...new Set(o.days.map((d) => d.working_as))].map(certLabel).join(", ");
+      rows.push([
+        o.official_name, roles, o.dietary_restrictions || "", o.hotel_name ? "Yes" : "No",
+        _fmtMDY(o.check_in), _fmtMDY(o.check_out),
+        ...cols.map((c) => (worked.has(c.date) ? "X" : "")),
+        o.pay, o.mileage == null ? "" : o.mileage,
+      ]);
+    }
+    const tt = reportData.totals;
+    rows.push(["Totals", "", "", "", "", "", ...cols.map(() => ""), tt.pay, tt.mileage]);
+  }
+  return rows;
+}
 document.getElementById("report-print").addEventListener("click", () => window.print());
-document.getElementById("report-template").addEventListener("click", () => _csvDownload([REPORT_HEADERS], "officials-report-template"));
+document.getElementById("report-template").addEventListener("click", () => {
+  if (!reportData) return;  // reports tab loads reportData on open
+  _csvDownload(_reportMatrix(false), "staffing-plan-template");
+});
 document.getElementById("report-csv").addEventListener("click", () => {
   if (!reportData) return;
-  const rows = [REPORT_HEADERS.slice()];
-  for (const o of reportData.officials) {
-    rows.push([
-      o.official_name, o.days.map((d) => `${d.work_date} ${certLabel(d.working_as)}`).join("; "),
-      o.site_label || "", o.hotel_name || "", o.dietary_restrictions || "",
-      o.pay, o.mileage == null ? "" : o.mileage, o.total,
-      [o.missing_distance ? "no distance" : "", o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window day" : ""].filter(Boolean).join(" / "),
-    ]);
-  }
-  const t = reportData.totals;
-  rows.push(["Totals", "", "", "", "", t.pay, t.mileage, t.total, ""]);
-  const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = `officials-report-${active.name.replace(/\s+/g, "_")}.csv`;
-  a.click(); URL.revokeObjectURL(url);
+  _csvDownload(_reportMatrix(true), `staffing-plan-${active.name.replace(/\s+/g, "_")}`);
 });
 
 // =================== Setup entity configs ===================

@@ -12,6 +12,7 @@
   --field-bg: #ffffff;   /* input/select/textarea background */
   --zebra: #f7f9fa;      /* even table rows */
   --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
+  color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
 }
 
 /* Dark theme — toggled via data-theme on <html> (persisted in localStorage). */
@@ -29,7 +30,10 @@
   --field-bg: #11161b;
   --zebra: #1f262e;
   --elev: #1e252d;
+  color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
 }
+/* Belt-and-suspenders: lighten the webkit calendar icon in dark mode. */
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(1.4); }
 
 * { box-sizing: border-box; }
 
@@ -375,14 +379,13 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .btn-link.danger { color: var(--bad); }
 
 /* Right-align numeric columns for scannability */
-#report-table th:nth-child(6), #report-table td:nth-child(6),
-#report-table th:nth-child(7), #report-table td:nth-child(7),
-#report-table th:nth-child(8), #report-table td:nth-child(8),
-#report-totals th:nth-child(2), #report-totals th:nth-child(3), #report-totals th:nth-child(4),
+#report-table .num, #report-totals .num,
 #panel-rates .list-table th:nth-child(3), #panel-rates .list-table td:nth-child(3),
 #panel-distances .list-table th:nth-child(4), #panel-distances .list-table td:nth-child(4),
 #trb-table th:nth-child(4), #trb-table td:nth-child(4),
 #trb-table th:nth-child(5), #trb-table td:nth-child(5) { text-align: right; }
+/* Center the weekday X columns on the staffing plan */
+#report-table .daycol { text-align: center; }
 
 /* Consistent styling for the few unclassed action buttons */
 /* Match the unclassed save buttons to the primary button look */
@@ -516,6 +519,12 @@ td.toggle { white-space: nowrap; }
 
 /* ---- print: show only the active report ---- */
 @media print {
+  /* Always print on white, even when the dark theme is active (saves ink / legible). */
+  :root, :root[data-theme="dark"] {
+    --bg: #fff; --card: #fff; --elev: #fff; --field-bg: #fff; --zebra: #fff;
+    --ink: #000; --muted: #333; --border: #bbb;
+  }
+  body { background: #fff; color: #000; }
   header, .menu-l1, .menu, #context-bar, .no-print { display: none !important; }
   .panel:not(.active) { display: none !important; }
   .tpanel .needs-active-note { display: none !important; }
