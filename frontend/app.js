@@ -4,24 +4,92 @@
 //  * Tournament workspace — an active tournament (shown in the context bar,
 //    persisted) scopes Sites / Roster / Assignments / Room blocks.
 
+let _inflight = 0;
+function _progress(delta) {
+  _inflight = Math.max(0, _inflight + delta);
+  const p = document.getElementById("progress");
+  if (p) p.classList.toggle("active", _inflight > 0);
+}
 async function api(path, options) {
-  const res = await fetch("/api" + path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const body = res.status === 204 ? null : await res.json();
-  if (!res.ok) {
-    const detail = body && body.detail ? body.detail : res.statusText;
-    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  _progress(1);
+  try {
+    const res = await fetch("/api" + path, {
+      headers: { "Content-Type": "application/json" },
+      ...options,
+    });
+    const body = res.status === 204 ? null : await res.json();
+    if (!res.ok) {
+      const detail = body && body.detail ? body.detail : res.statusText;
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+    return body;
+  } finally {
+    _progress(-1);
   }
-  return body;
+}
+function toast(text, ok = true) {
+  const box = document.getElementById("toasts");
+  if (!box || !text) return;
+  const t = document.createElement("div");
+  t.className = "toast " + (ok ? "ok" : "bad");
+  t.textContent = text;
+  box.appendChild(t);
+  setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ok ? 2500 : 5000);
 }
 function setMsg(id, text, ok) {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text;
-  el.className = "msg " + (ok ? "ok" : "bad");
-  if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ""; }, 4000);
+  if (el) {
+    el.textContent = text;
+    el.className = "msg " + (ok ? "ok" : "bad");
+    if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ""; }, 4000);
+  }
+  toast(text, ok);
+}
+
+// Styled confirm dialog (replaces native confirm); returns a Promise<bool>.
+function confirmDialog(message, okLabel = "Delete") {
+  return new Promise((resolve) => {
+    const m = document.getElementById("confirm-modal");
+    const ok = document.getElementById("confirm-ok");
+    const cancel = document.getElementById("confirm-cancel");
+    document.getElementById("confirm-text").textContent = message;
+    ok.textContent = okLabel;
+    m.hidden = false;
+    ok.focus();
+    const done = (v) => {
+      m.hidden = true;
+      ok.removeEventListener("click", onOk);
+      cancel.removeEventListener("click", onCancel);
+      document.removeEventListener("keydown", onKey);
+      resolve(v);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    const onKey = (e) => { if (e.key === "Escape") done(false); else if (e.key === "Enter") done(true); };
+    ok.addEventListener("click", onOk);
+    cancel.addEventListener("click", onCancel);
+    document.addEventListener("keydown", onKey);
+  });
+}
+
+// Colored status chip for known tokens (selection status, email status, etc.).
+const BADGE = {
+  selected: "ok", alternate: "warn", withdrawn: "bad",
+  new: "warn", filed: "ok", needs_followup: "warn",
+  pending: "warn", paired: "ok",
+  mutual: "info", random: "muted",
+  same_club: "info", siblings: "info",
+};
+function chip(v) {
+  if (v == null || v === "") return "";
+  return `<span class="badge badge-${BADGE[v] || "muted"}">${esc(v)}</span>`;
+}
+
+// Open the collapsible <details> wrapping a form (used when filing/editing).
+function openForm(form) {
+  const d = form && form.closest("details.addbox");
+  if (d) d.open = true;
+  if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
 }
 function esc(v) {
   if (v === null || v === undefined) return "";
@@ -43,6 +111,76 @@ function fillSelect(el, items, labelFn, none = true) {
   }
   el.value = cur;
 }
+
+// =================== Type-in dropdowns (searchable comboboxes) ===================
+// Progressively enhance every native <select> into a filterable, type-to-search
+// dropdown. The native <select> stays in the DOM as the form's source of truth
+// (value/required/submit/listeners all unchanged) — we just overlay a text input.
+function enhanceSelect(sel) {
+  if (!sel || sel.dataset.combo) return;
+  sel.dataset.combo = "1";
+  sel.tabIndex = -1;
+  sel.classList.add("combo-native");
+  const wrap = document.createElement("span");
+  wrap.className = "combo";
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+  const input = document.createElement("input");
+  input.type = "text"; input.className = "combo-input"; input.autocomplete = "off";
+  input.setAttribute("role", "combobox"); input.setAttribute("aria-autocomplete", "list");
+  const list = document.createElement("div");
+  list.className = "combo-list"; list.hidden = true;
+  wrap.append(input, list);
+  let shown = [], hi = -1;
+
+  function syncDisplay() {
+    const o = sel.selectedOptions[0];
+    input.value = o ? o.textContent : "";
+    input.disabled = sel.disabled;
+  }
+  function render(q) {
+    const t = (q || "").trim().toLowerCase();
+    shown = [...sel.options].filter((o) => o.textContent.trim() !== "" && (!t || o.textContent.toLowerCase().includes(t)));
+    list.innerHTML = "";
+    if (!shown.length) { list.innerHTML = '<div class="combo-empty">No matches</div>'; return; }
+    shown.forEach((o, i) => {
+      const it = document.createElement("div");
+      it.className = "combo-item" + (o.value === sel.value ? " sel" : "") + (i === hi ? " hi" : "");
+      it.textContent = o.textContent;
+      it.addEventListener("mousedown", (e) => { e.preventDefault(); choose(o); });
+      list.appendChild(it);
+    });
+  }
+  function paintHi() {
+    [...list.children].forEach((c, i) => c.classList.toggle("hi", i === hi));
+    if (list.children[hi]) list.children[hi].scrollIntoView({ block: "nearest" });
+  }
+  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; }
+  function close() { list.hidden = true; hi = -1; syncDisplay(); }
+  function choose(o) { sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true })); syncDisplay(); close(); }
+
+  input.addEventListener("focus", open);
+  input.addEventListener("click", open);
+  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
+    else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } }
+    else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(); } }
+  });
+  document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) close(); });
+
+  // Keep the visible text in sync when options/value/disabled change in code.
+  new MutationObserver(() => requestAnimationFrame(syncDisplay))
+    .observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+  sel.addEventListener("change", syncDisplay);
+  sel._comboSync = syncDisplay;
+  syncDisplay();
+}
+function enhanceAllSelects() { document.querySelectorAll("select").forEach(enhanceSelect); }
+function syncCombos() { document.querySelectorAll("select[data-combo]").forEach((s) => s._comboSync && s._comboSync()); }
+// form.reset() doesn't fire change — resync combos after any reset.
+document.addEventListener("reset", () => requestAnimationFrame(syncCombos), true);
 
 // ---- caches + labels ----
 const sitesById = {}, tournamentsById = {}, officialsById = {}, playersById = {}, hotelsById = {};
@@ -76,10 +214,59 @@ function refreshAllSelects() {
 }
 
 // ---- tabs ----
-document.getElementById("menu").addEventListener("click", (e) => {
+// ARIA: expose the menu as a tablist and make tabs keyboard-navigable.
+const _menuEl = document.getElementById("menu");
+_menuEl.setAttribute("role", "tablist");
+document.querySelectorAll(".tab").forEach((t) => {
+  t.setAttribute("role", "tab");
+  t.setAttribute("aria-selected", t.classList.contains("active") ? "true" : "false");
+});
+
+// ---- two-level menu: level 1 = section group, level 2 = that group's tabs ----
+// Only one group's tabs are visible at a time (no more all-at-once toolbar).
+const _groupsEl = document.getElementById("menu-groups");
+const _groups = [...document.querySelectorAll(".menu-group")];
+function _markGroup(key) {
+  _groups.forEach((g) => g.classList.toggle("group-active", g.dataset.group === key));
+  [..._groupsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.group === key));
+}
+function activateGroup(key) {
+  _markGroup(key);
+  const grp = _groups.find((g) => g.dataset.group === key);
+  if (grp && !grp.querySelector(".tab.active")) {
+    const first = [...grp.querySelectorAll(".tab")].find((t) => !t.classList.contains("disabled"));
+    if (first) first.click();
+  }
+  sizeLists();
+}
+_groups.forEach((g) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "gbtn";
+  b.dataset.group = g.dataset.group;
+  b.textContent = g.querySelector(".menu-label").textContent;
+  if (g.classList.contains("group-active")) b.classList.add("active");
+  b.addEventListener("click", () => activateGroup(g.dataset.group));
+  _groupsEl.appendChild(b);
+});
+_menuEl.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const tabs = [...document.querySelectorAll(".tab")];
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  next.focus();
+});
+_menuEl.addEventListener("click", (e) => {
   const tab = e.target.closest(".tab");
   if (!tab) return;
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+  document.querySelectorAll(".tab").forEach((t) => {
+    const on = t === tab;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  const grpEl = tab.closest(".menu-group");
+  if (grpEl) _markGroup(grpEl.dataset.group);  // keep level-1 in sync (e.g. file-from-email jumps)
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.target));
   // Refresh tournament-scoped panels on open so they always reflect current data.
   const loaders = {
@@ -93,12 +280,27 @@ document.getElementById("menu").addEventListener("click", (e) => {
     "panel-t-withdrawals": () => loadWithdrawals(),
     "panel-t-sched": () => schedList.load(),
     "panel-t-divflex": () => divflexList.load(),
+    "panel-t-pairing": () => loadPairing(),
+    "panel-t-doubles": () => loadDoubles(),
     "panel-t-photels": () => photelList.load(),
     "panel-t-reports": () => loadReports(),
   };
   if (active && loaders[tab.dataset.target]) loaders[tab.dataset.target]();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
+  sizeLists();
 });
+
+// Bound every scrollable list to the real space left below it so it never runs
+// off the bottom of the screen, whatever the toolbar height happens to be.
+function sizeLists() {
+  const ls = document.querySelector(".panel.active .list-scroll");
+  const top = ls ? ls.getBoundingClientRect().top : 160;
+  const max = Math.max(140, window.innerHeight - top - 16);
+  document.documentElement.style.setProperty("--list-max", max + "px");
+}
+window.addEventListener("resize", sizeLists);
+window.addEventListener("load", sizeLists);
+requestAnimationFrame(sizeLists);
 
 // =================== Active tournament state ===================
 let active = null;
@@ -121,6 +323,7 @@ function setActive(id) {
   activeSelect.value = active ? String(active.id) : "";
   if (active) localStorage.setItem("activeTid", active.id);
   else localStorage.removeItem("activeTid");
+  syncCombos();
   updateActiveUI();
 }
 
@@ -135,7 +338,7 @@ function updateActiveUI() {
   });
   if (active) {
     info.textContent = `${active.type} · ${active.play_start_date} → ${active.play_end_date}`;
-    loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); photelList.load(); loadReports();
+    loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); loadPairing(); loadDoubles(); photelList.load(); loadReports();
   } else {
     info.textContent = "";
   }
@@ -150,11 +353,45 @@ function wireEntity(cfg) {
   const filterInput = panel.querySelector(".filter");
   const newBtn = panel.querySelector(".new-btn");
   const title = panel.querySelector(".detail-title");
+  const detailPane = panel.querySelector(".detail-pane");
   const submitBtn = form.querySelector('button[type="submit"]');
   const deleteBtn = form.querySelector(".delete");
   const cancelBtn = form.querySelector(".cancel");
   let items = [];
   let selectedId = null;
+
+  // prev/next record navigation (so a long list needn't be scrolled to switch records)
+  const nav = document.createElement("div");
+  nav.className = "detail-nav";
+  const prevBtn = document.createElement("button");
+  prevBtn.type = "button"; prevBtn.className = "nav-btn"; prevBtn.textContent = "‹ Prev"; prevBtn.title = "Previous record";
+  const nextBtn = document.createElement("button");
+  nextBtn.type = "button"; nextBtn.className = "nav-btn"; nextBtn.textContent = "Next ›"; nextBtn.title = "Next record";
+  const navPos = document.createElement("span");
+  navPos.className = "nav-pos";
+  nav.append(prevBtn, navPos, nextBtn);
+  detailPane.insertBefore(nav, detailPane.firstChild);
+  function shownList() { return items.filter(matchesFilter); }
+  function updateNav() {
+    const shown = shownList();
+    const idx = shown.findIndex((it) => it.id === selectedId);
+    const have = selectedId != null && idx >= 0;
+    navPos.textContent = shown.length ? `${have ? idx + 1 : "–"} / ${shown.length}` : "";
+    prevBtn.disabled = !have || idx <= 0;
+    nextBtn.disabled = !have || idx >= shown.length - 1;
+  }
+  function navTo(delta) {
+    const shown = shownList();
+    const idx = shown.findIndex((it) => it.id === selectedId);
+    if (idx < 0) return;
+    const target = shown[idx + delta];
+    if (!target) return;
+    select(target);
+    const row = tbody.querySelector("tr.selected");
+    if (row) row.scrollIntoView({ block: "nearest" });
+  }
+  prevBtn.addEventListener("click", () => navTo(-1));
+  nextBtn.addEventListener("click", () => navTo(1));
 
   function fillForm(item) {
     for (const el of form.elements) {
@@ -162,6 +399,7 @@ function wireEntity(cfg) {
       const v = item ? item[el.name] : null;
       el.value = v === null || v === undefined ? "" : v;
     }
+    requestAnimationFrame(syncCombos);  // refresh type-in dropdown displays
   }
   function showNew() {
     selectedId = null; fillForm(null);
@@ -203,9 +441,10 @@ function wireEntity(cfg) {
     const span = cfg.columns.length + 1;
     if (items.length === 0) tbody.innerHTML = `<tr><td class="empty" colspan="${span}">No ${cfg.singular}s yet — use the form to add one.</td></tr>`;
     else if (shown.length === 0) tbody.innerHTML = `<tr><td class="empty" colspan="${span}">No matches</td></tr>`;
+    updateNav();
   }
   async function removeItem(id) {
-    if (!confirm(`Delete ${cfg.singular} #${id}?`)) return;
+    if (!(await confirmDialog(`Delete ${cfg.singular} #${id}?`))) return;
     try {
       await api(`${cfg.path}/${id}`, { method: "DELETE" });
       setMsg(cfg.msgId, "deleted", true);
@@ -221,6 +460,7 @@ function wireEntity(cfg) {
   }
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    submitBtn.disabled = true;
     try {
       let body = formObj(form);
       if (cfg.transform) body = cfg.transform(body);
@@ -232,6 +472,7 @@ function wireEntity(cfg) {
       if (cfg.afterChange) cfg.afterChange();
       if (saved && saved.id != null) select(saved);
     } catch (err) { setMsg(cfg.msgId, err.message, false); }
+    finally { submitBtn.disabled = false; }
   });
   deleteBtn.addEventListener("click", () => { if (selectedId != null) removeItem(selectedId); });
   newBtn.addEventListener("click", showNew);
@@ -306,7 +547,7 @@ function renderRoster() {
   for (const e of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${esc([e.last_name, e.first_name].filter(Boolean).join(", "))} <span class="muted">(${esc(e.usta_number)})</span></td>` +
-      `<td>${esc(e.age_division)}</td><td>${esc(e.selection_status)}</td><td>${esc(e.t_shirt_size)}</td><td>${esc(e.dietary_preference)}</td><td class="actions"></td>`;
+      `<td>${esc(e.age_division)}</td><td>${chip(e.selection_status)}</td><td>${esc(e.t_shirt_size)}</td><td>${esc(e.dietary_preference)}</td><td class="actions"></td>`;
     const cell = tr.querySelector(".actions");
     const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
     ed.addEventListener("click", () => {
@@ -318,10 +559,11 @@ function renderRoster() {
       rosterForm.t_shirt_size.value = e.t_shirt_size || "";
       rosterForm.dietary_preference.value = e.dietary_preference || "";
       rosterForm.querySelector('button[type="submit"]').textContent = "Update player";
+      openForm(rosterForm);
     });
     const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
     dl.addEventListener("click", async () => {
-      if (!confirm("Remove player from roster?")) return;
+      if (!(await confirmDialog("Remove player from roster?"))) return;
       try { await api(`/roster/${e.id}`, { method: "DELETE" }); loadRoster(); } catch (err) { setMsg("roster-msg", err.message, false); }
     });
     cell.append(ed, dl);
@@ -372,6 +614,11 @@ async function loadAssignments() {
   const avail = await api(`/tournaments/${active.id}/availability`);
   const availByOfficial = {};
   for (const r of avail) (availByOfficial[r.official_id] ||= []).push(r.available_date);
+  // Surface availability in the official picker for this tournament.
+  fillSelect(document.getElementById("asg-official"), Object.values(officialsById), (o) => {
+    const n = (availByOfficial[o.id] || []).length;
+    return `${officialLabel(o)} — ${n ? n + " avail day(s)" : "no availability"}`;
+  }, false);
   const box = document.getElementById("asg-list");
   box.innerHTML = "";
   if (list.length === 0) { box.innerHTML = '<p class="muted">No officials assigned yet.</p>'; return; }
@@ -396,7 +643,7 @@ function renderAssignment(a, availDates) {
   });
   const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
   dl.addEventListener("click", async () => {
-    if (!confirm("Delete assignment?")) return;
+    if (!(await confirmDialog("Delete assignment?"))) return;
     try { await api(`/assignments/${a.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); }
   });
   actions.append(ed, dl); head.appendChild(actions); card.appendChild(head);
@@ -503,9 +750,10 @@ async function loadRoomBlocks() {
       trbForm.check_out.value = b.check_out || "";
       trbForm.cancellation_info.value = b.cancellation_info || "";
       trbForm.querySelector('button[type="submit"]').textContent = "Update block";
+      openForm(trbForm);
     });
     const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
-    dl.addEventListener("click", async () => { if (!confirm("Delete room block?")) return; try { await api(`/room-blocks/${b.id}`, { method: "DELETE" }); loadRoomBlocks(); } catch (e) { setMsg("trb-msg", e.message, false); } });
+    dl.addEventListener("click", async () => { if (!(await confirmDialog("Delete room block?"))) return; try { await api(`/room-blocks/${b.id}`, { method: "DELETE" }); loadRoomBlocks(); } catch (e) { setMsg("trb-msg", e.message, false); } });
     cell.append(ed, dl);
     tbody.appendChild(tr);
   }
@@ -621,6 +869,8 @@ const FILE_TARGETS = {
   scheduling_avoidance: { label: "Scheduling avoid.", tab: "panel-t-sched", form: document.getElementById("sched-form"), msg: "sched-msg" },
   division_flex: { label: "Division flex", tab: "panel-t-divflex", form: document.getElementById("divflex-form"), msg: "divflex-msg" },
   hotel: { label: "Player hotel", tab: "panel-t-photels", form: document.getElementById("photel-form"), msg: "photel-msg" },
+  pairing_avoidance: { label: "Pairing avoid.", tab: "panel-t-pairing", form: document.getElementById("pairing-form"), msg: "pairing-msg" },
+  doubles: { label: "Doubles", tab: "panel-t-doubles", form: document.getElementById("doubles-form"), msg: "doubles-msg" },
 };
 
 async function loadInbox() {
@@ -631,7 +881,7 @@ async function loadInbox() {
   for (const m of rows) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${esc((m.received_at || "").slice(0, 10))}</td><td>${esc(m.from_address)}</td>` +
-      `<td>${esc(m.subject)}</td><td class="cls"></td><td>${esc(m.status)}</td><td class="actions"></td>`;
+      `<td>${esc(m.subject)}</td><td class="cls"></td><td>${chip(m.status)}</td><td class="actions"></td>`;
     const sel = document.createElement("select");
     EMAIL_CLASSES.forEach((c) => { const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); });
     sel.value = m.classification || "unclassified";
@@ -650,12 +900,23 @@ async function loadInbox() {
       const t = FILE_TARGETS[tgt.value];
       t.form.source_email_id.value = m.id;
       document.querySelector(`.tab[data-target="${t.tab}"]`).click();
+      openForm(t.form);
       setMsg(t.msg, `filing from email #${m.id}`, true);
       t.form.usta_number.focus();
     });
-    cell.append(tgt, fileBtn);
+    const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
+    sgBtn.addEventListener("click", async () => {
+      try {
+        const res = await api(`/emails/${m.id}/suggest`, { method: "POST" });
+        sel.value = res.classification;
+        if (FILE_TARGETS[res.classification]) tgt.value = res.classification;
+        await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification: res.classification, status: m.status }) });
+        setMsg("email-msg", `suggested: ${res.classification}`, true);
+      } catch (e) { setMsg("email-msg", e.message, false); }
+    });
+    cell.append(sgBtn, tgt, fileBtn);
     const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!confirm("Delete email?")) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
     cell.append(del);
     tbody.appendChild(tr);
   }
@@ -679,7 +940,7 @@ async function loadLate() {
     tr.innerHTML = `<td>${esc(e.request_date)}</td><td>${esc(e.request_time)}</td><td>${esc(nm)}</td>` +
       `<td>${esc(e.usta_number)}</td><td>${esc(e.age_division)}</td><td>${esc(e.events)}</td><td class="actions"></td>`;
     const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!confirm("Delete late entry?")) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
     tr.querySelector(".actions").appendChild(del);
     tbody.appendChild(tr);
   }
@@ -709,7 +970,7 @@ async function loadWithdrawals() {
       `<td>${esc(w.events)}</td><td>${w.was_alternate ? "yes" : ""}</td><td>${esc(w.reason)}</td>` +
       `<td>${esc(w.notes)}</td><td class="actions"></td>`;
     const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!confirm("Delete withdrawal?")) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } });
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } });
     tr.querySelector(".actions").appendChild(del);
     tbody.appendChild(tr);
   }
@@ -740,7 +1001,7 @@ function wirePlayerList(cfg) {
       const tr = document.createElement("tr");
       tr.innerHTML = cfg.cells(r, nm) + '<td class="actions"></td>';
       const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-      del.addEventListener("click", async () => { if (!confirm("Delete?")) return; try { await api(`${cfg.del}/${r.id}`, { method: "DELETE" }); load(); } catch (e) { setMsg(cfg.msgId, e.message, false); } });
+      del.addEventListener("click", async () => { if (!(await confirmDialog("Delete?"))) return; try { await api(`${cfg.del}/${r.id}`, { method: "DELETE" }); load(); } catch (e) { setMsg(cfg.msgId, e.message, false); } });
       tr.querySelector(".actions").appendChild(del);
       tbody.appendChild(tr);
     }
@@ -750,9 +1011,12 @@ function wirePlayerList(cfg) {
   function reset() { form.reset(); form.source_email_id.value = ""; }
   form.addEventListener("submit", async (e) => {
     e.preventDefault(); if (!active) return;
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
     const b = formObj(form); b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
     try { await api(`/tournaments/${active.id}${cfg.path}`, { method: "POST", body: JSON.stringify(b) }); setMsg(cfg.msgId, "added", true); reset(); load(); loadInbox(); }
     catch (err) { setMsg(cfg.msgId, err.message, false); }
+    finally { btn.disabled = false; }
   });
   form.querySelector(".cancel").addEventListener("click", reset);
   return { load };
@@ -800,6 +1064,112 @@ function renderTshirts() {
 }
 async function loadTshirts() { tshirtRows = await api("/tshirts"); renderTshirts(); }
 document.getElementById("tshirt-filter").addEventListener("input", renderTshirts);
+
+// --- Pairing avoidances (juniors; group of 2+ players) ---
+const pairingForm = document.getElementById("pairing-form");
+const pairingMembersBox = document.getElementById("pairing-members");
+function pairingMemberRow() {
+  const div = document.createElement("div"); div.className = "row pmember";
+  div.innerHTML = '<label>USTA # <input class="pm-usta" /></label>' +
+    '<label>First <input class="pm-first" /></label><label>Last <input class="pm-last" /></label>';
+  const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "×";
+  del.addEventListener("click", () => { div.remove(); if (!pairingMembersBox.children.length) pairingMemberRow(); });
+  div.appendChild(del); pairingMembersBox.appendChild(div);
+}
+function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
+document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
+async function loadPairing() {
+  if (!active) return;
+  const rows = await api(`/tournaments/${active.id}/pairing-avoidances`);
+  const tbody = document.querySelector("#pairing-table tbody");
+  tbody.innerHTML = "";
+  for (const g of rows) {
+    const names = g.members.map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(g.age_division)}</td><td>${esc(g.relationship)}</td><td>${esc(names)}</td><td class="actions"></td>`;
+    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } });
+    tr.querySelector(".actions").appendChild(del);
+    tbody.appendChild(tr);
+  }
+  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="4">No pairing avoidances yet.</td></tr>';
+}
+pairingForm.addEventListener("submit", async (e) => {
+  e.preventDefault(); if (!active) return;
+  const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => ({
+    usta_number: r.querySelector(".pm-usta").value.trim(),
+    first_name: r.querySelector(".pm-first").value.trim() || null,
+    last_name: r.querySelector(".pm-last").value.trim() || null,
+  })).filter((m) => m.usta_number);
+  if (members.length < 2) { setMsg("pairing-msg", "add at least two players", false); return; }
+  const body = {
+    age_division: pairingForm.age_division.value || null,
+    relationship: pairingForm.relationship.value,
+    members,
+    source_email_id: pairingForm.source_email_id.value ? Number(pairingForm.source_email_id.value) : null,
+  };
+  try { await api(`/tournaments/${active.id}/pairing-avoidances`, { method: "POST", body: JSON.stringify(body) }); setMsg("pairing-msg", "added", true); pairingReset(); loadPairing(); loadInbox(); }
+  catch (err) { setMsg("pairing-msg", err.message, false); }
+});
+pairingForm.querySelector(".cancel").addEventListener("click", pairingReset);
+pairingReset();
+
+// --- Doubles pairing (mutual two-sided verification + random FIFO queue) ---
+const doublesForm = document.getElementById("doubles-form");
+function doublesSyncRandom() {
+  document.getElementById("doubles-partner-wrap").style.display =
+    document.getElementById("doubles-random").checked ? "none" : "";
+}
+document.getElementById("doubles-random").addEventListener("change", doublesSyncRandom);
+function doublesReset() { doublesForm.reset(); doublesForm.source_email_id.value = ""; doublesSyncRandom(); }
+async function loadDoubles() {
+  if (!active) return;
+  const data = await api(`/tournaments/${active.id}/doubles`);
+  const rt = document.querySelector("#doubles-req-table tbody");
+  rt.innerHTML = "";
+  for (const r of data.requests) {
+    const nm = [r.last_name, r.first_name].filter(Boolean).join(", ");
+    const type = r.wants_random ? "random" : "mutual";
+    const info = r.status === "paired" ? "paired"
+      : r.wants_random ? "queued (waiting)" : `→ ${esc(r.partner_usta || "?")} (awaiting partner)`;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.age_division)}</td><td>${chip(type)}</td><td>${info}</td><td class="actions"></td>`;
+    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
+    tr.querySelector(".actions").appendChild(del);
+    rt.appendChild(tr);
+  }
+  if (data.requests.length === 0) rt.innerHTML = '<tr><td class="empty" colspan="6">No doubles requests yet.</td></tr>';
+  const pt = document.querySelector("#doubles-pair-table tbody");
+  pt.innerHTML = "";
+  for (const d of data.pairs) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(d.age_division)}</td><td>${chip(d.pairing_type)}</td><td>${esc(d.player1)}</td><td>${esc(d.player2)}</td><td class="actions"></td>`;
+    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete pair?"))) return; try { await api(`/doubles-pairs/${d.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
+    tr.querySelector(".actions").appendChild(del);
+    pt.appendChild(tr);
+  }
+  if (data.pairs.length === 0) pt.innerHTML = '<tr><td class="empty" colspan="5">No verified pairs yet.</td></tr>';
+}
+doublesForm.addEventListener("submit", async (e) => {
+  e.preventDefault(); if (!active) return;
+  const b = {
+    usta_number: doublesForm.usta_number.value.trim(),
+    first_name: doublesForm.first_name.value.trim() || null,
+    last_name: doublesForm.last_name.value.trim() || null,
+    age_division: doublesForm.age_division.value.trim() || null,
+    wants_random: doublesForm.wants_random.checked,
+    partner_usta: doublesForm.partner_usta.value.trim() || null,
+    source_email_id: doublesForm.source_email_id.value ? Number(doublesForm.source_email_id.value) : null,
+  };
+  try {
+    const res = await api(`/tournaments/${active.id}/doubles-requests`, { method: "POST", body: JSON.stringify(b) });
+    setMsg("doubles-msg", res.paired ? "paired!" : (b.wants_random ? "queued" : "filed — awaiting partner"), true);
+    doublesReset(); loadDoubles(); loadInbox();
+  } catch (err) { setMsg("doubles-msg", err.message, false); }
+});
+doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
 
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
@@ -996,6 +1366,55 @@ const distancesCrud = wireEntity({
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });
 
+// =================== Generic CSV export for list tables ===================
+function exportTable(table, name) {
+  const ths = [...table.querySelectorAll("thead th")];
+  const keep = ths.map((th) => th.textContent.trim() !== "");  // skip the actions column
+  const headers = ths.filter((_, i) => keep[i]).map((th) => th.textContent.trim());
+  const rows = [...table.querySelectorAll("tbody tr")]
+    .filter((tr) => !tr.querySelector(".empty"))
+    .map((tr) => [...tr.children].filter((_, i) => keep[i]).map((td) => td.textContent.replace(/\s+/g, " ").trim()));
+  const csv = [headers, ...rows]
+    .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = name + ".csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+const EXPORTABLE = {
+  "roster-table": "roster", "late-table": "late-entries", "withdrawal-table": "withdrawals",
+  "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
+  "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
+  "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
+  "cvb-table": "cvb-hotel-totals", "tshirt-table": "tshirts", "inbox-table": "inbox",
+};
+for (const [id, name] of Object.entries(EXPORTABLE)) {
+  const table = document.getElementById(id);
+  if (!table) continue;
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "export-btn no-print"; btn.textContent = "⬇ CSV";
+  btn.addEventListener("click", () => exportTable(table, name));
+  table.parentNode.insertBefore(btn, table);
+}
+
+// =================== Collapse workspace add-forms (list stays primary) ===================
+// Wrap each workspace add-form in a <details> at runtime (no HTML changes).
+const COLLAPSIBLE = {
+  "roster-form": "Add player", "withdrawal-form": "Add withdrawal",
+  "sched-form": "Add scheduling avoidance", "divflex-form": "Add division flexibility",
+  "pairing-form": "Add pairing group", "doubles-form": "File doubles request",
+  "photel-form": "Add player hotel", "late-form": "Add late entry", "trb-form": "Add room block",
+};
+for (const [id, label] of Object.entries(COLLAPSIBLE)) {
+  const form = document.getElementById(id);
+  if (!form || form.closest("details.addbox")) continue;
+  const det = document.createElement("details"); det.className = "addbox";
+  const sum = document.createElement("summary"); sum.textContent = "＋ " + label;
+  form.parentNode.insertBefore(det, form);
+  det.append(sum, form);
+}
+
 // =================== Auth + role-based views ===================
 let adminLoaded = false;
 async function adminInit() {
@@ -1098,6 +1517,7 @@ document.getElementById("acct-save").addEventListener("click", async () => {
 });
 
 (async function init() {
+  enhanceAllSelects();  // turn every <select> into a type-in dropdown
   await refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }

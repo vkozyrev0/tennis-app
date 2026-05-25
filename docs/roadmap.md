@@ -122,7 +122,9 @@ pay snapshots).
       an official's login from the Official detail.
 - [x] **Availability** — both **TD-side** (Availability tab, migration 0007) and
       **officials' own** (self-service).
-- [ ] TD sees availability when making assignments (surface it in the assign flow).
+- [x] TD sees availability when making assignments — the Assignments official
+      picker shows each official's available-day count for the tournament, and the
+      day picker offers their available dates.
 - [ ] **Google Maps geocoding** to auto-compute home↔site round-trip distance
       (the primary mileage source), with **manual entry as fallback** when the
       lookup is unavailable (D3/U2).
@@ -146,9 +148,11 @@ a review inbox; a person files each message into the right list.
 **Done when:** a forwarded email reliably appears in the review inbox and a person
 can file it into a structured, provenance-linked row.
 
-> **Future enhancement (out of initial scope):** an **email-triage agent** that
-> auto-classifies/extracts into the same tables. Adding it revisits D5
-> (cloud-vs-local LLM) since a model would then see the data.
+> **Triage agent — v0 built (local, D5-safe):** a rule-based suggester
+> (`app/triage.py`, `POST /api/emails/{id}/suggest`) proposes a classification from
+> keywords — **no LLM, no data leaves the building**; the inbox "Suggest" button
+> sets it and a human confirms. **Still open (D5):** upgrading to an **LLM** that
+> reads email content needs the explicit cloud-vs-local privacy call first.
 
 ---
 
@@ -164,16 +168,21 @@ order (simplest first):
       (audit §2.4).
 - [x] **Scheduling avoidances** + **Division flexibility** (adults) — migration
       0013; list + add + file-from-email (generic inbox target picker).
-- [ ] **Pairing avoidances** (juniors).
-- [ ] **Doubles pairing** — two-sided verification state machine + **random
-      pairing queue** with odd-one-out handling; a random request is **binding**
-      (no later self-found partner — audit §2.2, §3.6). Hardest; do last.
-- [ ] **T-shirt cumulative list** — derived view over `TournamentEntry.t_shirt_size`
-      across tournaments (audit §8 F1).
-- [ ] **Player hotel stays** + **CVB sponsorship analytics** view (audit §1.2).
+- [x] **Pairing avoidances** (juniors, migration 0015) — group of 2+ players
+      (header + members), relationship same_club/siblings; list + multi-member add
+      + file-from-email (audit §1.1).
+- [x] **Doubles pairing** (migration 0016) — mutual two-sided verification (a
+      reciprocal pending request creates a verified pair) + **random FIFO queue**
+      (binding); odd requester stays pending (audit §2.2, §3.6).
+- [x] **T-shirt cumulative list** — derived view (`/api/tshirts`) over
+      `TournamentEntry.t_shirt_size` across tournaments; **T-shirts** Setup tab
+      (audit §8 F1).
+- [x] **Player hotel stays** + **CVB sponsorship analytics** (migration 0014;
+      `/api/hotel-analytics` totals per hotel) — audit §1.2.
 
 **Done when:** every list in the vision can be filed from the review inbox and
-exported.
+exported. ✅ **Done** — all Phase-4 lists are built and each has a CSV export.
+Remaining: the optional auto-triage agent.
 
 ---
 
@@ -181,7 +190,9 @@ exported.
 - [ ] PII: encryption at rest, access control, retention policy (audit §5.1).
 - [ ] Audit trail for money (store calc inputs + rule version — audit §5.3).
 - [ ] Multi-user TD access if needed (D8).
-- [ ] Spreadsheet/PDF exports for all reports.
+- [x] **CSV export on every list** — a generic "⬇ CSV" button on the roster,
+      t-shirts, inbox, and all Part B list tables (skips the actions column), plus
+      the officials report's existing Print + CSV. (PDF still optional.)
 - [ ] Correction handling: follow-up emails that amend an earlier row.
 
 ---
@@ -290,3 +301,120 @@ Implemented: `kind` on `room_block`; Room blocks tab has a **Block type** select
 + column; `GET /room-blocks?kind=` filter; the Assignments **Hotel assignment**
 dropdown lists **only `official` blocks**; the Reports tab has an
 **officials-needing-accommodation roster** (official + hotel + night span).
+
+---
+
+## UI/UX pass 1 (2026-05-25) — applied
+First batch from the UI review (frontend only; backend/tests unchanged):
+- **✅ Grouped tournament nav** — the 14 tournament tabs are split into labeled
+  sub-areas: **Tournament** (Sites/Roster/Availability), **Staffing**
+  (Assignments/Room blocks/Reports), **Player requests** (Inbox + the 7 lists).
+- **✅ Status color chips** — `selection_status`, email `status`, doubles type, etc.
+  render as tinted badges (ok/warn/bad/info/muted) for scannability.
+- **✅ Toasts** — every `setMsg` also raises a corner toast (errors linger longer);
+  inline messages kept.
+- **✅ Accessibility** — `:focus-visible` outlines; the menu is a `role="tablist"`
+  with `aria-selected` and **arrow-key** navigation.
+- **✅ Table polish** — zebra striping + **sticky headers** on list tables.
+
+## UI/UX pass 2 (2026-05-25) — applied
+- **✅ Global loading bar** — a thin top progress bar driven by the `api()` wrapper
+  (shows whenever any request is in flight).
+- **✅ Right-aligned numeric columns** — report pay/mileage/total, rate/day,
+  one-way miles, room counts.
+- **✅ Button consistency** — the previously unstyled save buttons (availability,
+  my-availability) now match the primary button; report Print/CSV already matched.
+
+## UI/UX pass 3 (2026-05-25) — applied
+- **✅ Styled delete confirm** — a real modal (`confirmDialog()`, Esc/Enter
+  support) replaces the browser's native `confirm()` across all 11 delete actions.
+- **✅ Busy-on-submit** — the Setup forms disable their submit button while saving
+  (prevents double-submit; complements the global loading bar).
+
+## UI/UX pass 4 (2026-05-25) — applied
+- **✅ Collapsible add-forms** — the 9 workspace add-forms are wrapped (at runtime,
+  no HTML churn) in `<details>` and **closed by default** so the list is primary;
+  they **auto-open** when filing-from-email or editing a row.
+- **✅ Busy-on-submit extended** to the workspace `wirePlayerList` forms
+  (scheduling/division/player-hotels) on top of the Setup forms.
+
+## UI/UX pass 5 (2026-05-25) — applied
+- **✅ Fixed master-detail proportions (bug)** — the grid had the **list capped at
+  360px** (`minmax(260px,360px) 1fr`), forcing long columns (e.g. site/hotel
+  names) to wrap to many lines. Flipped to `minmax(0,1fr) minmax(280px,380px)` so
+  the **list gets the room** and the form is bounded; raised the stacking
+  breakpoint to **980px** so medium screens get a **full-width list** instead of a
+  cramped two-column; page max-width 1100→1200; the edit form is **sticky** while
+  scrolling a long list. Verified: a 1421px viewport gives a 752px list with the
+  long names on a single 36px row.
+
+## UI/UX pass 6 (2026-05-25) — applied
+- **✅ Compact forms** — denser detail/add forms per request: small **uppercase
+  field labels** (0.68rem), smaller controls (0.82rem, tighter padding), reduced
+  row spacing, and **compact buttons** (submit/delete/cancel/new/save at 0.8rem).
+  Forms take far less vertical space while staying readable.
+
+## UI/UX pass 7 (2026-05-25) — applied
+- **✅ Condensed toolbar** — the whole top chrome was slimmed to reclaim vertical
+  space: **header** padding 1rem→0.5rem and the **h1** 1.4rem→1.05rem; the
+  **context bar** is tighter (padding 0.4→0.25rem, gap 0.5→0.4rem, font 0.85→
+  0.72rem) with a smaller **active-tournament select** (min-width 240→200px,
+  0.78rem); the **nav menu** is denser (gap 1.5→1rem, 2px under-border) with
+  smaller **tabs** (0.92→0.82rem, padding 0.55/0.85→0.38/0.7rem) and **group
+  labels** (0.7→0.6rem); **user box / logout** dropped to 0.72rem. Verified in
+  preview: h1 16.8px, tabs 13.12px, context-bar 4px/8.8px padding, no console
+  errors.
+
+## UI/UX pass 8 (2026-05-25) — applied
+- **✅ Lists own their scrollbar** (native, dependency-free per D6) — each Setup
+  master-detail list now lives in a `.list-scroll` container with its **own
+  vertical scrollbar** (`max-height: calc(100vh - 200px)`, sticky header pinned to
+  the container edge). The list no longer pushes the page tall, so the sticky edit
+  form stays in view — no more scrolling **past** the form to reach items at the
+  bottom. *(We kept the pure-HTML/CSS approach rather than adopting a third-party
+  grid like Tabulator/AG Grid, on the user's call — same "grid with its own
+  scrollbar" UX, no CDN dependency, works offline.)*
+- **✅ Prev / Next record navigation** — every master-detail detail form gets a
+  small nav bar (`‹ Prev` · `N / total` · `Next ›`) that steps through the
+  **currently filtered** list without touching the list at all; endpoints disable
+  at the ends, the position counter reflects the active filter, and the selected
+  row auto-scrolls into view inside its container. Verified in preview: 7 scroll
+  containers + 7 nav bars, `1 / 2`→`2 / 2` stepping, Prev disabled on the first
+  record, no console errors.
+
+## UI/UX pass 9 (2026-05-25) — applied
+- **✅ List height bounded to the viewport (dynamic)** — the earlier
+  `calc(100vh - 200px)` was a guess and could still run a long list off the bottom
+  of the screen. Now a tiny `sizeLists()` helper measures each active
+  `.list-scroll`'s real top offset and sets a `--list-max` CSS variable to the
+  exact space remaining (`innerHeight − top − 16px`), recomputed on **tab switch,
+  window resize, and load**. The list's own scrollbar now always ends inside the
+  viewport regardless of toolbar height. Verified: list top 212px → `--list-max`
+  1051px → list bottom within the 1279px viewport.
+- **✅ Toolbar condensed further** — second density pass: header padding 0.5→0.3rem
+  and h1 1.05→0.92rem (14.7px); context bar padding 0.25→0.18rem, labels 0.72→
+  0.68rem, active-tournament select 0.78→0.74rem (min-width 200→180); nav tabs
+  0.82→0.78rem (12.5px) with tighter padding (0.38/0.7→0.28/0.6rem) and group
+  labels 0.6→0.55rem.
+
+## UI/UX pass 10 (2026-05-25) — applied
+- **✅ Two-level menu** — the toolbar no longer shows every tab at once. A
+  **level-1 bar** lists the four sections (**Setup · Tournament · Staffing ·
+  Player requests**); picking one reveals **only that group's tabs** in the
+  level-2 bar (`.menu-group.group-active`), auto-opening its first enabled tab.
+  Cross-group jumps (e.g. file-from-email) keep the level-1 highlight in sync.
+  Verified: 4 group buttons, exactly one group's tabs visible, Staffing→Assignments
+  opens correctly.
+- **✅ Type-in dropdowns (searchable comboboxes)** — every native `<select>` is
+  progressively enhanced into a **filter-as-you-type** dropdown (`enhanceSelect`):
+  a text input overlays the select, typing filters options, ↑/↓/Enter/Esc work,
+  and click-away closes. The native `<select>` stays the **source of truth**
+  (value/`required`/submit/listeners unchanged), with displays re-synced on
+  change / option-repopulation (MutationObserver) / form reset / edit-fill /
+  active-tournament restore. Stayed **dependency-free** (no Select2/Choices.js).
+  Verified: 17 comboboxes; the officials picker filters 51→5 on "z" and writes the
+  chosen value back to the select; no console errors.
+
+Still open from the review: a full button-style **utility-class system**, busy-on-
+submit on the remaining bespoke forms (roster/assignment/doubles/etc.), and a
+sidebar nav for very narrow screens.

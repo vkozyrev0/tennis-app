@@ -233,6 +233,20 @@ def test_pay_snapshot_persisted():
     assert row["rule_version"] == a2["rule_version"]
 
 
+def test_triage_suggest():
+    t = _tournament()
+    cases = [
+        ("Need to withdraw", "my child has an injury", "withdrawal"),
+        ("Late entry?", "we missed the deadline, can we still enter", "late_entry"),
+        ("Doubles partner", "please set up random pairing", "doubles"),
+        ("Hotel info", "we are staying at the Marriott", "hotel"),
+    ]
+    for subj, body, expected in cases:
+        em = _ok(client.post("/api/emails", json={"tournament_id": t["id"], "subject": subj, "body": body}))
+        got = client.post(f"/api/emails/{em['id']}/suggest").json()["classification"]
+        assert got == expected, f"{subj!r} -> {got}, expected {expected}"
+
+
 def test_inbox_and_late_entry_filing():
     t = _tournament()
     em = _ok(client.post("/api/emails", json={
@@ -276,6 +290,57 @@ def test_withdrawal_alternate_needs_no_reason():
     client.post(f"/api/tournaments/{t['id']}/players", json={"player_id": p["id"], "selection_status": "alternate"})
     w = _ok(client.post(f"/api/tournaments/{t['id']}/withdrawals", json={"usta_number": p["usta_number"]}))
     assert w["was_alternate"] is True and (w["reason"] is None or w["reason"] == "")
+
+
+def test_doubles_mutual_verification():
+    t = _tournament()
+    a, b = _player(), _player()
+    # first email (A names B): pending, no pair yet
+    r1 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
+        "usta_number": a["usta_number"], "age_division": "G14", "partner_usta": b["usta_number"]}))
+    assert r1["paired"] is False
+    assert len(client.get(f"/api/tournaments/{t['id']}/doubles").json()["pairs"]) == 0
+    # second email (B names A): verifies the partnership
+    r2 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
+        "usta_number": b["usta_number"], "age_division": "G14", "partner_usta": a["usta_number"]}))
+    assert r2["paired"] is True
+    data = client.get(f"/api/tournaments/{t['id']}/doubles").json()
+    assert len(data["pairs"]) == 1 and data["pairs"][0]["pairing_type"] == "mutual"
+    assert all(req["status"] == "paired" for req in data["requests"])
+
+
+def test_doubles_random_queue():
+    t = _tournament()
+    a, b = _player(), _player()
+    # first random: queued (waiting)
+    r1 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests",
+                         json={"usta_number": a["usta_number"], "age_division": "B16", "wants_random": True}))
+    assert r1["paired"] is False
+    # second random same division: pairs FIFO
+    r2 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests",
+                         json={"usta_number": b["usta_number"], "age_division": "B16", "wants_random": True}))
+    assert r2["paired"] is True
+    data = client.get(f"/api/tournaments/{t['id']}/doubles").json()
+    assert len(data["pairs"]) == 1 and data["pairs"][0]["pairing_type"] == "random"
+    # mutual request requires a partner (or random)
+    bad = client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={"usta_number": a["usta_number"]})
+    assert bad.status_code == 422
+
+
+def test_pairing_avoidance_group():
+    t = _tournament()
+    p1, p2 = _player(), _player()
+    g = _ok(client.post(f"/api/tournaments/{t['id']}/pairing-avoidances", json={
+        "age_division": "B12", "relationship": "siblings",
+        "members": [{"usta_number": p1["usta_number"], "last_name": "A"},
+                    {"usta_number": p2["usta_number"], "last_name": "B"}]}))
+    assert g["relationship"] == "siblings" and len(g["members"]) == 2
+    # fewer than two players rejected
+    bad = client.post(f"/api/tournaments/{t['id']}/pairing-avoidances",
+                      json={"relationship": "same_club", "members": [{"usta_number": p1["usta_number"]}]})
+    assert bad.status_code == 422
+    assert len(client.get(f"/api/tournaments/{t['id']}/pairing-avoidances").json()) == 1
+    assert client.delete(f"/api/pairing-avoidances/{g['id']}").status_code == 204
 
 
 def test_player_hotels_analytics_and_tshirts():

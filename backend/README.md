@@ -33,7 +33,7 @@ new `migrations/*.sql` (tracked in `schema_migrations`).
 
 ## Test
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q   # 25 end-to-end tests; skips if Postgres is down
+.\.venv\Scripts\python.exe -m pytest -q   # 30 end-to-end tests; skips if Postgres is down
 ```
 Tests run against a **separate `courtops_test` database** (created/migrated/seeded
 automatically by `tests/conftest.py`), so they never pollute the working DB.
@@ -59,37 +59,60 @@ backend/
     models.py          pydantic request/response models
     main.py            FastAPI app; mounts API + static frontend
     security.py        pbkdf2 hashing + cookie-session auth dependencies
+    triage.py          local rule-based email classifier (agent v0, no LLM)
     routers/           health, auth (login/logout/me), me (official self-service),
                        sites, tournaments (+ /sites M2M), officials (+ /account),
                        players (+ /history), rates, hotels, room_blocks, distances,
                        roster (+ CSV/XLSX import), assignments (+ days, pay/mileage),
                        reports, certifications, availability,
-                       emails (review inbox), late_entries, withdrawals,
-                       adult_lists (scheduling avoid. + division flex)
+                       emails (review inbox + /suggest triage), late_entries, withdrawals,
+                       adult_lists (scheduling avoid. + division flex),
+                       player_hotels (+ CVB analytics + /tshirts list),
+                       pairing_avoidances (juniors, group of 2+),
+                       doubles (mutual verification + random queue)
   migrations/          0001_core_schema, 0002_rates_hotels,
                        0003_mappings_assignments, 0004_player_history,
                        0005_assignment_snapshots, 0006_certifications,
                        0007_availability, 0008_auth, 0009_certification_types,
                        0010_room_block_kind, 0011_player_ops, 0012_withdrawals,
-                       0013_avoid_divflex
+                       0013_avoid_divflex, 0014_player_hotels, 0015_pairing_avoidances,
+                       0016_doubles
   migrate.py           migration runner (creates DB, tracks schema_migrations)
   seed.py              demo data (sites, a tournament + site link, cert rates)
   reset_demo.py        wipe + re-seed the working DB
   backfill_distances.py  import officials + distances from the mileage workbook
   tests/conftest.py    points the suite at courtops_test (isolation)
-  tests/test_smoke.py  end-to-end smoke tests (25; admin-authenticated)
+  tests/test_smoke.py  end-to-end smoke tests (30; admin-authenticated)
 frontend/              index.html, styles.css, app.js (vanilla fetch, no framework)
 ```
 
 ## Frontend structure
-Two areas (see `app.js`):
+Two areas (see `app.js`), pure HTML/CSS + vanilla JS:
 - **Setup** (persistent master data): Tournaments catalog, Sites, Officials,
-  Players, Rates, Hotels, Distances — generic master-detail CRUD with per-row
-  Edit/Delete and a client-side filter.
+  Players, Rates, Hotels, Distances, T-shirts — generic master-detail CRUD with
+  per-row Edit/Delete and a client-side filter. The **list is the wide column**
+  (form bounded, sticky); stacks to a full-width list under 980px.
 - **Tournament workspace**: an **active tournament** chosen in the context bar
-  (persisted in `localStorage`) scopes four membership panels — **Sites**
-  (filterable toggle grid), **Roster** (`tournament_entry`), **Assignments**
-  (per-day roles + computed pay/mileage), **Room blocks**.
+  (persisted in `localStorage`) scopes labeled nav sub-areas — **Tournament**
+  (Sites/Roster/Availability), **Staffing** (Assignments/Room blocks/Reports),
+  **Player requests** (review Inbox + late entries, withdrawals, scheduling,
+  division flex, pairing avoidances, doubles, player hotels). Workspace add-forms
+  are collapsible (`<details>`, closed by default; auto-open on file/edit).
+
+UX: status **color chips**, corner **toasts**, a styled **confirm modal**, a
+global request **progress bar**, busy-on-submit, **CSV export** per list, keyboard
+**ARIA tablist** + `:focus-visible`, zebra/sticky tables, right-aligned numerics.
+Navigation is a **two-level menu** — a level-1 bar of sections (Setup / Tournament
+/ Staffing / Player requests) reveals only the chosen group's tabs — and every
+`<select>` is a **type-in searchable dropdown** (native select kept as the form's
+source of truth; no JS dependency).
+Setup lists each have **their own scrollbar** (`.list-scroll` container, pinned
+header) whose height is **bounded to the viewport dynamically** (a `sizeLists()`
+helper sets `--list-max` from the list's real top offset on tab-switch/resize/load),
+so a long list never pushes the sticky edit form out of view or runs off the
+bottom of the screen. Each detail form has **Prev / Next record navigation**
+(`‹ Prev · N / total · Next ›`) that steps through the filtered list without
+scrolling. The toolbar/header are **condensed** for vertical density.
 
 ## Scope status
 - **Phase 0** ✅ — core schema + CRUD foundations.
@@ -101,10 +124,11 @@ Two areas (see `app.js`):
   **roster CSV/XLSX import**, **official certifications** (role-constrained), and
   **TD-entered availability**, **auth + officials self-service** (login,
   `admin`/`official` roles, `/api/me/*`), and the start of **Part B** (review
-  **Inbox** + **Late entries** + **Withdrawals**, **Scheduling avoidances**, **Division flexibility**, all with file-from-email) are done. **Remaining:**
-  surfacing availability in the assign flow, auto-distance (geocoding), and the
-  rest of Part B (doubles, pairing avoidances, …). See `docs/roadmap.md` and
-  `docs/data-model.md` markers.
+  **Inbox** + **Late entries** + **Withdrawals**, **Scheduling avoidances**, **Division flexibility**, **Player hotels** + CVB analytics, and the cumulative **T-shirt** list, **Pairing avoidances** (juniors), and **Doubles** (mutual + random) — **all Part B lists** — with file-from-email) are done — availability is surfaced in the Assignments picker and a local
+  rule-based triage **/suggest** proposes a classification. **Remaining:**
+  auto-distance (geocoding), real email auto-ingest, and the **LLM** upgrade of the
+  triage agent (the open **D5** call). (All Part B lists are built, each
+  with **CSV export**.) See `docs/roadmap.md` and `docs/data-model.md` markers.
 
 **Login (POC):** `admin` / `admin` (seeded). Admins set an official's login from
 the Official detail; officials then sign in to a self-service profile + availability

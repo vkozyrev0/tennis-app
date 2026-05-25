@@ -283,6 +283,83 @@ class WithdrawalOut(BaseModel):
     source_email_id: Optional[int] = None
 
 
+class DoublesRequestCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    wants_random: bool = False
+    partner_usta: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _partner_or_random(self):
+        if not self.wants_random and not (self.partner_usta and self.partner_usta.strip()):
+            raise ValueError("a mutual request needs a partner USTA number (or set wants_random)")
+        return self
+
+
+class DoublesRequestOut(BaseModel):
+    id: int
+    tournament_id: int
+    age_division: Optional[str] = None
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    partner_usta: Optional[str] = None
+    wants_random: bool
+    status: str
+    source_email_id: Optional[int] = None
+
+
+class DoublesPairOut(BaseModel):
+    id: int
+    tournament_id: int
+    age_division: Optional[str] = None
+    pairing_type: str
+    verified: bool
+    player1_id: int
+    player2_id: int
+    player1: Optional[str] = None
+    player2: Optional[str] = None
+
+
+class PairingMemberIn(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
+class PairingAvoidanceCreate(BaseModel):
+    age_division: Optional[str] = None
+    relationship: Optional[Literal["same_club", "siblings"]] = None
+    members: list[PairingMemberIn] = []
+    source_email_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _two_members(self):
+        if len(self.members) < 2:
+            raise ValueError("a pairing avoidance needs at least two players")
+        return self
+
+
+class PairingMemberOut(BaseModel):
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+
+class PairingAvoidanceOut(BaseModel):
+    id: int
+    tournament_id: int
+    age_division: Optional[str] = None
+    relationship: Optional[str] = None
+    source_email_id: Optional[int] = None
+    members: list[PairingMemberOut] = []
+
+
 class PlayerHotelCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None

@@ -198,12 +198,13 @@ hard block on unverified distances.
 
 ---
 
-## Part B — Player operations  🚧 *started*
-> **Built so far:** `Player` + `TournamentEntry` (roster, shared with Part A), the
-> **`EmailMessage` review inbox**, and the first list — **`LateEntry`** (migration
-> 0011), with a "file from email" flow. **Still 🔭:** doubles, withdrawals,
-> avoidances, division flexibility, player hotel stays. Human-review workflow, no
-> auto-parsing (D5/§5.1).
+## Part B — Player operations  ✅ *lists complete*
+> **Built:** the **`EmailMessage` review inbox** + every list with a generic
+> "file from email" picker — late entries, withdrawals, scheduling avoidances,
+> division flexibility, player hotel stays (+ CVB analytics), pairing avoidances
+> (groups), the cumulative t-shirt list, and **doubles** (mutual two-sided
+> verification + random FIFO queue). Human-review workflow, no auto-parsing
+> (D5/§5.1). Future enhancement: a triage agent that auto-suggests classification.
 
 ### Player  ✅ *(built — mutable, with history)*
 One stable identity across every list. **USTA number is the natural key**
@@ -303,34 +304,34 @@ person sets `classification` and files each message into a list.
 | `classification` | **human-assigned** text: `unclassified` \| `late_entry` \| `withdrawal` \| `doubles` \| `pairing_avoidance` \| `scheduling_avoidance` \| `division_flex` \| `hotel` \| `other` |
 | `status` | `new` \| `filed` \| `needs_followup` (filing a list sets `filed`) |
 
-> A future **triage agent** could auto-suggest `classification` and the extracted
-> fields, leaving the human to confirm — but that is out of initial scope and
-> would revisit D5 (cloud-vs-local LLM). For now the fields above are set by a
-> person.
+> **Triage agent v0 (built):** `POST /api/emails/{id}/suggest` returns a
+> rule-based classification (`app/triage.py`) — local keyword matching, **no LLM /
+> no data leaves the building** (D5-safe); the inbox "Suggest" button applies it and
+> a human confirms. Upgrading to an **LLM** that reads email content is the still-
+> open **D5** call (cloud vs local).
 
-### DoublesRequest  /  DoublesPair
-Two-sided verification state machine (audit §2.2).
-- **DoublesRequest**: `id`, `tournament_id`, `age_division`,
-  `requesting_player_id`, `partner_named`, `wants_random` (bool),
-  `source_email_id`.
-- **DoublesPair**: `id`, `tournament_id`, `age_division`, `player1_id`,
-  `player2_id`, `both_emails_received` (bool), `pairing_type`
-  (`mutual` \| `random`), `email1_id`, `email2_id`.
+### DoublesRequest  /  DoublesPair  ✅ *built (migration 0016)*
+Two-sided verification (audit §2.2).
+- **doubles_request** (one filed email): `id`, `tournament_id`, `age_division`,
+  `player_id` (requester), `partner_usta` (named partner; null for random),
+  `wants_random` (bool), `status` (`pending` \| `paired`), `source_email_id`.
+- **doubles_pair** (verified): `id`, `tournament_id`, `age_division`, `player1_id`,
+  `player2_id`, `pairing_type` (`mutual` \| `random`), `verified`.
 
-### RandomPairingQueue
-| Field | Notes |
-|-------|-------|
-| `id` | PK |
-| `tournament_id`, `age_division` | |
-| `player_id` | |
-| `enqueued_at` | FIFO order |
-| `status` | `waiting` \| `paired` (audit §3.6) |
+> **Mutual** verifies when filing a request finds a reciprocal pending request
+> (the named partner named this player back, same division) → a `doubles_pair`
+> (`mutual`) is created and both requests flip to `paired`. **Names** resolve via
+> `concat_ws` so a missing first/last doesn't blank the row.
 
-**Rules (§3.6):** FIFO per `(tournament, age_division)`. A new random requester
-pairs with the longest-waiting `waiting` row in the same division → both form a
-`DoublesPair` (`pairing_type = random`) and flip to `paired`. An odd requester
-stays `waiting`. A random request is **binding**: once queued, a player **cannot**
-switch to a self-found partner — they play with whoever is randomly assigned.
+### RandomPairingQueue  ✅ *built — implemented as pending random `doubles_request` rows*
+No separate table: a **random** request is a `doubles_request` with
+`wants_random=true`. The pending ones, ordered by `created_at`, **are** the FIFO
+queue per `(tournament, age_division)`.
+
+**Rules (§3.6):** filing a random request pairs it with the oldest pending random
+request in the same division → a `doubles_pair` (`pairing_type=random`); both flip
+to `paired`. An odd requester stays `pending` (waiting). Binding: once filed, a
+player plays with whoever is randomly assigned.
 
 ### Withdrawal  ✅ *built (migration 0012)*
 The email-driven withdrawal detail. Report columns (age division, player,
@@ -367,7 +368,7 @@ Recording a withdrawal sets the roster `selection_status = withdrawn`.
 > (`source = late_entry`), so late entrants land on the same roster — and get a
 > t-shirt size and dietary preference recorded by the TD (audit §4.1).
 
-### PairingAvoidance (juniors)
+### PairingAvoidance (juniors)  ✅ *built (migration 0015)*
 A group of **two or more** players who must not meet in the **first round**
 (audit §1.1; confirmed C1 — same club or siblings). Modeled as a header +
 members so a group can exceed two players.
@@ -378,8 +379,9 @@ members so a group can exceed two players.
 | `relationship` | `same_club` \| `siblings` |
 | `source_email_id` | |
 
-### PairingAvoidanceMember
-The players in a `PairingAvoidance` group (2+ rows per group).
+### PairingAvoidanceMember  ✅ *built (migration 0015)*
+The players in a `PairingAvoidance` group (2+ rows per group). UI: dynamic member
+rows (+member); list shows the names joined ("A & B & C").
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -405,9 +407,11 @@ Player↔day/time (audit §1.1). List + add + file-from-email.
 | `willing_divisions` | list |
 | `source_email_id` | |
 
-### PlayerHotelStay  (CVB sponsorship analytics — audit §1.2)
+### PlayerHotelStay  (CVB sponsorship analytics — audit §1.2)  ✅ *built (migration 0014)*
 Players report which hotel they stayed in so the TD can show room-night patterns
 to the CVB and earn complimentary officials' rooms / sponsorship (confirmed C2).
+List + add + file-from-email; `GET /api/hotel-analytics` aggregates stays per hotel
+across all tournaments (shown as "CVB hotel totals").
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -415,14 +419,15 @@ to the CVB and earn complimentary officials' rooms / sponsorship (confirmed C2).
 | `hotel_name` | free-text, normalize for analytics |
 | `source_email_id` | |
 
-### T-shirt size  (cumulative history — F1, carried by `TournamentEntry`)
+### T-shirt size  (cumulative history — F1, carried by `TournamentEntry`)  ✅ *built*
 Not a separate table: `TournamentEntry.t_shirt_size` already gives one row per
 player per tournament, so the set of a player's entries **is** the cumulative
 history. "Latest size" = derived view, the most recent entry by tournament date.
 This keeps a player's most recent size known even when they are a late entry in a
 future tournament (late entries never pick a size on the USTA site; the TD records
 it on their `TournamentEntry`, `source = late_entry`). F1 satisfied — history
-kept, not collapsed.
+kept, not collapsed. Surfaced via `GET /api/tshirts` (a derived cross-tournament
+list) on the **T-shirts** Setup tab.
 
 ---
 

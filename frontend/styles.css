@@ -13,6 +13,46 @@
 
 * { box-sizing: border-box; }
 
+/* Keyboard focus visibility (was missing) */
+:focus-visible { outline: 2px solid #1f6feb; outline-offset: 2px; border-radius: 4px; }
+
+/* Global request progress bar */
+.progress { position: fixed; top: 0; left: 0; width: 100%; height: 3px; z-index: 2000; pointer-events: none; overflow: hidden; }
+.progress.active::before {
+  content: ""; position: absolute; top: 0; height: 100%; width: 40%;
+  background: #1f6feb; animation: prog 0.9s linear infinite;
+}
+@keyframes prog { from { left: -40%; } to { left: 100%; } }
+
+/* Toasts */
+.toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; }
+.toast {
+  min-width: 200px; max-width: 360px; padding: 0.6rem 0.9rem; border-radius: 8px;
+  color: #fff; font-size: 0.9rem; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  animation: toast-in 0.15s ease-out;
+}
+.toast.ok { background: var(--ok); }
+.toast.bad { background: var(--bad); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Confirm modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1500; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--card); border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+.modal-box p { margin: 0 0 0.5rem; }
+.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+/* Status badges */
+.badge {
+  display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
+}
+.badge-ok { background: #e3f3e6; color: #1d6b2c; }
+.badge-warn { background: #fdf2d6; color: #8a6d1b; }
+.badge-bad { background: #fde3e3; color: #a02020; }
+.badge-info { background: #e3eefb; color: #1d4f91; }
+.badge-muted { background: #eceff2; color: #54616e; }
+
 body {
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
@@ -24,9 +64,9 @@ body {
 header {
   background: var(--accent);
   color: var(--accent-ink);
-  padding: 1rem 1.5rem 0.75rem;
+  padding: 0.3rem 1rem 0.28rem;
 }
-header h1 { margin: 0; font-size: 1.4rem; }
+header h1 { margin: 0; font-size: 0.92rem; }
 
 .pill {
   display: inline-block;
@@ -40,10 +80,10 @@ header h1 { margin: 0; font-size: 1.4rem; }
 .pill.ok { background: var(--ok); }
 .pill.bad { background: var(--bad); }
 
-#user-box { font-size: 0.8rem; font-weight: normal; margin-left: 0.5rem; }
+#user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
 #logout-btn {
-  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 6px;
-  padding: 0.15rem 0.55rem; cursor: pointer; font: inherit; font-size: 0.8rem; margin-left: 0.3rem;
+  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.3rem;
 }
 .login-card {
   max-width: 360px; margin: 3rem auto; background: var(--card);
@@ -54,56 +94,73 @@ header h1 { margin: 0; font-size: 1.4rem; }
 
 /* ---- active tournament context bar ---- */
 #context-bar {
-  margin-top: 0.6rem;
+  margin-top: 0.28rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 8px;
-  padding: 0.4rem 0.7rem;
+  border-radius: 5px;
+  padding: 0.18rem 0.45rem;
 }
 #context-bar.has-active { background: rgba(255, 255, 255, 0.22); border-color: #fff; }
-.ctx-label { font-size: 0.85rem; opacity: 0.9; }
-#active-tournament { padding: 0.35rem 0.5rem; border-radius: 6px; border: 0; font: inherit; min-width: 240px; }
-.ctx-info { font-size: 0.85rem; opacity: 0.95; }
+.ctx-label { font-size: 0.68rem; opacity: 0.9; }
+#active-tournament { padding: 0.16rem 0.35rem; border-radius: 4px; border: 0; font: inherit; min-width: 180px; font-size: 0.74rem; }
+#context-bar .combo { width: auto; }
+#context-bar .combo-input { min-width: 180px; padding: 0.16rem 1.2rem 0.16rem 0.35rem; font-size: 0.74rem; border-radius: 4px; margin-top: 0; }
+.ctx-info { font-size: 0.68rem; opacity: 0.95; }
 
 /* ---- grouped menu ---- */
-.menu {
+/* level 1 — section groups (only one group's tabs show at a time) */
+.menu-l1 {
   display: flex;
-  gap: 1.5rem;
-  padding: 0 1.5rem;
+  gap: 0.3rem;
+  padding: 0.25rem 1rem 0;
   background: var(--accent);
-  border-bottom: 3px solid #245733;
   flex-wrap: wrap;
 }
-.menu-group { display: flex; align-items: flex-end; gap: 0.25rem; }
-.menu-label {
-  align-self: center;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.6);
-  padding-right: 0.25rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.25);
-  margin-right: 0.25rem;
+.gbtn {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
 }
+.gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.gbtn.active { background: #245733; color: #fff; }
+
+/* level 2 — the active group's tabs */
+.menu {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0 1rem;
+  background: #245733;
+  flex-wrap: wrap;
+}
+.menu-group { display: none; align-items: flex-end; gap: 0.15rem; }
+.menu-group.group-active { display: flex; }
+.menu-label { display: none; }  /* group name now lives in the level-1 bar */
 .tab {
   appearance: none;
   border: 0;
   background: transparent;
   color: rgba(255, 255, 255, 0.85);
   font: inherit;
-  font-size: 0.92rem;
-  padding: 0.55rem 0.85rem;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.6rem;
   cursor: pointer;
-  border-radius: 8px 8px 0 0;
+  border-radius: 5px 5px 0 0;
 }
 .tab:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .tab.active { background: var(--bg); color: var(--ink); font-weight: 600; }
 .tab.disabled { opacity: 0.45; }
 
-main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+main { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
 
 /* ---- panels ---- */
 .panel { display: none; }
@@ -111,10 +168,13 @@ main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
 .master-detail {
   display: grid;
-  grid-template-columns: minmax(260px, 360px) 1fr;
+  /* List is the primary scanning surface → give it the room; bound the form. */
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
   gap: 1.25rem;
   align-items: start;
 }
+/* Keep the edit form in view while scrolling a long list. */
+.detail-pane { position: sticky; top: 0.75rem; }
 
 .list-pane, .detail-pane {
   background: var(--card);
@@ -131,67 +191,119 @@ main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
   background: var(--accent);
   color: var(--accent-ink);
   border: 0;
-  border-radius: 6px;
-  padding: 0.35rem 0.7rem;
-  font: inherit;
+  border-radius: 5px;
+  padding: 0.3rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.8rem;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.detail-title { margin: 0 0 0.75rem; font-size: 1.1rem; }
+.detail-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
 
-/* ---- forms ---- */
-.row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
-.row label { flex: 1 1 140px; display: flex; flex-direction: column; font-size: 0.85rem; color: var(--muted); }
+/* prev/next record navigation on the detail form */
+.detail-nav {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+.nav-btn {
+  appearance: none; border: 1px solid var(--border); background: var(--bg);
+  border-radius: 5px; padding: 0.2rem 0.55rem; font: inherit; font-size: 0.78rem;
+  cursor: pointer; color: var(--ink);
+}
+.nav-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); }
+.nav-btn:disabled { opacity: 0.4; cursor: default; }
+.nav-pos { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
 
-input, select {
-  margin-top: 0.2rem;
-  padding: 0.45rem 0.55rem;
+/* ---- forms (compact) ---- */
+.row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.row label {
+  flex: 1 1 130px; display: flex; flex-direction: column;
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--muted);
+}
+
+input, select, textarea {
+  margin-top: 0.12rem;
+  padding: 0.28rem 0.4rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font: inherit;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
   color: var(--ink);
   background: #fff;
 }
 
-.actions-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.8rem; }
+/* type-in dropdowns (searchable comboboxes) */
+.combo { position: relative; display: block; }
+.combo-native {
+  position: absolute; left: 0; bottom: 0; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; margin: 0;
+}
+.combo::after {
+  content: "▾"; position: absolute; right: 0.45rem; top: 50%;
+  transform: translateY(-30%); pointer-events: none;
+  color: var(--muted); font-size: 0.65rem;
+}
+.combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
+.combo-list {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+  margin-top: 2px; max-height: 240px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+}
+.combo-item { padding: 0.3rem 0.5rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+.combo-item:hover, .combo-item.hi { background: var(--sel); }
+.combo-item.sel { font-weight: 600; }
+.combo-empty { padding: 0.4rem 0.5rem; color: var(--muted); font-size: 0.8rem; }
+
+.actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
 
 button[type="submit"] {
-  padding: 0.5rem 1rem;
+  padding: 0.32rem 0.75rem;
   background: var(--accent);
   color: var(--accent-ink);
   border: 0;
-  border-radius: 6px;
-  font: inherit;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 button[type="submit"]:hover { filter: brightness(1.05); }
 
-.delete {
-  padding: 0.5rem 0.9rem;
+.delete, .cancel {
+  padding: 0.3rem 0.65rem;
   background: transparent;
-  color: var(--bad);
-  border: 1px solid var(--bad);
-  border-radius: 6px;
-  font: inherit;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.8rem;
   cursor: pointer;
 }
+.delete { color: var(--bad); border: 1px solid var(--bad); }
 .delete:hover { background: #fdecec; }
-
-.cancel {
-  padding: 0.5rem 0.9rem;
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font: inherit;
-  cursor: pointer;
-}
+.cancel { color: var(--muted); border: 1px solid var(--border); }
 .cancel:hover { background: var(--bg); }
 
 .msg { margin-left: 0.4rem; font-size: 0.85rem; }
 .msg.ok { color: var(--ok); }
 .msg.bad { color: var(--bad); }
+
+/* ---- list scroll container (own scrollbar; header stays pinned) ---- */
+.list-scroll {
+  /* JS keeps --list-max in sync with the real space below the list (sizeLists);
+     the calc() is a sane fallback before the first measurement. */
+  max-height: var(--list-max, calc(100vh - 200px));
+  min-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.list-scroll .list-table { border: 0; }
+.list-scroll .list-table th { top: -1px; }  /* pin against the container edge */
 
 /* ---- list table ---- */
 .list-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
@@ -200,7 +312,11 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   padding: 0.4rem 0.5rem;
   border-bottom: 1px solid var(--border);
 }
-.list-table th { color: var(--muted); font-weight: 600; }
+.list-table th {
+  color: var(--muted); font-weight: 600;
+  position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.list-table tbody tr:nth-of-type(even) { background: #f7f9fa; }  /* zebra */
 .list-table tbody tr { cursor: pointer; }
 .list-table tbody tr:hover { background: var(--bg); }
 .list-table tbody tr.selected { background: var(--sel); }
@@ -218,6 +334,37 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 }
 .btn-link:hover { text-decoration: underline; }
 .btn-link.danger { color: var(--bad); }
+
+/* Right-align numeric columns for scannability */
+#report-table th:nth-child(6), #report-table td:nth-child(6),
+#report-table th:nth-child(7), #report-table td:nth-child(7),
+#report-table th:nth-child(8), #report-table td:nth-child(8),
+#report-totals th:nth-child(2), #report-totals th:nth-child(3), #report-totals th:nth-child(4),
+#panel-rates .list-table th:nth-child(3), #panel-rates .list-table td:nth-child(3),
+#panel-distances .list-table th:nth-child(4), #panel-distances .list-table td:nth-child(4),
+#trb-table th:nth-child(4), #trb-table td:nth-child(4),
+#trb-table th:nth-child(5), #trb-table td:nth-child(5) { text-align: right; }
+
+/* Consistent styling for the few unclassed action buttons */
+/* Match the unclassed save buttons to the primary button look */
+#avail-save, #me-avail-save {
+  padding: 0.32rem 0.75rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 5px; font-family: inherit; font-size: 0.8rem; cursor: pointer;
+}
+
+.export-btn {
+  display: inline-block;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.export-btn:hover { background: var(--bg); }
 
 /* ---- tournament workspace ---- */
 .card {
@@ -240,6 +387,16 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   border-radius: 6px; font: inherit; cursor: pointer;
 }
 .inline-form .row { margin-bottom: 0.5rem; }
+
+/* Collapsible workspace add-forms (list stays primary) */
+details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: #fbfdfc; }
+details.addbox > summary {
+  cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--accent);
+  list-style: none; user-select: none;
+}
+details.addbox > summary::-webkit-details-marker { display: none; }
+details.addbox[open] > summary { border-bottom: 1px solid var(--border); }
+details.addbox > form { padding: 0.7rem 0.8rem; }
 .import-row {
   display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
   margin-bottom: 0.8rem; padding-bottom: 0.8rem; border-bottom: 1px dashed var(--border);
@@ -290,8 +447,12 @@ td.toggle { white-space: nowrap; }
 #report-meta { margin-bottom: 0.6rem; }
 
 /* ---- responsive ---- */
-@media (max-width: 720px) {
+/* Two columns only on wide screens; otherwise a full-width list (no cramped wrap). */
+@media (max-width: 980px) {
   .master-detail { grid-template-columns: 1fr; }
+  .detail-pane { position: static; }
+}
+@media (max-width: 720px) {
   .menu { overflow-x: auto; }
 }
 

@@ -15,12 +15,14 @@ from .routers import (
     availability,
     certifications,
     distances,
+    doubles,
     emails,
     health,
     hotels,
     late_entries,
     me,
     officials,
+    pairing_avoidances,
     player_hotels,
     players,
     rates,
@@ -45,7 +47,8 @@ app.include_router(me.router)
 _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, roster, assignments, reports, certifications, availability,
-          emails, late_entries, withdrawals, adult_lists, player_hotels):
+          emails, late_entries, withdrawals, adult_lists, player_hotels,
+          pairing_avoidances, doubles):
     app.include_router(r.router, dependencies=_admin)
 
 # Serve the pure HTML/CSS frontend (repo-root/frontend) at "/".

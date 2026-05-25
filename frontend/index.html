@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <div id="progress" class="progress"></div>
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
       <span id="user-box" hidden><span id="username-label"></span>
@@ -29,8 +30,9 @@
     <p class="muted">POC login: <code>admin</code> / <code>admin</code></p>
   </section>
 
+  <nav class="menu-l1" id="menu-groups" aria-label="Sections"></nav>
   <nav class="menu" id="menu">
-    <div class="menu-group">
+    <div class="menu-group group-active" data-group="setup">
       <span class="menu-label">Setup</span>
       <button class="tab active" data-target="panel-tournaments">Tournaments</button>
       <button class="tab" data-target="panel-sites">Sites</button>
@@ -41,20 +43,28 @@
       <button class="tab" data-target="panel-distances">Distances</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
     </div>
-    <div class="menu-group tgroup">
+    <div class="menu-group tgroup" data-group="tournament">
       <span class="menu-label">Tournament</span>
       <button class="tab needs-active" data-target="panel-t-sites">Sites</button>
       <button class="tab needs-active" data-target="panel-t-roster">Roster</button>
+      <button class="tab needs-active" data-target="panel-t-availability">Availability</button>
+    </div>
+    <div class="menu-group tgroup" data-group="staffing">
+      <span class="menu-label">Staffing</span>
       <button class="tab needs-active" data-target="panel-t-assignments">Assignments</button>
       <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
-      <button class="tab needs-active" data-target="panel-t-availability">Availability</button>
+      <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
+    </div>
+    <div class="menu-group tgroup" data-group="requests">
+      <span class="menu-label">Player requests</span>
       <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
       <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
       <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
       <button class="tab needs-active" data-target="panel-t-sched">Scheduling</button>
       <button class="tab needs-active" data-target="panel-t-divflex">Div. flex</button>
+      <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoid.</button>
+      <button class="tab needs-active" data-target="panel-t-doubles">Doubles</button>
       <button class="tab needs-active" data-target="panel-t-photels">Player hotels</button>
-      <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
     </div>
   </nav>
 
@@ -69,7 +79,7 @@
             <input class="filter" type="search" placeholder="Filter tournaments…" />
             <button type="button" class="new-btn">+ New</button>
           </div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -103,7 +113,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter sites…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -122,7 +132,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -161,7 +171,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -183,7 +193,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter rates…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Cert</th><th>Rate/day</th><th>Effective</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Cert</th><th>Rate/day</th><th>Effective</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -201,7 +211,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter hotels…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -221,7 +231,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" /><button type="button" class="new-btn">+ New</button></div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Official</th><th>Site</th><th>1-way mi</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Official</th><th>Site</th><th>1-way mi</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -485,6 +495,70 @@
       </div>
     </section>
 
+    <!-- T: Pairing avoidances (juniors) -->
+    <section class="panel tpanel" id="panel-t-pairing">
+      <div class="needs-active-note">Select a tournament in the bar above to manage pairing avoidances.</div>
+      <div class="t-content card">
+        <h3>Pairing avoidances — <span class="t-name"></span></h3>
+        <p class="muted">A group of 2+ players (same club or siblings) who must not meet in the first round.</p>
+        <form id="pairing-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>Age division <input name="age_division" /></label>
+            <label>Relationship
+              <select name="relationship"><option value="same_club">same club</option><option value="siblings">siblings</option></select>
+            </label>
+          </div>
+          <div id="pairing-members"></div>
+          <div class="actions-row">
+            <button type="button" id="pairing-add-member" class="btn-link">+ member</button>
+            <button type="submit">Add group</button>
+            <button type="button" class="cancel">Clear</button>
+            <span class="msg" id="pairing-msg"></span>
+          </div>
+        </form>
+        <table id="pairing-table" class="list-table">
+          <thead><tr><th>Division</th><th>Relationship</th><th>Players</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Doubles pairing -->
+    <section class="panel tpanel" id="panel-t-doubles">
+      <div class="needs-active-note">Select a tournament in the bar above to manage doubles pairing.</div>
+      <div class="t-content card">
+        <h3>Doubles pairing — <span class="t-name"></span></h3>
+        <p class="muted">Mutual partnerships verify when <em>both</em> players' emails are on file (each naming the other). Random requests pair FIFO per division and are binding.</p>
+        <form id="doubles-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Age division <input name="age_division" /></label>
+            <label>Random pairing <input type="checkbox" id="doubles-random" name="wants_random" /></label>
+            <label id="doubles-partner-wrap">Partner USTA # <input name="partner_usta" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">File request</button><button type="button" class="cancel">Clear</button><span class="msg" id="doubles-msg"></span></div>
+        </form>
+
+        <h4>Pending requests &amp; random queue</h4>
+        <table id="doubles-req-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Type</th><th>Partner / status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <h4>Verified pairs</h4>
+        <table id="doubles-pair-table" class="list-table">
+          <thead><tr><th>Division</th><th>Type</th><th>Player 1</th><th>Player 2</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- T: Player hotels -->
     <section class="panel tpanel" id="panel-t-photels">
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
@@ -567,6 +641,16 @@
     </section>
   </main>
 
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="confirm-modal" class="modal" hidden role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <p id="confirm-text"></p>
+      <div class="modal-actions">
+        <button type="button" id="confirm-cancel" class="cancel">Cancel</button>
+        <button type="button" id="confirm-ok" class="delete">Delete</button>
+      </div>
+    </div>
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>

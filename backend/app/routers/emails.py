@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..models import EmailCreate, EmailOut, EmailUpdate
+from ..triage import classify
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
 
@@ -59,6 +60,17 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
     if row is None:
         raise HTTPException(status_code=404, detail="email not found")
     return row
+
+
+@router.post("/{email_id}/suggest")
+def suggest_classification(email_id: int, conn=Depends(db_dep)):
+    """Local rule-based triage suggestion (no LLM, no data leaves the building)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT subject, body FROM email_message WHERE id = %s", (email_id,))
+        row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="email not found")
+    return {"classification": classify(row["subject"], row["body"])}
 
 
 @router.delete("/{email_id}", status_code=204)
