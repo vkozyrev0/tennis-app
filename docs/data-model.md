@@ -6,10 +6,11 @@ Storage-agnostic; field types are indicative. **PK** = primary key,
 **FK** = foreign key.
 
 > **Build status (POC):** ✅ implemented · 🔭 planned (designed, not yet built).
-> **Part A is fully implemented** (incl. Certification + Availability);
-> **Part B (player operations) is entirely 🔭** except `Player`/`TournamentEntry`,
-> which the roster shares. Markers below call out where the model and the running
-> app differ.
+> **Part A is fully implemented** (incl. Certification + Availability) and
+> **Part B (player operations) is now fully implemented** as a human-review
+> workflow — review inbox + all lists (late entries, withdrawals, scheduling
+> avoidances, division flexibility, pairing avoidances, doubles, player hotels,
+> t-shirts). Markers below call out where the model and the running app differ.
 
 ---
 
@@ -90,7 +91,7 @@ incomplete). Managed as chips on the Official detail.
 |-------|-------|
 | `id` | PK |
 | `official_id` | FK → Official |
-| `type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
+| `cert_type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
 
 ### CertificationRate
 Set by TD; **per-day** rate by certification type (D2). The applicable rate is
@@ -99,7 +100,7 @@ rates on days they work different roles (audit §3.2).
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
-| `type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
+| `cert_type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
 | `rate_per_day` | money |
 | `effective_from` | rate version, for auditability (audit §5.3) |
 
@@ -442,13 +443,13 @@ Tournament *───* Assignment *───1 Official                          
 Official *───* OfficialSiteDistance *───1 Site   (one-way miles)    ✅
 CertificationRate (rate by cert type, per day)                      ✅
 Hotel 1───* RoomBlock  (property vs. inventory; block→Tournament)   ✅
-Official *───* Certification  (held certs)                          🔭
-Tournament *───* Availability *───1 Official                        🔭
+Official *───* Certification  (held certs)                          ✅
+Tournament *───* Availability *───1 Official                        ✅
 
 Tournament *───* TournamentEntry *───1 Player                       ✅
    (TD roster: selection_status, division, t-shirt, dietary; t-shirt history)
 
-Part B (all 🔭): EmailMessage review inbox ──┬─ DoublesRequest → DoublesPair ← RandomPairingQueue
+Part B (all ✅): EmailMessage review inbox ──┬─ DoublesRequest → DoublesPair ← RandomPairingQueue
                                             ├─ Withdrawal      → sets TournamentEntry.selection_status
                                             ├─ LateEntry       → creates TournamentEntry (source=late_entry)
                                             ├─ PairingAvoidance *─* PairingAvoidanceMember (juniors)

@@ -1,4 +1,5 @@
 """Official availability per tournament (TD-entered). Phase 2 / audit §Availability."""
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
@@ -35,15 +36,21 @@ def set_availability(tournament_id: int, body: AvailabilitySet, conn=Depends(db_
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute("SELECT id FROM official WHERE id = %s", (body.official_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=400, detail="official_id does not exist")
         cur.execute(
             "DELETE FROM availability WHERE tournament_id = %s AND official_id = %s",
             (tournament_id, body.official_id),
         )
-        for d in body.dates:
-            cur.execute(
-                "INSERT INTO availability (official_id, tournament_id, available_date, hotel_needed) "
-                "VALUES (%s, %s, %s, %s)",
-                (body.official_id, tournament_id, d, body.hotel_needed),
-            )
+        try:
+            for d in body.dates:
+                cur.execute(
+                    "INSERT INTO availability (official_id, tournament_id, available_date, hotel_needed) "
+                    "VALUES (%s, %s, %s, %s)",
+                    (body.official_id, tournament_id, d, body.hotel_needed),
+                )
+        except psycopg.errors.ForeignKeyViolation:
+            raise HTTPException(status_code=400, detail="invalid official_id or tournament_id")
     return {"official_id": body.official_id, "dates": [d.isoformat() for d in body.dates],
             "hotel_needed": body.hotel_needed}

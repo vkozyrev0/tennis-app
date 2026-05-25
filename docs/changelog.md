@@ -1,0 +1,251 @@
+# CourtOps Tennis — UI/UX & polish changelog
+
+Detailed, per-pass record of the UI/UX and polish work. The high-level plan
+and status live in [roadmap.md](roadmap.md); this file is the granular log.
+
+---
+
+## Post-audit improvements (2026-05-25) — applied
+After the code+docs audit (see roadmap "Audit follow-ups"), a further in-scope batch:
+- **✅ Late-entry deadline flag** — the previously-dead `late_entry_deadline` is now
+  used: the late-entries list returns `past_deadline` (request date after the
+  tournament's deadline) and the UI shows a **⚠ past deadline** marker. Surfaced,
+  not blocked (consistent with the other date flags). Backend + model + test.
+- **✅ Inline "add distance" on assignments** — when an assignment's venue site has
+  no mileage on file, the card shows an inline **one-way miles + add distance**
+  control that POSTs to `/api/distances` and refreshes, instead of making the TD
+  switch to the Distances tab.
+- **✅ Deferred items documented** — the four external-dependency/decision items
+  (Maps geocoding, email auto-ingest, LLM triage/D5, PII-at-rest + DB hardening)
+  are now an explicit **"On hold"** table in the roadmap with blockers + unblock
+  steps.
+
+---
+
+## UI/UX pass 1 (2026-05-25) — applied
+First batch from the UI review (frontend only; backend/tests unchanged):
+- **✅ Grouped tournament nav** — the 14 tournament tabs are split into labeled
+  sub-areas: **Tournament** (Sites/Roster/Availability), **Staffing**
+  (Assignments/Room blocks/Reports), **Player requests** (Inbox + the 7 lists).
+- **✅ Status color chips** — `selection_status`, email `status`, doubles type, etc.
+  render as tinted badges (ok/warn/bad/info/muted) for scannability.
+- **✅ Toasts** — every `setMsg` also raises a corner toast (errors linger longer);
+  inline messages kept.
+- **✅ Accessibility** — `:focus-visible` outlines; the menu is a `role="tablist"`
+  with `aria-selected` and **arrow-key** navigation.
+- **✅ Table polish** — zebra striping + **sticky headers** on list tables.
+
+## UI/UX pass 2 (2026-05-25) — applied
+- **✅ Global loading bar** — a thin top progress bar driven by the `api()` wrapper
+  (shows whenever any request is in flight).
+- **✅ Right-aligned numeric columns** — report pay/mileage/total, rate/day,
+  one-way miles, room counts.
+- **✅ Button consistency** — the previously unstyled save buttons (availability,
+  my-availability) now match the primary button; report Print/CSV already matched.
+
+## UI/UX pass 3 (2026-05-25) — applied
+- **✅ Styled delete confirm** — a real modal (`confirmDialog()`, Esc/Enter
+  support) replaces the browser's native `confirm()` across all 11 delete actions.
+- **✅ Busy-on-submit** — the Setup forms disable their submit button while saving
+  (prevents double-submit; complements the global loading bar).
+
+## UI/UX pass 4 (2026-05-25) — applied
+- **✅ Collapsible add-forms** — the 9 workspace add-forms are wrapped (at runtime,
+  no HTML churn) in `<details>` and **closed by default** so the list is primary;
+  they **auto-open** when filing-from-email or editing a row.
+- **✅ Busy-on-submit extended** to the workspace `wirePlayerList` forms
+  (scheduling/division/player-hotels) on top of the Setup forms.
+
+## UI/UX pass 5 (2026-05-25) — applied
+- **✅ Fixed master-detail proportions (bug)** — the grid had the **list capped at
+  360px** (`minmax(260px,360px) 1fr`), forcing long columns (e.g. site/hotel
+  names) to wrap to many lines. Flipped to `minmax(0,1fr) minmax(280px,380px)` so
+  the **list gets the room** and the form is bounded; raised the stacking
+  breakpoint to **980px** so medium screens get a **full-width list** instead of a
+  cramped two-column; page max-width 1100→1200; the edit form is **sticky** while
+  scrolling a long list. Verified: a 1421px viewport gives a 752px list with the
+  long names on a single 36px row.
+
+## UI/UX pass 6 (2026-05-25) — applied
+- **✅ Compact forms** — denser detail/add forms per request: small **uppercase
+  field labels** (0.68rem), smaller controls (0.82rem, tighter padding), reduced
+  row spacing, and **compact buttons** (submit/delete/cancel/new/save at 0.8rem).
+  Forms take far less vertical space while staying readable.
+
+## UI/UX pass 7 (2026-05-25) — applied
+- **✅ Condensed toolbar** — the whole top chrome was slimmed to reclaim vertical
+  space: **header** padding 1rem→0.5rem and the **h1** 1.4rem→1.05rem; the
+  **context bar** is tighter (padding 0.4→0.25rem, gap 0.5→0.4rem, font 0.85→
+  0.72rem) with a smaller **active-tournament select** (min-width 240→200px,
+  0.78rem); the **nav menu** is denser (gap 1.5→1rem, 2px under-border) with
+  smaller **tabs** (0.92→0.82rem, padding 0.55/0.85→0.38/0.7rem) and **group
+  labels** (0.7→0.6rem); **user box / logout** dropped to 0.72rem. Verified in
+  preview: h1 16.8px, tabs 13.12px, context-bar 4px/8.8px padding, no console
+  errors.
+
+## UI/UX pass 8 (2026-05-25) — applied
+- **✅ Lists own their scrollbar** (native, dependency-free per D6) — each Setup
+  master-detail list now lives in a `.list-scroll` container with its **own
+  vertical scrollbar** (`max-height: calc(100vh - 200px)`, sticky header pinned to
+  the container edge). The list no longer pushes the page tall, so the sticky edit
+  form stays in view — no more scrolling **past** the form to reach items at the
+  bottom. *(We kept the pure-HTML/CSS approach rather than adopting a third-party
+  grid like Tabulator/AG Grid, on the user's call — same "grid with its own
+  scrollbar" UX, no CDN dependency, works offline.)*
+- **✅ Prev / Next record navigation** — every master-detail detail form gets a
+  small nav bar (`‹ Prev` · `N / total` · `Next ›`) that steps through the
+  **currently filtered** list without touching the list at all; endpoints disable
+  at the ends, the position counter reflects the active filter, and the selected
+  row auto-scrolls into view inside its container. Verified in preview: 7 scroll
+  containers + 7 nav bars, `1 / 2`→`2 / 2` stepping, Prev disabled on the first
+  record, no console errors.
+
+## UI/UX pass 9 (2026-05-25) — applied
+- **✅ List height bounded to the viewport (dynamic)** — the earlier
+  `calc(100vh - 200px)` was a guess and could still run a long list off the bottom
+  of the screen. Now a tiny `sizeLists()` helper measures each active
+  `.list-scroll`'s real top offset and sets a `--list-max` CSS variable to the
+  exact space remaining (`innerHeight − top − 16px`), recomputed on **tab switch,
+  window resize, and load**. The list's own scrollbar now always ends inside the
+  viewport regardless of toolbar height. Verified: list top 212px → `--list-max`
+  1051px → list bottom within the 1279px viewport.
+- **✅ Toolbar condensed further** — second density pass: header padding 0.5→0.3rem
+  and h1 1.05→0.92rem (14.7px); context bar padding 0.25→0.18rem, labels 0.72→
+  0.68rem, active-tournament select 0.78→0.74rem (min-width 200→180); nav tabs
+  0.82→0.78rem (12.5px) with tighter padding (0.38/0.7→0.28/0.6rem) and group
+  labels 0.6→0.55rem.
+
+## UI/UX pass 10 (2026-05-25) — applied
+- **✅ Two-level menu** — the toolbar no longer shows every tab at once. A
+  **level-1 bar** lists the four sections (**Setup · Tournament · Staffing ·
+  Player requests**); picking one reveals **only that group's tabs** in the
+  level-2 bar (`.menu-group.group-active`), auto-opening its first enabled tab.
+  Cross-group jumps (e.g. file-from-email) keep the level-1 highlight in sync.
+  Verified: 4 group buttons, exactly one group's tabs visible, Staffing→Assignments
+  opens correctly.
+- **✅ Type-in dropdowns (searchable comboboxes)** — every native `<select>` is
+  progressively enhanced into a **filter-as-you-type** dropdown (`enhanceSelect`):
+  a text input overlays the select, typing filters options, ↑/↓/Enter/Esc work,
+  and click-away closes. The native `<select>` stays the **source of truth**
+  (value/`required`/submit/listeners unchanged), with displays re-synced on
+  change / option-repopulation (MutationObserver) / form reset / edit-fill /
+  active-tournament restore. Stayed **dependency-free** (no Select2/Choices.js).
+  Verified: 17 comboboxes; the officials picker filters 51→5 on "z" and writes the
+  chosen value back to the select; no console errors.
+
+## UI/UX pass 11 (2026-05-25) — applied
+- **✅ Part B forms reference the existing Players list** — every Staffing /
+  Player-request form now **picks an existing player** instead of free-typing a
+  name + USTA #. The three free-text fields (USTA #, first, last) collapsed into a
+  single **Player** picker (`select.player-ref`, a type-in combobox) on late
+  entries, withdrawals, scheduling avoidances, division flexibility, player hotels,
+  doubles (player **and** partner), and each **pairing-group member** row.
+  (Staffing's Assignments already used an officials picker.) On submit the chosen
+  player is resolved back to USTA #/first/last, so the **backend is unchanged**
+  (it still upserts/matches by USTA #). The file-from-email flow focuses the new
+  player picker. Verified end-to-end: filing a scheduling avoidance via the picker
+  created the row against the active tournament for the referenced player; 9 player
+  pickers populate (14 players + blank); no console errors.
+
+## UI/UX pass 12 (2026-05-25) — applied
+- **✅ Combobox placeholder fix** — the "— select … —" prompt was sitting in the
+  input as a real value, so you had to delete it before typing a search. It's now
+  rendered as the input's grey **`placeholder`** (the field starts empty), and the
+  input **selects its text on focus** so an existing choice can be typed over too.
+  Verified: an unset player picker shows empty value + "— select player —"
+  placeholder, and typing "jon" filters straight to "Jones, Sam" with no clearing.
+
+## UI/UX pass 13 (2026-05-25) — applied
+- **✅ CSV template downloads** — next to each list's **⬇ CSV** export button there
+  is now a **⬇ Template** button that downloads an **empty CSV with just the
+  headers** for the user to fill in. **Roster's** template uses the importer's
+  **canonical field names** (`usta_number, first_name, last_name, age_division,
+  events, selection_status, t_shirt_size, dietary_preference`) so the filled file
+  re-imports as-is; other lists use their visible column headers. Derived/aggregate
+  lists (verified doubles pairs, CVB totals, inbox, cumulative t-shirts) are
+  export-only and get no template. Verified: 8 template + 12 export buttons; roster
+  template emits the canonical header row; no console errors.
+
+## UI/UX pass 14 (2026-05-25) — applied
+- **✅ Full-width layout** — dropped the centered **1200px cap** on `main` (which
+  left large empty margins on wide screens) in favour of a **fluid full-window**
+  layout with comfortable side padding (1.75rem). The reclaimed space goes to the
+  **list** (1fr) and the **detail form** (cap nudged 380→420px). Verified at a
+  1421px viewport: `main` 1421px, list pane 925px (was ~752px), form 420px; no
+  console errors.
+  - **Rebalanced** (follow-up): the lists were too wide and the form too narrow, so
+    the detail column was widened to `minmax(420px, 600px)` — at 1421px the form is
+    now 600px and the list 745px.
+
+## UI/UX pass 15 (2026-05-25) — applied
+- **✅ Combobox dropdown contrast fix (bug)** — dropdown items were **inheriting**
+  their text colour from the surroundings: the header (active-tournament) combobox
+  showed **white text on the white list** (invisible), and form comboboxes inherited
+  the muted-grey label colour (low contrast). The `.combo-list`/`.combo-item` now
+  set explicit `color: var(--ink)` on `#fff` (and reset inherited uppercase/letter-
+  spacing), with highlighted/selected rows keeping dark ink on the light `--sel`
+  green. Verified: item text is `rgb(31,41,51)` in both header and form dropdowns.
+
+## UI/UX pass 16 (2026-05-25) — applied
+- **✅ Placeholder no longer a dropdown row** — the blank "— select … —" / "— none —"
+  option was appearing as a selectable item in the combobox list. It's now excluded
+  from the rendered list (it already shows as the input's grey placeholder). Optional
+  fields are still clearable: empty the text and commit (Enter / click-away) and the
+  selection resets to none; required fields simply have no blank row. Verified:
+  active-tournament shows only the 2 tournaments, an optional site picker shows only
+  real sites yet still clears to none, and the required player picker lists only
+  players — no "— … —" rows anywhere.
+
+## UI/UX pass 17 (2026-05-25) — applied
+- **✅ Roster import row tidied** — the oversized **Import CSV/XLSX** button is now a
+  compact **Import** (0.8rem), and a **⬇ Template** button sits right beside the
+  upload control (secondary `.ghost` style) so the importer's template is where you
+  need it. The template emits the importer's **canonical columns**
+  (`usta_number … dietary_preference`) — fill it in and re-upload. The redundant
+  table-side roster template was removed (roster added to `NO_TEMPLATE`); the roster
+  table keeps its **⬇ CSV** export. Verified: Import 12.8px/compact padding, template
+  emits the canonical header row, only the CSV export remains by the table; no
+  console errors.
+
+## UI/UX pass 18 (2026-05-25) — applied (roadmap correctness gaps)
+Reviewed the roadmap and executed the two outstanding **🟡 correctness gaps** that
+need no external service:
+- **✅ Assignment site constrained** to the active tournament's sites (dropdown
+  filled per-tournament in `loadAssignments`). Verified: 1 linked site shown vs 4
+  global.
+- **✅ Work-date bounds warning** — ⚠ flag on out-of-window day chips + an
+  "Add anyway?" confirm when adding a day outside the play window (warning, not a
+  block — audit §3.4). Verified via `_outOfWindow`.
+
+### Deferred — need an external service or an explicit decision (not executed)
+These remaining roadmap items can't be completed inside the local POC without new
+infrastructure or a privacy decision, so they're intentionally left open:
+- **Google Maps geocoding** for auto-distance (Phase 2) — needs a Maps API key +
+  network egress; **manual distance entry is the working fallback** today (D3/U2).
+- **Dedicated forwarding-address email auto-ingest** (Phase 3, D4) — needs real
+  mail infra; **manual add to the review inbox** is the working POC path.
+- **LLM triage upgrade** (D5) — the local rule-based suggester ships; an LLM that
+  reads minors' email content requires the **cloud-vs-local privacy call first**.
+- **PII encryption at rest / retention** + **DB hardening** (Phase 5, audit §5) —
+  tied to the post-POC deployment switch (dedicated DB user, secrets, TLS).
+- **Money audit trail** beyond the current snapshot (store all calc *inputs*),
+  **correction-handling** for amending emails, and **multi-user TD access** (D8) —
+  lower-priority polish.
+
+## UI/UX pass 19 (2026-05-25) — applied (remaining UI-review backlog)
+- **✅ Busy-on-submit everywhere** — added an `onSubmit(form, handler)` helper that
+  preventDefaults and **disables the submit button while the async handler runs**
+  (re-enabling in `finally`, even on early return/error). Routed every remaining
+  bespoke form through it: roster, assignment, room-block, email, late entry,
+  withdrawal, pairing, doubles, login, and profile. (Setup `wireEntity` and
+  `wirePlayerList` already had it.) Verified: the email form's button disables
+  during submit and re-enables after.
+- **✅ Narrow-screen nav** — at ≤720px both nav rows (level-1 groups + level-2 tabs)
+  **scroll horizontally** (`overflow-x:auto; flex-wrap:nowrap`) instead of wrapping
+  into many rows; the context bar wraps and the active-tournament picker shrinks to
+  140px. Also fixed the **print** rule to hide the new level-1 bar. Verified at
+  375px: both rows `overflow-x:auto; nowrap`.
+
+Still open from the UI review (no external dep, just lower priority): a full
+button-style **utility-class system** (cosmetic refactor), the inline "add
+distance" fix on assignments, and the structured assignment-card layout.

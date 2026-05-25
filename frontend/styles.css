@@ -463,12 +463,17 @@ td.toggle { white-space: nowrap; }
   .detail-pane { position: static; }
 }
 @media (max-width: 720px) {
-  .menu { overflow-x: auto; }
+  /* Both nav rows scroll horizontally instead of wrapping into many rows. */
+  .menu-l1, .menu { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .menu-group.group-active { flex-wrap: nowrap; }
+  .gbtn, .tab { white-space: nowrap; }
+  #context-bar { flex-wrap: wrap; }
+  #active-tournament, #context-bar .combo, #context-bar .combo-input { min-width: 140px; }
 }
 
 /* ---- print: show only the active report ---- */
 @media print {
-  header, .menu, #context-bar, .no-print { display: none !important; }
+  header, .menu-l1, .menu, #context-bar, .no-print { display: none !important; }
   .panel:not(.active) { display: none !important; }
   .tpanel .needs-active-note { display: none !important; }
   main { padding: 0; max-width: none; }

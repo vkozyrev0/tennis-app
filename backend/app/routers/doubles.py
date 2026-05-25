@@ -54,6 +54,10 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        # Random pairing is per-division FIFO, so a division is required — otherwise
+        # NULL-division requests would pair across divisions (audit §3.6).
+        if body.wants_random and not (body.age_division or "").strip():
+            raise HTTPException(status_code=400, detail="random pairing requires an age division")
         pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
         partner = (body.partner_usta or "").strip() or None
         cur.execute(

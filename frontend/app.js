@@ -100,6 +100,16 @@ function formObj(form) {
   for (const el of form.elements) if (el.name) o[el.name] = el.value === "" ? null : el.value;
   return o;
 }
+// Register a submit handler that preventDefaults and disables the submit button
+// while the async handler runs (guards against double-submit), re-enabling after.
+function onSubmit(form, handler) {
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+    try { await handler(e); } finally { if (btn) btn.disabled = false; }
+  });
+}
 function fillSelect(el, items, labelFn, none = true) {
   if (!el) return;
   const cur = el.value;
@@ -614,7 +624,7 @@ function renderRoster() {
   if (rosterRows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">No players on this roster yet.</td></tr>';
 }
 function rosterReset() { rosterEditId = null; rosterForm.reset(); rosterForm.querySelector('button[type="submit"]').textContent = "Add player"; }
-rosterForm.addEventListener("submit", async (e) => {
+onSubmit(rosterForm, async (e) => {
   e.preventDefault();
   const b = formObj(rosterForm); b.player_id = Number(b.player_id);
   try {
@@ -699,6 +709,29 @@ function renderAssignment(a, availDates) {
   });
   actions.append(ed, dl); head.appendChild(actions); card.appendChild(head);
 
+  // Inline mileage fix: if the venue site has no distance on file, add it right
+  // here instead of switching to the Distances tab.
+  if (a.missing_distance && a.site_id) {
+    const fix = document.createElement("div"); fix.className = "add-day";
+    fix.innerHTML = '<span class="muted">No mileage on file — </span>';
+    const mi = document.createElement("input");
+    mi.type = "number"; mi.min = "0"; mi.step = "0.1"; mi.placeholder = "one-way miles";
+    mi.style.maxWidth = "9rem";
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn-link"; btn.textContent = "add distance";
+    btn.addEventListener("click", async () => {
+      const v = parseFloat(mi.value);
+      if (!(v >= 0)) { setMsg("asg-msg", "enter one-way miles", false); return; }
+      try {
+        await api("/distances", { method: "POST", body: JSON.stringify({
+          official_id: a.official_id, site_id: a.site_id, one_way_miles: v, source: "manual" }) });
+        loadAssignments();
+      } catch (e) { setMsg("asg-msg", e.message, false); }
+    });
+    fix.append(mi, btn);
+    card.appendChild(fix);
+  }
+
   // Confirmed days, grouped chips (cert + date with weekday). Days outside the
   // tournament's play window are flagged (a warning, not a block — audit §3.4).
   const days = document.createElement("div"); days.className = "days";
@@ -769,7 +802,7 @@ function renderAssignment(a, availDates) {
   return card;
 }
 function asgReset() { asgEditId = null; asgForm.reset(); asgForm.querySelector('button[type="submit"]').textContent = "Add official"; }
-asgForm.addEventListener("submit", async (e) => {
+onSubmit(asgForm, async (e) => {
   e.preventDefault();
   const b = formObj(asgForm);
   b.official_id = Number(b.official_id);
@@ -818,7 +851,7 @@ async function loadRoomBlocks() {
   if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="8">No room blocks for this tournament yet.</td></tr>';
 }
 function trbReset() { trbEditId = null; trbForm.reset(); trbForm.querySelector('button[type="submit"]').textContent = "Add block"; }
-trbForm.addEventListener("submit", async (e) => {
+onSubmit(trbForm, async (e) => {
   e.preventDefault();
   const b = formObj(trbForm);
   b.hotel_id = Number(b.hotel_id);
@@ -981,7 +1014,7 @@ async function loadInbox() {
   }
   if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">Inbox empty — add a forwarded email above.</td></tr>';
 }
-document.getElementById("email-form").addEventListener("submit", async (e) => {
+onSubmit(document.getElementById("email-form"), async (e) => {
   e.preventDefault(); if (!active) return;
   const b = formObj(e.target); b.tournament_id = active.id;
   try { await api("/emails", { method: "POST", body: JSON.stringify(b) }); setMsg("email-msg", "added", true); e.target.reset(); loadInbox(); }
@@ -996,7 +1029,8 @@ async function loadLate() {
   for (const e of rows) {
     const tr = document.createElement("tr");
     const nm = [e.last_name, e.first_name].filter(Boolean).join(", ");
-    tr.innerHTML = `<td>${esc(e.request_date)}</td><td>${esc(e.request_time)}</td><td>${esc(nm)}</td>` +
+    const lateFlag = e.past_deadline ? ' <span class="warn" title="After the late-entry deadline">⚠ past deadline</span>' : "";
+    tr.innerHTML = `<td>${esc(e.request_date)}${lateFlag}</td><td>${esc(e.request_time)}</td><td>${esc(nm)}</td>` +
       `<td>${esc(e.usta_number)}</td><td>${esc(e.age_division)}</td><td>${esc(e.events)}</td><td class="actions"></td>`;
     const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
     del.addEventListener("click", async () => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
@@ -1006,7 +1040,7 @@ async function loadLate() {
   if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="7">No late entries yet.</td></tr>';
 }
 function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
-lateForm.addEventListener("submit", async (e) => {
+onSubmit(lateForm, async (e) => {
   e.preventDefault(); if (!active) return;
   const b = expandPlayerRef(formObj(lateForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
@@ -1036,7 +1070,7 @@ async function loadWithdrawals() {
   if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="8">No withdrawals yet.</td></tr>';
 }
 function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
-wdForm.addEventListener("submit", async (e) => {
+onSubmit(wdForm, async (e) => {
   e.preventDefault(); if (!active) return;
   const b = expandPlayerRef(formObj(wdForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
@@ -1156,7 +1190,7 @@ async function loadPairing() {
   }
   if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="4">No pairing avoidances yet.</td></tr>';
 }
-pairingForm.addEventListener("submit", async (e) => {
+onSubmit(pairingForm, async (e) => {
   e.preventDefault(); if (!active) return;
   const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => {
     const p = playersById[r.querySelector(".pm-player").value];
@@ -1213,7 +1247,7 @@ async function loadDoubles() {
   }
   if (data.pairs.length === 0) pt.innerHTML = '<tr><td class="empty" colspan="5">No verified pairs yet.</td></tr>';
 }
-doublesForm.addEventListener("submit", async (e) => {
+onSubmit(doublesForm, async (e) => {
   e.preventDefault(); if (!active) return;
   const me = playersById[doublesForm.player_ref.value];
   if (!me) { setMsg("doubles-msg", "select a player", false); return; }
@@ -1258,6 +1292,7 @@ async function loadReports() {
     const flags = [
       o.missing_distance ? "no distance" : "",
       o.hotel_date_mismatch ? "⚠ hotel dates" : "",
+      o.work_date_out_of_window ? "⚠ off-window day" : "",
     ].filter(Boolean).join(", ");
     const tr = document.createElement("tr");
     tr.innerHTML =
@@ -1270,7 +1305,8 @@ async function loadReports() {
   if (reportData.officials.length === 0)
     tbody.innerHTML = '<tr><td class="empty" colspan="9">No officials assigned yet.</td></tr>';
   const note = (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
-    (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "");
+    (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
+    (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "");
   document.getElementById("report-totals").innerHTML =
     `<th colspan="5">Totals${note}</th><th>${money(totals.pay)}</th>` +
     `<th>${money(totals.mileage)}</th><th>${money(totals.total)}</th><th></th>`;
@@ -1296,7 +1332,7 @@ document.getElementById("report-csv").addEventListener("click", () => {
       o.official_name, o.days.map((d) => `${d.work_date} ${certLabel(d.working_as)}`).join("; "),
       o.site_label || "", o.hotel_name || "", o.dietary_restrictions || "",
       o.pay, o.mileage == null ? "" : o.mileage, o.total,
-      [o.missing_distance ? "no distance" : "", o.hotel_date_mismatch ? "hotel dates" : ""].filter(Boolean).join(" / "),
+      [o.missing_distance ? "no distance" : "", o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window day" : ""].filter(Boolean).join(" / "),
     ]);
   }
   const t = reportData.totals;
@@ -1569,7 +1605,7 @@ function applyAuth(who) {
   if (isOfficial) officialInit();
 }
 
-document.getElementById("login-form").addEventListener("submit", async (e) => {
+onSubmit(document.getElementById("login-form"), async (e) => {
   e.preventDefault();
   const f = e.target;
   try {
@@ -1583,7 +1619,7 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   adminLoaded = false;
   applyAuth(null);
 });
-document.getElementById("me-form").addEventListener("submit", async (e) => {
+onSubmit(document.getElementById("me-form"), async (e) => {
   e.preventDefault();
   const b = {};
   for (const el of e.target.elements) if (el.name) b[el.name] = el.value === "" ? null : el.value;

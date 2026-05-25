@@ -10,8 +10,12 @@ router = APIRouter(tags=["late-entries"])
 _SELECT = """
 SELECT le.id, le.tournament_id, le.player_id, le.request_date, le.request_time,
        le.age_division, le.events, le.source_email_id,
-       p.usta_number, p.first_name, p.last_name
-FROM late_entry le JOIN player p ON p.id = le.player_id
+       p.usta_number, p.first_name, p.last_name,
+       (t.late_entry_deadline IS NOT NULL
+        AND COALESCE(le.request_date, CURRENT_DATE) > t.late_entry_deadline) AS past_deadline
+FROM late_entry le
+JOIN player p ON p.id = le.player_id
+JOIN tournament t ON t.id = le.tournament_id
 """
 
 

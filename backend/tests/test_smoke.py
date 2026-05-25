@@ -512,3 +512,53 @@ def test_assignment_missing_distance_and_hotel_mismatch():
                    json={"official_id": o["id"], "site_id": s["id"], "room_block_id": rb["id"]}).json()
     assert a["hotel_date_mismatch"] is True, a
     assert client.delete(f"/api/assignments/{a['id']}").status_code == 204
+
+
+def test_work_date_out_of_window_flag():
+    # tournament play window is 2026-06-01..2026-06-04 (see _tournament default)
+    t, o = _tournament(), _official()
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    a = _ok(client.post(f"/api/assignments/{a['id']}/days",
+                        json={"work_date": "2026-07-01", "working_as": "roving_official"}))
+    assert a["work_date_out_of_window"] is True, a
+    rep = client.get(f"/api/tournaments/{t['id']}/reports/officials").json()
+    assert rep["totals"]["out_of_window_count"] >= 1
+
+
+def test_room_block_create_returns_rooms_remaining():
+    t, h = _tournament(), _hotel()
+    rb = _ok(client.post("/api/room-blocks", json={
+        "hotel_id": h["id"], "tournament_id": t["id"], "room_count": 4}))
+    assert rb["rooms_remaining"] == 4  # nobody assigned yet
+
+
+def test_late_entry_past_deadline_flag():
+    t = _tournament(late_entry_deadline="2026-05-01")
+    p1, p2 = _player(), _player()
+    late = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries",
+                           json={"usta_number": p1["usta_number"], "request_date": "2026-05-10"}))
+    assert late["past_deadline"] is True
+    ontime = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries",
+                             json={"usta_number": p2["usta_number"], "request_date": "2026-04-20"}))
+    assert ontime["past_deadline"] is False
+
+
+def test_doubles_random_requires_division():
+    t, p = _tournament(), _player()
+    bad = client.post(f"/api/tournaments/{t['id']}/doubles-requests",
+                      json={"usta_number": p["usta_number"], "wants_random": True})
+    assert bad.status_code == 400, bad.text
+
+
+def test_account_reset_invalidates_sessions():
+    o = _official(first_name="Reset", last_name="Me")
+    uname = "rst" + uuid.uuid4().hex[:6]
+    assert client.put(f"/api/officials/{o['id']}/account",
+                      json={"username": uname, "password": "pw1"}).status_code == 200
+    off = TestClient(app)
+    assert off.post("/api/auth/login", json={"username": uname, "password": "pw1"}).status_code == 200
+    assert off.get("/api/me").status_code == 200
+    # admin resets the login -> the official's existing session is invalidated
+    assert client.put(f"/api/officials/{o['id']}/account",
+                      json={"username": uname, "password": "pw2"}).status_code == 200
+    assert off.get("/api/me").status_code == 401

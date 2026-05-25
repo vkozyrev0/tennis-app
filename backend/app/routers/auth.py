@@ -21,9 +21,12 @@ def login(body: LoginIn, response: Response, conn=Depends(db_dep)):
         user = cur.fetchone()
         if user is None or not verify_pw(body.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="invalid username or password")
+        cur.execute("DELETE FROM session WHERE expires_at <= now()")  # opportunistic cleanup
         token = secrets.token_urlsafe(32)
         cur.execute(
-            "INSERT INTO session (token, user_id) VALUES (%s, %s)", (token, user["id"])
+            "INSERT INTO session (token, user_id, expires_at) "
+            "VALUES (%s, %s, now() + interval '30 days')",
+            (token, user["id"]),
         )
     response.set_cookie(COOKIE_NAME, token, httponly=True, samesite="lax", path="/")
     return {"username": user["username"], "role": user["role"], "official_id": user["official_id"]}

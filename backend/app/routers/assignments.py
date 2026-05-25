@@ -85,11 +85,19 @@ def _summary(cur, a: dict) -> dict:
             ci, co = blk["check_in"].isoformat(), blk["check_out"].isoformat()
             hotel_date_mismatch = any(d < ci or d > co for d in wd)
 
+    # A worked day outside the tournament's play window is surfaced as a flag, not
+    # a block (consistent with the hotel-date-mismatch policy, audit §3.4).
+    work_date_out_of_window = False
+    if days and a.get("play_start_date") and a.get("play_end_date"):
+        ps, pe = a["play_start_date"].isoformat(), a["play_end_date"].isoformat()
+        work_date_out_of_window = any(d["work_date"] < ps or d["work_date"] > pe for d in days)
+
     return {
         "id": a["id"],
         "tournament_id": a["tournament_id"],
         "official_id": a["official_id"],
         "official_name": f'{a["last_name"]}, {a["first_name"]}',
+        "dietary_restrictions": a.get("dietary_restrictions"),
         "site_id": a["site_id"],
         "site_label": a["site_label"],
         "room_block_id": a["room_block_id"],
@@ -99,6 +107,7 @@ def _summary(cur, a: dict) -> dict:
         "mileage": mileage,
         "missing_distance": missing_distance,
         "hotel_date_mismatch": hotel_date_mismatch,
+        "work_date_out_of_window": work_date_out_of_window,
         "total": round(pay + (mileage or 0.0), 2),
         "rule_version": a.get("rule_version"),
         "snapshot_at": a["snapshot_at"].isoformat() if a.get("snapshot_at") else None,
@@ -108,11 +117,13 @@ def _summary(cur, a: dict) -> dict:
 _ASG_SELECT = """
 SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        a.snapshot_at, a.rule_version,
-       o.first_name, o.last_name,
+       o.first_name, o.last_name, o.dietary_restrictions,
+       t.play_start_date, t.play_end_date,
        COALESCE(s.code, s.name) AS site_label,
        h.name AS hotel_name
 FROM assignment a
 JOIN official o ON o.id = a.official_id
+JOIN tournament t ON t.id = a.tournament_id
 LEFT JOIN site s ON s.id = a.site_id
 LEFT JOIN room_block rb ON rb.id = a.room_block_id
 LEFT JOIN hotel h ON h.id = rb.hotel_id

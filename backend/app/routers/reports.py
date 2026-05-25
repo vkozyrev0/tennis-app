@@ -33,15 +33,9 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         )
         rows = cur.fetchall()
 
-        officials = []
-        for a in rows:
-            s = _summary(cur, a)
-            cur.execute(
-                "SELECT dietary_restrictions FROM official WHERE id = %s",
-                (a["official_id"],),
-            )
-            s["dietary_restrictions"] = cur.fetchone()["dietary_restrictions"]
-            officials.append(s)
+        # _summary already carries dietary_restrictions (joined in _ASG_SELECT),
+        # so no per-official follow-up query is needed.
+        officials = [_summary(cur, a) for a in rows]
 
     totals = {
         "official_count": len(officials),
@@ -49,6 +43,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "mileage": round(sum((o["mileage"] or 0.0) for o in officials), 2),
         "missing_distance_count": sum(1 for o in officials if o["missing_distance"]),
         "hotel_mismatch_count": sum(1 for o in officials if o["hotel_date_mismatch"]),
+        "out_of_window_count": sum(1 for o in officials if o["work_date_out_of_window"]),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "totals": totals}

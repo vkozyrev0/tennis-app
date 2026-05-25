@@ -53,12 +53,18 @@ def list_room_blocks(tournament_id: int | None = None, kind: str | None = None,
         return cur.fetchall()
 
 
+def _with_remaining(cur, block_id: int):
+    """Re-read a block including the computed rooms_remaining (consistency with list)."""
+    cur.execute(f"SELECT {_LIST_COLS} FROM room_block WHERE id = %s", (block_id,))
+    return cur.fetchone()
+
+
 @router.post("", response_model=RoomBlockOut, status_code=201)
 def create_room_block(body: RoomBlockCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             cur.execute(_INSERT, body.model_dump())
-            return cur.fetchone()
+            return _with_remaining(cur, cur.fetchone()["id"])
     except psycopg.errors.ForeignKeyViolation as e:
         raise HTTPException(status_code=400, detail=_fk_detail(e))
 
@@ -68,12 +74,11 @@ def update_room_block(block_id: int, body: RoomBlockCreate, conn=Depends(db_dep)
     try:
         with conn.cursor() as cur:
             cur.execute(_UPDATE, {**body.model_dump(), "id": block_id})
-            row = cur.fetchone()
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="room block not found")
+            return _with_remaining(cur, block_id)
     except psycopg.errors.ForeignKeyViolation as e:
         raise HTTPException(status_code=400, detail=_fk_detail(e))
-    if row is None:
-        raise HTTPException(status_code=404, detail="room block not found")
-    return row
 
 
 @router.delete("/{block_id}", status_code=204)

@@ -102,4 +102,7 @@ def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_
             row = cur.fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="username already in use")
+        # Setting/resetting the login invalidates any existing sessions for that
+        # account, so a credential change forces a fresh login (audit follow-up).
+        cur.execute("DELETE FROM session WHERE user_id = %s", (row["id"],))
     return {"id": row["id"], "username": row["username"], "official_id": official_id}

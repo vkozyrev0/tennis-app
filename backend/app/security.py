@@ -36,7 +36,8 @@ def get_current_user(sid: str | None = Cookie(default=None), conn=Depends(db_dep
     with conn.cursor() as cur:
         cur.execute(
             "SELECT u.id, u.username, u.role, u.official_id "
-            "FROM session s JOIN user_account u ON u.id = s.user_id WHERE s.token = %s",
+            "FROM session s JOIN user_account u ON u.id = s.user_id "
+            "WHERE s.token = %s AND s.expires_at > now()",
             (sid,),
         )
         user = cur.fetchone()

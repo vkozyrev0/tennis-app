@@ -256,6 +256,7 @@ class LateEntryOut(BaseModel):
     request_date: Optional[date] = None
     request_time: Optional[str] = None
     source_email_id: Optional[int] = None
+    past_deadline: bool = False  # request_date after the tournament's late-entry deadline
 
 
 class WithdrawalCreate(BaseModel):
