@@ -7,6 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — Room blocks, Availability & Name history** (phase 5) —
+  the remaining workspace/sub-detail tables convert: **Room blocks** (via
+  `makeListGrid`, now extended with an optional **Edit** action alongside Delete —
+  Edit opens the existing form; right-aligned Rooms/Left), the **Availability**
+  summary (read grid, one row per official with their dates joined), and the player
+  **Name history** sub-table (read grid in the collapsible box — it builds hidden,
+  so it `redraw()`s once shown). The only non-grid surfaces left are the **Inbox**
+  and the print **report** (incl. its lodging roster), both by design.
 - **✅ Tabulator grid — summaries, T-shirts & tournament Sites** (phase 4) — the
   last hand-built tables move to a new read-only `makeReadGrid` helper (sortable +
   native ⬇ CSV, registered for redraw-on-tab-show): the **T-shirts** Setup list

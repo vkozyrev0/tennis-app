@@ -1135,36 +1135,31 @@ asgForm.querySelector(".cancel").addEventListener("click", asgReset);
 // --- Room blocks (tournament-scoped) ---
 const trbForm = document.getElementById("trb-form");
 let trbEditId = null;
+const trbGrid = makeListGrid("trb-table", [
+  { title: "ID", field: "id", width: 64 },
+  { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id); } },
+  { title: "Type", field: "kind", formatter: (c) => (c.getData().kind === "official" ? "Officials comp" : "Player rate") },
+  { title: "Rooms", field: "room_count", hozAlign: "right", width: 90 },
+  { title: "Left", field: "rooms_remaining", hozAlign: "right", width: 80 },
+  { title: "Check-in", field: "check_in" },
+  { title: "Check-out", field: "check_out" },
+], "room-blocks", "No room blocks for this tournament yet.",
+  async (b) => { if (!(await confirmDialog("Delete room block?"))) return; try { await api(`/room-blocks/${b.id}`, { method: "DELETE" }); loadRoomBlocks(); } catch (e) { setMsg("trb-msg", e.message, false); } },
+  (b) => {
+    trbEditId = b.id;
+    trbForm.hotel_id.value = b.hotel_id;
+    trbForm.kind.value = b.kind || "player";
+    trbForm.room_count.value = b.room_count;
+    trbForm.confirmation_number.value = b.confirmation_number || "";
+    trbForm.check_in.value = b.check_in || "";
+    trbForm.check_out.value = b.check_out || "";
+    trbForm.cancellation_info.value = b.cancellation_info || "";
+    trbForm.querySelector('button[type="submit"]').textContent = "Update block";
+    openForm(trbForm);
+  });
 async function loadRoomBlocks() {
   if (!active) return;
-  const rows = await api(`/room-blocks?tournament_id=${active.id}`);
-  const tbody = document.querySelector("#trb-table tbody");
-  tbody.innerHTML = "";
-  for (const b of rows) {
-    const tr = document.createElement("tr");
-    const kindLbl = b.kind === "official" ? "Officials comp" : "Player rate";
-    tr.innerHTML = `<td>${b.id}</td><td>${esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id)}</td>` +
-      `<td>${kindLbl}</td><td>${b.room_count}</td><td>${b.rooms_remaining}</td><td>${esc(b.check_in)}</td><td>${esc(b.check_out)}</td><td class="actions"></td>`;
-    const cell = tr.querySelector(".actions");
-    const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
-    ed.addEventListener("click", () => {
-      trbEditId = b.id;
-      trbForm.hotel_id.value = b.hotel_id;
-      trbForm.kind.value = b.kind || "player";
-      trbForm.room_count.value = b.room_count;
-      trbForm.confirmation_number.value = b.confirmation_number || "";
-      trbForm.check_in.value = b.check_in || "";
-      trbForm.check_out.value = b.check_out || "";
-      trbForm.cancellation_info.value = b.cancellation_info || "";
-      trbForm.querySelector('button[type="submit"]').textContent = "Update block";
-      openForm(trbForm);
-    });
-    const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
-    dl.addEventListener("click", async () => { if (!(await confirmDialog("Delete room block?"))) return; try { await api(`/room-blocks/${b.id}`, { method: "DELETE" }); loadRoomBlocks(); } catch (e) { setMsg("trb-msg", e.message, false); } });
-    cell.append(ed, dl);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="8">No room blocks for this tournament yet.</td></tr>';
+  trbGrid.setData(await api(`/room-blocks?tournament_id=${active.id}`));
 }
 function trbReset() { trbEditId = null; trbForm.reset(); trbForm.querySelector('button[type="submit"]').textContent = "Add block"; }
 onSubmit(trbForm, async (e) => {
@@ -1204,18 +1199,23 @@ function renderAvailDates() {
     box.appendChild(lbl);
   }
 }
+const availGrid = makeReadGrid("avail-table", [
+  { title: "Official", field: "official_name" },
+  { title: "Available dates", field: "dates_text", headerSort: false },
+  { title: "Hotel", field: "hotel", width: 90, formatter: (c) => (c.getData().hotel ? "yes" : "") },
+], "availability", "No availability recorded yet.");
 function renderAvailTable() {
-  const tbody = document.querySelector("#avail-table tbody");
   const byOff = {};
   for (const r of availAll) {
     (byOff[r.official_name] ||= { dates: [], hotel: false });
     byOff[r.official_name].dates.push(r.available_date);
     if (r.hotel_needed) byOff[r.official_name].hotel = true;
   }
-  const names = Object.keys(byOff).sort();
-  tbody.innerHTML = names.length
-    ? names.map((n) => `<tr><td>${esc(n)}</td><td>${esc(byOff[n].dates.sort().map(fmtDOW).join(", "))}</td><td>${byOff[n].hotel ? "yes" : ""}</td></tr>`).join("")
-    : '<tr><td class="empty" colspan="3">No availability recorded yet.</td></tr>';
+  const rows = Object.keys(byOff).sort().map((n) => ({
+    official_name: n, hotel: byOff[n].hotel,
+    dates_text: byOff[n].dates.sort().map(fmtDOW).join(", "),
+  }));
+  availGrid.setData(rows);
 }
 async function renderAvailCerts(oid) {
   const box = document.getElementById("avail-certs");
@@ -1340,7 +1340,7 @@ onSubmit(document.getElementById("email-form"), async (e) => {
 // Generic simple list grid (no master-detail): replaces a static table with a
 // Tabulator grid + a Delete action + a per-grid CSV download. Used by the
 // delete-only workspace lists (late entries, withdrawals).
-function makeListGrid(tableId, columns, exportName, placeholder, onDelete) {
+function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit) {
   const tableEl = document.getElementById(tableId);
   const panelId = tableEl.closest(".panel")?.id;
   const mount = document.createElement("div"); mount.className = "grid-mount";
@@ -1351,9 +1351,14 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete) {
   mount.parentElement.insertBefore(csv, mount);
   const cols = columns.slice();
   cols.push({
-    title: "", field: "_act", headerSort: false, width: 84, cssClass: "grid-actions-cell",
+    title: "", field: "_act", headerSort: false, width: onEdit ? 108 : 84, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const r = cell.getData(); const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      if (onEdit) {
+        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
+        ed.addEventListener("click", (ev) => { ev.stopPropagation(); onEdit(r); });
+        wrap.append(ed);
+      }
       const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
       del.addEventListener("click", (ev) => { ev.stopPropagation(); onDelete(r); });
       wrap.append(del); return wrap;
@@ -1934,22 +1939,21 @@ const officialsCrud = wireEntity({
     document.getElementById("official-account").hidden = true;
   },
 });
+const phHistGrid = makeReadGrid("player-history-table", [
+  { title: "When", field: "_when", headerSort: false,
+    formatter: (c) => { const h = c.getData(); return esc((h.valid_from || "").slice(0, 10) + " → " + (h.valid_to || "").slice(0, 10)); } },
+  { title: "Name", field: "last_name", formatter: _playerCell },
+  { title: "USTA #", field: "usta_number" },
+  { title: "Change", field: "change_type" },
+], null, "No prior versions — this is the original record.", { maxHeight: "30vh" });
 async function loadPlayerHistory(id) {
   const box = document.getElementById("player-history");
-  const tbody = box.querySelector("tbody");
   box.hidden = false;
   try {
-    const rows = await api(`/players/${id}/history`);
-    tbody.innerHTML = "";
-    for (const h of rows) {
-      const when = (h.valid_from || "").slice(0, 10) + " → " + (h.valid_to || "").slice(0, 10);
-      const name = [h.last_name, h.first_name].filter(Boolean).join(", ");
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${esc(when)}</td><td>${esc(name)}</td><td>${esc(h.usta_number)}</td><td>${esc(h.change_type)}</td>`;
-      tbody.appendChild(tr);
-    }
-    if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="4">No prior versions — this is the original record.</td></tr>';
-  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="4">${esc(e.message)}</td></tr>`; }
+    phHistGrid.setData(await api(`/players/${id}/history`));
+  } catch (e) { phHistGrid.setData([]); setMsg("player-msg", e.message, false); }
+  // the box was hidden at build time; lay the grid out now that it's visible
+  requestAnimationFrame(() => { try { phHistGrid.grid.redraw(true); } catch (_) {} });
 }
 
 const playersCrud = wireEntity({
