@@ -95,20 +95,24 @@ def merge_batch(batch_id: int, conn=Depends(db_dep)):
         cur.execute("SELECT id, row_num, data FROM import_row "
                     "WHERE batch_id = %s AND valid AND NOT merged ORDER BY row_num", (batch_id,))
         rows = cur.fetchall()
-        merged, errors = 0, []
+        merged, errors, conflicts = 0, [], []
         for r in rows:
             cur.execute("SAVEPOINT imp")
             try:
-                merge(cur, tid, r["data"])
+                note = merge(cur, tid, r["data"])  # conflict note (str) or None
                 cur.execute("RELEASE SAVEPOINT imp")
-                cur.execute("UPDATE import_row SET merged = true, error = NULL WHERE id = %s", (r["id"],))
+                cur.execute("UPDATE import_row SET merged = true, error = %s WHERE id = %s",
+                            (note, r["id"]))
                 merged += 1
+                if note:
+                    conflicts.append({"row": r["row_num"], "detail": note})
             except Exception as e:  # row-level failure: keep the rest of the batch
                 cur.execute("ROLLBACK TO SAVEPOINT imp")
                 cur.execute("UPDATE import_row SET error = %s WHERE id = %s", (str(e)[:300], r["id"]))
                 errors.append({"row": r["row_num"], "error": str(e)})
         cur.execute("UPDATE import_batch SET status = 'merged' WHERE id = %s", (batch_id,))
-    return {"merged": merged, "failed": len(errors), "errors": errors[:50]}
+    return {"merged": merged, "failed": len(errors), "conflicts": conflicts[:50],
+            "errors": errors[:50]}
 
 
 @router.delete("/batches/{batch_id}", status_code=204)

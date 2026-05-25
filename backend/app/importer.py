@@ -106,8 +106,17 @@ def validate(data: dict, cols) -> str | None:
 
 
 # ---- merge functions (mirror the per-resource routers) ----------------------
+# Each returns a conflict note (str) when the row hit existing data, else None.
+# The merge still proceeds ("go with the merge"); the note is surfaced to the user.
+def _exists(cur, table, tid, pid) -> bool:
+    cur.execute(f"SELECT 1 FROM {table} WHERE tournament_id = %s AND player_id = %s LIMIT 1", (tid, pid))
+    return cur.fetchone() is not None
+
+
 def _merge_roster(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = ("already on the roster — entry overwritten"
+                if _exists(cur, "tournament_entry", tid, pid) else None)
     status = (_s(d.get("selection_status")) or "selected").lower()
     if status not in _VALID_STATUS:
         status = "selected"
@@ -126,10 +135,12 @@ def _merge_roster(cur, tid, d):
         (tid, pid, _s(d.get("age_division")), _s(d.get("events")), status,
          _norm_shirt(_s(d.get("t_shirt_size"))), _s(d.get("dietary_preference"))),
     )
+    return conflict
 
 
 def _merge_late(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = "already has a late entry — another was added" if _exists(cur, "late_entry", tid, pid) else None
     cur.execute(
         """
         INSERT INTO tournament_entry (tournament_id, player_id, age_division, events,
@@ -147,10 +158,12 @@ def _merge_late(cur, tid, d):
         (tid, pid, _s(d.get("request_date")), _s(d.get("request_time")),
          _s(d.get("age_division")), _s(d.get("events"))),
     )
+    return conflict
 
 
 def _merge_withdrawal(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = "already has a withdrawal — another was added" if _exists(cur, "withdrawal", tid, pid) else None
     cur.execute("SELECT selection_status FROM tournament_entry "
                 "WHERE tournament_id=%s AND player_id=%s", (tid, pid))
     entry = cur.fetchone()
@@ -166,28 +179,34 @@ def _merge_withdrawal(cur, tid, d):
         "VALUES (%s,%s,%s,%s,%s,%s)",
         (tid, pid, _s(d.get("events")), reason, _s(d.get("notes")), was_alt),
     )
+    return conflict
 
 
 def _merge_sched(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = "already has a scheduling avoidance — another was added" if _exists(cur, "scheduling_avoidance", tid, pid) else None
     cur.execute(
         "INSERT INTO scheduling_avoidance (tournament_id, player_id, avoid_day, avoid_time_range) "
         "VALUES (%s,%s,%s,%s)",
         (tid, pid, _s(d.get("avoid_day")), _s(d.get("avoid_time_range"))),
     )
+    return conflict
 
 
 def _merge_divflex(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = "already has a division-flexibility entry — another was added" if _exists(cur, "division_flexibility", tid, pid) else None
     cur.execute(
         "INSERT INTO division_flexibility (tournament_id, player_id, home_division, willing_divisions) "
         "VALUES (%s,%s,%s,%s)",
         (tid, pid, _s(d.get("home_division")), _s(d.get("willing_divisions"))),
     )
+    return conflict
 
 
 def _merge_photel(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
+    conflict = "already has a hotel on file — another was added" if _exists(cur, "player_hotel_stay", tid, pid) else None
     hotel = " ".join((d.get("hotel_name") or "").split()) or None
     lodging = " ".join((d.get("lodging_plan") or "").split()) or None
     cur.execute(
@@ -195,6 +214,7 @@ def _merge_photel(cur, tid, d):
         "VALUES (%s,%s,%s,%s)",
         (tid, pid, hotel, lodging),
     )
+    return conflict
 
 
 # ---- registry ---------------------------------------------------------------

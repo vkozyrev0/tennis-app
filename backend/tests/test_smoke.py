@@ -253,6 +253,12 @@ def test_import_staging_and_merge():
     roster = {e["usta_number"]: e for e in client.get(f"/api/tournaments/{t['id']}/players").json()}
     assert set(roster) == {ids[0], ids[1]}
     assert roster[ids[0]]["t_shirt_size"] == "Youth Medium"
+    # re-importing the same players is a conflict (merged anyway, but reported)
+    up2 = client.post(f"/api/import/tournaments/{t['id']}/roster",
+                      files={"file": ("roster.csv", csv_data, "text/csv")}).json()
+    m2 = client.post(f"/api/import/batches/{up2['batch_id']}/merge").json()
+    assert m2["merged"] == 2 and len(m2["conflicts"]) == 2
+    assert "roster" in m2["conflicts"][0]["detail"]
     # templates download in both formats
     assert client.get("/api/import/template/roster?fmt=csv").status_code == 200
     assert client.get("/api/import/template/roster?fmt=xlsx").status_code == 200

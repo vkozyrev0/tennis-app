@@ -17,6 +17,10 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
   per-type merge mirroring the routers, t-shirt size normalized) + `routers/imports.py`
   (`/types`, `/template/{type}?fmt=`, upload, `/batches/{id}`, `/merge`, discard) with a
   per-row SAVEPOINT so one bad row can't abort the batch.
+  - **Conflicts surfaced**: merge proceeds but reports rows that hit existing data
+    (e.g. "already on the roster — entry overwritten", "already has a late entry —
+    another was added"); the response carries `conflicts[]` and the Import page lists
+    them as a ⚠ note under the merge result.
 - **✅ Design-critique fixes (moderate, non-security)** — from the `design-critique`
   review:
   - **Accessibility**: field labels bumped 0.68→0.72rem (~11.5px) and light `--muted`

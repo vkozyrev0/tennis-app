@@ -779,8 +779,19 @@ function _renderBatch(el, body) {
     merge.disabled = true;
     try {
       const r = await api(`/import/batches/${body.batch_id}/merge`, { method: "POST" });
-      toast(`Merged ${r.merged}${r.failed ? `, ${r.failed} failed` : ""}`, !r.failed);
-      el.innerHTML = `<div class="muted">Merged ${r.merged} row(s)${r.failed ? `; ${r.failed} failed` : ""}.</div>`;
+      const nConf = (r.conflicts || []).length;
+      toast(`Merged ${r.merged}${r.failed ? `, ${r.failed} failed` : ""}${nConf ? `, ${nConf} conflict(s)` : ""}`, !r.failed);
+      let html = `<div class="muted">Merged ${r.merged} row(s)${r.failed ? `; ${r.failed} failed` : ""}.</div>`;
+      if (nConf) {
+        html += `<div class="warn" style="margin-top:0.2rem">⚠ ${nConf} conflict(s) — merged anyway:</div>` +
+          '<ul class="import-errors" style="color:var(--warn-ink,#8a6d1b)">' +
+          r.conflicts.map((c) => `<li>row ${c.row}: ${esc(c.detail)}</li>`).join("") + "</ul>";
+      }
+      if (r.errors && r.errors.length) {
+        html += '<ul class="import-errors"><li>' +
+          r.errors.map((e) => `row ${e.row}: ${esc(e.error)}`).join("</li><li>") + "</li></ul>";
+      }
+      el.innerHTML = html;
       _importRefresh();
     } catch (e) { toast(e.message, false); merge.disabled = false; }
   });
