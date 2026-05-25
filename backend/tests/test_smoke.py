@@ -205,6 +205,24 @@ def test_roster_csv_import():
     assert amy["first_name"] == "Amelia"
 
 
+def test_roster_import_normalizes_tshirt_sizes():
+    t = _tournament()
+    ids = ["TS" + uuid.uuid4().hex[:6] for _ in range(5)]
+    csv_data = "USTA #,First,T-Shirt\n" + "".join(
+        f"{i},N,{sz}\n" for i, sz in zip(ids, ["YM", "Adult Large", "xl", "youth small", "AS"])
+    )
+    r = client.post(f"/api/tournaments/{t['id']}/players/import",
+                    files={"file": ("roster.csv", csv_data, "text/csv")})
+    assert r.status_code == 200, r.text
+    roster = {e["usta_number"]: e["t_shirt_size"] for e in
+              client.get(f"/api/tournaments/{t['id']}/players").json()}
+    assert roster[ids[0]] == "Youth Medium"
+    assert roster[ids[1]] == "Adult Large"
+    assert roster[ids[2]] == "Adult Extra Large"
+    assert roster[ids[3]] == "Youth Small"
+    assert roster[ids[4]] == "Adult Small"
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()

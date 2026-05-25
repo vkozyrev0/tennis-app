@@ -74,6 +74,41 @@ def _s(v):
     return s or None
 
 
+# Canonical t-shirt sizes (must match the roster form dropdown).
+_SHIRT_CANON = {
+    ("youth", "small"): "Youth Small", ("youth", "medium"): "Youth Medium",
+    ("youth", "large"): "Youth Large", ("adult", "small"): "Adult Small",
+    ("adult", "medium"): "Adult Medium", ("adult", "large"): "Adult Large",
+    ("adult", "xl"): "Adult Extra Large",
+}
+_SHIRT_SIZE = {
+    "s": "small", "sm": "small", "small": "small",
+    "m": "medium", "med": "medium", "medium": "medium",
+    "l": "large", "lg": "large", "large": "large",
+    "xl": "xl", "xlarge": "xl", "extralarge": "xl", "xxl": "xl", "xxxl": "xl",
+}
+
+
+def _norm_shirt(v):
+    """Normalize a free-text t-shirt size (abbreviated or full) to a canonical
+    label; unrecognized values pass through unchanged so nothing is lost."""
+    if v is None:
+        return None
+    raw = str(v).strip()
+    s = re.sub(r"[^a-z]", "", raw.lower())  # 'Youth M' -> 'youthm', 'YM' -> 'ym'
+    if not s:
+        return raw or None
+    # Split off a youth/adult marker; default to adult when none is given.
+    if s.startswith(("youth", "yth", "junior", "jr")) or (s[0] == "y" and len(s) <= 4):
+        group, rest = "youth", re.sub(r"^(youth|yth|junior|jr|y)", "", s, count=1)
+    elif s.startswith("adult") or (s[0] == "a" and len(s) <= 4):
+        group, rest = "adult", re.sub(r"^(adult|a)", "", s, count=1)
+    else:
+        group, rest = "adult", s
+    size = _SHIRT_SIZE.get(rest)
+    return _SHIRT_CANON.get((group, size), raw)
+
+
 @router.post("/api/tournaments/{tournament_id}/players/import")
 async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=Depends(db_dep)):
     """Upload a CSV/XLSX roster; upsert players (by USTA #) and their entries (§3.8)."""
@@ -125,7 +160,7 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
                     dietary_preference = EXCLUDED.dietary_preference
                 """,
                 (tournament_id, pid, _s(rec.get("age_division")), _s(rec.get("events")),
-                 status, _s(rec.get("t_shirt_size")), _s(rec.get("dietary_preference"))),
+                 status, _norm_shirt(_s(rec.get("t_shirt_size"))), _s(rec.get("dietary_preference"))),
             )
             upserted += 1
     return {"created_players": created, "updated_players": updated,

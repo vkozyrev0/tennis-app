@@ -11,6 +11,11 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
   fixed-option select (combobox-enhanced): Youth Small/Medium/Large, Adult
   Small/Medium/Large/Extra Large (+ none). The T-shirts order-quantity summary sorts
   by this canonical apparel order.
+- **✅ Roster import normalizes T-shirt sizes** — the CSV/XLSX importer maps both
+  **abbreviated** (`YM`, `AL`, `XL`, `AS`, …) and **full** (`youth medium`,
+  `Adult Large`, …) forms to the canonical labels (`_norm_shirt`); unrecognized
+  values pass through unchanged so nothing is lost. Verified by a test covering YM /
+  Adult Large / xl / youth small / AS.
 - **✅ Report = TD "Staffing Plan" format** — the officials report was reshaped to the
   layout the TD uses: **Name · Position · Dietary · Hotel? · Check-in · Check-out ·
   one column per play-day weekday (✓) · Pay · Mileage**, titled "<Tournament> —

@@ -208,6 +208,7 @@ buildable without them is done; revisit when the prerequisite is available.
 | **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | Needs a mail domain + inbound webhook/IMAP infra. POC uses manual paste into the review inbox. | Stand up a forwarding address + ingestion endpoint; dedup by `message_id` already exists. |
 | **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
 | **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption, retention policy. |
+| **Non-official staff in the Staffing Plan** (Site Director, Player Amenities, Trainer, Operations, Stringer) | Not a blocker — a deliberate scope choice; the model currently covers **officials** only, so the staffing-plan report shows officials. | Add a staff/role model (or extend assignment with a non-cert role + per-day availability/pay) and group them in the report like the TD's sheet. *(Deferred at the TD's request.)* |
 
 > Session expiry/invalidation (migration `0017`) and admin/official access control
 > are **done** — they're the parts of hardening that don't need new infrastructure.
