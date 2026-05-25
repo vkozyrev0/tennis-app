@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Player hotels reference the Hotels table** (migration `0023`) — `player_hotel_stay`
+  gains a `hotel_id` FK; recording a hotel **upserts one canonical hotel row per name**
+  (case-insensitive, whitespace-collapsed) and stores the canonical name, so the same
+  hotel typed differently (`hilton` / `Hilton `) is **one hotel, counted once**. Existing
+  rows backfilled. Applies to both the form and staged imports (`upsert_hotel`).
 - **✅ T-shirt size constrained** (migration `0022`) — existing values normalized
   (codes + full forms → the canonical 7), anything off-list nulled, then a `CHECK`
   added so `tournament_entry.t_shirt_size` can only be NULL or one of the 7 sizes.

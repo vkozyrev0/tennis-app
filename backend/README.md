@@ -79,7 +79,7 @@ backend/
                        0013_avoid_divflex, 0014_player_hotels, 0015_pairing_avoidances,
                        0016_doubles, 0017_session_expiry, 0018_lodging_plan,
                        0019_player_city_state, 0020_import_staging, 0021_perf_indexes,
-                       0022_tshirt_constraint
+                       0022_tshirt_constraint, 0023_player_hotel_fk
   migrate.py           migration runner (creates DB, tracks schema_migrations)
   seed.py              demo data (sites, a tournament + site link, cert rates)
   reset_demo.py        wipe + re-seed the working DB

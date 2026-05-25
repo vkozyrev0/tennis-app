@@ -10,7 +10,7 @@ import re
 
 from openpyxl import Workbook, load_workbook
 
-from .playerops import upsert_player
+from .playerops import upsert_hotel, upsert_player
 
 _VALID_STATUS = {"selected", "alternate", "withdrawn"}
 
@@ -207,12 +207,12 @@ def _merge_divflex(cur, tid, d):
 def _merge_photel(cur, tid, d):
     pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"))
     conflict = "already has a hotel on file — another was added" if _exists(cur, "player_hotel_stay", tid, pid) else None
-    hotel = " ".join((d.get("hotel_name") or "").split()) or None
+    hid, hname = upsert_hotel(cur, d.get("hotel_name"))
     lodging = " ".join((d.get("lodging_plan") or "").split()) or None
     cur.execute(
-        "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_name, lodging_plan) "
-        "VALUES (%s,%s,%s,%s)",
-        (tid, pid, hotel, lodging),
+        "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_id, hotel_name, lodging_plan) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        (tid, pid, hid, hname, lodging),
     )
     return conflict
 

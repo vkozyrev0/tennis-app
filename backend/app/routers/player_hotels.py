@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..models import PlayerHotelCreate, PlayerHotelOut, TShirtRow
-from ..playerops import mark_email_filed, upsert_player
+from ..playerops import mark_email_filed, upsert_hotel, upsert_player
 
 router = APIRouter(tags=["player-ops"])
 
 _PH = """
-SELECT s.id, s.tournament_id, s.player_id, s.hotel_name, s.lodging_plan,
+SELECT s.id, s.tournament_id, s.player_id, s.hotel_id, s.hotel_name, s.lodging_plan,
        s.source_email_id, p.usta_number, p.first_name, p.last_name
 FROM player_hotel_stay s JOIN player p ON p.id = s.player_id
 """
@@ -30,14 +30,13 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
-        # Normalize whitespace so "Hilton " and "Hilton" don't drift apart in the
-        # raw list (the summaries also group case-insensitively).
-        hotel = " ".join((body.hotel_name or "").split()) or None
+        # One canonical hotel row per name (case-insensitive) — FK keeps names consistent.
+        hid, hname = upsert_hotel(cur, body.hotel_name)
         lodging = " ".join((body.lodging_plan or "").split()) or None
         cur.execute(
-            "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_name, lodging_plan, source_email_id) "
-            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
-            (tournament_id, pid, hotel, lodging, body.source_email_id),
+            "INSERT INTO player_hotel_stay (tournament_id, player_id, hotel_id, hotel_name, lodging_plan, source_email_id) "
+            "VALUES (%s,%s,%s,%s,%s,%s) RETURNING id",
+            (tournament_id, pid, hid, hname, lodging, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
         mark_email_filed(cur, body.source_email_id, "hotel")

@@ -265,6 +265,25 @@ def test_import_staging_and_merge():
     assert {x["key"] for x in client.get("/api/import/types").json()} >= {"roster", "withdrawals", "player_hotels"}
 
 
+def test_player_hotel_fk_dedup():
+    t, p1, p2 = _tournament(), _player(), _player()
+    hname = "Grand Hyatt " + uuid.uuid4().hex[:4]
+    s1 = _ok(client.post(f"/api/tournaments/{t['id']}/player-hotels",
+                         json={"usta_number": p1["usta_number"], "hotel_name": hname}))
+    # same hotel, messy casing/spacing → same hotel_id + canonical name
+    s2 = _ok(client.post(f"/api/tournaments/{t['id']}/player-hotels",
+                         json={"usta_number": p2["usta_number"], "hotel_name": f"  {hname.lower()}   "}))
+    assert s1["hotel_id"] and s1["hotel_id"] == s2["hotel_id"]
+    assert s1["hotel_name"] == s2["hotel_name"] == hname
+    # both selected → summary groups them as one hotel, two players
+    for p in (p1, p2):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
+    summ = {r["hotel_name"]: r["players"] for r in
+            client.get(f"/api/tournaments/{t['id']}/hotel-summary").json()}
+    assert summ.get(hname) == 2
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()
