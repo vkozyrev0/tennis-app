@@ -481,10 +481,21 @@ function wireEntity(cfg) {
   const mount = tableEl.closest(".list-scroll") || tableEl.parentElement;
   mount.classList.remove("list-scroll"); mount.innerHTML = ""; mount.classList.add("grid-mount");
 
-  const columns = cfg.columns.map((c, i) => ({
-    title: titles[i] || c.key, field: c.key,
-    formatter: c.fmt ? (cell) => esc(c.fmt(cell.getData())) : undefined,
-  }));
+  // Columns may opt into in-grid editing via `c.edit` (double-click a cell).
+  // Only columns whose `key` maps 1:1 to a writable DB field should set it;
+  // composite/computed columns (fmt over several fields) stay form-only.
+  const columns = cfg.columns.map((c, i) => {
+    const col = {
+      title: titles[i] || c.key, field: c.key,
+      formatter: c.fmt ? (cell) => esc(c.fmt(cell.getData())) : undefined,
+    };
+    if (c.edit) {
+      col.editor = c.edit.editor;
+      if (c.edit.params) col.editorParams = c.edit.params;
+      col.cssClass = "editable-cell";
+    }
+    return col;
+  });
   columns.push({
     title: "", field: "_act", headerSort: false, width: cfg.rowAction ? 160 : 108,
     cssClass: "grid-actions-cell",
@@ -504,6 +515,7 @@ function wireEntity(cfg) {
     index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
     columnDefaults: { headerSortTristate: true, resizable: false },
+    editTriggerEvent: "dblclick",  // single click selects/navigates; double-click edits
     columns,
   });
   (GRIDS[cfg.panelId] ||= []).push(table);
@@ -511,6 +523,25 @@ function wireEntity(cfg) {
   table.on("rowClick", (e, row) => select(row.getData()));
   table.on("dataFiltered", () => { markRows(); updateNav(); });
   table.on("dataSorted", () => { markRows(); updateNav(); });
+  // In-grid edit: PUT the whole row (the *Out record has every field the model
+  // needs; Pydantic ignores extras). Refresh to pick up server normalization.
+  table.on("cellEdited", async (cell) => {
+    const data = cell.getRow().getData();
+    if (cell.getValue() === cell.getOldValue()) return;  // no-op
+    try {
+      let body = { ...data }; delete body._act;
+      if (cfg.transform) body = cfg.transform(body);
+      await api(`${cfg.path}/${data.id}`, { method: "PUT", body: JSON.stringify(body) });
+      setMsg(cfg.msgId, "saved", true);
+      await refresh();
+      if (cfg.afterChange) cfg.afterChange();
+      if (selectedId === data.id) fillForm(table.getRow(data.id)?.getData() || data);
+    } catch (err) {
+      setMsg(cfg.msgId, err.message, false);
+      try { cell.restoreOldValue(); } catch (_) {}
+      await refresh();
+    }
+  });
 
   function activeData() { return built ? table.getRows("active").map((r) => r.getData()) : items; }
   function updateNav() {
@@ -678,13 +709,17 @@ const rosterGrid = new Tabulator(rosterMount, {
   index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
   placeholder: "No players on this roster yet.",
   columnDefaults: { headerSortTristate: true, resizable: false },
+  editTriggerEvent: "dblclick",  // single click selects; double-click edits in place
   columns: [
     { title: "Player", field: "last_name",
       formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; } },
-    { title: "Div", field: "age_division" },
-    { title: "Status", field: "selection_status", formatter: (cell) => chip(cell.getData().selection_status) },
-    { title: "Shirt", field: "t_shirt_size" },
-    { title: "Dietary", field: "dietary_preference" },
+    { title: "Div", field: "age_division", editor: "input", cssClass: "editable-cell" },
+    { title: "Status", field: "selection_status", cssClass: "editable-cell",
+      editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
+      formatter: (cell) => chip(cell.getData().selection_status) },
+    { title: "Shirt", field: "t_shirt_size", cssClass: "editable-cell",
+      editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] } },
+    { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell" },
     { title: "", field: "_act", headerSort: false, width: 108, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
@@ -707,6 +742,26 @@ rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { ros
 rosterGrid.on("rowClick", (e, row) => rosterSelect(row.getData()));
 rosterGrid.on("dataFiltered", applyRosterSel);
 rosterGrid.on("dataSorted", applyRosterSel);
+// In-grid edit: PUT the whole entry (RosterEntryOut has every field the model
+// needs; the backend re-normalizes t_shirt_size). Refresh to reflect that.
+rosterGrid.on("cellEdited", async (cell) => {
+  if (cell.getValue() === cell.getOldValue()) return;
+  const e = cell.getRow().getData();
+  try {
+    const body = {
+      player_id: e.player_id, age_division: e.age_division || null, events: e.events || null,
+      selection_status: e.selection_status, t_shirt_size: e.t_shirt_size || null,
+      dietary_preference: e.dietary_preference || null,
+    };
+    await api(`/roster/${e.id}`, { method: "PUT", body: JSON.stringify(body) });
+    setMsg("roster-msg", "saved", true);
+    await loadRoster();
+  } catch (err) {
+    setMsg("roster-msg", err.message, false);
+    try { cell.restoreOldValue(); } catch (_) {}
+    await loadRoster();
+  }
+});
 function rosterMatches(data) {
   const q = document.getElementById("roster-filter").value.trim().toLowerCase();
   return !q || JSON.stringify(data).toLowerCase().includes(q);
@@ -1756,7 +1811,8 @@ workOnBtn.addEventListener("click", () => {
 
 const tournamentsCrud = wireEntity({
   path: "/tournaments", singular: "tournament", panelId: "panel-tournaments", formId: "tournament-form", msgId: "tournament-msg",
-  columns: [{ key: "id" }, { key: "name" }, { key: "type" }],
+  columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } },
+    { key: "type", edit: { editor: "list", params: { values: ["junior", "adult"] } } }],
   onLoad: (rows) => {
     for (const k in tournamentsById) delete tournamentsById[k];
     rows.forEach((t) => (tournamentsById[t.id] = t));
@@ -1782,7 +1838,8 @@ const tournamentsCrud = wireEntity({
 
 const sitesCrud = wireEntity({
   path: "/sites", singular: "site", panelId: "panel-sites", formId: "site-form", msgId: "site-msg",
-  columns: [{ key: "id" }, { key: "code" }, { key: "name" }, { key: "city" }],
+  columns: [{ key: "id" }, { key: "code", edit: { editor: "input" } },
+    { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
   onLoad: (rows) => { for (const k in sitesById) delete sitesById[k]; rows.forEach((s) => (sitesById[s.id] = s)); refreshAllSelects(); if (active) renderTSites(); },
 });
 let certOfficialId = null;
@@ -1853,19 +1910,22 @@ async function loadPlayerHistory(id) {
 
 const playersCrud = wireEntity({
   path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
-  columns: [{ key: "id" }, { key: "usta_number" }, { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") }],
+  columns: [{ key: "id" }, { key: "usta_number", edit: { editor: "input" } }, { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") }],
   onLoad: (rows) => { for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects(); },
   onSelect: (p) => loadPlayerHistory(p.id),
   onNew: () => { document.getElementById("player-history").hidden = true; },
 });
 const ratesCrud = wireEntity({
   path: "/rates", singular: "rate", panelId: "panel-rates", formId: "rate-form", msgId: "rate-msg",
-  columns: [{ key: "id" }, { key: "cert_type" }, { key: "rate_per_day", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2) }, { key: "effective_from" }],
+  columns: [{ key: "id" },
+    { key: "cert_type", edit: { editor: "list", params: { values: ["roving_official", "chair_umpire", "tournament_referee", "deputy_referee", "referee_in_training"] } } },
+    { key: "rate_per_day", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2), edit: { editor: "number", params: { min: 0, step: 0.01 } } },
+    { key: "effective_from", edit: { editor: "date" } }],
   transform: (o) => { o.rate_per_day = Number(o.rate_per_day); if (o.effective_from == null) delete o.effective_from; return o; },
 });
 const hotelsCrud = wireEntity({
   path: "/hotels", singular: "hotel", panelId: "panel-hotels", formId: "hotel-form", msgId: "hotel-msg",
-  columns: [{ key: "id" }, { key: "name" }, { key: "city" }],
+  columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
   onLoad: (rows) => { for (const k in hotelsById) delete hotelsById[k]; rows.forEach((h) => (hotelsById[h.id] = h)); refreshAllSelects(); },
 });
 const distancesCrud = wireEntity({
@@ -1874,7 +1934,7 @@ const distancesCrud = wireEntity({
     { key: "id" },
     { key: "official", fmt: (d) => (officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : d.official_id) },
     { key: "site", fmt: (d) => (sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : d.site_id) },
-    { key: "one_way_miles" },
+    { key: "one_way_miles", edit: { editor: "number", params: { min: 0, step: 0.1 } } },
   ],
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });

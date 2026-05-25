@@ -7,6 +7,18 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ In-grid inline editing** (phase 3) — Tabulator cells now edit in place
+  (**double-click** to edit; single-click still selects the row / drives Prev-Next),
+  committing straight to the API. `wireEntity` columns opt in via `edit: { editor,
+  params }` and a generic `cellEdited` handler **PUTs the whole row** (each `*Out`
+  record already carries every field the create model needs; Pydantic ignores
+  extras) then refreshes to reflect any server normalization; on error the cell
+  reverts. Wired on **Tournaments** (name, type), **Sites** (code/name/city),
+  **Players** (USTA #), **Rates** (cert type, $/day, effective-from), **Hotels**
+  (name/city), **Distances** (one-way miles) and the **Roster** (division, status,
+  shirt size, dietary — backend re-normalizes the shirt size). Composite/FK columns
+  (official & player names, distance's official/site) stay form-only. Edited cells
+  get a hover outline + focused-editor styling (light/dark).
 - **✅ Tabulator grid — Pairing avoidances & Doubles** (phase 2d) — the last
   workspace lists move off hand-built tables onto `makeListGrid`: Pairing
   avoidances (Division / Relationship / Players-joined), Doubles **requests**

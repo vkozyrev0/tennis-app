@@ -370,6 +370,14 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 }
 .grid-actions { display: flex; gap: 0.2rem; justify-content: flex-end; align-items: center; }
 .grid-actions-cell { overflow: visible; }
+/* In-grid editable cells: subtle affordance (double-click to edit). */
+.tabulator .tabulator-cell.editable-cell { cursor: cell; }
+.tabulator .tabulator-cell.editable-cell:hover { box-shadow: inset 0 0 0 1px var(--border); }
+.tabulator .tabulator-cell.tabulator-editing { box-shadow: inset 0 0 0 2px var(--accent, #2563eb); padding: 0; }
+.tabulator .tabulator-cell.tabulator-editing input,
+.tabulator .tabulator-cell.tabulator-editing select {
+  background: var(--card); color: var(--ink); border: 0; padding: 0.32rem 0.5rem; width: 100%; box-sizing: border-box;
+}
 
 /* ---- list scroll container (own scrollbar; header stays pinned) ---- */
 .list-scroll {
