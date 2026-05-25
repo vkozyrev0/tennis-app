@@ -269,17 +269,12 @@
     <section class="panel" id="panel-import">
       <div class="card">
         <h3>Import</h3>
-        <p class="muted">Upload data from a spreadsheet (CSV or Excel). Roster import
-          targets the <strong>active tournament</strong> chosen in the bar above.
-          Download a blank <strong>template</strong> below, fill it in, then upload.
+        <p class="muted">Upload data from a spreadsheet (<strong>CSV or Excel</strong>) into the
+          <strong>active tournament</strong> (chosen in the bar above). For each type:
+          download a blank <strong>template</strong>, fill it in, <strong>upload</strong> (rows are
+          staged and validated), then <strong>Merge</strong> the valid rows into the tables.
           (Each list's own page has its <strong>⬇ CSV export</strong>.)</p>
-        <div class="import-row">
-          <label>Roster (CSV / Excel) <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
-          <button type="button" id="roster-import">Import roster</button>
-          <span class="msg" id="roster-import-msg"></span>
-        </div>
-        <h4 style="margin:0.9rem 0 0.2rem">Download templates</h4>
-        <div id="import-templates"></div>
+        <div id="import-sections"></div>
       </div>
     </section>
 

@@ -232,6 +232,33 @@ def test_player_city_state():
     assert upd["city"] == "Macon"
 
 
+def test_import_staging_and_merge():
+    t = _tournament()
+    ids = ["IS" + uuid.uuid4().hex[:6] for _ in range(3)]
+    # one valid, one valid, one invalid (missing USTA #)
+    csv_data = ("USTA #,First,Division,T-Shirt\n"
+                f"{ids[0]},Ann,G12,YM\n"
+                f"{ids[1]},Bea,G14,Adult Large\n"
+                ",NoUsta,G16,AS\n")
+    up = client.post(f"/api/import/tournaments/{t['id']}/roster",
+                     files={"file": ("roster.csv", csv_data, "text/csv")})
+    assert up.status_code == 201, up.text
+    b = up.json()
+    assert b["total"] == 3 and b["valid"] == 2 and b["invalid"] == 1
+    # nothing in the roster yet — staged only
+    assert client.get(f"/api/tournaments/{t['id']}/players").json() == []
+    # merge → only the 2 valid rows land, sizes normalized
+    m = client.post(f"/api/import/batches/{b['batch_id']}/merge").json()
+    assert m["merged"] == 2 and m["failed"] == 0
+    roster = {e["usta_number"]: e for e in client.get(f"/api/tournaments/{t['id']}/players").json()}
+    assert set(roster) == {ids[0], ids[1]}
+    assert roster[ids[0]]["t_shirt_size"] == "Youth Medium"
+    # templates download in both formats
+    assert client.get("/api/import/template/roster?fmt=csv").status_code == 200
+    assert client.get("/api/import/template/roster?fmt=xlsx").status_code == 200
+    assert {x["key"] for x in client.get("/api/import/types").json()} >= {"roster", "withdrawals", "player_hotels"}
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()

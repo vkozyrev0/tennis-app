@@ -380,6 +380,7 @@ _menuEl.addEventListener("click", (e) => {
   };
   if (active && loaders[tab.dataset.target]) loaders[tab.dataset.target]();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
+  if (tab.dataset.target === "panel-import") buildImportPage();
   sizeLists();
 });
 
@@ -760,22 +761,78 @@ async function rosterSignInExport() {
   }
   _csvDownload(rows, `sign-in-sheet-${(active.name || "").replace(/\s+/g, "_")}`);
 }
-document.getElementById("roster-import").addEventListener("click", async () => {
+// --- Data → Import page: per-type upload → staging → merge (built from /api/import/types) ---
+function _importRefresh() {
   if (!active) return;
-  const f = document.getElementById("roster-file").files[0];
-  if (!f) { setMsg("roster-import-msg", "choose a CSV/XLSX file", false); return; }
-  const fd = new FormData();
-  fd.append("file", f);
-  try {
-    const res = await fetch(`/api/tournaments/${active.id}/players/import`, { method: "POST", body: fd });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.detail || res.statusText);
-    const errs = body.errors && body.errors.length ? `, ${body.errors.length} row error(s)` : "";
-    setMsg("roster-import-msg", `imported ${body.entries} (new ${body.created_players}, updated ${body.updated_players})${errs}`, true);
-    document.getElementById("roster-file").value = "";
-    loadRoster();
-  } catch (e) { setMsg("roster-import-msg", e.message, false); }
-});
+  loadRoster(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); photelList.load();
+}
+function _renderBatch(el, body) {
+  el.innerHTML = `<div class="muted">Staged ${body.total}: <strong>${body.valid} valid</strong>, ${body.invalid} invalid.</div>`;
+  if (body.errors && body.errors.length) {
+    el.innerHTML += '<ul class="import-errors">' +
+      body.errors.map((e) => `<li>row ${e.row}: ${esc(e.error)}</li>`).join("") + "</ul>";
+  }
+  const merge = document.createElement("button");
+  merge.type = "button"; merge.className = "export-btn"; merge.disabled = !body.valid;
+  merge.textContent = `Merge ${body.valid} valid row(s)`;
+  merge.addEventListener("click", async () => {
+    merge.disabled = true;
+    try {
+      const r = await api(`/import/batches/${body.batch_id}/merge`, { method: "POST" });
+      toast(`Merged ${r.merged}${r.failed ? `, ${r.failed} failed` : ""}`, !r.failed);
+      el.innerHTML = `<div class="muted">Merged ${r.merged} row(s)${r.failed ? `; ${r.failed} failed` : ""}.</div>`;
+      _importRefresh();
+    } catch (e) { toast(e.message, false); merge.disabled = false; }
+  });
+  const disc = document.createElement("button");
+  disc.type = "button"; disc.className = "export-btn"; disc.textContent = "Discard";
+  disc.addEventListener("click", async () => {
+    try { await api(`/import/batches/${body.batch_id}`, { method: "DELETE" }); el.innerHTML = ""; }
+    catch (e) { toast(e.message, false); }
+  });
+  const actions = document.createElement("div"); actions.className = "export-grid";
+  actions.append(merge, disc); el.appendChild(actions);
+}
+async function buildImportPage() {
+  const root = document.getElementById("import-sections");
+  if (!root || root.dataset.built) return;
+  let types;
+  try { types = await api("/import/types"); } catch (e) { root.textContent = e.message; return; }
+  root.dataset.built = "1";
+  for (const t of types) {
+    const sec = document.createElement("section"); sec.className = "export-section";
+    sec.innerHTML = `<h4>${esc(t.label)}</h4><p class="muted">${esc(t.desc)} ` +
+      `<span class="muted">Columns: ${esc(t.columns.join(", "))}${t.required.length ? ` (required: ${esc(t.required.join(", "))})` : ""}.</span></p>`;
+    const row = document.createElement("div"); row.className = "export-grid";
+    for (const fmt of ["csv", "xlsx"]) {
+      const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
+      a.href = `/api/import/template/${t.key}?fmt=${fmt}`;
+      a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
+      row.appendChild(a);
+    }
+    const file = document.createElement("input"); file.type = "file"; file.accept = ".csv,.xlsx,.xlsm";
+    const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";
+    const msg = document.createElement("span"); msg.className = "msg";
+    row.append(file, up, msg);
+    const result = document.createElement("div"); result.className = "import-result";
+    sec.append(row, result);
+    up.addEventListener("click", async () => {
+      if (!active) { msg.textContent = "select a tournament first"; msg.className = "msg bad"; return; }
+      if (!file.files[0]) { msg.textContent = "choose a file"; msg.className = "msg bad"; return; }
+      up.disabled = true; msg.textContent = "";
+      try {
+        const fd = new FormData(); fd.append("file", file.files[0]);
+        const res = await fetch(`/api/import/tournaments/${active.id}/${t.key}`, { method: "POST", body: fd });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.detail || res.statusText);
+        file.value = "";
+        _renderBatch(result, body);
+      } catch (e) { msg.textContent = e.message; msg.className = "msg bad"; }
+      finally { up.disabled = false; }
+    });
+    root.appendChild(sec);
+  }
+}
 
 // --- Assignments ---
 const asgForm = document.getElementById("asg-form");
@@ -1777,33 +1834,6 @@ document.getElementById("roster-csv").addEventListener("click", () =>
 document.getElementById("roster-signin-csv").addEventListener("click", rosterSignInExport);
 document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);
-
-// --- Data → Import page: download-template buttons (blank, headers-only CSVs) ---
-const TEMPLATES = [
-  { title: "Roster", desc: "Importer's columns — fill in and upload above (re-importable).",
-    fn: () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template") },
-  { title: "Sign-in sheet", desc: "Status / events / city / state / size / hotel / lodging.", fn: rosterSignInTemplate },
-  { title: "Officials report (staffing plan)", desc: "Officials staffing-plan columns.", fn: reportTemplateExport },
-  { title: "T-shirt order", desc: "Size → quantity.", fn: () => _csvDownload([["Size", "Quantity"]], "tshirt-order-template") },
-  { title: "Late entries", desc: "Player / division / events / request date.", fn: () => templateTable(document.getElementById("late-table"), "late-entries") },
-  { title: "Withdrawals", desc: "Player / division / events / reason.", fn: () => templateTable(document.getElementById("withdrawal-table"), "withdrawals") },
-  { title: "Scheduling avoidances", desc: "Player / avoid day / avoid time.", fn: () => templateTable(document.getElementById("sched-table"), "scheduling-avoidances") },
-  { title: "Division flexibility", desc: "Player / home / willing divisions.", fn: () => templateTable(document.getElementById("divflex-table"), "division-flexibility") },
-  { title: "Pairing avoidances", desc: "Division / relationship / players.", fn: () => templateTable(document.getElementById("pairing-table"), "pairing-avoidances") },
-  { title: "Player hotels", desc: "Player / hotel / lodging plan.", fn: () => templateTable(document.getElementById("photel-table"), "player-hotels") },
-];
-(function buildImportTemplates() {
-  const root = document.getElementById("import-templates");
-  if (!root) return;
-  for (const t of TEMPLATES) {
-    const sec = document.createElement("div"); sec.className = "export-section";
-    const row = document.createElement("div"); row.className = "export-grid";
-    const b = document.createElement("button"); b.type = "button"; b.className = "export-btn"; b.textContent = "⬇ " + t.title;
-    b.addEventListener("click", t.fn);
-    const d = document.createElement("span"); d.className = "muted"; d.textContent = t.desc;
-    row.append(b, d); sec.appendChild(row); root.appendChild(sec);
-  }
-})();
 
 // =================== Collapse workspace add-forms (list stays primary) ===================
 // Wrap each workspace add-form in a <details> at runtime (no HTML changes).

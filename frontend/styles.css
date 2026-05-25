@@ -428,6 +428,9 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   cursor: pointer;
 }
 .export-btn:hover { background: var(--bg); }
+a.export-btn { text-decoration: none; }
+.import-result { margin-top: 0.4rem; }
+.import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
 .export-section { padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
 .export-section:last-child { border-bottom: 0; }
 .export-section h4 { margin: 0 0 0.15rem; font-size: 0.95rem; }

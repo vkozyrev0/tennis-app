@@ -7,6 +7,16 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Import pipeline with staging** (migration `0020`) — the **Data → Import** page
+  imports each data type from **CSV or Excel** through a **staging area**: upload →
+  rows land in `import_batch`/`import_row` (parsed + per-row validated, *nothing written
+  to the main tables yet*) → review the valid/invalid summary → **Merge** the valid rows.
+  Six importable types (roster, late entries, withdrawals, scheduling avoidances,
+  division flexibility, player hotels), each with a **template in both CSV and Excel**
+  and tolerant header matching. Backend: `app/importer.py` registry (columns/aliases +
+  per-type merge mirroring the routers, t-shirt size normalized) + `routers/imports.py`
+  (`/types`, `/template/{type}?fmt=`, upload, `/batches/{id}`, `/merge`, discard) with a
+  per-row SAVEPOINT so one bad row can't abort the batch.
 - **✅ Design-critique fixes (moderate, non-security)** — from the `design-critique`
   review:
   - **Accessibility**: field labels bumped 0.68→0.72rem (~11.5px) and light `--muted`
