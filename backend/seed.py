@@ -1,5 +1,6 @@
 """Seed a little demo data (idempotent). Run from backend/:  python seed.py"""
 from app.db import get_conn
+from app.security import hash_pw
 
 SITES = [
     {"code": "JDS", "name": "John Drew Smith Tennis Center", "city": "Macon", "state": "GA"},
@@ -57,7 +58,8 @@ def main() -> None:
                 (tournament_id, site_id),
             )
 
-            for cert, rate in [("roving", 150), ("chair", 200), ("referee", 250)]:
+            for cert, rate in [("roving_official", 150), ("chair_umpire", 200),
+                               ("tournament_referee", 250)]:
                 cur.execute(
                     """
                     INSERT INTO certification_rate (cert_type, rate_per_day)
@@ -66,6 +68,13 @@ def main() -> None:
                     """,
                     (cert, rate),
                 )
+
+            # POC admin login (admin / admin) — see roadmap §Stack security note.
+            cur.execute(
+                "INSERT INTO user_account (username, password_hash, role) "
+                "VALUES (%s, %s, 'admin') ON CONFLICT (username) DO NOTHING",
+                ("admin", hash_pw("admin")),
+            )
         conn.commit()
         print("seed complete")
     finally:

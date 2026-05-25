@@ -1,5 +1,5 @@
 """Pydantic request/response models for the API."""
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
@@ -69,14 +69,34 @@ class PlayerCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    birthdate: Optional[date] = None
 
 
 class PlayerOut(PlayerCreate):
     id: int
+    updated_at: Optional[datetime] = None
+
+
+class PlayerHistoryOut(BaseModel):
+    id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    birthdate: Optional[date] = None
+    valid_from: datetime
+    valid_to: datetime
+    change_type: str
 
 
 # ---------- Certification rate ----------
-CertType = Literal["roving", "chair", "referee"]
+CertType = Literal[
+    "roving_official",
+    "chair_umpire",
+    "tournament_referee",
+    "deputy_referee",
+    "referee_in_training",
+]
 
 
 class CertificationRateCreate(BaseModel):
@@ -108,6 +128,7 @@ class HotelOut(HotelCreate):
 class RoomBlockCreate(BaseModel):
     hotel_id: int
     tournament_id: Optional[int] = None
+    kind: Literal["player", "official"] = "player"
     confirmation_number: Optional[str] = None
     cancellation_info: Optional[str] = None
     check_in: Optional[date] = None
@@ -123,6 +144,7 @@ class RoomBlockCreate(BaseModel):
 
 class RoomBlockOut(RoomBlockCreate):
     id: int
+    rooms_remaining: Optional[int] = None  # room_count - assignments using it
 
 
 # ---------- Official <-> Site distance ----------
@@ -168,3 +190,197 @@ class AssignmentCreate(BaseModel):
 class AssignmentDayCreate(BaseModel):
     work_date: date
     working_as: CertType
+
+
+# ---------- Official certifications ----------
+class CertificationCreate(BaseModel):
+    cert_type: CertType
+
+
+class CertificationOut(BaseModel):
+    id: int
+    official_id: int
+    cert_type: CertType
+
+
+# ---------- Part B: email inbox + late entries ----------
+EmailStatus = Literal["new", "filed", "needs_followup"]
+
+
+class EmailCreate(BaseModel):
+    tournament_id: Optional[int] = None
+    message_id: Optional[str] = None
+    from_address: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+
+
+class EmailUpdate(BaseModel):
+    tournament_id: Optional[int] = None
+    classification: str = "unclassified"
+    status: EmailStatus = "new"
+
+
+class EmailOut(BaseModel):
+    id: int
+    tournament_id: Optional[int] = None
+    message_id: Optional[str] = None
+    received_at: datetime
+    from_address: Optional[str] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    classification: str
+    status: EmailStatus
+
+
+class LateEntryCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    events: Optional[str] = None
+    request_date: Optional[date] = None
+    request_time: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class LateEntryOut(BaseModel):
+    id: int
+    tournament_id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    events: Optional[str] = None
+    request_date: Optional[date] = None
+    request_time: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class WithdrawalCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    events: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class WithdrawalOut(BaseModel):
+    id: int
+    tournament_id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    events: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
+    was_alternate: bool = False
+    source_email_id: Optional[int] = None
+
+
+class PlayerHotelCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    hotel_name: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class PlayerHotelOut(BaseModel):
+    id: int
+    tournament_id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    hotel_name: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class TShirtRow(BaseModel):
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    tournament_id: int
+    tournament_name: Optional[str] = None
+    t_shirt_size: Optional[str] = None
+
+
+class SchedAvoidCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    avoid_day: Optional[str] = None
+    avoid_time_range: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class SchedAvoidOut(BaseModel):
+    id: int
+    tournament_id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    avoid_day: Optional[str] = None
+    avoid_time_range: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class DivFlexCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    home_division: Optional[str] = None
+    willing_divisions: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+class DivFlexOut(BaseModel):
+    id: int
+    tournament_id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    home_division: Optional[str] = None
+    willing_divisions: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+
+# ---------- Auth ----------
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class AccountCreate(BaseModel):
+    username: str
+    password: str
+
+
+class MyAvailabilitySet(BaseModel):
+    dates: list[date] = []
+    hotel_needed: bool = False
+
+
+# ---------- Availability ----------
+class AvailabilityOut(BaseModel):
+    id: int
+    official_id: int
+    tournament_id: int
+    available_date: date
+    hotel_needed: bool = False
+
+
+class AvailabilitySet(BaseModel):
+    official_id: int
+    dates: list[date] = []
+    hotel_needed: bool = False

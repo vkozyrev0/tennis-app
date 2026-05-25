@@ -7,23 +7,23 @@ from ..models import RoomBlockCreate, RoomBlockOut
 router = APIRouter(prefix="/api/room-blocks", tags=["room-blocks"])
 
 _COLS = (
-    "id, hotel_id, tournament_id, confirmation_number, cancellation_info, "
+    "id, hotel_id, tournament_id, kind, confirmation_number, cancellation_info, "
     "check_in, check_out, room_count"
 )
 
 _INSERT = f"""
 INSERT INTO room_block
-    (hotel_id, tournament_id, confirmation_number, cancellation_info,
+    (hotel_id, tournament_id, kind, confirmation_number, cancellation_info,
      check_in, check_out, room_count)
 VALUES
-    (%(hotel_id)s, %(tournament_id)s, %(confirmation_number)s,
+    (%(hotel_id)s, %(tournament_id)s, %(kind)s, %(confirmation_number)s,
      %(cancellation_info)s, %(check_in)s, %(check_out)s, %(room_count)s)
 RETURNING {_COLS}
 """
 
 _UPDATE = f"""
 UPDATE room_block SET
-    hotel_id = %(hotel_id)s, tournament_id = %(tournament_id)s,
+    hotel_id = %(hotel_id)s, tournament_id = %(tournament_id)s, kind = %(kind)s,
     confirmation_number = %(confirmation_number)s,
     cancellation_info = %(cancellation_info)s, check_in = %(check_in)s,
     check_out = %(check_out)s, room_count = %(room_count)s
@@ -32,16 +32,24 @@ RETURNING {_COLS}
 """
 
 
+_LIST_COLS = (
+    _COLS
+    + ", room_count - (SELECT count(*) FROM assignment a "
+    "WHERE a.room_block_id = room_block.id) AS rooms_remaining"
+)
+
+
 @router.get("", response_model=list[RoomBlockOut])
-def list_room_blocks(tournament_id: int | None = None, conn=Depends(db_dep)):
+def list_room_blocks(tournament_id: int | None = None, kind: str | None = None,
+                     conn=Depends(db_dep)):
+    clauses, params = [], []
+    if tournament_id is not None:
+        clauses.append("tournament_id = %s"); params.append(tournament_id)
+    if kind is not None:
+        clauses.append("kind = %s"); params.append(kind)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        if tournament_id is None:
-            cur.execute(f"SELECT {_COLS} FROM room_block ORDER BY id")
-        else:
-            cur.execute(
-                f"SELECT {_COLS} FROM room_block WHERE tournament_id = %s ORDER BY id",
-                (tournament_id,),
-            )
+        cur.execute(f"SELECT {_LIST_COLS} FROM room_block{where} ORDER BY id", params)
         return cur.fetchall()
 
 

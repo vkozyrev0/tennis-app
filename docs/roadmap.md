@@ -69,11 +69,12 @@ tournaments end-to-end.
 ## Phase 1 — Officials app, administrator side  *(highest, clearest value)*  🚧 IN PROGRESS
 - [x] TD CRUD: tournaments (name, type, the three dates above + match-play
       window, site), sites. *(full CRUD + filters, master-detail UI)*
-- [ ] **Per-tournament roster import** (`TournamentEntry`): TD supplies players by
-      USTA ID with selection status, t-shirt size, dietary preference (audit §4.1).
-      Default ingestion = **CSV/XLSX upload** mapped to `TournamentEntry`, plus
-      manual add/edit for late entries; confirm the USTA export format (audit §3.8).
-      Foundation for the alternate list, t-shirt history, and Part B lists.
+- [x] **Per-tournament roster import** (`TournamentEntry`): **CSV/XLSX upload**
+      (`POST .../players/import`) upserts players by USTA ID + their entries
+      (status, t-shirt, dietary), tolerant header matching; plus manual add/edit
+      (audit §3.8). Foundation for the alternate list, t-shirt history, Part B.
+- [x] **Official certifications** (migration 0006): held certs on the Official
+      detail; assignment-day role is constrained to held certs (audit §3.2).
 - [x] `CertificationRate` management (**per-day rate per certification** — D2).
       *(migration 0002, `/api/rates` CRUD, Rates tab, seeded roving/chair/referee)*
 - [x] `HotelRoomBlock` inventory with `room_count`. *(migration 0002,
@@ -95,24 +96,33 @@ tournaments end-to-end.
       `OfficialSiteDistance` is on file (`missing_distance`, audit §3.7 S4).
       *(computed in the assignment summary; verified pay 350 + mileage 97.5 = 447.5)*
       Google Maps geocoding remains the Phase 2 auto-source (D3/U2).
-- [ ] **Seed/backfill the `OfficialSiteDistance` matrix** from the existing
-      `Officials Mileage Workbook.xlsx` where trustworthy, and surface officials
-      missing a distance. Sample reality: 18/47 had no distance, and a `182`
-      placeholder (`=(2*116)−50`) was reused across 6 officials — **import real
-      values only, never placeholders** (audit §3.7 S4/S6).
-- [ ] **Reports**: confirmation roster (by tournament/date/site/hotel) including a
-      **dietary restrictions** column (audit §2.3) and a **hotel date-mismatch
-      alert** where needed check-in/out falls outside the reservation (audit §3.4);
-      plus pay/mileage totals (per official, per tournament).
+- [x] **Seed/backfill the `OfficialSiteDistance` matrix** from
+      `Officials Mileage Workbook.xlsx` — `backfill_distances.py` imports officials
+      + distances (one-way = `(reimbursable+50)/2`), skipping the `182` placeholder
+      and blanks. First run: **47 officials, 38 distances, 6 placeholders skipped**
+      (audit §3.7 S4/S6).
+- [x] **Reports**: officials confirmation & pay report — per-day roles, site,
+      hotel, **dietary** column (audit §2.3), **missing-distance** + **hotel
+      date-mismatch** flags (audit §3.4), and pay/mileage **totals**. Print
+      (print stylesheet) + **Export CSV**. *(`/api/tournaments/{id}/reports/officials`,
+      Reports tab.)*
 
 **Done when:** TD can staff a tournament end-to-end and print both reports.
+**Status:** ✅ core path complete — staff a tournament (roster, assignments with
+per-day roles, hotels) and print/export the officials report. Remaining Phase 1
+polish tracked in the backlog below (distance backfill, room-count enforcement,
+pay snapshots).
 
 ---
 
-## Phase 2 — Officials self-service + auto-distance
-- [ ] Official auth + "end-user platform": edit own profile, set per-tournament
-      **availability** + `hotel_needed`.
-- [ ] TD sees availability when making assignments.
+## Phase 2 — Officials self-service + auto-distance  🚧
+- [x] **Official auth + self-service** (migration 0008): cookie-session login
+      (pbkdf2), `admin`/`official` roles, role-split UI. Officials edit their own
+      profile and set per-tournament **availability** via `/api/me/*`; admin sets
+      an official's login from the Official detail.
+- [x] **Availability** — both **TD-side** (Availability tab, migration 0007) and
+      **officials' own** (self-service).
+- [ ] TD sees availability when making assignments (surface it in the assign flow).
 - [ ] **Google Maps geocoding** to auto-compute home↔site round-trip distance
       (the primary mileage source), with **manual entry as fallback** when the
       lookup is unavailable (D3/U2).
@@ -121,17 +131,17 @@ tournaments end-to-end.
 
 ---
 
-## Phase 3 — Email ingestion + human review (Part B core)
+## Phase 3 — Email ingestion + human review (Part B core)  🚧
 The player side starts as a **human-review workflow — no automated parsing**
 (D5/§5.1). The TD forwards player/parent email to a dedicated address; it lands in
 a review inbox; a person files each message into the right list.
-- [ ] Implement ingestion via the **dedicated forwarding address** (D4; smallest
-      privacy blast radius — audit §5.2).
-- [ ] `EmailMessage` provenance + dedup by `message_id`.
-- [ ] **Review inbox UI**: show each message; the TD/staff pick its type and
-      key the fields into the target list (no auto-extract). `classification` and
-      the extracted row are **human-assigned**.
-- [ ] Minors' data is encrypted at rest and access-controlled (audit §5.1).
+- [~] Ingestion: **POC manual add** to the inbox (migration 0011). Dedicated
+      forwarding-address auto-ingest still 🔭 (D4).
+- [x] `EmailMessage` provenance + dedup by `message_id`.
+- [x] **Review inbox UI** (Inbox tab): add a message, set `classification`, **file**
+      it into a list (no auto-extract); filing sets the email `status='filed'`.
+- [ ] Minors' data encryption at rest + access control (Phase 5; access-control via
+      admin auth is in place).
 
 **Done when:** a forwarded email reliably appears in the review inbox and a person
 can file it into a structured, provenance-linked row.
@@ -145,11 +155,15 @@ can file it into a structured, provenance-linked row.
 ## Phase 4 — Player list features (built on the review inbox)
 Each is a filing form (from the review inbox) + a list view + an export. Suggested
 order (simplest first):
-- [ ] **Late entries** (simple filing; creates/updates a `TournamentEntry`,
-      `source = late_entry` — audit §4.1).
-- [ ] **Withdrawals** (reason optional when roster status = alternate; recording
-      sets `TournamentEntry.selection_status = withdrawn` — audit §2.4).
-- [ ] **Scheduling avoidances** (adults) and **Division flexibility** (adults).
+- [x] **Late entries** (migration 0011) — list + manual add + **file-from-email**;
+      upserts the player and their `TournamentEntry` (`source = late_entry`), marks
+      the source email filed (audit §4.1).
+- [x] **Withdrawals** (migration 0012) — list + manual add + **file-from-email**;
+      reason required unless the player was an alternate; flips
+      `TournamentEntry.selection_status = withdrawn`; `was_alternate` snapshotted
+      (audit §2.4).
+- [x] **Scheduling avoidances** + **Division flexibility** (adults) — migration
+      0013; list + add + file-from-email (generic inbox target picker).
 - [ ] **Pairing avoidances** (juniors).
 - [ ] **Doubles pairing** — two-sided verification state machine + **random
       pairing queue** with odd-one-out handling; a random request is **binding**
@@ -188,3 +202,91 @@ is in scope; an automated triage agent is a possible follow-on after Phase 5.
 All decisions are made — pick the web stack and execute Phase 0 + the
 read-only/CRUD slice of Phase 1. That produces a usable officials tool fastest;
 the human-review Part B (Phase 3) can follow in parallel.
+
+---
+
+## UI review & backlog (2026-05-24)
+Critical review of the running POC UI. Ordered by impact.
+
+### 🔴 Missing — needed to finish Phase 1
+- **✅ DONE — Reports**: officials confirmation & pay report with per-day roles,
+  site/hotel, **dietary** column, pay/mileage **totals**, missing-distance and
+  hotel-date-mismatch flags, plus **Print** and **Export CSV**
+  (`/api/tournaments/{id}/reports/officials`, Reports tab).
+- **✅ DONE — Roster CSV/XLSX import** (audit §3.8): `POST .../players/import`
+  upserts players by USTA ID + entries, with tolerant header matching; UI file
+  picker on the Roster tab.
+- **✅ DONE — `OfficialSiteDistance` workbook backfill** (audit §3.7):
+  `backfill_distances.py` imports officials + distances from
+  `Officials Mileage Workbook.xlsx` (one-way = `(reimbursable+50)/2`), skipping the
+  `182` placeholder. First run: 47 officials, 38 distances, 6 placeholders skipped.
+
+### 🟡 Correctness / trust gaps
+- **✅ DONE — Player history**: `player` stays current; append-only
+  **`player_history`** (SCD Type 4, migration `0004`) maintained by a trigger;
+  **point-in-time names** resolved for past-tournament rosters; Name-history UI in
+  the Player detail. Per-tournament division already snapshotted on the roster.
+  See [data-model.md](data-model.md) §PlayerHistory.
+- **✅ DONE — Room-count enforced**: assigning an official to a full block returns
+  **409**; `rooms_remaining` is shown in the room-block list + assignment dropdown.
+- **Pay/mileage not snapshotted** (audit §5.3): only `AssignmentDay.rate_applied`
+  is stored; mileage, total, and `rule_version` are recomputed on read. Store a
+  snapshot at confirm time for reproducible money. **✅ DONE** — snapshots
+  (`snapshot_pay/mileage/total`, `rule_version`, `snapshot_at`) frozen on every
+  assignment change (migration `0005`); the report shows the pay-rule version.
+- **✅ DONE — Assignment role constrained**: `working_as` must be a certification
+  the official holds (409 otherwise), once any are on file (`Certification`).
+- **Assignment site unconstrained**: the mileage `site` can be any site, not just
+  one of the tournament's sites — restrict the dropdown to the tournament's sites.
+- **Work-date bounds**: a work day can fall outside the play window with no warning.
+
+### 🟢 UX / polish
+- **Inline mileage fix**: when an assignment shows "no distance", offer an inline
+  "add distance" action instead of making the TD switch to the Distances tab.
+- **Assignment card** is a dense run-on line → use a small structured layout
+  (name; pay/mileage/total badges; flags as colored chips); label the add-day date
+  field.
+- **Two ways to pick a tournament** (Setup list "Work on this" + context-bar
+  selector) — keep, but make the Setup-list row offer "Work on" directly.
+- **Naming consistency**: Setup forms say *New/Create/Save*; workspace sub-forms say
+  *Add/Clear* — unify.
+- **Feedback**: success/error messages auto-clear in 4s and can be missed; consider
+  a persistent toast for errors. No loading indicators.
+- **Required-field affordance** and clearer validation styling on inputs.
+- **Accessibility**: tabs are plain buttons (no `role="tablist"`/arrow-key nav);
+  add ARIA + keyboard support. Status colors already pair with text (good).
+- **Mobile**: the two-group menu wraps to several rows; consider a compact/scrolling
+  nav. (master-detail already stacks.)
+- **Server-side filtering/pagination** once lists grow (filters are client-side).
+
+### Notes
+- These are captured from the UI as built; they do **not** change earlier
+  decisions. Items marked 🔭 in [data-model.md](data-model.md) (Certification,
+  Availability, all of Part B) remain future work by design.
+
+---
+
+## TD review round 2 (2026-05-24) — applied
+- **✅ 5 certification types** (migration `0009`): roving official, chair umpire,
+  tournament referee, deputy referee, referee in training — across rates, certs,
+  assignment roles, and every dropdown.
+- **✅ Assignment day flow**: selecting an official shows their **available days**
+  (select-all / individual) + a certification dropdown to add days; a manual date
+  is the fallback when no availability is on file.
+- **✅ Report grouped by Official → certification → days**, and **weekday added** to
+  dates on the Report and Availability views.
+- **✅ Certification checkboxes on the Availability tab** (set an official's held
+  certs inline).
+- **✅ "Hotel assignment"** label on Assignments (was "Room block").
+- **✅ Distance delete verified** (returns 204; earlier failure not reproducible).
+
+### ✅ DONE — hotel model reframe (migration 0010)
+The TD clarified two distinct hotel needs the single `room_block` conflated; now
+split by **`kind`**:
+1. **`player`** — discounted hotel rates offered to *players*.
+2. **`official`** — comp rooms for *officials* needing accommodation.
+
+Implemented: `kind` on `room_block`; Room blocks tab has a **Block type** selector
++ column; `GET /room-blocks?kind=` filter; the Assignments **Hotel assignment**
+dropdown lists **only `official` blocks**; the Reports tab has an
+**officials-needing-accommodation roster** (official + hotel + night span).

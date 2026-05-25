@@ -2,11 +2,11 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import PlayerCreate, PlayerOut
+from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
-_COLS = "id, usta_number, first_name, last_name"
+_COLS = "id, usta_number, first_name, last_name, birthdate, updated_at"
 
 
 @router.get("", response_model=list[PlayerOut])
@@ -26,14 +26,28 @@ def get_player(player_id: int, conn=Depends(db_dep)):
     return row
 
 
+@router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])
+def player_history(player_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, player_id, usta_number, first_name, last_name, birthdate,
+                   valid_from, valid_to, change_type
+            FROM player_history WHERE player_id = %s ORDER BY valid_from DESC
+            """,
+            (player_id,),
+        )
+        return cur.fetchall()
+
+
 @router.post("", response_model=PlayerOut, status_code=201)
 def create_player(body: PlayerCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO player (usta_number, first_name, last_name)
-                VALUES (%(usta_number)s, %(first_name)s, %(last_name)s)
+                INSERT INTO player (usta_number, first_name, last_name, birthdate)
+                VALUES (%(usta_number)s, %(first_name)s, %(last_name)s, %(birthdate)s)
                 RETURNING {_COLS}
                 """,
                 body.model_dump(),
@@ -45,6 +59,7 @@ def create_player(body: PlayerCreate, conn=Depends(db_dep)):
 
 @router.put("/{player_id}", response_model=PlayerOut)
 def update_player(player_id: int, body: PlayerCreate, conn=Depends(db_dep)):
+    # The player_history trigger snapshots the prior values and bumps updated_at.
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -52,7 +67,8 @@ def update_player(player_id: int, body: PlayerCreate, conn=Depends(db_dep)):
                 UPDATE player SET
                     usta_number = %(usta_number)s,
                     first_name = %(first_name)s,
-                    last_name = %(last_name)s
+                    last_name = %(last_name)s,
+                    birthdate = %(birthdate)s
                 WHERE id = %(id)s
                 RETURNING {_COLS}
                 """,

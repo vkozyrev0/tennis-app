@@ -5,6 +5,12 @@ Proposed entities derived from the vision, with the collisions from
 Storage-agnostic; field types are indicative. **PK** = primary key,
 **FK** = foreign key.
 
+> **Build status (POC):** ✅ implemented · 🔭 planned (designed, not yet built).
+> **Part A is fully implemented** (incl. Certification + Availability);
+> **Part B (player operations) is entirely 🔭** except `Player`/`TournamentEntry`,
+> which the roster shares. Markers below call out where the model and the running
+> app differ.
+
 ---
 
 ## Shared / core
@@ -75,12 +81,16 @@ every tournament held at that site, so distance is entered/geocoded once.
 | `dietary_restrictions` | shown on the confirmed-officials report (audit §2.3) |
 | `lat`, `lng` | optional, for auto-distance |
 
-### Certification
+### Certification  ✅ *built (migration 0006)*
+Which certifications each official holds. **Enforced:** when an official has any
+certifications on file, an assignment day's `working_as` role must be one they hold
+(409 otherwise); if none are recorded, any role is allowed (data may be
+incomplete). Managed as chips on the Official detail.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
 | `official_id` | FK → Official |
-| `type` | `roving` \| `chair` \| `referee` |
+| `type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
 
 ### CertificationRate
 Set by TD; **per-day** rate by certification type (D2). The applicable rate is
@@ -89,12 +99,14 @@ rates on days they work different roles (audit §3.2).
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
-| `type` | `roving` \| `chair` \| `referee` |
+| `type` | one of 5: `roving_official` \| `chair_umpire` \| `tournament_referee` \| `deputy_referee` \| `referee_in_training` |
 | `rate_per_day` | money |
 | `effective_from` | rate version, for auditability (audit §5.3) |
 
-### Availability
-Official declares available dates per tournament.
+### Availability  ✅ *built — TD-entered (migration 0007)*
+Available dates per official per tournament. **Built:** the TD records dates on the
+tournament **Availability** tab (`PUT .../availability` replaces an official's set);
+`hotel_needed` is captured. Officials' self-service entry remains Phase 2.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -119,14 +131,23 @@ Hotels are **split** from room blocks (the property vs. the allocation at it).
 | `id` | PK |
 | `hotel_id` | FK → Hotel |
 | `tournament_id` | FK → Tournament (nullable); scopes the block for the per-tournament report |
+| `kind` | `player` (discounted hotel **rates for players**) \| `official` (comp **rooms for officials**) — migration 0010 |
 | `confirmation_number`, `cancellation_info` | |
 | `check_in`, `check_out` | block window |
 | `room_count` | total rooms in the block |
 
-**Allocation rules (§3.4):** Room-count is a **hard guard** — no booking past
-`room_count`. The **date check is a report alert, not a block**: if an assignment's
-worked dates fall outside `[check_in, check_out]`, flag it (the assignment summary
-returns `hotel_date_mismatch`) so the TD can adjust the reservation.
+> **Two purposes (TD clarification):** `kind='player'` blocks are the discounted
+> rates offered to players; `kind='official'` blocks are comp rooms for officials
+> needing accommodation. The Assignment **Hotel assignment** draws **only** from
+> `official` blocks, and the report's **officials-needing-accommodation roster**
+> lists each housed official + hotel + the night span they work.
+
+**Allocation rules (§3.4):** the **date check is implemented** — if an assignment's
+worked dates fall outside `[check_in, check_out]`, the summary returns
+`hotel_date_mismatch` so the TD can adjust the reservation. The **room-count cap is
+enforced ✅**: assigning an official to a full block returns **409**, and
+`rooms_remaining` (= `room_count` − assignments using the block) is surfaced in the
+room-block list and the assignment room-block dropdown.
 
 ### Assignment  (Tournament ↔ Official)
 TD assigns an official to a tournament, with a **venue site** (for mileage) and an
@@ -136,11 +157,15 @@ optional **room block**. The **role and rate are per day** (see `AssignmentDay`)
 | `id` | PK |
 | `tournament_id`, `official_id` | FK; UNIQUE together (one assignment per official per tournament) |
 | `site_id` | FK → Site (nullable); the venue the official travels to → mileage via `OfficialSiteDistance` |
-| `room_block_id` | FK → RoomBlock (nullable) |
+| `room_block_id` | FK → RoomBlock (nullable); capacity-checked on assign |
+| `snapshot_pay`, `snapshot_mileage`, `snapshot_total` | frozen money at the last change (§5.3) |
+| `rule_version`, `snapshot_at` | pricing-rule id + timestamp of the snapshot |
 
-> Pay, mileage, and the `hotel_date_mismatch` flag are **computed** in the
-> assignment summary endpoint (not stored), from `AssignmentDay.rate_applied`, the
-> official↔site distance, and the room-block window.
+> Pay, mileage, and `hotel_date_mismatch` are **computed** in the summary endpoint
+> and **snapshotted** onto the assignment (`snapshot_pay/mileage/total`,
+> `rule_version`, `snapshot_at`) on every change (create / edit / add-day /
+> remove-day), so a figure is reproducible later even if rates or distances change
+> (§5.3, migration `0005`).
 
 ### AssignmentDay
 One row per assigned day; the role worked that day picks the rate (audit §3.2).
@@ -149,7 +174,7 @@ One row per assigned day; the role worked that day picks the rate (audit §3.2).
 | `id` | PK |
 | `assignment_id` | FK → Assignment |
 | `work_date` | a single worked day; UNIQUE per `(assignment_id, work_date)` |
-| `working_as` | position worked **that day** (`roving` \| `chair` \| `referee`) |
+| `working_as` | position worked **that day** (one of the 5 `certification_type` values) |
 | `rate_applied` | per-day rate for that role, snapshotted when the day is added (§5.3) |
 
 **Derived — Pay** = `Σ over AssignmentDay of rate_applied`
@@ -164,27 +189,90 @@ mileage_pay        = min(reimbursable_miles × 0.65, 100)    # $0.65/mi, $100 ca
 The sample workbook stops at `reimbursable_miles` (no $ rate, no cap); the cap and
 dollar conversion are applied here, at the pay-computation step.
 
-**Validation (S4):** mileage pay requires a real `OfficialSiteDistance` (geocoded
-or an explicit manual entry). Block computation when the official's address is
-missing or the distance is an unverified placeholder.
+**Validation (S4):** mileage needs an `OfficialSiteDistance` for the assignment's
+`(official, site)`. **As built**, when none exists the summary returns
+`mileage = null` + `missing_distance = true` (surfaced as "no distance" in the UI)
+rather than hard-blocking; the cap and the `max(…,0)` floor are applied. *Still
+🔭:* importing the workbook matrix and rejecting the `182` placeholder, and any
+hard block on unverified distances.
 
 ---
 
-## Part B — Player operations
+## Part B — Player operations  🚧 *started*
+> **Built so far:** `Player` + `TournamentEntry` (roster, shared with Part A), the
+> **`EmailMessage` review inbox**, and the first list — **`LateEntry`** (migration
+> 0011), with a "file from email" flow. **Still 🔭:** doubles, withdrawals,
+> avoidances, division flexibility, player hotel stays. Human-review workflow, no
+> auto-parsing (D5/§5.1).
 
-### Player
+### Player  ✅ *(built — mutable, with history)*
 One stable identity across every list. **USTA number is the natural key**
-(audit §4.1). Holds only attributes that don't change tournament-to-tournament.
+(audit §4.1). The record is **mutable** — names change (marriage, corrections) and
+even a USTA number may be corrected — so edits must be **historized** (see
+`PlayerHistory`).
 | Field | Notes |
 |-------|-------|
-| `id` | PK |
-| `usta_number` | unique business key |
-| `first_name`, `last_name` | |
+| `id` | PK (surrogate, stable; all FKs point here) |
+| `usta_number` | unique business key; correctable, change tracked |
+| `first_name`, `last_name` | mutable; change tracked |
+| `birthdate` | optional, **stored**; could later *suggest* a division (suggestion still 🔭); the division actually played is per-roster |
+| `updated_at` | timestamp of the current version (start of its validity) |
 
 > Per-tournament attributes — **age division, selection status, t-shirt size,
 > dietary preference** — live on `TournamentEntry`, not on `Player`, because they
-> vary by tournament. "Latest t-shirt size" is a derived view over the player's
-> `TournamentEntry` rows (F1 — keep history, don't collapse).
+> vary by tournament. This already covers **"became an adult"**: the division is
+> whatever the roster row says for that tournament, so a player can be `B16` one
+> year and an adult division the next with no change to `Player`.
+
+### PlayerHistory  ✅ *built — append-only audit of player-level changes*
+**SCD Type 4** (a separate history table), maintained automatically by a Postgres
+trigger on `player` (migration `0004`). `Player` always holds the **current**
+version; `PlayerHistory` holds every **past** version with a validity window. FKs
+are unaffected (they still point at `player.id`), and current reads don't change.
+The Player detail pane shows a **Name history** list.
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `player_id` | FK → Player |
+| `usta_number`, `first_name`, `last_name`, `birthdate` | the values **as they were** |
+| `valid_from`, `valid_to` | `[valid_from, valid_to)` window this version was current |
+| `change_type` | `update` \| `delete` |
+| `changed_by` | optional (TD/user) |
+
+Trigger sketch (no app code, can't be bypassed):
+```sql
+-- BEFORE UPDATE/DELETE on player: snapshot the OLD row, closing its window at now()
+INSERT INTO player_history(player_id, usta_number, first_name, last_name,
+                           birthdate, valid_from, valid_to, change_type)
+VALUES (OLD.id, OLD.usta_number, OLD.first_name, OLD.last_name,
+        OLD.birthdate, OLD.updated_at, now(), TG_OP);  -- 'UPDATE' | 'DELETE'
+-- on UPDATE also set NEW.updated_at = now()
+```
+
+**Point-in-time name** (for stable historical reports) — resolve the name *as of* a
+tournament's `play_start_date` by unioning history with the current row:
+```sql
+SELECT first_name, last_name FROM (
+  SELECT first_name, last_name, valid_from, valid_to FROM player_history WHERE player_id = $1
+  UNION ALL
+  SELECT first_name, last_name, updated_at, 'infinity'::timestamptz FROM player WHERE id = $1
+) v WHERE $as_of >= valid_from AND $as_of < valid_to;
+```
+
+**Roster name policy — point-in-time (policy A), implemented:**
+1. **Point-in-time ✅ (chosen)** — roster/reports for a past tournament show the
+   name as of its `play_start_date` via the query above; live screens show the
+   current name. No duplication; always correct; reuses the history we already keep.
+   *(Implemented in the roster `LATERAL` lookup.)*
+2. **Snapshot-on-entry (not used)** — copy `first_name`/`last_name` onto
+   `tournament_entry` when the player is added; trivial to read, but a later
+   typo-fix won't propagate to old rosters.
+
+> Alternatives considered: **SCD Type 2** on `player` itself (every version a row,
+> `valid_to IS NULL` = current) — cleaner point-in-time queries but forces all FKs
+> to reference an identity column instead of the version, more invasive; rejected
+> for the POC. **Snapshot-only** (no history table) loses the cross-tournament
+> change timeline the TD asked for.
 
 ### TournamentEntry  (TD-supplied per-tournament roster — audit §4.1)
 The authoritative roster the TD supplies for each tournament, keyed by USTA ID.
@@ -202,19 +290,18 @@ avoidances, hotels) augments it.
 | `dietary_preference` | player dietary preference for this tournament |
 | `source` | `usta_roster` \| `late_entry` \| `manual` (late entries added by TD) |
 
-### EmailMessage
-Provenance for every filed row (audit §4.3). Emails forwarded to the dedicated
-address land here as a **review inbox**. **No automated parsing** for now (D5 /
-audit §5.1): a person reads each message, sets `classification`, and keys the
-target row(s) by hand.
+### EmailMessage  ✅ *built (migration 0011)*
+Provenance / review inbox (audit §4.3). Emails forwarded to the dedicated address
+land here (POC: entered by hand). **No automated parsing** (D5 / audit §5.1): a
+person sets `classification` and files each message into a list.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
-| `message_id` | dedup key |
+| `message_id` | unique dedup key (nullable for manual adds) |
 | `received_at`, `from_address`, `subject`, `body` | |
 | `tournament_id` | FK (set by the reviewer) |
-| `classification` | **human-assigned**: doubles \| withdrawal \| late_entry \| pairing_avoidance \| scheduling_avoidance \| division_flex \| hotel \| other |
-| `filed`, `needs_followup` | review-workflow flags (reviewer-set) |
+| `classification` | **human-assigned** text: `unclassified` \| `late_entry` \| `withdrawal` \| `doubles` \| `pairing_avoidance` \| `scheduling_avoidance` \| `division_flex` \| `hotel` \| `other` |
+| `status` | `new` \| `filed` \| `needs_followup` (filing a list sets `filed`) |
 
 > A future **triage agent** could auto-suggest `classification` and the extracted
 > fields, leaving the human to confirm — but that is out of initial scope and
@@ -245,30 +332,36 @@ pairs with the longest-waiting `waiting` row in the same division → both form 
 stays `waiting`. A random request is **binding**: once queued, a player **cannot**
 switch to a self-found partner — they play with whoever is randomly assigned.
 
-### Withdrawal
+### Withdrawal  ✅ *built (migration 0012)*
 The email-driven withdrawal detail. Report columns (age division, player,
 event(s), reason, notes — F2) come from this row joined to `TournamentEntry`.
-Recording a withdrawal also sets the roster `selection_status = withdrawn`.
+Recording a withdrawal sets the roster `selection_status = withdrawn`.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
 | `tournament_id`, `player_id` | |
 | `events` | event(s) withdrawn from |
-| `reason` | **optional** when the player's roster `selection_status` is `alternate`; otherwise required (audit §2.4) |
+| `reason` | **optional** when the player was an `alternate`; otherwise required — enforced at filing (audit §2.4) |
 | `notes` | |
-| `source_email_id` | |
+| `was_alternate` | **snapshotted at filing** (the roster flip to `withdrawn` would otherwise lose the prior status) |
+| `source_email_id` | FK → EmailMessage (nullable); filing from an email marks it `filed`/`withdrawal` |
 
-> `was_alternate` and `age_division` are **read from `TournamentEntry`**, not
-> re-entered here (single source of truth — §4.1).
+> `age_division` is read from `TournamentEntry` at list time. `was_alternate` is
+> snapshotted here (not read back) because recording overwrites the roster status.
 
-### LateEntry
+### LateEntry  ✅ *built (migration 0011)*
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
 | `tournament_id`, `player_id` | `player_id` carries the USTA number (F3 — no duplicate column) |
 | `request_date`, `request_time` | when the late-entry email arrived |
 | `age_division`, `events` | as requested in the email |
-| `source_email_id` | |
+| `source_email_id` | FK → EmailMessage (nullable) |
+
+> **Filing a late entry** (from the inbox or by hand) upserts the player by USTA
+> number, puts them on the roster (`tournament_entry.source = late_entry`), and —
+> when filed from an email — marks that email `status='filed'`,
+> `classification='late_entry'`.
 
 > Processing a late entry creates/updates the player's `TournamentEntry`
 > (`source = late_entry`), so late entrants land on the same roster — and get a
@@ -293,8 +386,8 @@ The players in a `PairingAvoidance` group (2+ rows per group).
 | `pairing_avoidance_id` | FK → PairingAvoidance |
 | `player_id` | FK → Player |
 
-### SchedulingAvoidance (adults)
-Player↔day/time (audit §1.1).
+### SchedulingAvoidance (adults)  ✅ *built (migration 0013)*
+Player↔day/time (audit §1.1). List + add + file-from-email.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -302,7 +395,8 @@ Player↔day/time (audit §1.1).
 | `avoid_day`, `avoid_time_range` | |
 | `source_email_id` | |
 
-### DivisionFlexibility (adults)
+### DivisionFlexibility (adults)  ✅ *built (migration 0013)*
+`willing_divisions` stored as a comma-separated string (POC). List + add + file-from-email.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -333,20 +427,27 @@ kept, not collapsed.
 ---
 
 ## Relationship sketch
+`✅` built · `🔭` planned.
 ```
-Site 1───* Tournament *───* (Availability, Assignment) *───1 Official *───* Certification
-  │                                │  └─* AssignmentDay (per-day role+rate)  CertificationRate (by type)
-  └──* OfficialSiteDistance *──────┤   (one-way miles per official×site)
-                                   └─* HotelRoomBlock (allocated via Assignment; date mismatch → report alert)
+Site *───* Tournament  (M2M via tournament_site)                    ✅
+Tournament *───* Assignment *───1 Official                          ✅
+                    │  ├─ site_id → Site         (mileage venue)    ✅
+                    │  ├─ room_block_id → RoomBlock                 ✅
+                    │  └─* AssignmentDay (per-day role + rate)      ✅
+Official *───* OfficialSiteDistance *───1 Site   (one-way miles)    ✅
+CertificationRate (rate by cert type, per day)                      ✅
+Hotel 1───* RoomBlock  (property vs. inventory; block→Tournament)   ✅
+Official *───* Certification  (held certs)                          🔭
+Tournament *───* Availability *───1 Official                        🔭
 
-Tournament *───* TournamentEntry *───1 Player        (TD roster: status, division, t-shirt, dietary)
-           │        ▲ (status=withdrawn; t-shirt history; alternate list)
-Tournament *───* EmailMessage ──┬─* DoublesRequest ─→ DoublesPair ←─ RandomPairingQueue
-                                ├─* Withdrawal            → sets TournamentEntry.selection_status
-                                ├─* LateEntry             → creates TournamentEntry (source=late_entry)
-                                ├─* PairingAvoidance *─* PairingAvoidanceMember (juniors, 2+ players)
-                                ├─* SchedulingAvoidance   (adults)
-                                ├─* DivisionFlexibility   (adults)
-                                └─* PlayerHotelStay ─→ CVB analytics
+Tournament *───* TournamentEntry *───1 Player                       ✅
+   (TD roster: selection_status, division, t-shirt, dietary; t-shirt history)
+
+Part B (all 🔭): EmailMessage review inbox ──┬─ DoublesRequest → DoublesPair ← RandomPairingQueue
+                                            ├─ Withdrawal      → sets TournamentEntry.selection_status
+                                            ├─ LateEntry       → creates TournamentEntry (source=late_entry)
+                                            ├─ PairingAvoidance *─* PairingAvoidanceMember (juniors)
+                                            ├─ SchedulingAvoidance / DivisionFlexibility   (adults)
+                                            └─ PlayerHotelStay → CVB analytics
 All player rows ───* Player (key: usta_number); per-tournament attrs on TournamentEntry
 ```

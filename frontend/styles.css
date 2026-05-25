@@ -24,10 +24,9 @@ body {
 header {
   background: var(--accent);
   color: var(--accent-ink);
-  padding: 1.1rem 1.5rem 0.9rem;
+  padding: 1rem 1.5rem 0.75rem;
 }
-header h1 { margin: 0; font-size: 1.5rem; }
-header .sub { margin: 0.25rem 0 0; opacity: 0.95; font-size: 0.95rem; }
+header h1 { margin: 0; font-size: 1.4rem; }
 
 .pill {
   display: inline-block;
@@ -35,18 +34,59 @@ header .sub { margin: 0.25rem 0 0; opacity: 0.95; font-size: 0.95rem; }
   padding: 0.1rem 0.55rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.2);
-  font-size: 0.8rem;
+  font-size: 0.7rem;
+  vertical-align: middle;
 }
 .pill.ok { background: var(--ok); }
 .pill.bad { background: var(--bad); }
 
-/* ---- tabs ---- */
-.tabs {
+#user-box { font-size: 0.8rem; font-weight: normal; margin-left: 0.5rem; }
+#logout-btn {
+  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 6px;
+  padding: 0.15rem 0.55rem; cursor: pointer; font: inherit; font-size: 0.8rem; margin-left: 0.3rem;
+}
+.login-card {
+  max-width: 360px; margin: 3rem auto; background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.login-card h2 { margin-top: 0; }
+
+/* ---- active tournament context bar ---- */
+#context-bar {
+  margin-top: 0.6rem;
   display: flex;
-  gap: 0.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
+#context-bar.has-active { background: rgba(255, 255, 255, 0.22); border-color: #fff; }
+.ctx-label { font-size: 0.85rem; opacity: 0.9; }
+#active-tournament { padding: 0.35rem 0.5rem; border-radius: 6px; border: 0; font: inherit; min-width: 240px; }
+.ctx-info { font-size: 0.85rem; opacity: 0.95; }
+
+/* ---- grouped menu ---- */
+.menu {
+  display: flex;
+  gap: 1.5rem;
   padding: 0 1.5rem;
   background: var(--accent);
   border-bottom: 3px solid #245733;
+  flex-wrap: wrap;
+}
+.menu-group { display: flex; align-items: flex-end; gap: 0.25rem; }
+.menu-label {
+  align-self: center;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.6);
+  padding-right: 0.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+  margin-right: 0.25rem;
 }
 .tab {
   appearance: none;
@@ -54,13 +94,14 @@ header .sub { margin: 0.25rem 0 0; opacity: 0.95; font-size: 0.95rem; }
   background: transparent;
   color: rgba(255, 255, 255, 0.85);
   font: inherit;
-  font-size: 0.95rem;
-  padding: 0.6rem 1rem;
+  font-size: 0.92rem;
+  padding: 0.55rem 0.85rem;
   cursor: pointer;
   border-radius: 8px 8px 0 0;
 }
 .tab:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .tab.active { background: var(--bg); color: var(--ink); font-weight: 600; }
+.tab.disabled { opacity: 0.45; }
 
 main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
 
@@ -178,17 +219,38 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .btn-link:hover { text-decoration: underline; }
 .btn-link.danger { color: var(--bad); }
 
-/* ---- tournament hub ---- */
-#tournament-extras { margin-top: 1.25rem; border-top: 2px solid var(--border); padding-top: 1rem; }
-.subcard {
+/* ---- tournament workspace ---- */
+.card {
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.85rem 1rem;
-  margin-bottom: 1rem;
-  background: #fbfdfc;
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
-.subcard h4 { margin: 0 0 0.6rem; font-size: 1rem; color: var(--accent); }
+.card h3 { margin-top: 0; }
+.needs-active-note {
+  background: #fff8e6;
+  border: 1px solid #f0e0a8;
+  color: #8a6d3b;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+#work-on-btn {
+  padding: 0.5rem 0.9rem; background: #245733; color: #fff; border: 0;
+  border-radius: 6px; font: inherit; cursor: pointer;
+}
 .inline-form .row { margin-bottom: 0.5rem; }
+.import-row {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-bottom: 0.8rem; padding-bottom: 0.8rem; border-bottom: 1px dashed var(--border);
+}
+.import-row button {
+  padding: 0.4rem 0.8rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 6px; font: inherit; cursor: pointer;
+}
+.t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
+.btn-link.add { color: var(--muted); }
+td.toggle { white-space: nowrap; }
 
 .checks { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
 .check { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.88rem; color: var(--ink); }
@@ -218,8 +280,26 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .add-day { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
 .add-day input, .add-day select { padding: 0.3rem 0.4rem; }
 
+/* ---- reports ---- */
+.report-toolbar { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; }
+#report-print, #report-csv {
+  padding: 0.4rem 0.8rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 6px; font: inherit; cursor: pointer;
+}
+#report-table tfoot th { border-top: 2px solid var(--ink); font-weight: 700; text-align: left; }
+#report-meta { margin-bottom: 0.6rem; }
+
 /* ---- responsive ---- */
 @media (max-width: 720px) {
   .master-detail { grid-template-columns: 1fr; }
-  .tabs { overflow-x: auto; }
+  .menu { overflow-x: auto; }
+}
+
+/* ---- print: show only the active report ---- */
+@media print {
+  header, .menu, #context-bar, .no-print { display: none !important; }
+  .panel:not(.active) { display: none !important; }
+  .tpanel .needs-active-note { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .card { border: 0; box-shadow: none; padding: 0; }
 }

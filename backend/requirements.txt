@@ -5,3 +5,5 @@ pydantic
 python-dotenv
 pytest
 httpx
+openpyxl
+python-multipart

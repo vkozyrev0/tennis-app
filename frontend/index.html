@@ -8,25 +8,60 @@
 </head>
 <body>
   <header>
-    <h1>CourtOps Tennis</h1>
-    <p class="sub">Officials &amp; tournament admin
-      <span id="health" class="pill">checking…</span>
-    </p>
+    <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
+      <span id="user-box" hidden><span id="username-label"></span>
+        <button type="button" id="logout-btn">Log out</button></span>
+    </h1>
+    <div id="context-bar">
+      <span class="ctx-label">Working on:</span>
+      <select id="active-tournament"><option value="">— select a tournament —</option></select>
+      <span id="active-info" class="ctx-info"></span>
+    </div>
   </header>
 
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-target="panel-tournaments">Tournaments</button>
-    <button class="tab" data-target="panel-sites">Sites</button>
-    <button class="tab" data-target="panel-officials">Officials</button>
-    <button class="tab" data-target="panel-players">Players</button>
-    <button class="tab" data-target="panel-rates">Rates</button>
-    <button class="tab" data-target="panel-hotels">Hotels</button>
-    <button class="tab" data-target="panel-room-blocks">Room blocks</button>
-    <button class="tab" data-target="panel-distances">Distances</button>
+  <section id="login-view" hidden class="login-card">
+    <h2>Sign in</h2>
+    <form id="login-form" autocomplete="off">
+      <div class="row"><label>Username <input name="username" required /></label></div>
+      <div class="row"><label>Password <input name="password" type="password" required /></label></div>
+      <div class="actions-row"><button type="submit">Sign in</button><span class="msg" id="login-msg"></span></div>
+    </form>
+    <p class="muted">POC login: <code>admin</code> / <code>admin</code></p>
+  </section>
+
+  <nav class="menu" id="menu">
+    <div class="menu-group">
+      <span class="menu-label">Setup</span>
+      <button class="tab active" data-target="panel-tournaments">Tournaments</button>
+      <button class="tab" data-target="panel-sites">Sites</button>
+      <button class="tab" data-target="panel-officials">Officials</button>
+      <button class="tab" data-target="panel-players">Players</button>
+      <button class="tab" data-target="panel-rates">Rates</button>
+      <button class="tab" data-target="panel-hotels">Hotels</button>
+      <button class="tab" data-target="panel-distances">Distances</button>
+      <button class="tab" data-target="panel-tshirts">T-shirts</button>
+    </div>
+    <div class="menu-group tgroup">
+      <span class="menu-label">Tournament</span>
+      <button class="tab needs-active" data-target="panel-t-sites">Sites</button>
+      <button class="tab needs-active" data-target="panel-t-roster">Roster</button>
+      <button class="tab needs-active" data-target="panel-t-assignments">Assignments</button>
+      <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
+      <button class="tab needs-active" data-target="panel-t-availability">Availability</button>
+      <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
+      <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
+      <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
+      <button class="tab needs-active" data-target="panel-t-sched">Scheduling</button>
+      <button class="tab needs-active" data-target="panel-t-divflex">Div. flex</button>
+      <button class="tab needs-active" data-target="panel-t-photels">Player hotels</button>
+      <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
+    </div>
   </nav>
 
   <main>
-    <!-- ===== Tournaments (hub) ===== -->
+    <!-- ============ SETUP ============ -->
+
+    <!-- Tournaments (catalog CRUD) -->
     <section class="panel active" id="panel-tournaments">
       <div class="master-detail">
         <div class="list-pane">
@@ -34,19 +69,14 @@
             <input class="filter" type="search" placeholder="Filter tournaments…" />
             <button type="button" class="new-btn">+ New</button>
           </div>
-          <table class="list-table">
-            <thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead>
-            <tbody></tbody>
-          </table>
+          <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="tournament-form" autocomplete="off">
             <div class="row">
               <label>Name <input name="name" required /></label>
-              <label>Type
-                <select name="type"><option value="junior">junior</option><option value="adult">adult</option></select>
-              </label>
+              <label>Type <select name="type"><option value="junior">junior</option><option value="adult">adult</option></select></label>
             </div>
             <div class="row">
               <label>Play start <input type="date" name="play_start_date" required /></label>
@@ -60,320 +90,480 @@
               <button type="submit">Save</button>
               <button type="button" class="delete" hidden>Delete</button>
               <button type="button" class="cancel">New</button>
+              <button type="button" id="work-on-btn" hidden>Work on this →</button>
               <span class="msg" id="tournament-msg"></span>
             </div>
           </form>
-
-          <div id="tournament-extras" hidden>
-            <!-- Sites mapping -->
-            <div class="subcard">
-              <h4>Sites</h4>
-              <div id="hub-site-checks" class="checks"></div>
-              <div class="actions-row">
-                <button type="button" id="hub-sites-save">Save sites</button>
-                <span class="msg" id="hub-sites-msg"></span>
-              </div>
-            </div>
-
-            <!-- Players (roster) mapping -->
-            <div class="subcard">
-              <h4>Players (roster)</h4>
-              <form id="roster-form" autocomplete="off" class="inline-form">
-                <div class="row">
-                  <label>Player <select name="player_id" id="roster-player" required></select></label>
-                  <label>Division <input name="age_division" /></label>
-                  <label>Status
-                    <select name="selection_status">
-                      <option value="selected">selected</option>
-                      <option value="alternate">alternate</option>
-                      <option value="withdrawn">withdrawn</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="row">
-                  <label>Events <input name="events" /></label>
-                  <label>T-shirt <input name="t_shirt_size" /></label>
-                  <label>Dietary <input name="dietary_preference" /></label>
-                </div>
-                <div class="actions-row">
-                  <button type="submit">Add player</button>
-                  <button type="button" class="cancel">Clear</button>
-                  <span class="msg" id="roster-msg"></span>
-                </div>
-              </form>
-              <table id="roster-table" class="list-table">
-                <thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-
-            <!-- Officials (assignments) mapping -->
-            <div class="subcard">
-              <h4>Officials (assignments)</h4>
-              <form id="asg-form" autocomplete="off" class="inline-form">
-                <div class="row">
-                  <label>Official <select name="official_id" id="asg-official" required></select></label>
-                  <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
-                  <label>Room block <select name="room_block_id" id="asg-room-block"></select></label>
-                </div>
-                <div class="actions-row">
-                  <button type="submit">Add official</button>
-                  <button type="button" class="cancel">Clear</button>
-                  <span class="msg" id="asg-msg"></span>
-                </div>
-              </form>
-              <div id="asg-list"></div>
-            </div>
-          </div>
         </div>
       </div>
     </section>
 
-    <!-- ===== Sites ===== -->
+    <!-- Sites -->
     <section class="panel" id="panel-sites">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter sites…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter sites…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="site-form" autocomplete="off">
-            <div class="row">
-              <label>Code <input name="code" placeholder="JDS" /></label>
-              <label>Name <input name="name" required /></label>
-            </div>
-            <div class="row">
-              <label>Street <input name="street" /></label>
-              <label>City <input name="city" /></label>
-            </div>
-            <div class="row">
-              <label>State <input name="state" maxlength="2" /></label>
-              <label>Zip <input name="zip" /></label>
-            </div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="site-msg"></span>
-            </div>
+            <div class="row"><label>Code <input name="code" /></label><label>Name <input name="name" required /></label></div>
+            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
+            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="site-msg"></span></div>
           </form>
         </div>
       </div>
     </section>
 
-    <!-- ===== Officials ===== -->
+    <!-- Officials -->
     <section class="panel" id="panel-officials">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter officials…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="official-form" autocomplete="off">
-            <div class="row">
-              <label>First name <input name="first_name" required /></label>
-              <label>Last name <input name="last_name" required /></label>
-            </div>
-            <div class="row">
-              <label>Street <input name="street" /></label>
-              <label>City <input name="city" /></label>
-            </div>
-            <div class="row">
-              <label>State <input name="state" maxlength="2" /></label>
-              <label>Zip <input name="zip" /></label>
-            </div>
-            <div class="row">
-              <label>Phone <input name="phone" /></label>
-              <label>Email <input name="email" type="email" /></label>
-            </div>
-            <div class="row">
-              <label>Dietary restrictions <input name="dietary_restrictions" /></label>
-            </div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="official-msg"></span>
-            </div>
+            <div class="row"><label>First name <input name="first_name" required /></label><label>Last name <input name="last_name" required /></label></div>
+            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
+            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+            <div class="row"><label>Phone <input name="phone" /></label><label>Email <input name="email" type="email" /></label></div>
+            <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="official-msg"></span></div>
           </form>
+          <div id="official-certs" hidden>
+            <h4>Certifications</h4>
+            <div id="cert-chips" class="days"></div>
+            <div class="cert-add">
+              <select id="cert-type"><option value="roving_official">Roving official</option><option value="chair_umpire">Chair umpire</option><option value="tournament_referee">Tournament referee</option><option value="deputy_referee">Deputy referee</option><option value="referee_in_training">Referee in training</option></select>
+              <button type="button" id="cert-add-btn" class="btn-link">+ add</button>
+              <span class="msg" id="cert-msg"></span>
+            </div>
+          </div>
+          <div id="official-account" hidden>
+            <h4>Login</h4>
+            <div class="cert-add">
+              <input id="acct-user" placeholder="username" />
+              <input id="acct-pass" type="password" placeholder="password" />
+              <button type="button" id="acct-save" class="btn-link">Set login</button>
+              <span class="msg" id="acct-msg"></span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ===== Players ===== -->
+    <!-- Players -->
     <section class="panel" id="panel-players">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter players…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="player-form" autocomplete="off">
-            <div class="row"><label>USTA # <input name="usta_number" required /></label></div>
-            <div class="row">
-              <label>First name <input name="first_name" /></label>
-              <label>Last name <input name="last_name" /></label>
-            </div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="player-msg"></span>
-            </div>
+            <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" /></label></div>
+            <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="player-msg"></span></div>
           </form>
+          <div id="player-history" hidden>
+            <h4>Name history</h4>
+            <table class="list-table"><thead><tr><th>When</th><th>Name</th><th>USTA #</th><th>Change</th></tr></thead><tbody></tbody></table>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- ===== Rates ===== -->
+    <!-- Rates -->
     <section class="panel" id="panel-rates">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter rates…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter rates…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>Cert</th><th>Rate/day</th><th>Effective</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="rate-form" autocomplete="off">
-            <div class="row">
-              <label>Certification
-                <select name="cert_type"><option value="roving">roving</option><option value="chair">chair</option><option value="referee">referee</option></select>
-              </label>
-              <label>Rate per day ($) <input type="number" name="rate_per_day" min="0" step="0.01" required /></label>
-            </div>
+            <div class="row"><label>Certification <select name="cert_type"><option value="roving_official">Roving official</option><option value="chair_umpire">Chair umpire</option><option value="tournament_referee">Tournament referee</option><option value="deputy_referee">Deputy referee</option><option value="referee_in_training">Referee in training</option></select></label><label>Rate per day ($) <input type="number" name="rate_per_day" min="0" step="0.01" required /></label></div>
             <div class="row"><label>Effective from <input type="date" name="effective_from" /></label></div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="rate-msg"></span>
-            </div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="rate-msg"></span></div>
           </form>
         </div>
       </div>
     </section>
 
-    <!-- ===== Hotels (properties) ===== -->
+    <!-- Hotels -->
     <section class="panel" id="panel-hotels">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter hotels…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter hotels…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="hotel-form" autocomplete="off">
-            <div class="row">
-              <label>Name <input name="name" required /></label>
-              <label>Website <input name="website" /></label>
-            </div>
-            <div class="row">
-              <label>Street <input name="street" /></label>
-              <label>City <input name="city" /></label>
-            </div>
-            <div class="row">
-              <label>State <input name="state" maxlength="2" /></label>
-              <label>Zip <input name="zip" /></label>
-            </div>
+            <div class="row"><label>Name <input name="name" required /></label><label>Website <input name="website" /></label></div>
+            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
+            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
             <div class="row"><label>Phone <input name="phone" /></label></div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="hotel-msg"></span>
-            </div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="hotel-msg"></span></div>
           </form>
         </div>
       </div>
     </section>
 
-    <!-- ===== Room blocks ===== -->
-    <section class="panel" id="panel-room-blocks">
-      <div class="master-detail">
-        <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter room blocks…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
-          <table class="list-table"><thead><tr><th>ID</th><th>Hotel</th><th>Rooms</th><th>Tournament</th><th></th></tr></thead><tbody></tbody></table>
-        </div>
-        <div class="detail-pane">
-          <h3 class="detail-title"></h3>
-          <form id="room-block-form" autocomplete="off">
-            <div class="row">
-              <label>Hotel <select name="hotel_id" id="rb-hotel" required></select></label>
-              <label>Tournament <select name="tournament_id" id="rb-tournament"></select></label>
-            </div>
-            <div class="row">
-              <label>Rooms <input type="number" name="room_count" min="0" step="1" value="0" /></label>
-              <label>Confirmation # <input name="confirmation_number" /></label>
-            </div>
-            <div class="row">
-              <label>Check-in <input type="date" name="check_in" /></label>
-              <label>Check-out <input type="date" name="check_out" /></label>
-            </div>
-            <div class="row"><label>Cancellation info <input name="cancellation_info" /></label></div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="room-block-msg"></span>
-            </div>
-          </form>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== Distances ===== -->
+    <!-- Distances -->
     <section class="panel" id="panel-distances">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter distances…" />
-            <button type="button" class="new-btn">+ New</button>
-          </div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" /><button type="button" class="new-btn">+ New</button></div>
           <table class="list-table"><thead><tr><th>ID</th><th>Official</th><th>Site</th><th>1-way mi</th><th></th></tr></thead><tbody></tbody></table>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="distance-form" autocomplete="off">
-            <div class="row">
-              <label>Official <select name="official_id" id="dist-official" required></select></label>
-              <label>Site <select name="site_id" id="dist-site" required></select></label>
-            </div>
-            <div class="row">
-              <label>One-way miles <input type="number" name="one_way_miles" min="0" step="0.1" required /></label>
-              <label>Source
-                <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select>
-              </label>
-            </div>
-            <div class="actions-row">
-              <button type="submit">Save</button>
-              <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <span class="msg" id="distance-msg"></span>
-            </div>
+            <div class="row"><label>Official <select name="official_id" id="dist-official" required></select></label><label>Site <select name="site_id" id="dist-site" required></select></label></div>
+            <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="distance-msg"></span></div>
           </form>
         </div>
       </div>
+    </section>
+
+    <!-- T-shirts (Setup: cumulative, cross-tournament) -->
+    <section class="panel" id="panel-tshirts">
+      <div class="card">
+        <h3>T-shirt sizes — cumulative (all tournaments)</h3>
+        <p class="muted">Derived from each tournament's roster, so a player's most recent size is known even when they're a late entry next time.</p>
+        <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" style="max-width:320px" />
+        <table id="tshirt-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ TOURNAMENT WORKSPACE ============ -->
+
+    <!-- T: Sites (multiselect grid) -->
+    <section class="panel tpanel" id="panel-t-sites">
+      <div class="needs-active-note">Select a tournament in the bar above to manage its sites.</div>
+      <div class="t-content card">
+        <h3>Sites used by <span class="t-name"></span></h3>
+        <p class="muted">Toggle which sites this tournament uses. Filter the grid to find a site.</p>
+        <input class="filter" id="t-sites-filter" type="search" placeholder="Filter sites…" />
+        <table class="list-table" id="t-sites-table"><thead><tr><th></th><th>Code</th><th>Name</th><th>City</th></tr></thead><tbody></tbody></table>
+        <span class="msg" id="t-sites-msg"></span>
+      </div>
+    </section>
+
+    <!-- T: Roster -->
+    <section class="panel tpanel" id="panel-t-roster">
+      <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
+      <div class="t-content card">
+        <h3>Roster — <span class="t-name"></span></h3>
+        <div class="import-row">
+          <label>Import roster <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
+          <button type="button" id="roster-import">Import CSV/XLSX</button>
+          <span class="msg" id="roster-import-msg"></span>
+        </div>
+        <form id="roster-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Player <select name="player_id" id="roster-player" required></select></label>
+            <label>Division <input name="age_division" /></label>
+            <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
+          </div>
+          <div class="row">
+            <label>Events <input name="events" /></label>
+            <label>T-shirt <input name="t_shirt_size" /></label>
+            <label>Dietary <input name="dietary_preference" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add player</button><button type="button" class="cancel">Clear</button><span class="msg" id="roster-msg"></span></div>
+        </form>
+        <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" />
+        <table id="roster-table" class="list-table"><thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: Assignments -->
+    <section class="panel tpanel" id="panel-t-assignments">
+      <div class="needs-active-note">Select a tournament in the bar above to manage official assignments.</div>
+      <div class="t-content card">
+        <h3>Official assignments — <span class="t-name"></span></h3>
+        <form id="asg-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Official <select name="official_id" id="asg-official" required></select></label>
+            <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
+            <label>Hotel assignment <select name="room_block_id" id="asg-room-block"></select></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add official</button><button type="button" class="cancel">Clear</button><span class="msg" id="asg-msg"></span></div>
+        </form>
+        <div id="asg-list"></div>
+      </div>
+    </section>
+
+    <!-- T: Room blocks -->
+    <section class="panel tpanel" id="panel-t-roomblocks">
+      <div class="needs-active-note">Select a tournament in the bar above to manage its room blocks.</div>
+      <div class="t-content card">
+        <h3>Room blocks — <span class="t-name"></span></h3>
+        <form id="trb-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Hotel <select name="hotel_id" id="trb-hotel" required></select></label>
+            <label>Block type
+              <select name="kind"><option value="player">Player rate</option><option value="official">Officials comp</option></select>
+            </label>
+            <label>Rooms <input type="number" name="room_count" min="0" step="1" value="0" /></label>
+          </div>
+          <div class="row">
+            <label>Confirmation # <input name="confirmation_number" /></label>
+          </div>
+          <div class="row">
+            <label>Check-in <input type="date" name="check_in" /></label>
+            <label>Check-out <input type="date" name="check_out" /></label>
+            <label>Cancellation <input name="cancellation_info" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add block</button><button type="button" class="cancel">Clear</button><span class="msg" id="trb-msg"></span></div>
+        </form>
+        <table id="trb-table" class="list-table"><thead><tr><th>ID</th><th>Hotel</th><th>Type</th><th>Rooms</th><th>Left</th><th>Check-in</th><th>Check-out</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: Availability -->
+    <section class="panel tpanel" id="panel-t-availability">
+      <div class="needs-active-note">Select a tournament in the bar above to manage availability.</div>
+      <div class="t-content card">
+        <h3>Availability — <span class="t-name"></span></h3>
+        <div class="row">
+          <label>Official <select id="avail-official"></select></label>
+          <label>Hotel needed <input type="checkbox" id="avail-hotel" /></label>
+        </div>
+        <div class="avail-certs-wrap"><span class="muted">Certifications held:</span> <span id="avail-certs" class="days"></span></div>
+        <p class="muted">Tick the dates this official is available, then save.</p>
+        <div id="avail-dates" class="days"></div>
+        <div class="actions-row">
+          <button type="button" id="avail-save">Save availability</button>
+          <span class="msg" id="avail-msg"></span>
+        </div>
+        <h4>All availability</h4>
+        <table id="avail-table" class="list-table"><thead><tr><th>Official</th><th>Available dates</th><th>Hotel</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: Review inbox -->
+    <section class="panel tpanel" id="panel-t-inbox">
+      <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
+      <div class="t-content card">
+        <h3>Review inbox — <span class="t-name"></span></h3>
+        <p class="muted">Parent/player email is human-reviewed (no auto-parsing). Add a message, classify it, then file it into a list.</p>
+        <form id="email-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>From <input name="from_address" /></label>
+            <label>Subject <input name="subject" /></label>
+          </div>
+          <div class="row">
+            <label style="flex:1 1 100%">Body <textarea name="body" rows="2"></textarea></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add email</button><span class="msg" id="email-msg"></span></div>
+        </form>
+        <table id="inbox-table" class="list-table">
+          <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>Classification</th><th>Status</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Late entries -->
+    <section class="panel tpanel" id="panel-t-late">
+      <div class="needs-active-note">Select a tournament in the bar above to manage late entries.</div>
+      <div class="t-content card">
+        <h3>Late entries — <span class="t-name"></span></h3>
+        <form id="late-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Age division <input name="age_division" /></label>
+            <label>Events <input name="events" /></label>
+          </div>
+          <div class="row">
+            <label>Request date <input type="date" name="request_date" /></label>
+            <label>Request time <input name="request_time" placeholder="e.g. 2:30 PM" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add late entry</button><button type="button" class="cancel">Clear</button><span class="msg" id="late-msg"></span></div>
+        </form>
+        <table id="late-table" class="list-table">
+          <thead><tr><th>Date</th><th>Time</th><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Withdrawals -->
+    <section class="panel tpanel" id="panel-t-withdrawals">
+      <div class="needs-active-note">Select a tournament in the bar above to manage withdrawals.</div>
+      <div class="t-content card">
+        <h3>Withdrawals — <span class="t-name"></span></h3>
+        <p class="muted">A reason is required unless the player was an alternate. Recording a withdrawal sets their roster status to <em>withdrawn</em>.</p>
+        <form id="withdrawal-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Events <input name="events" /></label>
+            <label>Reason <input name="reason" /></label>
+            <label>Notes <input name="notes" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add withdrawal</button><button type="button" class="cancel">Clear</button><span class="msg" id="withdrawal-msg"></span></div>
+        </form>
+        <table id="withdrawal-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th>Alt?</th><th>Reason</th><th>Notes</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Scheduling avoidances (adults) -->
+    <section class="panel tpanel" id="panel-t-sched">
+      <div class="needs-active-note">Select a tournament in the bar above to manage scheduling avoidances.</div>
+      <div class="t-content card">
+        <h3>Scheduling avoidances — <span class="t-name"></span></h3>
+        <p class="muted">Days/times a player cannot play (adult tournaments).</p>
+        <form id="sched-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Avoid day <input name="avoid_day" placeholder="e.g. Sat" /></label>
+            <label>Avoid time <input name="avoid_time_range" placeholder="e.g. before 10am" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="sched-msg"></span></div>
+        </form>
+        <table id="sched-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Avoid day</th><th>Avoid time</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Division flexibility (adults) -->
+    <section class="panel tpanel" id="panel-t-divflex">
+      <div class="needs-active-note">Select a tournament in the bar above to manage division flexibility.</div>
+      <div class="t-content card">
+        <h3>Division flexibility — <span class="t-name"></span></h3>
+        <p class="muted">Players willing to play other divisions if theirs is undersubscribed.</p>
+        <form id="divflex-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Home division <input name="home_division" /></label>
+            <label>Willing divisions <input name="willing_divisions" placeholder="comma-separated" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="divflex-msg"></span></div>
+        </form>
+        <table id="divflex-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Home</th><th>Willing</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Player hotels -->
+    <section class="panel tpanel" id="panel-t-photels">
+      <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
+      <div class="t-content card">
+        <h3>Player hotels — <span class="t-name"></span></h3>
+        <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
+        <form id="photel-form" autocomplete="off" class="inline-form">
+          <input type="hidden" name="source_email_id" />
+          <div class="row">
+            <label>USTA # <input name="usta_number" required /></label>
+            <label>First name <input name="first_name" /></label>
+            <label>Last name <input name="last_name" /></label>
+          </div>
+          <div class="row">
+            <label>Hotel <input name="hotel_name" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="photel-msg"></span></div>
+        </form>
+        <table id="photel-table" class="list-table">
+          <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h4>CVB hotel totals (all tournaments)</h4>
+        <table id="cvb-table" class="list-table">
+          <thead><tr><th>Hotel</th><th>Stays</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- T: Reports -->
+    <section class="panel tpanel" id="panel-t-reports">
+      <div class="needs-active-note">Select a tournament in the bar above to view its reports.</div>
+      <div class="t-content card" id="report-card">
+        <div class="report-toolbar no-print">
+          <h3 style="margin:0;flex:1">Officials confirmation &amp; pay — <span class="t-name"></span></h3>
+          <button type="button" id="report-print">Print</button>
+          <button type="button" id="report-csv">Export CSV</button>
+        </div>
+        <div id="report-meta" class="muted"></div>
+        <table id="report-table" class="list-table">
+          <thead><tr>
+            <th>Official</th><th>Days (role)</th><th>Site</th><th>Hotel</th>
+            <th>Dietary</th><th>Pay</th><th>Mileage</th><th>Total</th><th>Flags</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot><tr id="report-totals"></tr></tfoot>
+        </table>
+
+        <h4>Officials needing accommodation</h4>
+        <table id="lodging-table" class="list-table">
+          <thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <main id="official-app" hidden>
+    <section class="card">
+      <h2>My profile</h2>
+      <form id="me-form" autocomplete="off">
+        <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
+        <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
+        <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+        <div class="row"><label>Phone <input name="phone" /></label><label>Email <input name="email" type="email" /></label></div>
+        <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
+        <div class="actions-row"><button type="submit">Save profile</button><span class="msg" id="me-msg"></span></div>
+      </form>
+    </section>
+    <section class="card" style="margin-top:1.25rem">
+      <h2>My availability</h2>
+      <div class="row">
+        <label>Tournament <select id="me-tournament"></select></label>
+        <label>Hotel needed <input type="checkbox" id="me-hotel" /></label>
+      </div>
+      <p class="muted">Tick the dates you are available, then save.</p>
+      <div id="me-dates" class="days"></div>
+      <div class="actions-row"><button type="button" id="me-avail-save">Save availability</button><span class="msg" id="me-avail-msg"></span></div>
     </section>
   </main>
 

@@ -5,37 +5,48 @@ Serves the JSON API under /api and the pure HTML/CSS frontend at /.
 """
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .routers import (
+    adult_lists,
     assignments,
+    auth,
+    availability,
+    certifications,
     distances,
+    emails,
     health,
     hotels,
+    late_entries,
+    me,
     officials,
+    player_hotels,
     players,
     rates,
+    reports,
     room_blocks,
     roster,
     sites,
     tournaments,
+    withdrawals,
 )
+from .security import require_admin
 
-app = FastAPI(title="CourtOps Tennis API", version="0.3.0")
+app = FastAPI(title="CourtOps Tennis API", version="0.4.0")
 
-# API routers first so they take precedence over the catch-all static mount.
+# Open endpoints: health + auth (login) + the official self-service surface
+# (which checks the session itself).
 app.include_router(health.router)
-app.include_router(sites.router)
-app.include_router(tournaments.router)
-app.include_router(officials.router)
-app.include_router(players.router)
-app.include_router(rates.router)
-app.include_router(hotels.router)
-app.include_router(room_blocks.router)
-app.include_router(distances.router)
-app.include_router(roster.router)
-app.include_router(assignments.router)
+app.include_router(auth.router)
+app.include_router(me.router)
+
+# Admin-only: every TD/back-office router requires an admin session.
+_admin = [Depends(require_admin)]
+for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
+          distances, roster, assignments, reports, certifications, availability,
+          emails, late_entries, withdrawals, adult_lists, player_hotels):
+    app.include_router(r.router, dependencies=_admin)
 
 # Serve the pure HTML/CSS frontend (repo-root/frontend) at "/".
 _FRONTEND = Path(__file__).resolve().parents[2] / "frontend"

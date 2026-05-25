@@ -1,7 +1,9 @@
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import OfficialCreate, OfficialOut
+from ..models import AccountCreate, OfficialCreate, OfficialOut
+from ..security import hash_pw
 
 router = APIRouter(prefix="/api/officials", tags=["officials"])
 
@@ -76,3 +78,28 @@ def delete_official(official_id: int, conn=Depends(db_dep)):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="official not found")
     return Response(status_code=204)
+
+
+@router.put("/{official_id}/account", status_code=200)
+def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_dep)):
+    """Admin: create or reset the login for an official (role=official)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM official WHERE id = %s", (official_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="official not found")
+        try:
+            cur.execute(
+                """
+                INSERT INTO user_account (username, password_hash, role, official_id)
+                VALUES (%s, %s, 'official', %s)
+                ON CONFLICT (username) DO UPDATE
+                    SET password_hash = EXCLUDED.password_hash,
+                        role = 'official', official_id = EXCLUDED.official_id
+                RETURNING id, username
+                """,
+                (body.username, hash_pw(body.password), official_id),
+            )
+            row = cur.fetchone()
+        except psycopg.errors.UniqueViolation:
+            raise HTTPException(status_code=409, detail="username already in use")
+    return {"id": row["id"], "username": row["username"], "official_id": official_id}
