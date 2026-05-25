@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — workspace player lists** (phase 2a) — the `wirePlayerList`
+  trio (Scheduling avoidances, Division flexibility, Player hotels) now render as
+  Tabulator grids (sortable, themed, per-grid ⬇ CSV via Tabulator's native download,
+  Delete action). The static tables are swapped for a mount in place (parent card
+  untouched); grids redraw on tab-show. Add/delete/`after`-hook flows preserved.
 - **✅ Tabulator grid for the Setup lists** (phase 1) — vendored **Tabulator 6.3.1**
   locally (`frontend/vendor/`, offline) and switched the 7 Setup master-detail lists
   (`wireEntity`) from hand-built `<table>`s to a Tabulator grid: **column sorting**

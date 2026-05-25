@@ -1315,23 +1315,52 @@ onSubmit(wdForm, async (e) => {
 wdForm.querySelector(".cancel").addEventListener("click", wdReset);
 
 // Generic player-keyed Part B list (form + table + delete + file-from-email).
+// Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
+const _playerCell = (cell) => {
+  const d = cell.getData();
+  return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+};
 function wirePlayerList(cfg) {
   const form = document.getElementById(cfg.formId);
+  // Replace the static <table> with a Tabulator mount (don't wipe the parent card).
+  const tableEl = document.getElementById(cfg.tableId);
+  const panelId = tableEl.closest(".panel")?.id;  // for redraw-on-tab-show
+  const mount = document.createElement("div"); mount.className = "grid-mount";
+  tableEl.parentElement.insertBefore(mount, tableEl);
+  tableEl.remove();
+  const csv = document.createElement("button");
+  csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
+  csv.addEventListener("click", () => table.download("csv", cfg.exportName + ".csv"));
+  mount.parentElement.insertBefore(csv, mount);
+
+  const columns = cfg.columns.slice();
+  columns.push({
+    title: "", field: "_act", headerSort: false, width: 84, cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const r = cell.getData();
+      const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      del.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        if (!(await confirmDialog("Delete?"))) return;
+        try { await api(`${cfg.del}/${r.id}`, { method: "DELETE" }); load(); }
+        catch (e) { setMsg(cfg.msgId, e.message, false); }
+      });
+      wrap.append(del); return wrap;
+    },
+  });
+  let built = false, pending = null;
+  const table = new Tabulator(mount, {
+    index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
+    columnDefaults: { headerSortTristate: true, resizable: false }, columns,
+  });
+  table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
+  if (panelId) GRIDS[panelId] = table;
+
   async function load() {
     if (!active) return;
     const rows = await api(`/tournaments/${active.id}${cfg.path}`);
-    const tbody = document.querySelector(`#${cfg.tableId} tbody`);
-    tbody.innerHTML = "";
-    for (const r of rows) {
-      const nm = [r.last_name, r.first_name].filter(Boolean).join(", ");
-      const tr = document.createElement("tr");
-      tr.innerHTML = cfg.cells(r, nm) + '<td class="actions"></td>';
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-      del.addEventListener("click", async () => { if (!(await confirmDialog("Delete?"))) return; try { await api(`${cfg.del}/${r.id}`, { method: "DELETE" }); load(); } catch (e) { setMsg(cfg.msgId, e.message, false); } });
-      tr.querySelector(".actions").appendChild(del);
-      tbody.appendChild(tr);
-    }
-    if (rows.length === 0) tbody.innerHTML = `<tr><td class="empty" colspan="${cfg.cols}">${cfg.empty}</td></tr>`;
+    if (built) await table.setData(rows); else pending = rows;
     if (cfg.after) cfg.after();
   }
   function reset() { form.reset(); form.source_email_id.value = ""; }
@@ -1349,15 +1378,25 @@ function wirePlayerList(cfg) {
 }
 const schedList = wirePlayerList({
   formId: "sched-form", msgId: "sched-msg", tableId: "sched-table",
-  path: "/scheduling-avoidances", del: "/scheduling-avoidances", cols: 5,
+  path: "/scheduling-avoidances", del: "/scheduling-avoidances", exportName: "scheduling-avoidances",
   empty: "No scheduling avoidances yet.",
-  cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.avoid_day)}</td><td>${esc(r.avoid_time_range)}</td>`,
+  columns: [
+    { title: "Player", field: "last_name", formatter: _playerCell },
+    { title: "USTA #", field: "usta_number" },
+    { title: "Avoid day", field: "avoid_day" },
+    { title: "Avoid time", field: "avoid_time_range" },
+  ],
 });
 const divflexList = wirePlayerList({
   formId: "divflex-form", msgId: "divflex-msg", tableId: "divflex-table",
-  path: "/division-flex", del: "/division-flex", cols: 5,
+  path: "/division-flex", del: "/division-flex", exportName: "division-flexibility",
   empty: "No division-flexibility entries yet.",
-  cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.home_division)}</td><td>${esc(r.willing_divisions)}</td>`,
+  columns: [
+    { title: "Player", field: "last_name", formatter: _playerCell },
+    { title: "USTA #", field: "usta_number" },
+    { title: "Home", field: "home_division" },
+    { title: "Willing", field: "willing_divisions" },
+  ],
 });
 
 async function loadCvb() {
@@ -1393,9 +1432,14 @@ async function loadLodgingSummary() {
 }
 const photelList = wirePlayerList({
   formId: "photel-form", msgId: "photel-msg", tableId: "photel-table",
-  path: "/player-hotels", del: "/player-hotels", cols: 5,
+  path: "/player-hotels", del: "/player-hotels", exportName: "player-hotels",
   empty: "No player hotels reported yet.",
-  cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.hotel_name)}</td><td>${esc(r.lodging_plan)}</td>`,
+  columns: [
+    { title: "Player", field: "last_name", formatter: _playerCell },
+    { title: "USTA #", field: "usta_number" },
+    { title: "Hotel", field: "hotel_name" },
+    { title: "Lodging plan", field: "lodging_plan" },
+  ],
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
