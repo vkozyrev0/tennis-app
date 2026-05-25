@@ -44,6 +44,11 @@
       <button class="tab" data-target="panel-distances">Distances</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
     </div>
+    <div class="menu-group" data-group="data">
+      <span class="menu-label">Import / Export</span>
+      <button class="tab" data-target="panel-import">Import</button>
+      <button class="tab" data-target="panel-export">Export</button>
+    </div>
     <div class="menu-group tgroup" data-group="tournament">
       <span class="menu-label">Tournament</span>
       <button class="tab needs-active" data-target="panel-t-sites">Sites</button>
@@ -252,12 +257,36 @@
         <h3>T-shirt sizes — cumulative (all tournaments)</h3>
         <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
-        <button type="button" id="tshirt-order-csv" class="export-btn no-print">⬇ Order CSV (size → qty)</button>
         <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" style="max-width:320px" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ============ IMPORT / EXPORT ============ -->
+    <section class="panel" id="panel-import">
+      <div class="card">
+        <h3>Import</h3>
+        <p class="muted">Bulk-load data from a spreadsheet. Roster import targets the
+          <strong>active tournament</strong> (choose one in the bar above).</p>
+        <div class="import-row">
+          <label>Roster (CSV/XLSX) <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
+          <button type="button" id="roster-import">Import roster</button>
+          <button type="button" id="roster-template" class="ghost" title="Download an empty CSV with the importer's columns">⬇ Template</button>
+          <span class="msg" id="roster-import-msg"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-export">
+      <div class="card">
+        <h3>Export</h3>
+        <p class="muted">Download any list as CSV (opens in Excel). Per-tournament
+          exports use the <strong>active tournament</strong>; "All tournaments" exports
+          are cumulative. Blank <em>templates</em> are for filling in / re-importing.</p>
+        <div id="export-groups"></div>
       </div>
     </section>
 
@@ -279,15 +308,7 @@
     <section class="panel tpanel" id="panel-t-roster">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
-        <h3>Roster — <span class="t-name"></span></h3>
-        <div class="import-row">
-          <label>Import roster <input type="file" id="roster-file" accept=".csv,.xlsx,.xlsm" /></label>
-          <button type="button" id="roster-import">Import</button>
-          <button type="button" id="roster-template" class="ghost" title="Download an empty CSV with the importer's columns">⬇ Template</button>
-          <button type="button" id="roster-csv" class="ghost" title="Export the roster as CSV">⬇ CSV</button>
-          <button type="button" id="roster-signin-csv" class="ghost" title="Download a sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in sheet</button>
-          <span class="msg" id="roster-import-msg"></span>
-        </div>
+        <h3>Roster — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(import &amp; export on the Import / Export menu)</span></h3>
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
@@ -635,8 +656,7 @@
         <div class="report-toolbar no-print">
           <h3 style="margin:0;flex:1"><span class="t-name"></span> — Staffing Plan</h3>
           <button type="button" id="report-print">Print</button>
-          <button type="button" id="report-csv">⬇ CSV</button>
-          <button type="button" id="report-template" title="Download an empty CSV with the report's column headers">⬇ Template</button>
+          <span class="muted" style="font-size:0.78rem">CSV on the Import / Export menu</span>
         </div>
         <div id="report-meta" class="muted"></div>
         <table id="report-table" class="list-table">

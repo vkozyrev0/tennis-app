@@ -710,14 +710,12 @@ onSubmit(rosterForm, async () => {
 rosterForm.querySelector(".cancel").addEventListener("click", rosterShowNew);
 document.getElementById("roster-new").addEventListener("click", rosterShowNew);
 document.getElementById("roster-filter").addEventListener("input", renderRoster);
-document.getElementById("roster-csv").addEventListener("click", () =>
-  exportTable(document.getElementById("roster-table"), "roster"));
 document.getElementById("roster-template").addEventListener("click", () =>
   _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template"));
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
 // joining the loaded roster with this tournament's player-hotel rows.
-document.getElementById("roster-signin-csv").addEventListener("click", async () => {
-  if (!active) return;
+async function rosterSignInExport() {
+  if (!active) { toast("Select a tournament first", false); return; }
   let hotelByPlayer = {};
   try {
     for (const r of await api(`/tournaments/${active.id}/player-hotels`)) {
@@ -737,7 +735,7 @@ document.getElementById("roster-signin-csv").addEventListener("click", async () 
     ]);
   }
   _csvDownload(rows, `sign-in-sheet-${(active.name || "").replace(/\s+/g, "_")}`);
-});
+}
 document.getElementById("roster-import").addEventListener("click", async () => {
   if (!active) return;
   const f = document.getElementById("roster-file").files[0];
@@ -1331,9 +1329,11 @@ function renderTshirtSummary() {
       + keys.map((c) => `<span class="badge badge-info">${esc(label(c))}: ${counts[c]}</span>`).join(" ")
     : "";
 }
-document.getElementById("tshirt-order-csv").addEventListener("click", () => {
+async function tshirtOrderExport() {
+  await loadTshirts();  // ensure the cumulative data + order rows are computed
   if (tshirtOrderRows.length > 1) _csvDownload(tshirtOrderRows, "tshirt-order");
-});
+  else toast("No t-shirt sizes recorded yet", false);
+}
 function renderTshirts() {
   renderTshirtSummary();
   const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
@@ -1550,14 +1550,16 @@ function _reportMatrix(includeData) {
   return rows;
 }
 document.getElementById("report-print").addEventListener("click", () => window.print());
-document.getElementById("report-template").addEventListener("click", () => {
-  if (!reportData) return;  // reports tab loads reportData on open
-  _csvDownload(_reportMatrix(false), "staffing-plan-template");
-});
-document.getElementById("report-csv").addEventListener("click", () => {
-  if (!reportData) return;
-  _csvDownload(_reportMatrix(true), `staffing-plan-${active.name.replace(/\s+/g, "_")}`);
-});
+async function reportCsvExport() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  await loadReports();
+  if (reportData) _csvDownload(_reportMatrix(true), `staffing-plan-${(active.name || "").replace(/\s+/g, "_")}`);
+}
+async function reportTemplateExport() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  await loadReports();
+  if (reportData) _csvDownload(_reportMatrix(false), "staffing-plan-template");
+}
 
 // =================== Setup entity configs ===================
 const workOnBtn = document.getElementById("work-on-btn");
@@ -1727,33 +1729,62 @@ function templateTable(table, name) {
   const headers = TEMPLATE_HEADERS[table.id] || _visibleHeaders(table).headers;
   _csvDownload([headers], name + "-template");
 }
-const EXPORTABLE = {
-  "late-table": "late-entries", "withdrawal-table": "withdrawals",
-  "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
-  "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
-  "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
-  "cvb-table": "cvb-hotel-totals", "hotel-summary-table": "hotel-summary",
-  "lodging-summary-table": "lodging-summary", "tshirt-table": "tshirts", "inbox-table": "inbox",
-};
-// Export-only here: derived/aggregate lists, plus roster (its template lives in
-// the import row next to the upload control).
-const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "hotel-summary-table",
-  "lodging-summary-table", "inbox-table", "tshirt-table"]);
-for (const [id, name] of Object.entries(EXPORTABLE)) {
-  const table = document.getElementById(id);
-  if (!table) continue;
-  if (!NO_TEMPLATE.has(id)) {
-    const tpl = document.createElement("button");
-    tpl.type = "button"; tpl.className = "export-btn no-print"; tpl.textContent = "⬇ Template";
-    tpl.title = "Download an empty CSV with just the headers";
-    tpl.addEventListener("click", () => templateTable(table, name));
-    table.parentNode.insertBefore(tpl, table);
-  }
-  const btn = document.createElement("button");
-  btn.type = "button"; btn.className = "export-btn no-print"; btn.textContent = "⬇ CSV";
-  btn.addEventListener("click", () => exportTable(table, name));
-  table.parentNode.insertBefore(btn, table);
+// All exports live on the Export page (Import / Export menu). Each table is kept
+// populated by its loader (on active-tournament set / tab open), so exportTable can
+// read it from here even when its tab isn't visible.
+function _exTable(id, name) {
+  if (!active) { toast("Select a tournament first", false); return; }
+  exportTable(document.getElementById(id), name);
 }
+function _tmplTable(id, name) { templateTable(document.getElementById(id), name); }
+const EXPORTS = [
+  ["This tournament (uses the active tournament)", [
+    ["Roster", () => _exTable("roster-table", "roster")],
+    ["Sign-in sheet", rosterSignInExport],
+    ["Officials report (staffing plan)", reportCsvExport],
+    ["T-shirt order (qty by size)", tshirtOrderExport],
+    ["Hotel summary", () => _exTable("hotel-summary-table", "hotel-summary")],
+    ["Lodging summary", () => _exTable("lodging-summary-table", "lodging-summary")],
+    ["Late entries", () => _exTable("late-table", "late-entries")],
+    ["Withdrawals", () => _exTable("withdrawal-table", "withdrawals")],
+    ["Scheduling avoidances", () => _exTable("sched-table", "scheduling-avoidances")],
+    ["Division flexibility", () => _exTable("divflex-table", "division-flexibility")],
+    ["Pairing avoidances", () => _exTable("pairing-table", "pairing-avoidances")],
+    ["Doubles requests", () => _exTable("doubles-req-table", "doubles-requests")],
+    ["Doubles pairs", () => _exTable("doubles-pair-table", "doubles-pairs")],
+    ["Player hotels", () => _exTable("photel-table", "player-hotels")],
+    ["Review inbox", () => _exTable("inbox-table", "inbox")],
+  ]],
+  ["All tournaments (cumulative)", [
+    ["T-shirts (all)", async () => { await loadTshirts(); exportTable(document.getElementById("tshirt-table"), "tshirts"); }],
+    ["CVB hotel totals", async () => { await loadCvb(); exportTable(document.getElementById("cvb-table"), "cvb-hotel-totals"); }],
+  ]],
+  ["Blank templates (fill in / re-import)", [
+    ["Roster", () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template")],
+    ["Officials report", reportTemplateExport],
+    ["Late entries", () => _tmplTable("late-table", "late-entries")],
+    ["Withdrawals", () => _tmplTable("withdrawal-table", "withdrawals")],
+    ["Scheduling avoidances", () => _tmplTable("sched-table", "scheduling-avoidances")],
+    ["Division flexibility", () => _tmplTable("divflex-table", "division-flexibility")],
+    ["Pairing avoidances", () => _tmplTable("pairing-table", "pairing-avoidances")],
+    ["Player hotels", () => _tmplTable("photel-table", "player-hotels")],
+  ]],
+];
+(function buildExportPage() {
+  const root = document.getElementById("export-groups");
+  if (!root) return;
+  for (const [group, items] of EXPORTS) {
+    const h = document.createElement("h4"); h.textContent = group; root.appendChild(h);
+    const grid = document.createElement("div"); grid.className = "export-grid";
+    for (const [label, fn] of items) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "export-btn"; b.textContent = "⬇ " + label;
+      b.addEventListener("click", fn);
+      grid.appendChild(b);
+    }
+    root.appendChild(grid);
+  }
+})();
 
 // =================== Collapse workspace add-forms (list stays primary) ===================
 // Wrap each workspace add-form in a <details> at runtime (no HTML changes).
