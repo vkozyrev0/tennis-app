@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ T-shirt summary merges mixed size formats** — the order summary now keys each
+  size by a canonical code (`shirtCode()` maps both legacy codes like `YM` and the
+  dropdown's full names like `Youth Medium` to the same `YM`), so historical/imported
+  data aggregates into one line per size instead of duplicate rows. Displayed as the
+  full label, ordered YS→YM→YL→AS→AM→AL→AXL; unknown values pass through.
 - **✅ T-shirt & hotel summaries — selected players only** (per the TD's workbook).
   Both the **t-shirt** order summary and the **hotel** summary now **exclude
   withdrawals and alternates** (`selection_status = 'selected'`).

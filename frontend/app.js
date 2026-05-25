@@ -1198,25 +1198,46 @@ const photelList = wirePlayerList({
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
 let tshirtRows = [];
-const _SHIRT_ORDER = ["Youth Small", "Youth Medium", "Youth Large",
-  "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"];
-function _shirtRank(s) { const i = _SHIRT_ORDER.indexOf(s); return i < 0 ? 999 : i; }
+// Canonical size codes smallest→largest, and code→label for display.
+const _SHIRT_CODES = ["YS", "YM", "YL", "AS", "AM", "AL", "AXL"];
+const _SHIRT_LABEL = {
+  YS: "Youth Small", YM: "Youth Medium", YL: "Youth Large",
+  AS: "Adult Small", AM: "Adult Medium", AL: "Adult Large", AXL: "Adult Extra Large",
+};
+const _SIZE_TOKEN = { s: "S", sm: "S", small: "S", m: "M", med: "M", medium: "M",
+  l: "L", lg: "L", large: "L", xl: "XL", xlarge: "XL", extralarge: "XL", xxl: "XL", xxxl: "XL" };
+// Map any stored size (full name OR legacy code like "YM") to a canonical code,
+// so mixed historical data aggregates into one line; unknowns return as-is.
+function shirtCode(v) {
+  if (!v) return null;
+  const s = String(v).toLowerCase().replace(/[^a-z]/g, "");
+  let group, rest;
+  if (/^(youth|yth|junior|jr)/.test(s) || (s[0] === "y" && s.length <= 4)) {
+    group = "Y"; rest = s.replace(/^(youth|yth|junior|jr|y)/, "");
+  } else if (/^adult/.test(s) || (s[0] === "a" && s.length <= 4)) {
+    group = "A"; rest = s.replace(/^(adult|a)/, "");
+  } else { group = "A"; rest = s; }
+  const sz = _SIZE_TOKEN[rest];
+  const code = sz && group + sz;
+  return _SHIRT_CODES.includes(code) ? code : String(v).trim();
+}
+function _shirtRank(code) { const i = _SHIRT_CODES.indexOf(code); return i < 0 ? 999 : i; }
 let tshirtOrderRows = [];  // [["Size","Qty"], ...] smallest→largest, for the vendor CSV
 function renderTshirtSummary() {
   // Order quantities = the latest size per player (rows arrive newest-first per
-  // player), counted by size — what you'd actually hand to the supplier. Backend
-  // already excludes withdrawals/alternates.
+  // player), counted by canonical size. Backend excludes withdrawals/alternates.
   const latest = {};
   for (const r of tshirtRows) if (!(r.player_id in latest)) latest[r.player_id] = r.t_shirt_size;
   const counts = {};
-  for (const sz of Object.values(latest)) counts[sz] = (counts[sz] || 0) + 1;
-  const sizes = Object.keys(counts).sort((a, b) => _shirtRank(a) - _shirtRank(b) || a.localeCompare(b));
+  for (const sz of Object.values(latest)) { const c = shirtCode(sz); counts[c] = (counts[c] || 0) + 1; }
+  const keys = Object.keys(counts).sort((a, b) => _shirtRank(a) - _shirtRank(b) || a.localeCompare(b));
   const players = Object.keys(latest).length;
-  tshirtOrderRows = [["Size", "Quantity"], ...sizes.map((s) => [s, counts[s]]), ["Total", players]];
+  const label = (c) => _SHIRT_LABEL[c] || c;
+  tshirtOrderRows = [["Size", "Quantity"], ...keys.map((c) => [label(c), counts[c]]), ["Total", players]];
   const el = document.getElementById("tshirt-summary");
-  el.innerHTML = sizes.length
+  el.innerHTML = keys.length
     ? `<span class="muted">Order quantities — latest size per player (${players} player${players === 1 ? "" : "s"}):</span> `
-      + sizes.map((s) => `<span class="badge badge-info">${esc(s)}: ${counts[s]}</span>`).join(" ")
+      + keys.map((c) => `<span class="badge badge-info">${esc(label(c))}: ${counts[c]}</span>`).join(" ")
     : "";
 }
 document.getElementById("tshirt-order-csv").addEventListener("click", () => {
