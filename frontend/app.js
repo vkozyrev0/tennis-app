@@ -1187,8 +1187,9 @@ const photelList = wirePlayerList({
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
 let tshirtRows = [];
-const _SHIRT_ORDER = ["YXS", "YS", "YM", "YL", "YXL", "AXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "XXXL"];
-function _shirtRank(s) { const i = _SHIRT_ORDER.indexOf((s || "").toUpperCase()); return i < 0 ? 999 : i; }
+const _SHIRT_ORDER = ["Youth Small", "Youth Medium", "Youth Large",
+  "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"];
+function _shirtRank(s) { const i = _SHIRT_ORDER.indexOf(s); return i < 0 ? 999 : i; }
 function renderTshirtSummary() {
   // Order quantities = the latest size per player (rows arrive newest-first per
   // player), counted by size — what you'd actually hand to the supplier.

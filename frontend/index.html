@@ -292,7 +292,18 @@
           </div>
           <div class="row">
             <label>Events <input name="events" /></label>
-            <label>T-shirt <input name="t_shirt_size" /></label>
+            <label>T-shirt
+              <select name="t_shirt_size">
+                <option value="">— none —</option>
+                <option>Youth Small</option>
+                <option>Youth Medium</option>
+                <option>Youth Large</option>
+                <option>Adult Small</option>
+                <option>Adult Medium</option>
+                <option>Adult Large</option>
+                <option>Adult Extra Large</option>
+              </select>
+            </label>
             <label>Dietary <input name="dietary_preference" /></label>
           </div>
           <div class="actions-row"><button type="submit">Add player</button><button type="button" class="cancel">Clear</button><span class="msg" id="roster-msg"></span></div>

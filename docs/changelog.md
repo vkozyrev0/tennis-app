@@ -7,6 +7,10 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ T-shirt size is a dropdown** — the roster's free-text T-shirt field is now a
+  fixed-option select (combobox-enhanced): Youth Small/Medium/Large, Adult
+  Small/Medium/Large/Extra Large (+ none). The T-shirts order-quantity summary sorts
+  by this canonical apparel order.
 - **✅ Report = TD "Staffing Plan" format** — the officials report was reshaped to the
   layout the TD uses: **Name · Position · Dietary · Hotel? · Check-in · Check-out ·
   one column per play-day weekday (✓) · Pay · Mileage**, titled "<Tournament> —
