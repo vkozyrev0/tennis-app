@@ -6,7 +6,22 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Post-audit improvements (2026-05-25) — applied
-After the code+docs audit (see roadmap "Audit follow-ups"), a further in-scope batch:
+After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Structured assignment card** — the dense run-on line (`name · site · hotel ·
+  pay · mileage · total · flags`) is replaced by a small layout: **name** + Edit/Delete
+  (top-right), a muted **meta** line (site / hotel / dietary), then **pay / mileage /
+  total badges** and any **flags as colored chips** (hotel-date, off-window day,
+  no-distance). Easier to scan at a glance.
+- **✅ Required-field affordance + validation styling** — required inputs now show a
+  red **`*`** inline with the label (added at load via `markRequiredFields()`, works
+  for combobox-wrapped selects too), and controls turn red **only after interaction**
+  (`:user-invalid`, incl. the combobox input via `:has()`) rather than on a pristine
+  form. Verified: 3 stars on the tournament form, red `#c62828`, no console errors.
+- **✅ T-shirts page completed** — the cumulative t-shirt list was just a flat
+  per-tournament table. Added an **"Order quantities" summary** — the **latest size
+  per player** (the rows arrive newest-first per player) counted by size and shown as
+  badges in proper size order (YXS…3XL), with a player count. That's the actionable
+  number a TD hands to the supplier; the per-row list remains below for detail.
 - **✅ Late-entry deadline flag** — the previously-dead `late_entry_deadline` is now
   used: the late-entries list returns `past_deadline` (request date after the
   tournament's deadline) and the UI shows a **⚠ past deadline** marker. Surfaced,
@@ -19,6 +34,24 @@ After the code+docs audit (see roadmap "Audit follow-ups"), a further in-scope b
   (Maps geocoding, email auto-ingest, LLM triage/D5, PII-at-rest + DB hardening)
   are now an explicit **"On hold"** table in the roadmap with blockers + unblock
   steps.
+
+---
+
+## Audit follow-ups (2026-05-25) — applied
+A full code + docs audit produced these fixes (backend + tests + docs):
+- **Security** — sessions now **expire** (migration `0017`, 30-day window, rejected and
+  cleaned up at auth time) and are **invalidated when an official's login is reset**.
+- **Reports** — removed an N+1 (the official's dietary is folded into the assignment
+  query) and added an **off-window-day** count to the totals.
+- **Flags** — `work_date_out_of_window` is surfaced on assignments and in the report
+  flags column / CSV.
+- **Consistency** — room-block create/update now return `rooms_remaining`; availability
+  PUT validates the official (400 instead of a 500); doubles **random requires a
+  division** (else cross-division pairing).
+- **Docs** — corrected the data-model relationship sketch (Certification / Availability /
+  Part B now ✅), the `cert_type` field name, the Part-B build-status header, and the
+  smoke-test count.
+- Test suite grew **30 -> 34**, all passing.
 
 ---
 

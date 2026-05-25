@@ -688,11 +688,26 @@ async function loadAssignments() {
 function renderAssignment(a, availDates) {
   const card = document.createElement("div");
   card.className = "asg";
-  const mileage = a.missing_distance ? '<span class="warn">no distance</span>' : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
-  const flags = a.hotel_date_mismatch ? ' <span class="warn">⚠ hotel dates</span>' : "";
+  // Structured header: name + actions on top; venue/hotel meta line; then
+  // pay/mileage/total badges and any flags as colored chips (no run-on line).
+  const mileage = a.missing_distance ? '<span class="warn">no distance</span>'
+    : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
+  const flagChips = [
+    a.hotel_date_mismatch ? '<span class="badge badge-warn">⚠ hotel dates</span>' : "",
+    a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
+    a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
+  ].filter(Boolean).join(" ");
   const head = document.createElement("div"); head.className = "asg-head";
-  head.innerHTML = `<strong>${esc(a.official_name)}</strong> · site: ${esc(a.site_label) || "—"} · hotel: ${esc(a.hotel_name) || "—"}` +
-    ` · pay $${a.pay.toFixed(2)} · mileage ${mileage} · <strong>total $${a.total.toFixed(2)}</strong>${flags}`;
+  head.innerHTML =
+    `<div class="asg-name"><strong>${esc(a.official_name)}</strong></div>` +
+    `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · hotel: ${esc(a.hotel_name) || "—"}` +
+    (a.dietary_restrictions ? ` · diet: ${esc(a.dietary_restrictions)}` : "") + `</div>` +
+    `<div class="asg-badges">` +
+      `<span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>` +
+      `<span class="badge badge-info">mileage ${mileage}</span>` +
+      `<span class="badge badge-ok">total $${a.total.toFixed(2)}</span>` +
+      (flagChips ? " " + flagChips : "") +
+    `</div>`;
   const actions = document.createElement("span"); actions.className = "asg-actions";
   const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
   ed.addEventListener("click", () => {
@@ -1146,7 +1161,25 @@ const photelList = wirePlayerList({
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
 let tshirtRows = [];
+const _SHIRT_ORDER = ["YXS", "YS", "YM", "YL", "YXL", "AXS", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "XXXL"];
+function _shirtRank(s) { const i = _SHIRT_ORDER.indexOf((s || "").toUpperCase()); return i < 0 ? 999 : i; }
+function renderTshirtSummary() {
+  // Order quantities = the latest size per player (rows arrive newest-first per
+  // player), counted by size — what you'd actually hand to the supplier.
+  const latest = {};
+  for (const r of tshirtRows) if (!(r.player_id in latest)) latest[r.player_id] = r.t_shirt_size;
+  const counts = {};
+  for (const sz of Object.values(latest)) counts[sz] = (counts[sz] || 0) + 1;
+  const sizes = Object.keys(counts).sort((a, b) => _shirtRank(a) - _shirtRank(b) || a.localeCompare(b));
+  const players = Object.keys(latest).length;
+  const el = document.getElementById("tshirt-summary");
+  el.innerHTML = sizes.length
+    ? `<span class="muted">Order quantities — latest size per player (${players} player${players === 1 ? "" : "s"}):</span> `
+      + sizes.map((s) => `<span class="badge badge-info">${esc(s)}: ${counts[s]}</span>`).join(" ")
+    : "";
+}
 function renderTshirts() {
+  renderTshirtSummary();
   const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
   const rows = tshirtRows.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q));
   const tbody = document.querySelector("#tshirt-table tbody");
@@ -1644,8 +1677,26 @@ document.getElementById("acct-save").addEventListener("click", async () => {
   } catch (err) { setMsg("acct-msg", err.message, false); }
 });
 
+// Mark required fields with a red asterisk inline with the label text (the label
+// is a flex column, so the text + star must share one inline element).
+function markRequiredFields() {
+  document.querySelectorAll("form .row label").forEach((label) => {
+    if (!label.querySelector("[required]") || label.querySelector(".req")) return;
+    const tn = [...label.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+    if (!tn) return;
+    const wrap = document.createElement("span");
+    wrap.className = "label-text";
+    wrap.textContent = tn.textContent.replace(/\s+$/, "");
+    const star = document.createElement("span");
+    star.className = "req"; star.textContent = " *"; star.title = "required";
+    wrap.appendChild(star);
+    tn.replaceWith(wrap);
+  });
+}
+
 (async function init() {
   enhanceAllSelects();  // turn every <select> into a type-in dropdown
+  markRequiredFields();
   await refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }

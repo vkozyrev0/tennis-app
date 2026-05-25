@@ -266,6 +266,15 @@ input, select, textarea {
 .combo-item.sel { font-weight: 600; }
 .combo-empty { padding: 0.4rem 0.5rem; color: var(--muted); font-size: 0.8rem; }
 
+.req { color: var(--bad); font-weight: 700; }
+
+/* Validation feedback only after the user has interacted (not on a pristine form). */
+input:user-invalid, select:user-invalid, textarea:user-invalid,
+.combo:has(select:user-invalid) .combo-input {
+  border-color: var(--bad);
+  background: #fdf5f5;
+}
+
 .actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
 
 button[type="submit"] {
@@ -416,6 +425,7 @@ details.addbox > form { padding: 0.7rem 0.8rem; }
 }
 .import-row button.ghost:hover { background: var(--bg); border-color: var(--accent); }
 .t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
+.tshirt-summary { margin: 0.5rem 0 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
 .btn-link.add { color: var(--muted); }
 td.toggle { white-space: nowrap; }
 
@@ -433,8 +443,11 @@ td.toggle { white-space: nowrap; }
   margin-bottom: 0.6rem;
   background: #fff;
 }
-.asg-head { font-size: 0.9rem; }
-.asg-actions { float: right; }
+.asg-head { font-size: 0.9rem; position: relative; }
+.asg-name { font-size: 0.95rem; padding-right: 5rem; }
+.asg-meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.1rem; }
+.asg-badges { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.asg-actions { position: absolute; top: 0; right: 0; }
 .days { margin: 0.5rem 0 0.3rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .chip {
   background: var(--sel);

@@ -329,32 +329,14 @@ dropdown lists **only `official` blocks**; the Reports tab has an
 
 ---
 
-## UI/UX & polish changelog (summary)
-The detailed per-pass log (19 UI/UX passes on 2026-05-25 + follow-ups) now lives in
-[changelog.md](changelog.md). Themes delivered:
-- **Navigation** — two-level section menu (groups -> tabs); narrow-screen horizontal scroll.
-- **Density** — condensed toolbar/header; compact forms; full-width fluid layout.
-- **Lists** — per-list scrollbars bounded to the viewport; Prev/Next record navigation.
-- **Inputs** — type-in searchable comboboxes for every `<select>` (placeholder / contrast /
-  clear fixes); Part B forms reference the existing Players list.
-- **Data** — CSV export + fill-in CSV templates per list; tidied roster import row.
-- **Robustness** — busy-on-submit on every form; toasts; styled confirm modal; progress
-  bar; ARIA tablist + `:focus-visible`.
-- **Correctness** — assignment mileage-site constrained to the tournament's sites;
-  out-of-window work-day warning.
-
-## Audit follow-ups (2026-05-25) — applied
-A full code + docs audit produced these fixes (backend + tests + docs):
-- **Security** — sessions now **expire** (migration `0017`, 30-day window, rejected and
-  cleaned up at auth time) and are **invalidated when an official's login is reset**.
-- **Reports** — removed an N+1 (the official's dietary is folded into the assignment
-  query) and added an **off-window-day** count to the totals.
-- **Flags** — `work_date_out_of_window` is surfaced on assignments and in the report
-  flags column / CSV.
-- **Consistency** — room-block create/update now return `rooms_remaining`; availability
-  PUT validates the official (400 instead of a 500); doubles **random requires a
-  division** (else cross-division pairing).
-- **Docs** — corrected the data-model relationship sketch (Certification / Availability /
-  Part B now ✅), the `cert_type` field name, the Part-B build-status header, and the
-  smoke-test count.
-- Test suite grew **30 -> 34**, all passing.
+## What's been built since this plan was written
+The dated, per-change record (19 UI/UX passes, the code+docs audit follow-ups, and
+post-audit improvements) lives in **[changelog.md](changelog.md)** — this plan file
+stays forward-looking. At a glance, delivered themes:
+- **Navigation / density** — two-level section menu; condensed toolbar; full-width layout.
+- **Lists / inputs** — viewport-bounded scrollers + Prev/Next nav; type-in comboboxes;
+  required-field affordance; Part B forms reference the existing Players list.
+- **Data** — CSV export + fill-in templates; t-shirt order-quantity totals.
+- **Robustness** — busy-on-submit; toasts; confirm modal; ARIA + `:focus-visible`.
+- **Correctness / security** — tournament-scoped assignment site; off-window-day flags;
+  session expiry + reset-invalidation; report N+1 removed; assorted validation fixes.
