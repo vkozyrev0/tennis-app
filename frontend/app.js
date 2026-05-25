@@ -381,6 +381,9 @@ _menuEl.addEventListener("click", (e) => {
   if (active && loaders[tab.dataset.target]) loaders[tab.dataset.target]();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-import") buildImportPage();
+  // Tabulator can't lay out columns while hidden — redraw the grid when shown.
+  const grid = GRIDS[tab.dataset.target];
+  if (grid) requestAnimationFrame(() => { try { grid.redraw(true); } catch (_) {} });
   sizeLists();
 });
 
@@ -439,11 +442,11 @@ function updateActiveUI() {
 }
 activeSelect.addEventListener("change", () => setActive(activeSelect.value));
 
-// =================== generic master-detail CRUD (Setup) ===================
+// =================== generic master-detail CRUD (Setup), Tabulator grid ======
+const GRIDS = {};  // panelId -> Tabulator (redrawn when its tab becomes visible)
 function wireEntity(cfg) {
   const panel = document.getElementById(cfg.panelId);
   const form = document.getElementById(cfg.formId);
-  const tbody = panel.querySelector(".list-table tbody");
   const filterInput = panel.querySelector(".filter");
   const newBtn = panel.querySelector(".new-btn");
   const title = panel.querySelector(".detail-title");
@@ -453,8 +456,9 @@ function wireEntity(cfg) {
   const cancelBtn = form.querySelector(".cancel");
   let items = [];
   let selectedId = null;
+  let built = false, pending = null;
 
-  // prev/next record navigation (so a long list needn't be scrolled to switch records)
+  // prev/next record navigation (steps through the grid's active = filtered+sorted rows)
   const nav = document.createElement("div");
   nav.className = "detail-nav";
   const prevBtn = document.createElement("button");
@@ -465,9 +469,47 @@ function wireEntity(cfg) {
   navPos.className = "nav-pos";
   nav.append(prevBtn, navPos, nextBtn);
   detailPane.insertBefore(nav, detailPane.firstChild);
-  function shownList() { return items.filter(matchesFilter); }
+
+  // Build the grid into the old .list-scroll container (reuse the thead titles).
+  const tableEl = panel.querySelector(".list-table");
+  const titles = [...tableEl.querySelectorAll("thead th")].map((t) => t.textContent.trim());
+  const mount = tableEl.closest(".list-scroll") || tableEl.parentElement;
+  mount.classList.remove("list-scroll"); mount.innerHTML = ""; mount.classList.add("grid-mount");
+
+  const columns = cfg.columns.map((c, i) => ({
+    title: titles[i] || c.key, field: c.key,
+    formatter: c.fmt ? (cell) => esc(c.fmt(cell.getData())) : undefined,
+  }));
+  columns.push({
+    title: "", field: "_act", headerSort: false, width: cfg.rowAction ? 160 : 108,
+    cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const item = cell.getData();
+      const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      if (cfg.rowAction) { const ex = cfg.rowAction(item); if (ex) wrap.append(ex); }
+      const e = document.createElement("button"); e.type = "button"; e.className = "btn-link"; e.textContent = "Edit";
+      e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); });
+      const d = document.createElement("button"); d.type = "button"; d.className = "btn-link danger"; d.textContent = "Delete";
+      d.addEventListener("click", (ev) => { ev.stopPropagation(); removeItem(item.id); });
+      wrap.append(e, d); return wrap;
+    },
+  });
+
+  const table = new Tabulator(mount, {
+    index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
+    placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
+    columnDefaults: { headerSortTristate: true, resizable: false },
+    columns,
+  });
+  GRIDS[cfg.panelId] = table;
+  table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
+  table.on("rowClick", (e, row) => select(row.getData()));
+  table.on("dataFiltered", () => { markRows(); updateNav(); });
+  table.on("dataSorted", () => { markRows(); updateNav(); });
+
+  function activeData() { return built ? table.getRows("active").map((r) => r.getData()) : items; }
   function updateNav() {
-    const shown = shownList();
+    const shown = activeData();
     const idx = shown.findIndex((it) => it.id === selectedId);
     const have = selectedId != null && idx >= 0;
     navPos.textContent = shown.length ? `${have ? idx + 1 : "–"} / ${shown.length}` : "";
@@ -475,17 +517,26 @@ function wireEntity(cfg) {
     nextBtn.disabled = !have || idx >= shown.length - 1;
   }
   function navTo(delta) {
-    const shown = shownList();
+    const shown = activeData();
     const idx = shown.findIndex((it) => it.id === selectedId);
-    if (idx < 0) return;
-    const target = shown[idx + delta];
-    if (!target) return;
-    select(target);
-    const row = tbody.querySelector("tr.selected");
-    if (row) row.scrollIntoView({ block: "nearest" });
+    if (idx < 0 || !shown[idx + delta]) return;
+    select(shown[idx + delta]);
+    if (built) try { table.scrollToRow(selectedId, "nearest", false); } catch (_) {}
   }
   prevBtn.addEventListener("click", () => navTo(-1));
   nextBtn.addEventListener("click", () => navTo(1));
+
+  function markRows() {  // highlight the selected row
+    if (!built) return;
+    for (const r of table.getRows()) r.getElement().classList.toggle("row-selected", r.getData().id === selectedId);
+  }
+  function applySelection() { markRows(); updateNav(); }
+
+  function matchesFilter(data) {
+    const q = filterInput.value.trim().toLowerCase();
+    if (!q) return true;
+    return cfg.columns.map((c) => (c.fmt ? c.fmt(data) : data[c.key])).concat(Object.values(data)).join(" ").toLowerCase().includes(q);
+  }
 
   function fillForm(item) {
     for (const el of form.elements) {
@@ -500,7 +551,7 @@ function wireEntity(cfg) {
     title.textContent = "New " + cfg.singular;
     submitBtn.textContent = "Create";
     deleteBtn.hidden = true;
-    renderList();
+    applySelection();
     if (cfg.onNew) cfg.onNew();
   }
   function select(item) {
@@ -508,38 +559,8 @@ function wireEntity(cfg) {
     title.textContent = `${cfg.singular} #${item.id}`;
     submitBtn.textContent = "Save";
     deleteBtn.hidden = false;
-    renderList();
+    applySelection();
     if (cfg.onSelect) cfg.onSelect(item);
-  }
-  function matchesFilter(item) {
-    const q = filterInput.value.trim().toLowerCase();
-    if (!q) return true;
-    return cfg.columns.map((c) => (c.fmt ? c.fmt(item) : item[c.key])).concat(Object.values(item)).join(" ").toLowerCase().includes(q);
-  }
-  function renderList() {
-    const shown = items.filter(matchesFilter);
-    tbody.innerHTML = "";
-    for (const item of shown) {
-      const tr = document.createElement("tr");
-      tr.className = item.id === selectedId ? "selected" : "";
-      tr.innerHTML = cfg.columns.map((c) => `<td>${esc(c.fmt ? c.fmt(item) : item[c.key])}</td>`).join("") + '<td class="actions"></td>';
-      tr.addEventListener("click", () => select(item));
-      const cell = tr.querySelector(".actions");
-      if (cfg.rowAction) {
-        const extra = cfg.rowAction(item);  // optional per-row button (e.g. "Work on →")
-        if (extra) cell.append(extra);
-      }
-      const e = document.createElement("button"); e.type = "button"; e.className = "btn-link"; e.textContent = "Edit";
-      e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); });
-      const d = document.createElement("button"); d.type = "button"; d.className = "btn-link danger"; d.textContent = "Delete";
-      d.addEventListener("click", (ev) => { ev.stopPropagation(); removeItem(item.id); });
-      cell.append(e, d);
-      tbody.appendChild(tr);
-    }
-    const span = cfg.columns.length + 1;
-    if (items.length === 0) tbody.innerHTML = `<tr><td class="empty" colspan="${span}">No ${cfg.singular}s yet — use the form to add one.</td></tr>`;
-    else if (shown.length === 0) tbody.innerHTML = `<tr><td class="empty" colspan="${span}">No matches</td></tr>`;
-    updateNav();
   }
   async function removeItem(id) {
     if (!(await confirmDialog(`Delete ${cfg.singular} #${id}?`))) return;
@@ -554,7 +575,8 @@ function wireEntity(cfg) {
   async function refresh() {
     items = await api(cfg.path);
     if (cfg.onLoad) cfg.onLoad(items);
-    renderList();
+    if (built) await table.setData(items); else pending = items;
+    applySelection();
   }
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -575,7 +597,7 @@ function wireEntity(cfg) {
   deleteBtn.addEventListener("click", () => { if (selectedId != null) removeItem(selectedId); });
   newBtn.addEventListener("click", showNew);
   cancelBtn.addEventListener("click", showNew);
-  filterInput.addEventListener("input", renderList);
+  filterInput.addEventListener("input", () => { if (built) table.setFilter(matchesFilter); });
   showNew();
   return { refresh };
 }

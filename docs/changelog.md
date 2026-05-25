@@ -7,6 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid for the Setup lists** (phase 1) — vendored **Tabulator 6.3.1**
+  locally (`frontend/vendor/`, offline) and switched the 7 Setup master-detail lists
+  (`wireEntity`) from hand-built `<table>`s to a Tabulator grid: **column sorting**
+  (new), themed to the app palette for light **and** dark, row-click → detail form,
+  external filter, Edit/Delete + "Work on →" actions, selection highlight, and
+  Prev/Next stepping the grid's active (filtered+sorted) rows. Hidden panels redraw
+  on tab-show. Workspace lists still use plain tables (phase 2 to follow).
 - **✅ Player hotels reference the Hotels table** (migration `0023`) — `player_hotel_stay`
   gains a `hotel_id` FK; recording a hotel **upserts one canonical hotel row per name**
   (case-insensitive, whitespace-collapsed) and stores the canonical name, so the same

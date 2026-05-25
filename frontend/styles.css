@@ -344,6 +344,33 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .msg.ok { color: var(--ok); }
 .msg.bad { color: var(--bad); }
 
+/* ---- Tabulator grid (Setup lists) themed to our palette (light + dark) ---- */
+.grid-mount { margin-top: 0.1rem; }
+.tabulator {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  font-family: inherit; font-size: 0.85rem; color: var(--ink);
+}
+.tabulator .tabulator-header {
+  background: var(--card); color: var(--muted);
+  border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.tabulator .tabulator-header .tabulator-col {
+  background: var(--card); border-right: 0;
+}
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.4rem 0.5rem; }
+.tabulator-row { background: var(--card); color: var(--ink); border-bottom: 1px solid var(--border); }
+.tabulator-row.tabulator-row-even { background: var(--zebra); }
+.tabulator-row.tabulator-selectable:hover { background: var(--bg); }
+.tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even { background: var(--sel); }
+.tabulator .tabulator-cell { padding: 0.32rem 0.5rem; border-right: 0; }
+.tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
+.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents { color: var(--muted); }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
+  border-bottom-color: var(--muted); border-top-color: var(--muted);
+}
+.grid-actions { display: flex; gap: 0.2rem; justify-content: flex-end; align-items: center; }
+.grid-actions-cell { overflow: visible; }
+
 /* ---- list scroll container (own scrollbar; header stays pinned) ---- */
 .list-scroll {
   /* JS keeps --list-max in sync with the real space below the list (sizeLists);
