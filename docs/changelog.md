@@ -7,6 +7,11 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — Late entries & Withdrawals** (phase 2c) — a generic
+  `makeListGrid` helper (delete-only list: Tabulator grid + Delete action + per-grid
+  CSV download) now backs both: Late entries (with the ⚠ past-deadline flag) and
+  Withdrawals (Alt?/Reason/Notes). Sortable, themed, redraw-on-tab-show; add-forms
+  and file-from-email unchanged.
 - **✅ Tabulator grid — Roster** (phase 2b) — the roster master-detail list is now a
   Tabulator grid: sortable columns, status **chip** formatter, themed light/dark,
   row-click → edit form, filter, Prev/Next over active rows, Edit/Delete actions,

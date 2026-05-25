@@ -444,6 +444,11 @@ activeSelect.addEventListener("change", () => setActive(activeSelect.value));
 
 // =================== generic master-detail CRUD (Setup), Tabulator grid ======
 const GRIDS = {};  // panelId -> Tabulator (redrawn when its tab becomes visible)
+// Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
+const _playerCell = (cell) => {
+  const d = cell.getData();
+  return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+};
 function wireEntity(cfg) {
   const panel = document.getElementById(cfg.panelId);
   const form = document.getElementById(cfg.formId);
@@ -1270,23 +1275,50 @@ onSubmit(document.getElementById("email-form"), async (e) => {
   catch (err) { setMsg("email-msg", err.message, false); }
 });
 
+// Generic simple list grid (no master-detail): replaces a static table with a
+// Tabulator grid + a Delete action + a per-grid CSV download. Used by the
+// delete-only workspace lists (late entries, withdrawals).
+function makeListGrid(tableId, columns, exportName, placeholder, onDelete) {
+  const tableEl = document.getElementById(tableId);
+  const panelId = tableEl.closest(".panel")?.id;
+  const mount = document.createElement("div"); mount.className = "grid-mount";
+  tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
+  const csv = document.createElement("button");
+  csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
+  csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
+  mount.parentElement.insertBefore(csv, mount);
+  const cols = columns.slice();
+  cols.push({
+    title: "", field: "_act", headerSort: false, width: 84, cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const r = cell.getData(); const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      del.addEventListener("click", (ev) => { ev.stopPropagation(); onDelete(r); });
+      wrap.append(del); return wrap;
+    },
+  });
+  let built = false, pending = null;
+  const grid = new Tabulator(mount, {
+    index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
+    columnDefaults: { headerSortTristate: true, resizable: false }, columns: cols,
+  });
+  grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
+  if (panelId) GRIDS[panelId] = grid;
+  return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
+}
+const lateGrid = makeListGrid("late-table", [
+  { title: "Date", field: "request_date",
+    formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn">⚠ past deadline</span>' : ""); } },
+  { title: "Time", field: "request_time" },
+  { title: "Player", field: "last_name", formatter: _playerCell },
+  { title: "USTA #", field: "usta_number" },
+  { title: "Division", field: "age_division" },
+  { title: "Events", field: "events" },
+], "late-entries", "No late entries yet.",
+  async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
 async function loadLate() {
   if (!active) return;
-  const rows = await api(`/tournaments/${active.id}/late-entries`);
-  const tbody = document.querySelector("#late-table tbody");
-  tbody.innerHTML = "";
-  for (const e of rows) {
-    const tr = document.createElement("tr");
-    const nm = [e.last_name, e.first_name].filter(Boolean).join(", ");
-    const lateFlag = e.past_deadline ? ' <span class="warn" title="After the late-entry deadline">⚠ past deadline</span>' : "";
-    tr.innerHTML = `<td>${esc(e.request_date)}${lateFlag}</td><td>${esc(e.request_time)}</td><td>${esc(nm)}</td>` +
-      `<td>${esc(e.usta_number)}</td><td>${esc(e.age_division)}</td><td>${esc(e.events)}</td><td class="actions"></td>`;
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
-    tr.querySelector(".actions").appendChild(del);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="7">No late entries yet.</td></tr>';
+  lateGrid.setData(await api(`/tournaments/${active.id}/late-entries`));
 }
 function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
 onSubmit(lateForm, async (e) => {
@@ -1300,23 +1332,19 @@ onSubmit(lateForm, async (e) => {
 });
 lateForm.querySelector(".cancel").addEventListener("click", lateReset);
 
+const wdGrid = makeListGrid("withdrawal-table", [
+  { title: "Player", field: "last_name", formatter: _playerCell },
+  { title: "USTA #", field: "usta_number" },
+  { title: "Division", field: "age_division" },
+  { title: "Events", field: "events" },
+  { title: "Alt?", field: "was_alternate", formatter: (c) => (c.getData().was_alternate ? "yes" : "") },
+  { title: "Reason", field: "reason" },
+  { title: "Notes", field: "notes" },
+], "withdrawals", "No withdrawals yet.",
+  async (w) => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } });
 async function loadWithdrawals() {
   if (!active) return;
-  const rows = await api(`/tournaments/${active.id}/withdrawals`);
-  const tbody = document.querySelector("#withdrawal-table tbody");
-  tbody.innerHTML = "";
-  for (const w of rows) {
-    const tr = document.createElement("tr");
-    const nm = [w.last_name, w.first_name].filter(Boolean).join(", ");
-    tr.innerHTML = `<td>${esc(nm)}</td><td>${esc(w.usta_number)}</td><td>${esc(w.age_division)}</td>` +
-      `<td>${esc(w.events)}</td><td>${w.was_alternate ? "yes" : ""}</td><td>${esc(w.reason)}</td>` +
-      `<td>${esc(w.notes)}</td><td class="actions"></td>`;
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } });
-    tr.querySelector(".actions").appendChild(del);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="8">No withdrawals yet.</td></tr>';
+  wdGrid.setData(await api(`/tournaments/${active.id}/withdrawals`));
 }
 function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
 onSubmit(wdForm, async (e) => {
@@ -1331,11 +1359,6 @@ onSubmit(wdForm, async (e) => {
 wdForm.querySelector(".cancel").addEventListener("click", wdReset);
 
 // Generic player-keyed Part B list (form + table + delete + file-from-email).
-// Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
-const _playerCell = (cell) => {
-  const d = cell.getData();
-  return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
-};
 function wirePlayerList(cfg) {
   const form = document.getElementById(cfg.formId);
   // Replace the static <table> with a Tabulator mount (don't wipe the parent card).
