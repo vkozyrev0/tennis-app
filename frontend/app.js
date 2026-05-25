@@ -738,6 +738,7 @@ function renderAssignment(a, availDates) {
     asgForm.site_id.value = a.site_id || "";
     asgForm.room_block_id.value = a.room_block_id || "";
     asgForm.querySelector('button[type="submit"]').textContent = "Update assignment";
+    openForm(asgForm);  // expand the (collapsible) add-form when editing
     // The fields are comboboxes — a direct .value set needs a display resync.
     if (typeof syncCombos === "function") syncCombos();
     asgForm.scrollIntoView({ block: "nearest" });
@@ -1671,6 +1672,7 @@ const COLLAPSIBLE = {
   "sched-form": "Add scheduling avoidance", "divflex-form": "Add division flexibility",
   "pairing-form": "Add pairing group", "doubles-form": "File doubles request",
   "photel-form": "Add player hotel", "late-form": "Add late entry", "trb-form": "Add room block",
+  "asg-form": "Assign official", "email-form": "Add email",
 };
 for (const [id, label] of Object.entries(COLLAPSIBLE)) {
   const form = document.getElementById(id);
@@ -1679,6 +1681,17 @@ for (const [id, label] of Object.entries(COLLAPSIBLE)) {
   const sum = document.createElement("summary"); sum.textContent = "＋ " + label;
   form.parentNode.insertBefore(det, form);
   det.append(sum, form);
+}
+
+// Give every workspace list table its own scrollbar (like the Setup lists), so a
+// long roster/inbox scrolls within the card instead of the whole page. Runs after
+// the export buttons are inserted so they stay outside the scroll container.
+for (const table of document.querySelectorAll(".tpanel table.list-table")) {
+  if (table.closest(".list-scroll, .tbl-scroll")) continue;
+  const wrap = document.createElement("div");
+  wrap.className = "tbl-scroll";
+  table.parentNode.insertBefore(wrap, table);
+  wrap.appendChild(table);
 }
 
 // =================== Auth + role-based views ===================

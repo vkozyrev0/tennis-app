@@ -7,6 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Workspace layout consistency** (validation follow-up). After auditing all 22
+  panels (the 7 Setup list/detail panels were already 100% consistent): (1) the
+  **Inbox** and **Assignments** add-forms are now **collapsible** like the other 9
+  workspace add-forms (Assignments' Edit auto-expands it); (2) **every workspace list
+  table gets its own scrollbar** (`.tbl-scroll`, 60vh cap, sticky header) like the
+  Setup lists — long rosters/inboxes scroll within the card, not the page. A print
+  override keeps wrapped tables un-clipped when printing the report.
 - **✅ T-shirt summary merges mixed size formats** — the order summary now keys each
   size by a canonical code (`shirtCode()` maps both legacy codes like `YM` and the
   dropdown's full names like `Youth Medium` to the same `YM`), so historical/imported

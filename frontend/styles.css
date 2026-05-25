@@ -356,6 +356,17 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .list-scroll .list-table { border: 0; }
 .list-scroll .list-table th { top: -1px; }  /* pin against the container edge */
 
+/* Workspace list tables: own scrollbar (fixed cap; several may stack per panel). */
+.tbl-scroll {
+  max-height: 60vh;
+  overflow: auto;  /* both axes — the staffing-plan report can be wide */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 0.3rem;
+}
+.tbl-scroll .list-table { border: 0; }
+.tbl-scroll .list-table th { top: -1px; }
+
 /* ---- list table ---- */
 .list-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .list-table th, .list-table td {
@@ -538,4 +549,6 @@ td.toggle { white-space: nowrap; }
   .tpanel .needs-active-note { display: none !important; }
   main { padding: 0; max-width: none; }
   .card { border: 0; box-shadow: none; padding: 0; }
+  /* don't clip scrollable tables when printing the report */
+  .list-scroll, .tbl-scroll { max-height: none !important; overflow: visible !important; border: 0; }
 }
