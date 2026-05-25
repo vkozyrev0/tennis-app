@@ -356,9 +356,11 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .list-scroll .list-table { border: 0; }
 .list-scroll .list-table th { top: -1px; }  /* pin against the container edge */
 
-/* Workspace list tables: own scrollbar (fixed cap; several may stack per panel). */
+/* Workspace list tables: own scrollbar. Cap shorter than the viewport so the
+   heading + add-form + table don't push the whole page into a scroll; min() also
+   protects short screens. */
 .tbl-scroll {
-  max-height: 60vh;
+  max-height: min(48vh, calc(100vh - 16rem));
   overflow: auto;  /* both axes — the staffing-plan report can be wide */
   border: 1px solid var(--border);
   border-radius: 8px;

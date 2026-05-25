@@ -11,9 +11,11 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
   panels (the 7 Setup list/detail panels were already 100% consistent): (1) the
   **Inbox** and **Assignments** add-forms are now **collapsible** like the other 9
   workspace add-forms (Assignments' Edit auto-expands it); (2) **every workspace list
-  table gets its own scrollbar** (`.tbl-scroll`, 60vh cap, sticky header) like the
-  Setup lists — long rosters/inboxes scroll within the card, not the page. A print
-  override keeps wrapped tables un-clipped when printing the report.
+  table gets its own scrollbar** (`.tbl-scroll`, sticky header) like the Setup lists
+  — long rosters/inboxes scroll within the card, not the page. The cap is
+  `min(48vh, calc(100vh - 16rem))` so the heading + add-form + table don't push the
+  whole page into a scrollbar (and short screens stay bounded). A print override
+  keeps wrapped tables un-clipped when printing the report.
 - **✅ T-shirt summary merges mixed size formats** — the order summary now keys each
   size by a canonical code (`shirtCode()` maps both legacy codes like `YM` and the
   dropdown's full names like `Youth Medium` to the same `YM`), so historical/imported
