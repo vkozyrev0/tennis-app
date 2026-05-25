@@ -17,3 +17,6 @@ Thumbs.db
 # Build artifacts from doc tooling
 unpacked_raw/
 *.zip
+
+# Sample/source data workbooks (contain PII — keep local only)
+*.xlsx
