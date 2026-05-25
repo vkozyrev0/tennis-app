@@ -19,14 +19,12 @@ After the code+docs audit (see "Audit follow-ups" below), a further in-scope bat
     and the player-hotel field offers a **datalist of known hotels** (free text still
     allowed) so entries stay consistent without a rigid FK.
   - *(CSRF, Secure-cookie, default DB creds deferred as security/hardening.)*
-- **✅ Central Export page** — a single **Data → Export** page is the one place for
-  every CSV download. **Import stays on its own page** (roster upload is back on the
-  Roster tab). The Export page lists **one section per export** (17 of them), each
-  with a **title**, an **explanation**, and two buttons: **⬇ Export CSV** and **⬇
-  Download template** (blank, headers-only). The per-page ⬇ CSV / Template / Sign-in /
-  Order buttons were removed from every individual page (Print stays on the report).
-  Per-tournament exports read the already-loaded tables; cross-tournament ones (t-shirts,
-  CVB) refresh on demand.
+- **✅ Data → Import page + exports on their pages** (reworked) — the central **Data**
+  page is now an **Import** aggregation page: the roster CSV/Excel upload plus a
+  **Download templates** list (10 blank, headers-only CSVs — roster is re-importable).
+  **Exports moved back to each list's own page** (⬇ CSV above every list/summary
+  table; roster gets ⬇ CSV + ⬇ Sign-in on its toolbar; T-shirts keeps ⬇ Order CSV;
+  the report keeps Print + ⬇ CSV). *(Supersedes the earlier single Export page.)*
 - **✅ Roster → master/detail** — the Tournament → Roster tab now uses the same
   master/detail layout as the Setup entities: a wide filterable list (own scrollbar)
   on the left, a sticky edit form with **Prev/Next** record nav on the right, row-

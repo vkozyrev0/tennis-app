@@ -1753,66 +1753,55 @@ function templateTable(table, name) {
   const headers = TEMPLATE_HEADERS[table.id] || _visibleHeaders(table).headers;
   _csvDownload([headers], name + "-template");
 }
-// All exports live on the Export page (Import / Export menu). Each table is kept
-// populated by its loader (on active-tournament set / tab open), so exportTable can
-// read it from here even when its tab isn't visible.
-function _exTable(id, name) {
-  if (!active) { toast("Select a tournament first", false); return; }
-  exportTable(document.getElementById(id), name);
+// --- Per-page CSV export: one "⬇ CSV" above each list/summary table ---
+const EXPORTABLE = {
+  "late-table": "late-entries", "withdrawal-table": "withdrawals",
+  "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
+  "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
+  "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
+  "cvb-table": "cvb-hotel-totals", "hotel-summary-table": "hotel-summary",
+  "lodging-summary-table": "lodging-summary", "tshirt-table": "tshirts", "inbox-table": "inbox",
+};
+for (const [id, name] of Object.entries(EXPORTABLE)) {
+  const table = document.getElementById(id);
+  if (!table) continue;
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "export-btn no-print"; btn.textContent = "⬇ CSV";
+  btn.addEventListener("click", () => exportTable(table, name));
+  const anchor = table.closest(".tbl-scroll") || table;  // keep the button outside the scroller
+  anchor.parentNode.insertBefore(btn, anchor);
 }
-function _tmplTable(id, name) { templateTable(document.getElementById(id), name); }
-// One section per export: title + explanation + Export CSV + Download template.
-const _tEx = (id, name) => () => _exTable(id, name);
-const _tTmpl = (id, name) => () => _tmplTable(id, name);
-const EXPORTS = [
-  { title: "Roster", desc: "All players entered for the active tournament — division, status, t-shirt and dietary. The template uses the importer's column names, so a filled-in copy can be re-imported on the Roster tab.",
-    ex: _tEx("roster-table", "roster"), tmpl: () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template") },
-  { title: "Sign-in sheet", desc: "Check-in roster in the TD's format — status, events, city/state, t-shirt, hotel and lodging for every player, sorted by last name.",
-    ex: rosterSignInExport, tmpl: rosterSignInTemplate },
-  { title: "Officials report (staffing plan)", desc: "Assigned officials with per-day roles, site/hotel, pay, mileage and flags for the active tournament (the printable Staffing Plan).",
-    ex: reportCsvExport, tmpl: reportTemplateExport },
-  { title: "T-shirt order", desc: "Quantity to order per size for selected players (no withdrawals/alternates), smallest size to largest — hand this to the vendor.",
-    ex: tshirtOrderExport, tmpl: () => _csvDownload([["Size", "Quantity"]], "tshirt-order-template") },
-  { title: "Hotel summary", desc: "Number of selected players per hotel for the active tournament, alphabetical.",
-    ex: _tEx("hotel-summary-table", "hotel-summary"), tmpl: _tTmpl("hotel-summary-table", "hotel-summary") },
-  { title: "Lodging summary", desc: "Number of selected players per lodging plan (Hotel / Commuter / …) for the active tournament.",
-    ex: _tEx("lodging-summary-table", "lodging-summary"), tmpl: _tTmpl("lodging-summary-table", "lodging-summary") },
-  { title: "Late entries", desc: "Players who entered after the deadline for the active tournament, with request date/time.",
-    ex: _tEx("late-table", "late-entries"), tmpl: _tTmpl("late-table", "late-entries") },
-  { title: "Withdrawals", desc: "Players withdrawn from the active tournament, with reason and alternate flag.",
-    ex: _tEx("withdrawal-table", "withdrawals"), tmpl: _tTmpl("withdrawal-table", "withdrawals") },
-  { title: "Scheduling avoidances", desc: "Day/time conflicts a player asked to avoid (adult events).",
-    ex: _tEx("sched-table", "scheduling-avoidances"), tmpl: _tTmpl("sched-table", "scheduling-avoidances") },
-  { title: "Division flexibility", desc: "Players willing to play other divisions if theirs is undersubscribed.",
-    ex: _tEx("divflex-table", "division-flexibility"), tmpl: _tTmpl("divflex-table", "division-flexibility") },
-  { title: "Pairing avoidances", desc: "Groups of juniors (same club / siblings) who should not meet in the first round.",
-    ex: _tEx("pairing-table", "pairing-avoidances"), tmpl: _tTmpl("pairing-table", "pairing-avoidances") },
-  { title: "Doubles requests", desc: "Pending doubles requests + the random-pairing queue for the active tournament.",
-    ex: _tEx("doubles-req-table", "doubles-requests"), tmpl: _tTmpl("doubles-req-table", "doubles-requests") },
-  { title: "Doubles pairs", desc: "Verified doubles partnerships (mutual or random) for the active tournament.",
-    ex: _tEx("doubles-pair-table", "doubles-pairs"), tmpl: _tTmpl("doubles-pair-table", "doubles-pairs") },
-  { title: "Player hotels", desc: "Each player's reported hotel and lodging plan for the active tournament.",
-    ex: _tEx("photel-table", "player-hotels"), tmpl: _tTmpl("photel-table", "player-hotels") },
-  { title: "Review inbox", desc: "Forwarded player/parent emails in the review inbox with their classification and status.",
-    ex: _tEx("inbox-table", "inbox"), tmpl: _tTmpl("inbox-table", "inbox") },
-  { title: "T-shirts — all tournaments", desc: "Cumulative t-shirt list across every tournament (latest size per player). Not tied to the active tournament.",
-    ex: async () => { await loadTshirts(); exportTable(document.getElementById("tshirt-table"), "tshirts"); },
-    tmpl: _tTmpl("tshirt-table", "tshirts") },
-  { title: "CVB hotel totals — all tournaments", desc: "Players per hotel across all tournaments, for CVB / convention-bureau negotiations.",
-    ex: async () => { await loadCvb(); exportTable(document.getElementById("cvb-table"), "cvb-hotel-totals"); },
-    tmpl: _tTmpl("cvb-table", "cvb-hotel-totals") },
+// Bespoke per-page exports (data isn't a plain table scrape).
+document.getElementById("roster-csv").addEventListener("click", () =>
+  exportTable(document.getElementById("roster-table"), "roster"));
+document.getElementById("roster-signin-csv").addEventListener("click", rosterSignInExport);
+document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
+document.getElementById("report-csv").addEventListener("click", reportCsvExport);
+
+// --- Data → Import page: download-template buttons (blank, headers-only CSVs) ---
+const TEMPLATES = [
+  { title: "Roster", desc: "Importer's columns — fill in and upload above (re-importable).",
+    fn: () => _csvDownload([TEMPLATE_HEADERS["roster-table"]], "roster-template") },
+  { title: "Sign-in sheet", desc: "Status / events / city / state / size / hotel / lodging.", fn: rosterSignInTemplate },
+  { title: "Officials report (staffing plan)", desc: "Officials staffing-plan columns.", fn: reportTemplateExport },
+  { title: "T-shirt order", desc: "Size → quantity.", fn: () => _csvDownload([["Size", "Quantity"]], "tshirt-order-template") },
+  { title: "Late entries", desc: "Player / division / events / request date.", fn: () => templateTable(document.getElementById("late-table"), "late-entries") },
+  { title: "Withdrawals", desc: "Player / division / events / reason.", fn: () => templateTable(document.getElementById("withdrawal-table"), "withdrawals") },
+  { title: "Scheduling avoidances", desc: "Player / avoid day / avoid time.", fn: () => templateTable(document.getElementById("sched-table"), "scheduling-avoidances") },
+  { title: "Division flexibility", desc: "Player / home / willing divisions.", fn: () => templateTable(document.getElementById("divflex-table"), "division-flexibility") },
+  { title: "Pairing avoidances", desc: "Division / relationship / players.", fn: () => templateTable(document.getElementById("pairing-table"), "pairing-avoidances") },
+  { title: "Player hotels", desc: "Player / hotel / lodging plan.", fn: () => templateTable(document.getElementById("photel-table"), "player-hotels") },
 ];
-(function buildExportPage() {
-  const root = document.getElementById("export-groups");
+(function buildImportTemplates() {
+  const root = document.getElementById("import-templates");
   if (!root) return;
-  for (const s of EXPORTS) {
-    const sec = document.createElement("section"); sec.className = "export-section";
-    const h = document.createElement("h4"); h.textContent = s.title; sec.appendChild(h);
-    const p = document.createElement("p"); p.className = "muted"; p.textContent = s.desc; sec.appendChild(p);
-    const grid = document.createElement("div"); grid.className = "export-grid";
-    const ex = document.createElement("button"); ex.type = "button"; ex.className = "export-btn"; ex.textContent = "⬇ Export CSV"; ex.addEventListener("click", s.ex);
-    const tm = document.createElement("button"); tm.type = "button"; tm.className = "export-btn"; tm.textContent = "⬇ Download template"; tm.addEventListener("click", s.tmpl);
-    grid.append(ex, tm); sec.appendChild(grid); root.appendChild(sec);
+  for (const t of TEMPLATES) {
+    const sec = document.createElement("div"); sec.className = "export-section";
+    const row = document.createElement("div"); row.className = "export-grid";
+    const b = document.createElement("button"); b.type = "button"; b.className = "export-btn"; b.textContent = "⬇ " + t.title;
+    b.addEventListener("click", t.fn);
+    const d = document.createElement("span"); d.className = "muted"; d.textContent = t.desc;
+    row.append(b, d); sec.appendChild(row); root.appendChild(sec);
   }
 })();
 
