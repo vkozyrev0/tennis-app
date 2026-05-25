@@ -50,18 +50,37 @@ def delete_player_hotel(row_id: int, conn=Depends(db_dep)):
     return Response(status_code=204)
 
 
+# Count distinct players per hotel. Names are grouped case-insensitively (after
+# trimming) for consistency and a representative spelling is shown; blanks are
+# excluded; only players who are *in* the tournament (selection_status='selected')
+# count — no withdrawals or alternates. Ordered alphabetically.
+_HOTEL_SUMMARY = """
+SELECT min(TRIM(s.hotel_name)) AS hotel_name, count(DISTINCT s.player_id) AS players
+FROM player_hotel_stay s
+JOIN tournament_entry e
+  ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
+WHERE e.selection_status = 'selected'
+  AND NULLIF(TRIM(s.hotel_name), '') IS NOT NULL
+  {extra}
+GROUP BY lower(TRIM(s.hotel_name))
+ORDER BY lower(TRIM(s.hotel_name))
+"""
+
+
+@router.get("/api/tournaments/{tournament_id}/hotel-summary")
+def hotel_summary(tournament_id: int, conn=Depends(db_dep)):
+    """Per-tournament: players per hotel (selected only, alphabetical, consistent)."""
+    with conn.cursor() as cur:
+        cur.execute(_HOTEL_SUMMARY.format(extra="AND s.tournament_id = %s"), (tournament_id,))
+        return cur.fetchall()
+
+
 @router.get("/api/hotel-analytics")
 def hotel_analytics(conn=Depends(db_dep)):
-    """Room-night patterns across all tournaments (for CVB negotiations)."""
+    """Players per hotel across all tournaments (for CVB negotiations) — selected
+    players only, names consistent + alphabetical."""
     with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT COALESCE(NULLIF(TRIM(hotel_name), ''), '(unspecified)') AS hotel_name,
-                   count(*) AS stays
-            FROM player_hotel_stay
-            GROUP BY 1 ORDER BY stays DESC, hotel_name
-            """
-        )
+        cur.execute(_HOTEL_SUMMARY.format(extra="").replace("AS players", "AS stays"))
         return cur.fetchall()
 
 
@@ -78,6 +97,7 @@ def tshirts(conn=Depends(db_dep)):
             JOIN player p ON p.id = e.player_id
             JOIN tournament t ON t.id = e.tournament_id
             WHERE e.t_shirt_size IS NOT NULL AND e.t_shirt_size <> ''
+              AND e.selection_status = 'selected'  -- no withdrawals/alternates
             ORDER BY p.last_name, p.first_name, t.play_start_date DESC
             """
         )

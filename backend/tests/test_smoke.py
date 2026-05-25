@@ -363,6 +363,9 @@ def test_pairing_avoidance_group():
 
 def test_player_hotels_analytics_and_tshirts():
     t, p = _tournament(), _player()
+    # the player must be IN the tournament (selected) to count in hotel summaries
+    client.post(f"/api/tournaments/{t['id']}/players",
+                json={"player_id": p["id"], "selection_status": "selected"})
     hname = "Marriott " + uuid.uuid4().hex[:4]
     s = _ok(client.post(f"/api/tournaments/{t['id']}/player-hotels",
                         json={"usta_number": p["usta_number"], "hotel_name": hname}))
@@ -370,7 +373,30 @@ def test_player_hotels_analytics_and_tshirts():
     # CVB analytics aggregates this hotel
     totals = client.get("/api/hotel-analytics").json()
     assert any(r["hotel_name"] == hname and r["stays"] >= 1 for r in totals)
+    # per-tournament hotel summary too
+    summ = client.get(f"/api/tournaments/{t['id']}/hotel-summary").json()
+    assert any(r["hotel_name"] == hname and r["players"] >= 1 for r in summ)
     assert client.delete(f"/api/player-hotels/{s['id']}").status_code == 204
+
+
+def test_summaries_exclude_withdrawn_and_alternates():
+    t = _tournament()
+    sel, alt, wd = _player(), _player(), _player()
+    for pl, st in [(sel, "selected"), (alt, "alternate"), (wd, "withdrawn")]:
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": pl["id"], "selection_status": st, "t_shirt_size": "Adult Medium"})
+    hotel = "Hyatt " + uuid.uuid4().hex[:4]
+    for pl in (sel, alt, wd):
+        client.post(f"/api/tournaments/{t['id']}/player-hotels",
+                    json={"usta_number": pl["usta_number"], "hotel_name": hotel})
+    # hotel summary counts only the selected player
+    summ = {r["hotel_name"]: r["players"] for r in
+            client.get(f"/api/tournaments/{t['id']}/hotel-summary").json()}
+    assert summ.get(hotel) == 1
+    # t-shirt list excludes alternates/withdrawals
+    mine = {r["usta_number"] for r in client.get("/api/tshirts").json() if r["tournament_id"] == t["id"]}
+    assert sel["usta_number"] in mine
+    assert alt["usta_number"] not in mine and wd["usta_number"] not in mine
 
     # t-shirt cumulative list picks up a roster entry's size
     p2 = _player()

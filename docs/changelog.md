@@ -7,6 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ T-shirt & hotel summaries — selected players only** (per the TD's workbook).
+  Both the **t-shirt** order summary and the **hotel** summary now **exclude
+  withdrawals and alternates** (`selection_status = 'selected'`).
+  - T-shirts: order quantities sort smallest→largest (YS, YM, YL, AS, AM, AL, AXL),
+    with a new **⬇ Order CSV (size → qty)** export for the vendor.
+  - Hotels: a new per-tournament **Hotel summary** (players per hotel) on the Player-
+    hotels tab — names **alphabetical** and grouped **case-insensitively** (consistent
+    spelling), blanks excluded, with CSV export. The cross-tournament CVB totals get
+    the same selected-only + consistent-name treatment.
 - **✅ T-shirt size is a dropdown** — the roster's free-text T-shirt field is now a
   fixed-option select (combobox-enhanced): Youth Small/Medium/Large, Adult
   Small/Medium/Large/Extra Large (+ none). The T-shirts order-quantity summary sorts

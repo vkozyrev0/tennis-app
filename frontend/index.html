@@ -249,8 +249,9 @@
     <section class="panel" id="panel-tshirts">
       <div class="card">
         <h3>T-shirt sizes — cumulative (all tournaments)</h3>
-        <p class="muted">Derived from each tournament's roster, so a player's most recent size is known even when they're a late entry next time.</p>
+        <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
+        <button type="button" id="tshirt-order-csv" class="export-btn no-print">⬇ Order CSV (size → qty)</button>
         <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" style="max-width:320px" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
@@ -582,6 +583,11 @@
         </form>
         <table id="photel-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h4>Hotel summary — this tournament (selected players)</h4>
+        <table id="hotel-summary-table" class="list-table">
+          <thead><tr><th>Hotel</th><th>Players</th></tr></thead>
           <tbody></tbody>
         </table>
         <h4>CVB hotel totals (all tournaments)</h4>

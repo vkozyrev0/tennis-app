@@ -1177,12 +1177,23 @@ async function loadCvb() {
       : '<tr><td class="empty" colspan="2">No player hotel data yet.</td></tr>';
   } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
 }
+// Per-tournament hotel summary: players per hotel (selected only, alphabetical).
+async function loadHotelSummary() {
+  if (!active) return;
+  const tbody = document.querySelector("#hotel-summary-table tbody");
+  try {
+    const rows = await api(`/tournaments/${active.id}/hotel-summary`);
+    tbody.innerHTML = rows.length
+      ? rows.map((r) => `<tr><td>${esc(r.hotel_name)}</td><td>${r.players}</td></tr>`).join("")
+      : '<tr><td class="empty" colspan="2">No hotels entered for selected players yet.</td></tr>';
+  } catch (e) { tbody.innerHTML = `<tr><td class="empty" colspan="2">${esc(e.message)}</td></tr>`; }
+}
 const photelList = wirePlayerList({
   formId: "photel-form", msgId: "photel-msg", tableId: "photel-table",
   path: "/player-hotels", del: "/player-hotels", cols: 4,
   empty: "No player hotels reported yet.",
   cells: (r, nm) => `<td>${esc(nm)}</td><td>${esc(r.usta_number)}</td><td>${esc(r.hotel_name)}</td>`,
-  after: loadCvb,
+  after: () => { loadCvb(); loadHotelSummary(); },
 });
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
@@ -1190,21 +1201,27 @@ let tshirtRows = [];
 const _SHIRT_ORDER = ["Youth Small", "Youth Medium", "Youth Large",
   "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"];
 function _shirtRank(s) { const i = _SHIRT_ORDER.indexOf(s); return i < 0 ? 999 : i; }
+let tshirtOrderRows = [];  // [["Size","Qty"], ...] smallest→largest, for the vendor CSV
 function renderTshirtSummary() {
   // Order quantities = the latest size per player (rows arrive newest-first per
-  // player), counted by size — what you'd actually hand to the supplier.
+  // player), counted by size — what you'd actually hand to the supplier. Backend
+  // already excludes withdrawals/alternates.
   const latest = {};
   for (const r of tshirtRows) if (!(r.player_id in latest)) latest[r.player_id] = r.t_shirt_size;
   const counts = {};
   for (const sz of Object.values(latest)) counts[sz] = (counts[sz] || 0) + 1;
   const sizes = Object.keys(counts).sort((a, b) => _shirtRank(a) - _shirtRank(b) || a.localeCompare(b));
   const players = Object.keys(latest).length;
+  tshirtOrderRows = [["Size", "Quantity"], ...sizes.map((s) => [s, counts[s]]), ["Total", players]];
   const el = document.getElementById("tshirt-summary");
   el.innerHTML = sizes.length
     ? `<span class="muted">Order quantities — latest size per player (${players} player${players === 1 ? "" : "s"}):</span> `
       + sizes.map((s) => `<span class="badge badge-info">${esc(s)}: ${counts[s]}</span>`).join(" ")
     : "";
 }
+document.getElementById("tshirt-order-csv").addEventListener("click", () => {
+  if (tshirtOrderRows.length > 1) _csvDownload(tshirtOrderRows, "tshirt-order");
+});
 function renderTshirts() {
   renderTshirtSummary();
   const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
@@ -1603,11 +1620,13 @@ const EXPORTABLE = {
   "sched-table": "scheduling-avoidances", "divflex-table": "division-flexibility",
   "pairing-table": "pairing-avoidances", "doubles-req-table": "doubles-requests",
   "doubles-pair-table": "doubles-pairs", "photel-table": "player-hotels",
-  "cvb-table": "cvb-hotel-totals", "tshirt-table": "tshirts", "inbox-table": "inbox",
+  "cvb-table": "cvb-hotel-totals", "hotel-summary-table": "hotel-summary",
+  "tshirt-table": "tshirts", "inbox-table": "inbox",
 };
 // Export-only here: derived/aggregate lists, plus roster (its template lives in
 // the import row next to the upload control).
-const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "inbox-table", "tshirt-table", "roster-table"]);
+const NO_TEMPLATE = new Set(["doubles-pair-table", "cvb-table", "hotel-summary-table",
+  "inbox-table", "tshirt-table", "roster-table"]);
 for (const [id, name] of Object.entries(EXPORTABLE)) {
   const table = document.getElementById(id);
   if (!table) continue;
