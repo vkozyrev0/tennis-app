@@ -522,7 +522,8 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   font-size: 0.82rem;
   cursor: pointer;
 }
-.btn-link:hover { text-decoration: underline; }
+.btn-link:hover:not(:disabled) { text-decoration: underline; }
+.btn-link:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
 .btn-link.danger { color: var(--bad); }
 
 /* Right-align numeric columns for scannability */

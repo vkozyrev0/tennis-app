@@ -1375,14 +1375,16 @@ const inboxGrid = makeReadGrid("inbox-table", [
     editor: "list", editorParams: { values: EMAIL_CLASSES },
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status) },
-  { title: "", field: "_act", headerSort: false, width: 230, cssClass: "grid-actions-cell",
+  { title: "", field: "_act", headerSort: false, width: 168, cssClass: "grid-actions-cell",
     formatter: (cell) => {
+      // The target is the row's classification (now inline-editable in its own
+      // column) — no redundant per-row picker. File is disabled until the
+      // classification is a fileable target.
       const m = cell.getData(); const row = cell.getRow();
+      const fileable = !!FILE_TARGETS[m.classification];
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
-      const tgt = document.createElement("select");
-      for (const k of Object.keys(FILE_TARGETS)) { const o = document.createElement("option"); o.value = k; o.textContent = FILE_TARGETS[k].label; tgt.appendChild(o); }
-      if (FILE_TARGETS[m.classification]) tgt.value = m.classification;
       const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
+      sgBtn.title = "Suggest a classification";
       sgBtn.addEventListener("click", async (ev) => {
         ev.stopPropagation();
         try {
@@ -1393,9 +1395,11 @@ const inboxGrid = makeReadGrid("inbox-table", [
         } catch (e) { setMsg("email-msg", e.message, false); }
       });
       const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
+      fileBtn.disabled = !fileable;
+      fileBtn.title = fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "Set a fileable classification first";
       fileBtn.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        const t = FILE_TARGETS[tgt.value];
+        const t = FILE_TARGETS[m.classification]; if (!t) return;
         t.form.source_email_id.value = m.id;
         document.querySelector(`.tab[data-target="${t.tab}"]`).click();
         openForm(t.form);
@@ -1403,9 +1407,10 @@ const inboxGrid = makeReadGrid("inbox-table", [
         const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
         if (focusEl) focusEl.focus();
       });
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-icon danger"; del.textContent = "✕";
+      del.title = "Delete email"; del.setAttribute("aria-label", del.title);
       del.addEventListener("click", async (ev) => { ev.stopPropagation(); if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
-      wrap.append(sgBtn, tgt, fileBtn, del); return wrap;
+      wrap.append(sgBtn, fileBtn, del); return wrap;
     } },
 ], "inbox", "Inbox empty — add a forwarded email above.", { index: "id" });
 // Persist an inline classification edit (double-click the cell).
