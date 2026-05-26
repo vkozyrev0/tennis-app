@@ -7,6 +7,17 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Setup master/detail → full-width grid + modal edit form** (phase 10) — the
+  Setup pages (Tournaments, Sites, Officials, Players, Rates, Hotels, Distances)
+  no longer split the page into list + side form. The **grid now spans the full
+  page width**, and the **detail form opens as a centered modal overlay** (with a
+  dimmed backdrop) when you click a row's **Edit** button or **+ New**. Close via
+  the × button, **Cancel**, **Esc**, clicking the backdrop, switching tabs, or a
+  successful Save/Delete. **In-grid (double-click) editing is unchanged** — single
+  click only highlights a row (so it never pre-empts a double-click to edit a
+  cell); Prev/Next record nav lives in the modal header. (`wireEntity` gained
+  `openModal`/`closeModal`; a single shared backdrop serves whichever panel is
+  active.)
 - **✅ Grid dropdown theming + Room-block in-grid edit** (phase 9) — two fixes:
   (1) the list editor / list header-filter **dropdown is appended to `<body>`**, so
   the `.tabulator` theme rules never reached it — it now has explicit light/dark

@@ -353,6 +353,7 @@ _menuEl.addEventListener("keydown", (e) => {
 _menuEl.addEventListener("click", (e) => {
   const tab = e.target.closest(".tab");
   if (!tab) return;
+  closeOpenDetail();  // never leave an edit overlay/backdrop hanging across tabs
   document.querySelectorAll(".tab").forEach((t) => {
     const on = t === tab;
     t.classList.toggle("active", on);
@@ -449,6 +450,15 @@ const _playerCell = (cell) => {
   const d = cell.getData();
   return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
 };
+// Shared backdrop for the master/detail edit overlay (one open at a time).
+const _detailBackdrop = document.createElement("div");
+_detailBackdrop.className = "detail-backdrop";
+document.body.appendChild(_detailBackdrop);
+let _closeOpenDetail = null;
+function closeOpenDetail() { if (_closeOpenDetail) _closeOpenDetail(); }
+_detailBackdrop.addEventListener("click", closeOpenDetail);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeOpenDetail(); });
+
 function wireEntity(cfg) {
   const panel = document.getElementById(cfg.panelId);
   const form = document.getElementById(cfg.formId);
@@ -474,6 +484,14 @@ function wireEntity(cfg) {
   navPos.className = "nav-pos";
   nav.append(prevBtn, navPos, nextBtn);
   detailPane.insertBefore(nav, detailPane.firstChild);
+
+  // The detail form is a modal overlay (the grid owns the full page width).
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button"; closeBtn.className = "detail-close"; closeBtn.textContent = "×"; closeBtn.title = "Close";
+  detailPane.insertBefore(closeBtn, detailPane.firstChild);
+  function openModal() { detailPane.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeModal; }
+  function closeModal() { detailPane.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; }
+  closeBtn.addEventListener("click", closeModal);
 
   // Build the grid into the old .list-scroll container (reuse the thead titles).
   const tableEl = panel.querySelector(".list-table");
@@ -516,7 +534,7 @@ function wireEntity(cfg) {
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
       if (cfg.rowAction) { const ex = cfg.rowAction(item); if (ex) wrap.append(ex); }
       const e = document.createElement("button"); e.type = "button"; e.className = "btn-link"; e.textContent = "Edit";
-      e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); });
+      e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); openModal(); });
       const d = document.createElement("button"); d.type = "button"; d.className = "btn-link danger"; d.textContent = "Delete";
       d.addEventListener("click", (ev) => { ev.stopPropagation(); removeItem(item.id); });
       wrap.append(e, d); return wrap;
@@ -533,7 +551,9 @@ function wireEntity(cfg) {
   });
   (GRIDS[cfg.panelId] ||= []).push(table);
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
-  table.on("rowClick", (e, row) => select(row.getData()));
+  // Single click only highlights the row (keeps double-click free for in-grid
+  // editing); use the Edit button to open the form overlay.
+  table.on("rowClick", (e, row) => { selectedId = row.getData().id; applySelection(); });
   table.on("dataFiltered", () => { markRows(); updateNav(); });
   table.on("dataSorted", () => { markRows(); updateNav(); });
   // In-grid edit: PUT the whole row (the *Out record has every field the model
@@ -617,6 +637,7 @@ function wireEntity(cfg) {
       await api(`${cfg.path}/${id}`, { method: "DELETE" });
       setMsg(cfg.msgId, "deleted", true);
       if (selectedId === id) showNew();
+      closeModal();
       await refresh();
       if (cfg.afterChange) cfg.afterChange();
     } catch (err) { setMsg(cfg.msgId, err.message, false); }
@@ -640,12 +661,13 @@ function wireEntity(cfg) {
       await refresh();
       if (cfg.afterChange) cfg.afterChange();
       if (saved && saved.id != null) select(saved);
+      closeModal();
     } catch (err) { setMsg(cfg.msgId, err.message, false); }
     finally { submitBtn.disabled = false; }
   });
   deleteBtn.addEventListener("click", () => { if (selectedId != null) removeItem(selectedId); });
-  newBtn.addEventListener("click", showNew);
-  cancelBtn.addEventListener("click", showNew);
+  newBtn.addEventListener("click", () => { showNew(); openModal(); });
+  cancelBtn.addEventListener("click", closeModal);
   filterInput.addEventListener("input", () => { if (built) table.setFilter(matchesFilter); });
   showNew();
   return { refresh };
