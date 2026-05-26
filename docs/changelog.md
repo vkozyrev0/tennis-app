@@ -7,6 +7,12 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Auto-fit column widths** (phase 8) — grids switch from `fitColumns`
+  (even stretch) to **`fitDataFill`**, so each column sizes to its content while
+  the table still fills the container (verified: no right-side gap, no horizontal
+  scroll). `columnDefaults` now set `minWidth: 80`, `maxWidth: 440`, **per-cell
+  tooltips** (so clipped long values show on hover), and `resizable: true` so a
+  user can still nudge a column. Header filters and sorting are unaffected.
 - **✅ Per-column header filters** (phase 7) — every grid now has a filter box
   under each meaningful column header. A shared `_autoHeaderFilters` helper gives
   `makeListGrid` / `makeReadGrid` / `wirePlayerList` columns an `input` filter,
