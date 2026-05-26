@@ -545,6 +545,12 @@ function wireEntity(cfg) {
   const form = document.getElementById(cfg.formId);
   const filterInput = panel.querySelector(".filter");
   const newBtn = panel.querySelector(".new-btn");
+  // Add a ⬇ CSV button next to + New so Setup lists match the workspace lists
+  // (Tabulator's native download writes a clean CSV from the current data).
+  const csvBtn = document.createElement("button");
+  csvBtn.type = "button"; csvBtn.className = "export-btn no-print"; csvBtn.textContent = "⬇ CSV";
+  csvBtn.title = "Download as CSV";
+  newBtn.parentNode.insertBefore(csvBtn, newBtn.nextSibling);
   const title = panel.querySelector(".detail-title");
   const detailPane = panel.querySelector(".detail-pane");
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -639,6 +645,7 @@ function wireEntity(cfg) {
     columns,
   });
   (GRIDS[cfg.panelId] ||= []).push(table);
+  csvBtn.addEventListener("click", () => table.download("csv", cfg.path.replace(/^\//, "") + ".csv"));
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
   // Single click only highlights the row (keeps double-click free for in-grid
   // editing); use the Edit button to open the form overlay.

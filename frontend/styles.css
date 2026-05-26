@@ -354,6 +354,9 @@ button[type="submit"]:hover { filter: brightness(1.05); }
   box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar — visible for keyboard nav */
 }
 .tabulator .tabulator-cell { padding: 0.38rem 0.55rem; border-right: 0; }
+/* Reserve scrollbar space so the right-edge action icons aren't crowded against
+   (or partially hidden by) the vertical scrollbar when it appears. */
+.tabulator .tabulator-tableholder { scrollbar-gutter: stable; }
 .tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
 .tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents {
   color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
