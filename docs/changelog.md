@@ -7,6 +7,32 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Design-critique pass: usability + a11y + visual coherence** (phase 14) —
+  Walk through the structured design critique:
+  - **Editable cells are obviously editable** — always-on accent right-edge tint
+    + a hover pencil glyph (`✎`) tell you which cells respond before you hover.
+  - **Active-tournament switch** closes any open detail modal and toasts the
+    switch (no more editing against the wrong tournament).
+  - **Global filter inputs** carry a 🔍 magnifier icon so they read as a
+    different scope from the per-column header filters.
+  - **Icon-only Edit/Delete** in grid action columns (`.btn-icon`, `✎` / `✕`)
+    with `title` + `aria-label`. Recovers ~36 px per row (108→72 with Edit,
+    84→48 delete-only), keyboard `:focus-visible` ring.
+  - **Form labels** drop the small uppercase letter-spacing — uppercase rank
+    belongs to grid headers only.
+  - **Dark-mode tokens bumped for AA**: `--accent` 2e7d46→3aa05c (filled buttons
+    clear AA on dark), `--muted` 9aa7b4→aab6c4, `--sel` 25313a→2c3f3a (tinted
+    toward accent so selection separates from zebra).
+  - **Status badges** got dark-mode palettes — deeper backgrounds with lighter
+    ink so the pills don't burn out against the dark card.
+  - **ARIA dialogs**: every `.detail-pane` is `role="dialog" aria-modal="true"
+    aria-labelledby={title}` (18 modals), and a MutationObserver on the
+    `detail-open` class focuses the first form field on open and restores focus
+    on close.
+  - **Empty-state polish**: every grid placeholder gets a soft accent ✦ icon +
+    breathing room — one CSS rule, no per-grid changes.
+
+
 - **✅ Pairing & Doubles PUT for simple fields** (phase 13b) — extends the
   Part B PUT story to the last two routers: pairing avoidances accept PUT for
   `age_division` and `relationship` (members stay add/delete — changing who's

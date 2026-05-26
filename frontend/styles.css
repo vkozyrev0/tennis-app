@@ -393,7 +393,13 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even { background: var(--sel); }
 .tabulator .tabulator-cell { padding: 0.32rem 0.5rem; border-right: 0; }
 .tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
-.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents { color: var(--muted); }
+.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents {
+  color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
+}
+.tabulator .tabulator-placeholder-contents::before {
+  content: "✦"; display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
+  opacity: 0.45; color: var(--accent);
+}
 .tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
   border-bottom-color: var(--muted); border-top-color: var(--muted);
 }
