@@ -544,7 +544,7 @@ function wireEntity(cfg) {
     index: "id", layout: "fitDataFill", maxHeight: "calc(100vh - 16rem)",
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
-    editTriggerEvent: "dblclick",  // single click selects/navigates; double-click edits
+    editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
     renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
     columns,
   });
@@ -761,7 +761,7 @@ const rosterGrid = new Tabulator(rosterMount, {
   index: "id", layout: "fitDataFill", maxHeight: "calc(100vh - 16rem)",
   placeholder: "No players on this roster yet.",
   columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
-  editTriggerEvent: "dblclick",  // single click selects; double-click edits in place
+  editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
   renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
   columns: [
     { title: "Player", field: "last_name",
@@ -1455,7 +1455,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   let built = false, pending = null;
   const grid = new Tabulator(mount, {
     index: "id", layout: "fitDataFill", maxHeight: "55vh", placeholder,
-    renderVertical: "basic", editTriggerEvent: "dblclick",  // double-click a cell to edit (where an editor is set)
+    renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });

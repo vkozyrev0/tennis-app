@@ -7,6 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ In-grid editing on single click** (phase 12) — in-place editing existed but
+  was bound to **double-click** (a holdover from when single click selected a row
+  for the side form). Now that the detail form opens from the **Edit** button, the
+  grids use `editTriggerEvent: "click"` so a **single click opens the cell editor**
+  — far more discoverable. Applies to the Setup grids, Roster, and Room blocks
+  (the Inbox classification editor already used single click). Editable columns
+  keep their hover affordance; the commit-on-change → PUT path is unchanged.
 - **✅ Workspace pages → full-width grid + modal forms** (phase 11) — the same
   treatment now covers the tournament workspace. **Roster** is a true
   master/detail like the Setup pages: full-width grid, **Edit** opens the entry
