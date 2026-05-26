@@ -71,6 +71,7 @@ function toast(text, ok = true) {
   if (!box || !text) return;
   const t = document.createElement("div");
   t.className = "toast " + (ok ? "ok" : "bad");
+  t.setAttribute("role", ok ? "status" : "alert");
   t.textContent = text;
   box.appendChild(t);
   setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ok ? 2500 : 5000);
@@ -80,10 +81,43 @@ function setMsg(id, text, ok) {
   if (el) {
     el.textContent = text;
     el.className = "msg " + (ok ? "ok" : "bad");
-    if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ""; }, 4000);
+    el.setAttribute("role", ok ? "status" : "alert");
+    // Keep error messages visible until the next form interaction; ok messages auto-clear.
+    if (text && ok !== false) setTimeout(() => { if (el.textContent === text) el.textContent = ""; }, 4000);
   }
   toast(text, ok);
 }
+
+// Find the form input most likely responsible for a server error message and
+// flag it (aria-invalid + .field-error + focus). Errors that don't match any
+// field name fall back to the form-level message only.
+function markInvalid(form, errorText) {
+  if (!form || !errorText) return;
+  // Strip prior invalid marks before re-evaluating.
+  for (const el of form.querySelectorAll("[aria-invalid='true']")) {
+    el.removeAttribute("aria-invalid"); el.classList.remove("field-error");
+  }
+  const t = String(errorText).toLowerCase();
+  // candidates: input/select/textarea with a name
+  const fields = [...form.elements].filter((e) => e.name);
+  // word-boundary search: the field name (or its dash/space variants) appears in the error
+  const hit = fields.find((e) => {
+    const n = e.name.toLowerCase();
+    const words = [n, n.replace(/_/g, " "), n.replace(/_/g, "-")];
+    return words.some((w) => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(t));
+  });
+  if (hit) {
+    hit.setAttribute("aria-invalid", "true"); hit.classList.add("field-error");
+    try { hit.focus(); } catch (_) {}
+  }
+}
+// Clear the invalid mark as soon as the user starts editing the flagged field.
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (t && t.getAttribute && t.getAttribute("aria-invalid") === "true") {
+    t.removeAttribute("aria-invalid"); t.classList.remove("field-error");
+  }
+}, true);
 
 // Styled confirm dialog (replaces native confirm); returns a Promise<bool>.
 function confirmDialog(message, okLabel = "Delete") {
@@ -758,7 +792,7 @@ function wireEntity(cfg) {
       if (cfg.afterChange) cfg.afterChange();
       if (saved && saved.id != null) select(saved);
       closeModal();
-    } catch (err) { setMsg(cfg.msgId, err.message, false); }
+    } catch (err) { setMsg(cfg.msgId, err.message, false); markInvalid(form, err.message); }
     finally { submitBtn.disabled = false; }
   });
   deleteBtn.addEventListener("click", () => { if (selectedId != null) removeItem(selectedId); });
@@ -985,7 +1019,7 @@ onSubmit(rosterForm, async () => {
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();
     rosterCloseModal();
-  } catch (err) { setMsg("roster-msg", err.message, false); }
+  } catch (err) { setMsg("roster-msg", err.message, false); markInvalid(rosterForm, err.message); }
 });
 rosterForm.querySelector(".cancel").textContent = "Cancel";
 rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
@@ -1280,7 +1314,7 @@ onSubmit(asgForm, async (e) => {
     if (asgEditId) await api(`/assignments/${asgEditId}`, { method: "PUT", body: JSON.stringify(b) });
     else await api(`/tournaments/${active.id}/assignments`, { method: "POST", body: JSON.stringify(b) });
     setMsg("asg-msg", asgEditId ? "saved" : "added", true); asgReset(); loadAssignments();
-  } catch (err) { setMsg("asg-msg", err.message, false); }
+  } catch (err) { setMsg("asg-msg", err.message, false); markInvalid(asgForm, err.message); }
 });
 asgForm.querySelector(".cancel").addEventListener("click", asgReset);
 
@@ -1340,7 +1374,7 @@ onSubmit(trbForm, async (e) => {
     if (trbEditId) await api(`/room-blocks/${trbEditId}`, { method: "PUT", body: JSON.stringify(b) });
     else await api(`/room-blocks`, { method: "POST", body: JSON.stringify(b) });
     setMsg("trb-msg", trbEditId ? "saved" : "added", true); trbReset(); loadRoomBlocks();
-  } catch (err) { setMsg("trb-msg", err.message, false); }
+  } catch (err) { setMsg("trb-msg", err.message, false); markInvalid(trbForm, err.message); }
 });
 trbForm.querySelector(".cancel").addEventListener("click", trbReset);
 
@@ -1513,7 +1547,7 @@ onSubmit(document.getElementById("email-form"), async (e) => {
   e.preventDefault(); if (!active) return;
   const b = formObj(e.target); b.tournament_id = active.id;
   try { await api("/emails", { method: "POST", body: JSON.stringify(b) }); setMsg("email-msg", "added", true); e.target.reset(); loadInbox(); }
-  catch (err) { setMsg("email-msg", err.message, false); }
+  catch (err) { setMsg("email-msg", err.message, false); markInvalid(e.target, err.message); }
 });
 
 // Generic simple list grid (no master-detail): replaces a static table with a
@@ -1650,7 +1684,7 @@ onSubmit(lateForm, async (e) => {
   try {
     await api(`/tournaments/${active.id}/late-entries`, { method: "POST", body: JSON.stringify(b) });
     setMsg("late-msg", "added", true); lateReset(); loadLate(); loadInbox();
-  } catch (err) { setMsg("late-msg", err.message, false); }
+  } catch (err) { setMsg("late-msg", err.message, false); markInvalid(lateForm, err.message); }
 });
 lateForm.querySelector(".cancel").addEventListener("click", lateReset);
 
@@ -1687,7 +1721,7 @@ onSubmit(wdForm, async (e) => {
   try {
     await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
     setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadRoster(); loadInbox();
-  } catch (err) { setMsg("withdrawal-msg", err.message, false); }
+  } catch (err) { setMsg("withdrawal-msg", err.message, false); markInvalid(wdForm, err.message); }
 });
 wdForm.querySelector(".cancel").addEventListener("click", wdReset);
 
@@ -1753,7 +1787,7 @@ function wirePlayerList(cfg) {
     btn.disabled = true;
     const b = expandPlayerRef(formObj(form)); b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
     try { await api(`/tournaments/${active.id}${cfg.path}`, { method: "POST", body: JSON.stringify(b) }); setMsg(cfg.msgId, "added", true); reset(); load(); loadInbox(); }
-    catch (err) { setMsg(cfg.msgId, err.message, false); }
+    catch (err) { setMsg(cfg.msgId, err.message, false); markInvalid(form, err.message); }
     finally { btn.disabled = false; }
   });
   form.querySelector(".cancel").addEventListener("click", reset);
@@ -1947,7 +1981,7 @@ onSubmit(pairingForm, async (e) => {
     source_email_id: pairingForm.source_email_id.value ? Number(pairingForm.source_email_id.value) : null,
   };
   try { await api(`/tournaments/${active.id}/pairing-avoidances`, { method: "POST", body: JSON.stringify(body) }); setMsg("pairing-msg", "added", true); pairingReset(); loadPairing(); loadInbox(); }
-  catch (err) { setMsg("pairing-msg", err.message, false); }
+  catch (err) { setMsg("pairing-msg", err.message, false); markInvalid(pairingForm, err.message); }
 });
 pairingForm.querySelector(".cancel").addEventListener("click", pairingReset);
 pairingReset();
@@ -2014,7 +2048,7 @@ onSubmit(doublesForm, async (e) => {
     const res = await api(`/tournaments/${active.id}/doubles-requests`, { method: "POST", body: JSON.stringify(b) });
     setMsg("doubles-msg", res.paired ? "paired!" : (b.wants_random ? "queued" : "filed — awaiting partner"), true);
     doublesReset(); loadDoubles(); loadInbox();
-  } catch (err) { setMsg("doubles-msg", err.message, false); }
+  } catch (err) { setMsg("doubles-msg", err.message, false); markInvalid(doublesForm, err.message); }
 });
 doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
 
