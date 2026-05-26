@@ -1618,7 +1618,7 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
 }
 const lateGrid = makeListGrid("late-table", [
   { title: "Date", field: "request_date", editor: "date", cssClass: "editable-cell",
-    formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn">⚠ past deadline</span>' : ""); } },
+    formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn" title="Past the late-entry deadline">⚠</span>' : ""); } },
   { title: "Time", field: "request_time", editor: "input", cssClass: "editable-cell" },
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
