@@ -7,6 +7,16 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Per-column header filters** (phase 7) — every grid now has a filter box
+  under each meaningful column header. A shared `_autoHeaderFilters` helper gives
+  `makeListGrid` / `makeReadGrid` / `wirePlayerList` columns an `input` filter,
+  skipping synthetic (`_…`) and raw-key (`id` / `*_id`) columns; the Setup grids
+  (`wireEntity`) build theirs inline (computed columns filter via the `fmt` text;
+  list-editable columns — type, cert_type — get a **dropdown** filter). Roster
+  (Status), Inbox (Classification) use dropdown filters; the Room-block **Hotel**
+  column filters by hotel name. Filters combine (AND) with the existing global
+  search box. Switched the grids to `renderVertical:"basic"` (small POC lists) to
+  avoid Tabulator's virtual-render resize loop that a row-count change could trip.
 - **✅ Tabulator grid — Inbox** (phase 6) — the review Inbox, previously kept as a
   custom table for its interactive per-row controls, is now a grid too:
   **Classification** is an inline `list` editor (click to change, persists on edit),

@@ -494,6 +494,18 @@ function wireEntity(cfg) {
       if (c.edit.params) col.editorParams = c.edit.params;
       col.cssClass = "editable-cell";
     }
+    // Per-column header filter on the meaningful columns (skip the id column).
+    // List-editable columns reuse their value set as a dropdown filter; computed
+    // (fmt) columns filter against the rendered text.
+    if (c.key !== "id") {
+      if (c.edit && c.edit.editor === "list") {
+        col.headerFilter = "list";
+        col.headerFilterParams = { values: c.edit.params.values, clearable: true };
+      } else {
+        col.headerFilter = "input";
+      }
+      if (c.fmt) col.headerFilterFunc = (term, _v, data) => c.fmt(data).toLowerCase().includes(String(term).toLowerCase());
+    }
     return col;
   });
   columns.push({
@@ -516,6 +528,7 @@ function wireEntity(cfg) {
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
     columnDefaults: { headerSortTristate: true, resizable: false },
     editTriggerEvent: "dblclick",  // single click selects/navigates; double-click edits
+    renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
     columns,
   });
   (GRIDS[cfg.panelId] ||= []).push(table);
@@ -717,16 +730,20 @@ const rosterGrid = new Tabulator(rosterMount, {
   placeholder: "No players on this roster yet.",
   columnDefaults: { headerSortTristate: true, resizable: false },
   editTriggerEvent: "dblclick",  // single click selects; double-click edits in place
+  renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
   columns: [
     { title: "Player", field: "last_name",
-      formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; } },
-    { title: "Div", field: "age_division", editor: "input", cssClass: "editable-cell" },
+      formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; },
+      headerFilter: "input", headerFilterFunc: (term, _v, e) => (rosterName(e) + " " + (e.usta_number || "")).toLowerCase().includes(String(term).toLowerCase()) },
+    { title: "Div", field: "age_division", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
     { title: "Status", field: "selection_status", cssClass: "editable-cell",
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
+      headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
       formatter: (cell) => chip(cell.getData().selection_status) },
     { title: "Shirt", field: "t_shirt_size", cssClass: "editable-cell",
-      editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] } },
-    { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell" },
+      editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] },
+      headerFilter: "input" },
+    { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
     { title: "", field: "_act", headerSort: false, width: 108, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
@@ -1137,7 +1154,8 @@ const trbForm = document.getElementById("trb-form");
 let trbEditId = null;
 const trbGrid = makeListGrid("trb-table", [
   { title: "ID", field: "id", width: 64 },
-  { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id); } },
+  { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id); },
+    headerFilter: "input", headerFilterFunc: (term, _v, b) => String(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id).toLowerCase().includes(String(term).toLowerCase()) },
   { title: "Type", field: "kind", formatter: (c) => (c.getData().kind === "official" ? "Officials comp" : "Player rate") },
   { title: "Rooms", field: "room_count", hozAlign: "right", width: 90 },
   { title: "Left", field: "rooms_remaining", hozAlign: "right", width: 80 },
@@ -1202,7 +1220,7 @@ function renderAvailDates() {
 const availGrid = makeReadGrid("avail-table", [
   { title: "Official", field: "official_name" },
   { title: "Available dates", field: "dates_text", headerSort: false },
-  { title: "Hotel", field: "hotel", width: 90, formatter: (c) => (c.getData().hotel ? "yes" : "") },
+  { title: "Hotel", field: "hotel", width: 90, noFilter: true, formatter: (c) => (c.getData().hotel ? "yes" : "") },
 ], "availability", "No availability recorded yet.");
 function renderAvailTable() {
   const byOff = {};
@@ -1290,7 +1308,8 @@ const inboxGrid = makeReadGrid("inbox-table", [
   { title: "From", field: "from_address" },
   { title: "Subject", field: "subject" },
   { title: "Classification", field: "classification", cssClass: "editable-cell",
-    editor: "list", editorParams: { values: EMAIL_CLASSES } },
+    editor: "list", editorParams: { values: EMAIL_CLASSES },
+    headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status) },
   { title: "", field: "_act", headerSort: false, width: 230, cssClass: "grid-actions-cell",
     formatter: (cell) => {
@@ -1345,6 +1364,20 @@ onSubmit(document.getElementById("email-form"), async (e) => {
 // Generic simple list grid (no master-detail): replaces a static table with a
 // Tabulator grid + a Delete action + a per-grid CSV download. Used by the
 // delete-only workspace lists (late entries, withdrawals).
+// Give each meaningful data column a header filter box (skip synthetic `_…`
+// fields and any column that already declares its own filter). `input` matches a
+// substring against the column's field value (works through formatters since the
+// underlying value is what's filtered).
+function _autoHeaderFilters(cols) {
+  for (const col of cols) {
+    if (col.headerFilter || col.noFilter || !col.field) continue;
+    // Skip synthetic (`_…`) and raw key columns (id / *_id) — filtering numeric
+    // keys as substrings isn't meaningful; name-bearing columns get a func instead.
+    if (col.field.startsWith("_") || col.field === "id" || col.field.endsWith("_id")) continue;
+    col.headerFilter = "input";
+  }
+  return cols;
+}
 function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit) {
   const tableEl = document.getElementById(tableId);
   const panelId = tableEl.closest(".panel")?.id;
@@ -1354,7 +1387,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
   csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
   mount.parentElement.insertBefore(csv, mount);
-  const cols = columns.slice();
+  const cols = _autoHeaderFilters(columns.slice());
   cols.push({
     title: "", field: "_act", headerSort: false, width: onEdit ? 108 : 84, cssClass: "grid-actions-cell",
     formatter: (cell) => {
@@ -1372,6 +1405,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   let built = false, pending = null;
   const grid = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
+    renderVertical: "basic",
     columnDefaults: { headerSortTristate: true, resizable: false }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
@@ -1396,7 +1430,8 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   let built = false, pending = null, pendingFilter = null;
   const grid = new Tabulator(mount, {
     layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
-    columnDefaults: { headerSortTristate: true, resizable: false }, columns,
+    renderVertical: "basic",
+    columnDefaults: { headerSortTristate: true, resizable: false }, columns: _autoHeaderFilters(columns),
     ...(opts.index ? { index: opts.index } : {}),
     ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
   });
@@ -1497,7 +1532,8 @@ function wirePlayerList(cfg) {
   let built = false, pending = null;
   const table = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
-    columnDefaults: { headerSortTristate: true, resizable: false }, columns,
+    renderVertical: "basic",
+    columnDefaults: { headerSortTristate: true, resizable: false }, columns: _autoHeaderFilters(columns),
   });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
   if (panelId) (GRIDS[panelId] ||= []).push(table);
