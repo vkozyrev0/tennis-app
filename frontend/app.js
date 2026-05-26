@@ -540,8 +540,11 @@ function setActive(id) {
   updateActiveUI();
   // Switching the active tournament mid-edit would otherwise leave a modal open
   // against a different tournament's data — close any open detail and toast.
-  if (prev && active && prev.id !== active.id && typeof closeOpenDetail === "function") {
-    closeOpenDetail();
+  if (prev && active && prev.id !== active.id) {
+    if (typeof closeOpenDetail === "function") closeOpenDetail();
+    // Also reset workspace add-forms — a half-filled form left from the previous
+    // tournament shouldn't submit against the new one.
+    document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
     if (typeof toast === "function") toast(`Switched to ${active.name}`, true);
   }
 }
@@ -2055,7 +2058,16 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
   { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
   { title: "Type", field: "_type", formatter: (c) => chip(c.getData().wants_random ? "random" : "mutual") },
   { title: "Partner status", field: "_info",
-    formatter: (c) => { const r = c.getData(); return r.status === "paired" ? "paired" : r.wants_random ? "queued (waiting)" : `→ ${esc(r.partner_usta || "?")} (awaiting partner)`; } },
+    formatter: (c) => {
+      const r = c.getData();
+      if (r.status === "paired") return "paired";
+      if (r.wants_random) return "queued (waiting)";
+      // Show the partner's name (looked up by USTA #) instead of the raw code,
+      // since the TD reads names, not USTA numbers, when scanning the queue.
+      const partner = r.partner_usta ? Object.values(playersById).find((p) => p.usta_number === r.partner_usta) : null;
+      const label = partner ? [partner.last_name, partner.first_name].filter(Boolean).join(", ") || partner.usta_number : (r.partner_usta || "?");
+      return `→ ${esc(label)} (awaiting partner)`;
+    } },
 ], "doubles-requests", "No doubles requests yet.",
   async (r) => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } },
   undefined,
