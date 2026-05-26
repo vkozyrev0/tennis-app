@@ -1792,12 +1792,24 @@ function pairingMemberRow() {
 function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
 document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
 const pairingGrid = makeListGrid("pairing-table", [
-  { title: "Division", field: "age_division" },
-  { title: "Relationship", field: "relationship" },
+  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
+  { title: "Relationship", field: "relationship", editor: "list", cssClass: "editable-cell",
+    editorParams: { values: ["same_club", "siblings"] } },
   { title: "Players", field: "_players",
     formatter: (c) => esc((c.getData().members || []).map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ")) },
 ], "pairing-avoidances", "No pairing avoidances yet.",
-  async (g) => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } });
+  async (g) => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } },
+  undefined,
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const g = cell.getRow().getData();
+    try {
+      await api(`/pairing-avoidances/${g.id}`, { method: "PUT", body: JSON.stringify({
+        age_division: g.age_division || null, relationship: g.relationship || null,
+      }) });
+      setMsg("pairing-msg", "saved", true); loadPairing();
+    } catch (err) { setMsg("pairing-msg", err.message, false); try { cell.restoreOldValue(); } catch (_) {} loadPairing(); }
+  });
 async function loadPairing() {
   if (!active) return;
   pairingGrid.setData(await api(`/tournaments/${active.id}/pairing-avoidances`));
@@ -1832,19 +1844,33 @@ function doublesReset() { doublesForm.reset(); doublesForm.source_email_id.value
 const doublesReqGrid = makeListGrid("doubles-req-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
-  { title: "Division", field: "age_division" },
+  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
   { title: "Type", field: "_type", formatter: (c) => chip(c.getData().wants_random ? "random" : "mutual") },
   { title: "Partner status", field: "_info",
     formatter: (c) => { const r = c.getData(); return r.status === "paired" ? "paired" : r.wants_random ? "queued (waiting)" : `→ ${esc(r.partner_usta || "?")} (awaiting partner)`; } },
 ], "doubles-requests", "No doubles requests yet.",
-  async (r) => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
+  async (r) => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } },
+  undefined,
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const r = cell.getRow().getData();
+    try { await api(`/doubles-requests/${r.id}`, { method: "PUT", body: JSON.stringify({ age_division: r.age_division || null }) }); setMsg("doubles-msg", "saved", true); loadDoubles(); }
+    catch (e) { setMsg("doubles-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadDoubles(); }
+  });
 const doublesPairGrid = makeListGrid("doubles-pair-table", [
-  { title: "Division", field: "age_division" },
+  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
   { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
   { title: "Player 1", field: "player1" },
   { title: "Player 2", field: "player2" },
 ], "doubles-pairs", "No verified pairs yet.",
-  async (d) => { if (!(await confirmDialog("Delete pair?"))) return; try { await api(`/doubles-pairs/${d.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } });
+  async (d) => { if (!(await confirmDialog("Delete pair?"))) return; try { await api(`/doubles-pairs/${d.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } },
+  undefined,
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const d = cell.getRow().getData();
+    try { await api(`/doubles-pairs/${d.id}`, { method: "PUT", body: JSON.stringify({ age_division: d.age_division || null }) }); setMsg("doubles-msg", "saved", true); loadDoubles(); }
+    catch (e) { setMsg("doubles-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadDoubles(); }
+  });
 async function loadDoubles() {
   if (!active) return;
   const data = await api(`/tournaments/${active.id}/doubles`);

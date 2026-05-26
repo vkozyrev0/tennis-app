@@ -405,6 +405,23 @@ def test_part_b_inline_edits():
     assert phu["hotel_name"] == "hilton downtown" and phu["lodging_plan"] == "Commuter" and phu["hotel_id"]
 
 
+def test_pairing_and_doubles_update():
+    t, a, b = _tournament(), _player(), _player()
+    # pairing: edit age_division + relationship (members stay add/delete)
+    g = _ok(client.post(f"/api/tournaments/{t['id']}/pairing-avoidances", json={
+        "age_division": "B14", "relationship": "same_club",
+        "members": [{"usta_number": a["usta_number"]}, {"usta_number": b["usta_number"]}]}))
+    gu = _ok(client.put(f"/api/pairing-avoidances/{g['id']}",
+                        json={"age_division": "B16", "relationship": "siblings"}), 200)
+    assert gu["age_division"] == "B16" and gu["relationship"] == "siblings"
+    # doubles request: edit age_division on a pending mutual request
+    r = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
+        "usta_number": a["usta_number"], "age_division": "G14", "partner_usta": b["usta_number"]}))
+    rid = r["request"]["id"]
+    ru = client.put(f"/api/doubles-requests/{rid}", json={"age_division": "G16"})
+    assert ru.status_code == 200 and ru.json()["age_division"] == "G16"
+
+
 def test_withdrawal_update_keeps_reason_rule():
     t, p = _tournament(), _player()
     client.post(f"/api/tournaments/{t['id']}/players", json={"player_id": p["id"], "selection_status": "selected"})

@@ -315,6 +315,14 @@ class DoublesRequestCreate(BaseModel):
         return self
 
 
+class DoublesRequestUpdate(BaseModel):
+    age_division: Optional[str] = None
+
+
+class DoublesPairUpdate(BaseModel):
+    age_division: Optional[str] = None
+
+
 class DoublesRequestOut(BaseModel):
     id: int
     tournament_id: int
@@ -345,6 +353,11 @@ class PairingMemberIn(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+
+
+class PairingAvoidanceUpdate(BaseModel):
+    age_division: Optional[str] = None
+    relationship: Optional[Literal["same_club", "siblings"]] = None
 
 
 class PairingAvoidanceCreate(BaseModel):

@@ -7,7 +7,7 @@ the next random request pairs with the longest-waiting one; binding once made.
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import DoublesRequestCreate
+from ..models import DoublesPairUpdate, DoublesRequestCreate, DoublesRequestUpdate
 from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["doubles"])
@@ -111,6 +111,35 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
         cur.execute(_REQ + " WHERE r.id = %s", (req_id,))
         request = cur.fetchone()
     return {"request": request, "paired": paired_id is not None}
+
+
+@router.put("/api/doubles-requests/{req_id}")
+def update_request(req_id: int, body: DoublesRequestUpdate, conn=Depends(db_dep)):
+    """Edit a request's `age_division`. Player / partner / random / verification
+    stay system-managed — to change those, delete and re-file."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE doubles_request SET age_division = %s WHERE id = %s",
+            (body.age_division, req_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+        cur.execute(_REQ + " WHERE r.id = %s", (req_id,))
+        return cur.fetchone()
+
+
+@router.put("/api/doubles-pairs/{pair_id}")
+def update_pair(pair_id: int, body: DoublesPairUpdate, conn=Depends(db_dep)):
+    """Edit a verified pair's `age_division`. Members / pairing_type stay fixed."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE doubles_pair SET age_division = %s WHERE id = %s",
+            (body.age_division, pair_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+        cur.execute(_PAIR + " WHERE d.id = %s", (pair_id,))
+        return cur.fetchone()
 
 
 @router.delete("/api/doubles-requests/{req_id}", status_code=204)

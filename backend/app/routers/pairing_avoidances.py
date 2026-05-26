@@ -3,7 +3,7 @@ meet in the first round (same club / siblings)."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import PairingAvoidanceCreate, PairingAvoidanceOut
+from ..models import PairingAvoidanceCreate, PairingAvoidanceOut, PairingAvoidanceUpdate
 from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["pairing-avoidances"])
@@ -70,6 +70,20 @@ def create_pairing(tournament_id: int, body: PairingAvoidanceCreate, conn=Depend
             )
         mark_email_filed(cur, body.source_email_id, "pairing_avoidance")
         return _group(cur, gid)
+
+
+@router.put("/api/pairing-avoidances/{group_id}", response_model=PairingAvoidanceOut)
+def update_pairing(group_id: int, body: PairingAvoidanceUpdate, conn=Depends(db_dep)):
+    """Edit the group's `age_division` / `relationship`. Membership stays managed
+    via add (POST) + delete; changing who's in a group means delete + re-add."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE pairing_avoidance SET age_division = %s, relationship = %s WHERE id = %s",
+            (body.age_division, body.relationship, group_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+        return _group(cur, group_id)
 
 
 @router.delete("/api/pairing-avoidances/{group_id}", status_code=204)

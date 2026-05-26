@@ -7,6 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Pairing & Doubles PUT for simple fields** (phase 13b) — extends the
+  Part B PUT story to the last two routers: pairing avoidances accept PUT for
+  `age_division` and `relationship` (members stay add/delete — changing who's
+  in a group means delete + re-add); doubles requests and verified pairs accept
+  PUT for `age_division` (players / partner / wants_random / pairing_type /
+  verification stay system-managed — to change those, delete and re-file). The
+  Pairing grid's Division becomes an input editor and Relationship a `same_club`
+  / `siblings` dropdown editor; both Doubles grids gain a Division editor.
+  Backend tests cover both endpoints (43 passing).
 - **✅ Part B PUT + in-grid editing** (phase 13) — added PUT endpoints to the
   Part B routers (`late_entries`, `withdrawals`, `adult_lists` for sched + div
   flex, `player_hotels`) with small `*Update` models limited to the editable
