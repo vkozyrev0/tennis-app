@@ -214,7 +214,13 @@ function chip(v) {
 
 // Open the modal overlay wrapping a workspace add-form (used when filing/editing).
 function openForm(form) {
-  if (form && typeof form._openModal === "function") { form._openModal(); return; }
+  if (form && typeof form._openModal === "function") {
+    // file-from-email sets source_email_id before openForm() — remember the
+    // filing flow so the modal can route back to the Inbox after close/submit.
+    form._wasFiling = !!(form.source_email_id && form.source_email_id.value);
+    form._openModal();
+    return;
+  }
   if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
 }
 function esc(v) {
@@ -2361,8 +2367,17 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
   form.parentNode.insertBefore(modal, form);
   modal.append(close, heading, form);
   const openM = () => { modal.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeM; if (typeof syncCombos === "function") requestAnimationFrame(syncCombos); };
-  const closeM = () => { modal.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; };
-  trigger.addEventListener("click", openM);
+  const closeM = () => {
+    modal.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null;
+    // If this open was a file-from-email flow, return to the Inbox so the user
+    // can process the next email without an extra trip back.
+    if (form._wasFiling) {
+      form._wasFiling = false;
+      const inboxTab = document.querySelector('.tab[data-target="panel-t-inbox"]');
+      if (inboxTab) inboxTab.click();
+    }
+  };
+  trigger.addEventListener("click", () => { form._wasFiling = false; openM(); });
   close.addEventListener("click", closeM);
   form.addEventListener("reset", closeM);  // success path and Cancel both reset → close
   form._openModal = openM;                  // openForm() (file-from-email) opens it
