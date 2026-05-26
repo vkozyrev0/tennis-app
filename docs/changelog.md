@@ -7,6 +7,20 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Grid dropdown theming + Room-block in-grid edit** (phase 9) — two fixes:
+  (1) the list editor / list header-filter **dropdown is appended to `<body>`**, so
+  the `.tabulator` theme rules never reached it — it now has explicit light/dark
+  styling (card background, readable text, hover/active highlight), `white-space:
+  nowrap` so long options aren't clipped in a narrow column, a 260px max-height
+  with its own scrollbar, and a z-index above app overlays (verified in dark mode:
+  card-coloured background, not white). (2) **Room blocks** gains **in-grid
+  editing** — `makeListGrid` now takes a `cellEdited` handler; Type (dropdown),
+  Rooms (number), Check-in/out (date) edit in place and PUT the row (the Edit
+  button still opens the form for the off-grid confirmation/cancellation fields).
+  Note: the **Part B** lists (late entries, withdrawals, scheduling, division flex,
+  player hotels, pairing, doubles) stay add/delete-only — they're POST/DELETE in
+  the API (human-review, filed-from-email); in-grid edit there needs new PUT
+  endpoints, tracked as a follow-up.
 - **✅ Auto-fit column widths** (phase 8) — grids switch from `fitColumns`
   (even stretch) to **`fitDataFill`**, so each column sizes to its content while
   the table still fills the container (verified: no right-side gap, no horizontal

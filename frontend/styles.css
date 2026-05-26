@@ -387,6 +387,25 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator .tabulator-cell.tabulator-editing select {
   background: var(--card); color: var(--ink); border: 0; padding: 0.32rem 0.5rem; width: 100%; box-sizing: border-box;
 }
+/* The list-editor / list-header-filter dropdown is appended to <body>, so it
+   isn't covered by the .tabulator theme rules — theme it explicitly for light +
+   dark, keep options on one line (so long values aren't clipped in a narrow
+   column), and cap its height with a scrollbar. z-index beats our overlays. */
+.tabulator-edit-list {
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  max-height: 260px; overflow-y: auto; z-index: 10050;
+}
+.tabulator-edit-list .tabulator-edit-list-item {
+  color: var(--ink); white-space: nowrap; padding: 0.3rem 0.6rem;
+}
+.tabulator-edit-list .tabulator-edit-list-item.active,
+.tabulator-edit-list .tabulator-edit-list-item.hover,
+.tabulator-edit-list .tabulator-edit-list-item:hover {
+  background: var(--sel); color: var(--ink);
+}
+.tabulator-edit-list .tabulator-edit-list-placeholder { color: var(--muted); }
 
 /* ---- list scroll container (own scrollbar; header stays pinned) ---- */
 .list-scroll {

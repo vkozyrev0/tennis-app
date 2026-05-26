@@ -1156,11 +1156,12 @@ const trbGrid = makeListGrid("trb-table", [
   { title: "ID", field: "id", width: 64 },
   { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id); },
     headerFilter: "input", headerFilterFunc: (term, _v, b) => String(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id).toLowerCase().includes(String(term).toLowerCase()) },
-  { title: "Type", field: "kind", formatter: (c) => (c.getData().kind === "official" ? "Officials comp" : "Player rate") },
-  { title: "Rooms", field: "room_count", hozAlign: "right", width: 90 },
+  { title: "Type", field: "kind", cssClass: "editable-cell", formatter: (c) => (c.getData().kind === "official" ? "Officials comp" : "Player rate"),
+    editor: "list", editorParams: { values: { player: "Player rate", official: "Officials comp" } } },
+  { title: "Rooms", field: "room_count", hozAlign: "right", width: 90, cssClass: "editable-cell", editor: "number", editorParams: { min: 0 } },
   { title: "Left", field: "rooms_remaining", hozAlign: "right", width: 80 },
-  { title: "Check-in", field: "check_in" },
-  { title: "Check-out", field: "check_out" },
+  { title: "Check-in", field: "check_in", cssClass: "editable-cell", editor: "date" },
+  { title: "Check-out", field: "check_out", cssClass: "editable-cell", editor: "date" },
 ], "room-blocks", "No room blocks for this tournament yet.",
   async (b) => { if (!(await confirmDialog("Delete room block?"))) return; try { await api(`/room-blocks/${b.id}`, { method: "DELETE" }); loadRoomBlocks(); } catch (e) { setMsg("trb-msg", e.message, false); } },
   (b) => {
@@ -1174,6 +1175,20 @@ const trbGrid = makeListGrid("trb-table", [
     trbForm.cancellation_info.value = b.cancellation_info || "";
     trbForm.querySelector('button[type="submit"]').textContent = "Update block";
     openForm(trbForm);
+  },
+  // In-grid edit: PUT the whole row (RoomBlockOut carries every required field).
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const b = cell.getRow().getData();
+    try {
+      const body = { ...b }; delete body._act;
+      body.hotel_id = Number(body.hotel_id);
+      body.room_count = body.room_count == null ? 0 : Number(body.room_count);
+      body.tournament_id = active.id;
+      await api(`/room-blocks/${b.id}`, { method: "PUT", body: JSON.stringify(body) });
+      setMsg("trb-msg", "saved", true);
+      loadRoomBlocks();  // refresh rooms_remaining
+    } catch (e) { setMsg("trb-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadRoomBlocks(); }
   });
 async function loadRoomBlocks() {
   if (!active) return;
@@ -1378,7 +1393,7 @@ function _autoHeaderFilters(cols) {
   }
   return cols;
 }
-function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit) {
+function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited) {
   const tableEl = document.getElementById(tableId);
   const panelId = tableEl.closest(".panel")?.id;
   const mount = document.createElement("div"); mount.className = "grid-mount";
@@ -1405,10 +1420,11 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   let built = false, pending = null;
   const grid = new Tabulator(mount, {
     index: "id", layout: "fitDataFill", maxHeight: "55vh", placeholder,
-    renderVertical: "basic",
+    renderVertical: "basic", editTriggerEvent: "dblclick",  // double-click a cell to edit (where an editor is set)
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
+  if (onCellEdited) grid.on("cellEdited", onCellEdited);
   if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
 }
