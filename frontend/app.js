@@ -103,10 +103,9 @@ function chip(v) {
   return `<span class="badge badge-${BADGE[v] || "muted"}">${esc(v)}</span>`;
 }
 
-// Open the collapsible <details> wrapping a form (used when filing/editing).
+// Open the modal overlay wrapping a workspace add-form (used when filing/editing).
 function openForm(form) {
-  const d = form && form.closest("details.addbox");
-  if (d) d.open = true;
+  if (form && typeof form._openModal === "function") { form._openModal(); return; }
   if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
 }
 function esc(v) {
@@ -734,6 +733,17 @@ const rosterTitle = document.getElementById("roster-title");
 const rosterSubmit = rosterForm.querySelector('button[type="submit"]');
 let rosterRows = [];
 let rosterEditId = null;
+// Roster detail form is a modal overlay (parity with the Setup pages).
+const rosterDetail = rosterForm.closest(".detail-pane");
+const rosterCloseBtn = document.createElement("button");
+rosterCloseBtn.type = "button"; rosterCloseBtn.className = "detail-close"; rosterCloseBtn.textContent = "×"; rosterCloseBtn.title = "Close";
+rosterDetail.insertBefore(rosterCloseBtn, rosterDetail.firstChild);
+function rosterOpenModal() {
+  rosterDetail.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = rosterCloseModal;
+  if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
+}
+function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; }
+rosterCloseBtn.addEventListener("click", rosterCloseModal);
 async function loadRoster() {
   if (!active) return;
   rosterRows = await api(`/tournaments/${active.id}/players`);  // kept for the sign-in export
@@ -771,12 +781,12 @@ const rosterGrid = new Tabulator(rosterMount, {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
         const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
-        ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); });
+        ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
         const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
         dl.addEventListener("click", async (ev) => {
           ev.stopPropagation();
           if (!(await confirmDialog("Remove player from roster?"))) return;
-          try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) rosterShowNew(); await loadRoster(); }
+          try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) { rosterShowNew(); rosterCloseModal(); } await loadRoster(); }
           catch (err) { setMsg("roster-msg", err.message, false); }
         });
         wrap.append(ed, dl); return wrap;
@@ -785,7 +795,9 @@ const rosterGrid = new Tabulator(rosterMount, {
 });
 (GRIDS["panel-t-roster"] ||= []).push(rosterGrid);
 rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
-rosterGrid.on("rowClick", (e, row) => rosterSelect(row.getData()));
+// Single click only highlights (keeps double-click free for in-grid editing);
+// the Edit button opens the form overlay.
+rosterGrid.on("rowClick", (e, row) => { rosterEditId = row.getData().id; applyRosterSel(); });
 rosterGrid.on("dataFiltered", applyRosterSel);
 rosterGrid.on("dataSorted", applyRosterSel);
 // In-grid edit: PUT the whole entry (RosterEntryOut has every field the model
@@ -873,10 +885,11 @@ onSubmit(rosterForm, async () => {
     await loadRoster();
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();
+    rosterCloseModal();
   } catch (err) { setMsg("roster-msg", err.message, false); }
 });
-rosterForm.querySelector(".cancel").addEventListener("click", rosterShowNew);
-document.getElementById("roster-new").addEventListener("click", rosterShowNew);
+rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
+document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
 document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
 // joining the loaded roster with this tournament's player-hotel rows.
@@ -2110,22 +2123,35 @@ document.getElementById("roster-signin-csv").addEventListener("click", rosterSig
 document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);
 
-// =================== Collapse workspace add-forms (list stays primary) ===================
-// Wrap each workspace add-form in a <details> at runtime (no HTML changes).
-const COLLAPSIBLE = {
+// =================== Workspace add-forms as modal overlays (grid stays primary) ===================
+// Each add-form becomes a centered modal opened by a "＋ Add X" button; the grid
+// owns the page. Closing is driven by the form's `reset` event — every submit
+// handler resets on success and the Cancel button resets too, so success and
+// cancel both close the overlay while a validation error keeps it open.
+const FORM_MODALS = {
   "withdrawal-form": "Add withdrawal",
   "sched-form": "Add scheduling avoidance", "divflex-form": "Add division flexibility",
   "pairing-form": "Add pairing group", "doubles-form": "File doubles request",
   "photel-form": "Add player hotel", "late-form": "Add late entry", "trb-form": "Add room block",
   "asg-form": "Assign official", "email-form": "Add email",
 };
-for (const [id, label] of Object.entries(COLLAPSIBLE)) {
+for (const [id, label] of Object.entries(FORM_MODALS)) {
   const form = document.getElementById(id);
-  if (!form || form.closest("details.addbox")) continue;
-  const det = document.createElement("details"); det.className = "addbox";
-  const sum = document.createElement("summary"); sum.textContent = "＋ " + label;
-  form.parentNode.insertBefore(det, form);
-  det.append(sum, form);
+  if (!form || form.closest(".detail-pane")) continue;
+  const trigger = document.createElement("button");
+  trigger.type = "button"; trigger.className = "new-btn add-trigger"; trigger.textContent = "＋ " + label;
+  const modal = document.createElement("div"); modal.className = "detail-pane form-modal";
+  const close = document.createElement("button"); close.type = "button"; close.className = "detail-close"; close.textContent = "×"; close.title = "Close";
+  const heading = document.createElement("h3"); heading.className = "detail-title"; heading.textContent = label;
+  form.parentNode.insertBefore(trigger, form);
+  form.parentNode.insertBefore(modal, form);
+  modal.append(close, heading, form);
+  const openM = () => { modal.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeM; if (typeof syncCombos === "function") requestAnimationFrame(syncCombos); };
+  const closeM = () => { modal.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; };
+  trigger.addEventListener("click", openM);
+  close.addEventListener("click", closeM);
+  form.addEventListener("reset", closeM);  // success path and Cancel both reset → close
+  form._openModal = openM;                  // openForm() (file-from-email) opens it
 }
 
 // Give every workspace list table its own scrollbar (like the Setup lists), so a

@@ -7,6 +7,19 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Workspace pages → full-width grid + modal forms** (phase 11) — the same
+  treatment now covers the tournament workspace. **Roster** is a true
+  master/detail like the Setup pages: full-width grid, **Edit** opens the entry
+  form as a modal overlay, single click only highlights (double-click still edits
+  in place), Prev/Next nav in the modal header. The other workspace **add-forms**
+  (late entries, withdrawals, scheduling, division flex, player hotels, pairing,
+  doubles, room blocks, assignments, inbox email) replace the old collapsible
+  `<details>` with a **"＋ Add X" button that opens the form as a modal** — closing
+  is driven by the form's `reset` event (every submit handler resets on success
+  and Cancel resets too, so both close the overlay while a validation error keeps
+  it open). **File-from-email** opens the target form's modal (verified: jumps to
+  the tab, opens the form, carries `source_email_id`). One shared backdrop serves
+  every panel; Esc / backdrop / tab-switch all close.
 - **✅ Setup master/detail → full-width grid + modal edit form** (phase 10) — the
   Setup pages (Tournaments, Sites, Officials, Players, Rates, Hotels, Distances)
   no longer split the page into list + side form. The **grid now spans the full
