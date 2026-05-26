@@ -3,7 +3,7 @@ Also the cumulative cross-tournament t-shirt list (derived from tournament_entry
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import PlayerHotelCreate, PlayerHotelOut, TShirtRow
+from ..models import PlayerHotelCreate, PlayerHotelOut, PlayerHotelUpdate, TShirtRow
 from ..playerops import mark_email_filed, upsert_hotel, upsert_player
 
 router = APIRouter(tags=["player-ops"])
@@ -41,6 +41,23 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
         new_id = cur.fetchone()["id"]
         mark_email_filed(cur, body.source_email_id, "hotel")
         cur.execute(_PH + " WHERE s.id = %s", (new_id,))
+        return cur.fetchone()
+
+
+@router.put("/api/player-hotels/{row_id}", response_model=PlayerHotelOut)
+def update_player_hotel(row_id: int, body: PlayerHotelUpdate, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM player_hotel_stay WHERE id = %s", (row_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="not found")
+        # Keep the hotel name canonical/consistent via the Hotels table (FK).
+        hid, hname = upsert_hotel(cur, body.hotel_name)
+        lodging = " ".join((body.lodging_plan or "").split()) or None
+        cur.execute(
+            "UPDATE player_hotel_stay SET hotel_id = %s, hotel_name = %s, lodging_plan = %s WHERE id = %s",
+            (hid, hname, lodging, row_id),
+        )
+        cur.execute(_PH + " WHERE s.id = %s", (row_id,))
         return cur.fetchone()
 
 

@@ -261,6 +261,13 @@ class LateEntryOut(BaseModel):
     past_deadline: bool = False  # request_date after the tournament's late-entry deadline
 
 
+class LateEntryUpdate(BaseModel):
+    age_division: Optional[str] = None
+    events: Optional[str] = None
+    request_date: Optional[date] = None
+    request_time: Optional[str] = None
+
+
 class WithdrawalCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
@@ -284,6 +291,12 @@ class WithdrawalOut(BaseModel):
     notes: Optional[str] = None
     was_alternate: bool = False
     source_email_id: Optional[int] = None
+
+
+class WithdrawalUpdate(BaseModel):
+    events: Optional[str] = None
+    reason: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class DoublesRequestCreate(BaseModel):
@@ -385,6 +398,11 @@ class PlayerHotelOut(BaseModel):
     source_email_id: Optional[int] = None
 
 
+class PlayerHotelUpdate(BaseModel):
+    hotel_name: Optional[str] = None
+    lodging_plan: Optional[str] = None
+
+
 class TShirtRow(BaseModel):
     player_id: int
     usta_number: Optional[str] = None
@@ -394,6 +412,11 @@ class TShirtRow(BaseModel):
     tournament_id: int
     tournament_name: Optional[str] = None
     t_shirt_size: Optional[str] = None
+
+
+class SchedAvoidUpdate(BaseModel):
+    avoid_day: Optional[str] = None
+    avoid_time_range: Optional[str] = None
 
 
 class SchedAvoidCreate(BaseModel):
@@ -415,6 +438,11 @@ class SchedAvoidOut(BaseModel):
     avoid_day: Optional[str] = None
     avoid_time_range: Optional[str] = None
     source_email_id: Optional[int] = None
+
+
+class DivFlexUpdate(BaseModel):
+    home_division: Optional[str] = None
+    willing_divisions: Optional[str] = None
 
 
 class DivFlexCreate(BaseModel):

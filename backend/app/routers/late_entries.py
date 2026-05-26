@@ -3,7 +3,7 @@ tournament_entry (source=late_entry) and marks the source email filed (audit §4
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import LateEntryCreate, LateEntryOut
+from ..models import LateEntryCreate, LateEntryOut, LateEntryUpdate
 
 router = APIRouter(tags=["late-entries"])
 
@@ -86,6 +86,20 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
             )
 
         cur.execute(_SELECT + " WHERE le.id = %s", (new_id,))
+        return cur.fetchone()
+
+
+@router.put("/api/late-entries/{entry_id}", response_model=LateEntryOut)
+def update_late_entry(entry_id: int, body: LateEntryUpdate, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE late_entry SET age_division = %s, events = %s, request_date = %s, "
+            "request_time = %s WHERE id = %s",
+            (body.age_division, body.events, body.request_date, body.request_time, entry_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="late entry not found")
+        cur.execute(_SELECT + " WHERE le.id = %s", (entry_id,))
         return cur.fetchone()
 
 

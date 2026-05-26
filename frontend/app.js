@@ -1499,15 +1499,27 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   };
 }
 const lateGrid = makeListGrid("late-table", [
-  { title: "Date", field: "request_date",
+  { title: "Date", field: "request_date", editor: "date", cssClass: "editable-cell",
     formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn">⚠ past deadline</span>' : ""); } },
-  { title: "Time", field: "request_time" },
+  { title: "Time", field: "request_time", editor: "input", cssClass: "editable-cell" },
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
-  { title: "Division", field: "age_division" },
-  { title: "Events", field: "events" },
+  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
+  { title: "Events", field: "events", editor: "input", cssClass: "editable-cell" },
 ], "late-entries", "No late entries yet.",
-  async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } });
+  async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } },
+  undefined,
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const e = cell.getRow().getData();
+    try {
+      await api(`/late-entries/${e.id}`, { method: "PUT", body: JSON.stringify({
+        age_division: e.age_division || null, events: e.events || null,
+        request_date: e.request_date || null, request_time: e.request_time || null,
+      }) });
+      setMsg("late-msg", "saved", true); loadLate();
+    } catch (err) { setMsg("late-msg", err.message, false); try { cell.restoreOldValue(); } catch (_) {} loadLate(); }
+  });
 async function loadLate() {
   if (!active) return;
   lateGrid.setData(await api(`/tournaments/${active.id}/late-entries`));
@@ -1528,12 +1540,23 @@ const wdGrid = makeListGrid("withdrawal-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
   { title: "Division", field: "age_division" },
-  { title: "Events", field: "events" },
+  { title: "Events", field: "events", editor: "input", cssClass: "editable-cell" },
   { title: "Alt?", field: "was_alternate", formatter: (c) => (c.getData().was_alternate ? "yes" : "") },
-  { title: "Reason", field: "reason" },
-  { title: "Notes", field: "notes" },
+  { title: "Reason", field: "reason", editor: "input", cssClass: "editable-cell" },
+  { title: "Notes", field: "notes", editor: "input", cssClass: "editable-cell" },
 ], "withdrawals", "No withdrawals yet.",
-  async (w) => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } });
+  async (w) => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } },
+  undefined,
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const w = cell.getRow().getData();
+    try {
+      await api(`/withdrawals/${w.id}`, { method: "PUT", body: JSON.stringify({
+        events: w.events || null, reason: w.reason || null, notes: w.notes || null,
+      }) });
+      setMsg("withdrawal-msg", "saved", true); loadWithdrawals();
+    } catch (e) { setMsg("withdrawal-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadWithdrawals(); }
+  });
 async function loadWithdrawals() {
   if (!active) return;
   wdGrid.setData(await api(`/tournaments/${active.id}/withdrawals`));
@@ -1583,10 +1606,19 @@ function wirePlayerList(cfg) {
   let built = false, pending = null;
   const table = new Tabulator(mount, {
     index: "id", layout: "fitDataFill", maxHeight: "55vh", placeholder: cfg.empty,
-    renderVertical: "basic",
+    renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: _autoHeaderFilters(columns),
   });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
+  // In-grid edit: PUT only the editable fields (cfg.editFields maps field→true);
+  // identity columns (player/usta) stay read-only.
+  if (cfg.editFields) table.on("cellEdited", async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const r = cell.getData();
+    const body = {}; for (const f of Object.keys(cfg.editFields)) body[f] = r[f] || null;
+    try { await api(`${cfg.del}/${r.id}`, { method: "PUT", body: JSON.stringify(body) }); setMsg(cfg.msgId, "saved", true); load(); if (cfg.after) cfg.after(); }
+    catch (e) { setMsg(cfg.msgId, e.message, false); try { cell.restoreOldValue(); } catch (_) {} load(); }
+  });
   if (panelId) (GRIDS[panelId] ||= []).push(table);
 
   async function load() {
@@ -1612,22 +1644,24 @@ const schedList = wirePlayerList({
   formId: "sched-form", msgId: "sched-msg", tableId: "sched-table",
   path: "/scheduling-avoidances", del: "/scheduling-avoidances", exportName: "scheduling-avoidances",
   empty: "No scheduling avoidances yet.",
+  editFields: { avoid_day: true, avoid_time_range: true },
   columns: [
     { title: "Player", field: "last_name", formatter: _playerCell },
     { title: "USTA #", field: "usta_number" },
-    { title: "Avoid day", field: "avoid_day" },
-    { title: "Avoid time", field: "avoid_time_range" },
+    { title: "Avoid day", field: "avoid_day", editor: "input", cssClass: "editable-cell" },
+    { title: "Avoid time", field: "avoid_time_range", editor: "input", cssClass: "editable-cell" },
   ],
 });
 const divflexList = wirePlayerList({
   formId: "divflex-form", msgId: "divflex-msg", tableId: "divflex-table",
   path: "/division-flex", del: "/division-flex", exportName: "division-flexibility",
   empty: "No division-flexibility entries yet.",
+  editFields: { home_division: true, willing_divisions: true },
   columns: [
     { title: "Player", field: "last_name", formatter: _playerCell },
     { title: "USTA #", field: "usta_number" },
-    { title: "Home", field: "home_division" },
-    { title: "Willing", field: "willing_divisions" },
+    { title: "Home", field: "home_division", editor: "input", cssClass: "editable-cell" },
+    { title: "Willing", field: "willing_divisions", editor: "input", cssClass: "editable-cell" },
   ],
 });
 
@@ -1663,11 +1697,12 @@ const photelList = wirePlayerList({
   formId: "photel-form", msgId: "photel-msg", tableId: "photel-table",
   path: "/player-hotels", del: "/player-hotels", exportName: "player-hotels",
   empty: "No player hotels reported yet.",
+  editFields: { hotel_name: true, lodging_plan: true },
   columns: [
     { title: "Player", field: "last_name", formatter: _playerCell },
     { title: "USTA #", field: "usta_number" },
-    { title: "Hotel", field: "hotel_name" },
-    { title: "Lodging plan", field: "lodging_plan" },
+    { title: "Hotel", field: "hotel_name", editor: "input", cssClass: "editable-cell" },
+    { title: "Lodging plan", field: "lodging_plan", editor: "input", cssClass: "editable-cell" },
   ],
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });

@@ -4,7 +4,7 @@ email) marks that email filed."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import WithdrawalCreate, WithdrawalOut
+from ..models import WithdrawalCreate, WithdrawalOut, WithdrawalUpdate
 
 router = APIRouter(tags=["withdrawals"])
 
@@ -92,6 +92,27 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
             )
 
         cur.execute(_SELECT + " WHERE w.id = %s", (new_id,))
+        return cur.fetchone()
+
+
+@router.put("/api/withdrawals/{withdrawal_id}", response_model=WithdrawalOut)
+def update_withdrawal(withdrawal_id: int, body: WithdrawalUpdate, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT was_alternate FROM withdrawal WHERE id = %s", (withdrawal_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="withdrawal not found")
+        # Reason rule (§2.4): required unless the player was an alternate.
+        if not row["was_alternate"] and not (body.reason and body.reason.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail="a reason is required unless the player was an alternate",
+            )
+        cur.execute(
+            "UPDATE withdrawal SET events = %s, reason = %s, notes = %s WHERE id = %s",
+            (body.events, body.reason, body.notes, withdrawal_id),
+        )
+        cur.execute(_SELECT + " WHERE w.id = %s", (withdrawal_id,))
         return cur.fetchone()
 
 

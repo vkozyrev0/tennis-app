@@ -371,6 +371,52 @@ def test_withdrawal_alternate_needs_no_reason():
     assert w["was_alternate"] is True and (w["reason"] is None or w["reason"] == "")
 
 
+def test_part_b_inline_edits():
+    """PUT (in-grid edit) on the Part B lists updates the editable fields."""
+    t, p = _tournament(), _player()
+    u = p["usta_number"]
+
+    # late entry: edit division + events
+    le = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries",
+                         json={"usta_number": u, "age_division": "B16", "events": "Singles"}))
+    upd = _ok(client.put(f"/api/late-entries/{le['id']}",
+                         json={"age_division": "B18", "events": "Doubles", "request_date": None, "request_time": None}), 200)
+    assert upd["age_division"] == "B18" and upd["events"] == "Doubles"
+
+    # scheduling avoidance
+    sa = _ok(client.post(f"/api/tournaments/{t['id']}/scheduling-avoidances",
+                         json={"usta_number": u, "avoid_day": "Mon"}))
+    sau = _ok(client.put(f"/api/scheduling-avoidances/{sa['id']}",
+                         json={"avoid_day": "Tue", "avoid_time_range": "AM"}), 200)
+    assert sau["avoid_day"] == "Tue" and sau["avoid_time_range"] == "AM"
+
+    # division flexibility
+    df = _ok(client.post(f"/api/tournaments/{t['id']}/division-flex",
+                         json={"usta_number": u, "home_division": "B12"}))
+    dfu = _ok(client.put(f"/api/division-flex/{df['id']}",
+                         json={"home_division": "B14", "willing_divisions": "B16"}), 200)
+    assert dfu["home_division"] == "B14" and dfu["willing_divisions"] == "B16"
+
+    # player hotel: edited name resolves to one canonical Hotels row
+    ph = _ok(client.post(f"/api/tournaments/{t['id']}/player-hotels",
+                         json={"usta_number": u, "hotel_name": "Marriott", "lodging_plan": "Hotel"}))
+    phu = _ok(client.put(f"/api/player-hotels/{ph['id']}",
+                         json={"hotel_name": "  hilton   downtown ", "lodging_plan": "Commuter"}), 200)
+    assert phu["hotel_name"] == "hilton downtown" and phu["lodging_plan"] == "Commuter" and phu["hotel_id"]
+
+
+def test_withdrawal_update_keeps_reason_rule():
+    t, p = _tournament(), _player()
+    client.post(f"/api/tournaments/{t['id']}/players", json={"player_id": p["id"], "selection_status": "selected"})
+    w = _ok(client.post(f"/api/tournaments/{t['id']}/withdrawals",
+                        json={"usta_number": p["usta_number"], "reason": "injury"}))
+    # a selected player still needs a reason on edit
+    assert client.put(f"/api/withdrawals/{w['id']}", json={"reason": "", "notes": "x"}).status_code == 400
+    upd = _ok(client.put(f"/api/withdrawals/{w['id']}",
+                        json={"reason": "illness", "notes": "doctor note", "events": "Singles"}), 200)
+    assert upd["reason"] == "illness" and upd["notes"] == "doctor note"
+
+
 def test_doubles_mutual_verification():
     t = _tournament()
     a, b = _player(), _player()

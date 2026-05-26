@@ -2,7 +2,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import DivFlexCreate, DivFlexOut, SchedAvoidCreate, SchedAvoidOut
+from ..models import (
+    DivFlexCreate,
+    DivFlexOut,
+    DivFlexUpdate,
+    SchedAvoidCreate,
+    SchedAvoidOut,
+    SchedAvoidUpdate,
+)
 from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["adult-lists"])
@@ -50,6 +57,19 @@ def create_sched(tournament_id: int, body: SchedAvoidCreate, conn=Depends(db_dep
         return cur.fetchone()
 
 
+@router.put("/api/scheduling-avoidances/{row_id}", response_model=SchedAvoidOut)
+def update_sched(row_id: int, body: SchedAvoidUpdate, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE scheduling_avoidance SET avoid_day = %s, avoid_time_range = %s WHERE id = %s",
+            (body.avoid_day, body.avoid_time_range, row_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+        cur.execute(_SA + " WHERE a.id = %s", (row_id,))
+        return cur.fetchone()
+
+
 @router.delete("/api/scheduling-avoidances/{row_id}", status_code=204)
 def delete_sched(row_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
@@ -81,6 +101,19 @@ def create_divflex(tournament_id: int, body: DivFlexCreate, conn=Depends(db_dep)
         new_id = cur.fetchone()["id"]
         mark_email_filed(cur, body.source_email_id, "division_flex")
         cur.execute(_DF + " WHERE d.id = %s", (new_id,))
+        return cur.fetchone()
+
+
+@router.put("/api/division-flex/{row_id}", response_model=DivFlexOut)
+def update_divflex(row_id: int, body: DivFlexUpdate, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE division_flexibility SET home_division = %s, willing_divisions = %s WHERE id = %s",
+            (body.home_division, body.willing_divisions, row_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+        cur.execute(_DF + " WHERE d.id = %s", (row_id,))
         return cur.fetchone()
 
 

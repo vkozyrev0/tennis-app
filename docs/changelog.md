@@ -7,6 +7,20 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Part B PUT + in-grid editing** (phase 13) — added PUT endpoints to the
+  Part B routers (`late_entries`, `withdrawals`, `adult_lists` for sched + div
+  flex, `player_hotels`) with small `*Update` models limited to the editable
+  fields (player identity / tournament are not changeable on edit). The
+  withdrawal §2.4 reason rule is enforced on PUT too. Player-hotel edits run
+  through `upsert_hotel` so the hotel name stays canonical and the FK points at
+  the right Hotels row. The frontend grids (Late entries, Withdrawals, Scheduling,
+  Division flex, Player hotels) now have **editors on the editable columns**;
+  `makeListGrid` already wired `cellEdited`, and `wirePlayerList` gained an
+  `editFields` config that drives a generic PUT-on-edit handler. Player / USTA #
+  columns stay read-only — those identify the row. Backend tests cover all five
+  PUTs plus the reason-rule path (40 → 42 passing).
+  Left untouched: **Pairing** (group of members) and **Doubles** (mutual
+  verification) — those don't map to a clean per-cell edit and stay add/delete.
 - **✅ In-grid editing on single click** (phase 12) — in-place editing existed but
   was bound to **double-click** (a holdover from when single click selected a row
   for the side form). Now that the detail form opens from the **Edit** button, the
