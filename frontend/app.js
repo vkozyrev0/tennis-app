@@ -537,7 +537,7 @@ function wireEntity(cfg) {
     return col;
   });
   columns.push({
-    title: "", field: "_act", headerSort: false, width: cfg.rowAction ? 132 : 72,
+    title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 132 : 72,
     cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const item = cell.getData();
@@ -556,7 +556,7 @@ function wireEntity(cfg) {
   const table = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
-    columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true },
     editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
     renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
     columns,
@@ -773,7 +773,7 @@ let rosterBuilt = false, rosterPending = null;
 const rosterGrid = new Tabulator(rosterMount, {
   index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
   placeholder: "No players on this roster yet.",
-  columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
+  columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true },
   editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
   renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
   columns: [
@@ -789,7 +789,7 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] },
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
-    { title: "", field: "_act", headerSort: false, width: 72, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 72, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
@@ -1377,7 +1377,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
     editor: "list", editorParams: { values: EMAIL_CLASSES },
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status) },
-  { title: "", field: "_act", headerSort: false, width: 168, cssClass: "grid-actions-cell",
+  { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       // The target is the row's classification (now inline-editable in its own
       // column) — no redundant per-row picker. File is disabled until the
@@ -1460,7 +1460,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   mount.parentElement.insertBefore(csv, mount);
   const cols = _autoHeaderFilters(columns.slice());
   cols.push({
-    title: "", field: "_act", headerSort: false, width: onEdit ? 72 : 48, cssClass: "grid-actions-cell",
+    title: "", field: "_act", headerSort: false, widthGrow: 0, width: onEdit ? 72 : 48, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const r = cell.getData(); const wrap = document.createElement("div"); wrap.className = "grid-actions";
       if (onEdit) {
@@ -1479,7 +1479,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   const grid = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-    columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: cols,
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
   if (onCellEdited) grid.on("cellEdited", onCellEdited);
@@ -1505,7 +1505,7 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   const grid = new Tabulator(mount, {
     layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
     renderVertical: "basic",
-    columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: _autoHeaderFilters(columns),
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: _autoHeaderFilters(columns),
     ...(opts.index ? { index: opts.index } : {}),
     ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
   });
@@ -1612,7 +1612,7 @@ function wirePlayerList(cfg) {
 
   const columns = cfg.columns.slice();
   columns.push({
-    title: "", field: "_act", headerSort: false, width: 48, cssClass: "grid-actions-cell",
+    title: "", field: "_act", headerSort: false, widthGrow: 0, width: 48, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const r = cell.getData();
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
@@ -1631,7 +1631,7 @@ function wirePlayerList(cfg) {
   const table = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-    columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: _autoHeaderFilters(columns),
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: _autoHeaderFilters(columns),
   });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
   // In-grid edit: PUT only the editable fields (cfg.editFields maps field→true);
