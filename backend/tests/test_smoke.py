@@ -144,6 +144,21 @@ def test_distance_crud():
     assert client.delete(f"/api/distances/{d['id']}").status_code == 204
 
 
+def test_roster_inline_create_player():
+    """The roster +New form lets a TD enter a walk-in player by USTA # alone;
+    the backend upserts via player_ops, no need to pre-create in Setup."""
+    t = _tournament()
+    num = "WALKIN" + uuid.uuid4().hex[:6]
+    e = _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+        "usta_number": num, "first_name": "Walter", "last_name": "Inn",
+        "age_division": "B16", "selection_status": "selected",
+    }))
+    assert e["usta_number"] == num and e["first_name"] == "Walter"
+    # neither id nor usta_number → 422
+    r = client.post(f"/api/tournaments/{t['id']}/players", json={"age_division": "B14"})
+    assert r.status_code == 422, r.text
+
+
 def test_roster():
     t, p = _tournament(), _player()
     e = _ok(client.post(f"/api/tournaments/{t['id']}/players",

@@ -9,6 +9,7 @@ from openpyxl import load_workbook
 
 from ..db import db_dep
 from ..models import RosterEntryCreate, RosterEntryOut
+from ..playerops import upsert_player
 
 router = APIRouter(tags=["roster"])
 
@@ -207,16 +208,21 @@ def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(d
     body.t_shirt_size = _norm_shirt(body.t_shirt_size)  # canonical size (DB CHECK)
     try:
         with conn.cursor() as cur:
+            # Inline-create the player if the form sent a USTA # but no player_id —
+            # lets a TD add a walk-in directly from the Roster form.
+            pid = body.player_id
+            if pid is None:
+                pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
             cur.execute(
                 """
                 INSERT INTO tournament_entry
                     (tournament_id, player_id, age_division, events,
                      selection_status, t_shirt_size, dietary_preference)
-                VALUES (%(tournament_id)s, %(player_id)s, %(age_division)s, %(events)s,
-                        %(selection_status)s, %(t_shirt_size)s, %(dietary_preference)s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                {**body.model_dump(), "tournament_id": tournament_id},
+                (tournament_id, pid, body.age_division, body.events,
+                 body.selection_status, body.t_shirt_size, body.dietary_preference),
             )
             new_id = cur.fetchone()["id"]
             cur.execute(_SELECT + " WHERE e.id = %s", (new_id,))

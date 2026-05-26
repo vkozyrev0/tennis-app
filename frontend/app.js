@@ -971,6 +971,7 @@ function rosterMarkRows() {
 function applyRosterSel() { rosterMarkRows(); rosterUpdateNav(); }
 function rosterSelect(e) {
   rosterEditId = e.id;
+  rosterSetMode("pick");  // editing an existing entry — always pick mode
   rosterForm.player_id.value = e.player_id;
   rosterForm.age_division.value = e.age_division || "";
   rosterForm.events.value = e.events || "";
@@ -986,9 +987,32 @@ function rosterShowNew() {
   rosterEditId = null; rosterForm.reset();
   rosterTitle.textContent = "New roster entry";
   rosterSubmit.textContent = "Add player";
+  rosterSetMode("pick");
   if (typeof syncCombos === "function") syncCombos();
   applyRosterSel();
 }
+// Two-mode add: pick an existing player, or inline-create a new one (handler
+// upserts via the backend). Single-source-of-truth flag drives the form fields
+// and the submit body shape.
+let rosterMode = "pick";
+function rosterSetMode(mode) {
+  rosterMode = mode;
+  const pickRow = rosterForm.querySelector(".roster-pick-row");
+  const newRow = rosterForm.querySelector(".roster-new-row");
+  const toggle = document.getElementById("roster-mode-toggle");
+  const picker = rosterForm.querySelector("[name='player_id']");
+  pickRow.hidden = mode !== "pick";
+  newRow.hidden = mode !== "new";
+  picker.required = mode === "pick";
+  // also disable the hidden controls so they don't submit values from the
+  // other mode (browsers skip disabled inputs in form serialization).
+  picker.disabled = mode !== "pick";
+  newRow.querySelectorAll("input").forEach((el) => { el.disabled = mode !== "new"; });
+  toggle.textContent = mode === "new" ? "← Pick an existing player" : "+ New player not on file →";
+}
+document.getElementById("roster-mode-toggle").addEventListener("click", () => {
+  rosterSetMode(rosterMode === "pick" ? "new" : "pick");
+});
 // Prev/Next record navigation (parity with the Setup master/detail forms).
 const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
 const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn"; rosterPrev.textContent = "‹ Prev";
@@ -1014,13 +1038,22 @@ function rosterNavTo(delta) {
 rosterPrev.addEventListener("click", () => rosterNavTo(-1));
 rosterNext.addEventListener("click", () => rosterNavTo(1));
 onSubmit(rosterForm, async () => {
-  const b = formObj(rosterForm); b.player_id = Number(b.player_id);
+  const b = formObj(rosterForm);
+  // pick mode → numeric player_id; new mode → usta_number/first/last (player_id null).
+  if (rosterMode === "pick") {
+    b.player_id = Number(b.player_id); delete b.usta_number; delete b.first_name; delete b.last_name;
+  } else {
+    b.player_id = null;
+  }
   try {
     const editing = rosterEditId != null;
     const saved = editing
       ? await api(`/roster/${rosterEditId}`, { method: "PUT", body: JSON.stringify(b) })
       : await api(`/tournaments/${active.id}/players`, { method: "POST", body: JSON.stringify(b) });
     setMsg("roster-msg", editing ? "saved" : "added", true);
+    // If we just inline-created a player, refresh the Setup Players list so
+    // the picker has the new option next time.
+    if (!editing && rosterMode === "new") { try { await playersCrud.refresh(); } catch (_) {} }
     await loadRoster();
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();

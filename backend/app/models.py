@@ -166,20 +166,38 @@ SelectionStatus = Literal["selected", "alternate", "withdrawn"]
 
 
 class RosterEntryCreate(BaseModel):
-    player_id: int
+    # Either an existing player_id OR a usta_number (with optional first/last
+    # names) — the handler upserts the player when player_id is omitted, so
+    # a TD can add a walk-in player without first creating them in Setup.
+    player_id: Optional[int] = None
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     age_division: Optional[str] = None
     events: Optional[str] = None
     selection_status: SelectionStatus = "selected"
     t_shirt_size: Optional[str] = None
     dietary_preference: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _id_or_usta(self):
+        if self.player_id is None and not (self.usta_number and self.usta_number.strip()):
+            raise ValueError("either player_id or usta_number is required")
+        return self
 
-class RosterEntryOut(RosterEntryCreate):
+
+class RosterEntryOut(BaseModel):
     id: int
     tournament_id: int
+    player_id: int
     usta_number: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    age_division: Optional[str] = None
+    events: Optional[str] = None
+    selection_status: SelectionStatus = "selected"
+    t_shirt_size: Optional[str] = None
+    dietary_preference: Optional[str] = None
 
 
 # ---------- Assignment ----------

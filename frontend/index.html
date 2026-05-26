@@ -313,9 +313,17 @@
           <div class="detail-pane">
             <h3 class="detail-title" id="roster-title">New roster entry</h3>
             <form id="roster-form" autocomplete="off">
-              <div class="row">
+              <div class="row roster-pick-row">
                 <label>Player <select name="player_id" id="roster-player" required></select></label>
                 <label>Division <input name="age_division" /></label>
+              </div>
+              <div class="row roster-new-row" hidden>
+                <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
+                <label>First name <input name="first_name" /></label>
+                <label>Last name <input name="last_name" /></label>
+              </div>
+              <div class="row" style="margin-top:-0.2rem;margin-bottom:0.4rem">
+                <button type="button" id="roster-mode-toggle" class="btn-link" style="font-size:0.78rem">+ New player not on file →</button>
               </div>
               <div class="row">
                 <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
