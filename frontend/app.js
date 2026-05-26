@@ -533,15 +533,17 @@ function wireEntity(cfg) {
     return col;
   });
   columns.push({
-    title: "", field: "_act", headerSort: false, width: cfg.rowAction ? 160 : 108,
+    title: "", field: "_act", headerSort: false, width: cfg.rowAction ? 132 : 72,
     cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const item = cell.getData();
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
       if (cfg.rowAction) { const ex = cfg.rowAction(item); if (ex) wrap.append(ex); }
-      const e = document.createElement("button"); e.type = "button"; e.className = "btn-link"; e.textContent = "Edit";
+      const e = document.createElement("button"); e.type = "button"; e.className = "btn-icon"; e.textContent = "✎";
+      e.title = "Edit " + cfg.singular; e.setAttribute("aria-label", e.title);
       e.addEventListener("click", (ev) => { ev.stopPropagation(); select(item); openModal(); });
-      const d = document.createElement("button"); d.type = "button"; d.className = "btn-link danger"; d.textContent = "Delete";
+      const d = document.createElement("button"); d.type = "button"; d.className = "btn-icon danger"; d.textContent = "✕";
+      d.title = "Delete " + cfg.singular; d.setAttribute("aria-label", d.title);
       d.addEventListener("click", (ev) => { ev.stopPropagation(); removeItem(item.id); });
       wrap.append(e, d); return wrap;
     },
@@ -783,13 +785,15 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] },
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
-    { title: "", field: "_act", headerSort: false, width: 108, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, width: 72, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
-        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
+        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
+        ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
         ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
-        const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
+        const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-icon danger"; dl.textContent = "✕";
+        dl.title = "Remove from roster"; dl.setAttribute("aria-label", dl.title);
         dl.addEventListener("click", async (ev) => {
           ev.stopPropagation();
           if (!(await confirmDialog("Remove player from roster?"))) return;
@@ -1446,15 +1450,17 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   mount.parentElement.insertBefore(csv, mount);
   const cols = _autoHeaderFilters(columns.slice());
   cols.push({
-    title: "", field: "_act", headerSort: false, width: onEdit ? 108 : 84, cssClass: "grid-actions-cell",
+    title: "", field: "_act", headerSort: false, width: onEdit ? 72 : 48, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const r = cell.getData(); const wrap = document.createElement("div"); wrap.className = "grid-actions";
       if (onEdit) {
-        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
+        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
+        ed.title = "Edit"; ed.setAttribute("aria-label", "Edit");
         ed.addEventListener("click", (ev) => { ev.stopPropagation(); onEdit(r); });
         wrap.append(ed);
       }
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-icon danger"; del.textContent = "✕";
+      del.title = "Delete"; del.setAttribute("aria-label", "Delete");
       del.addEventListener("click", (ev) => { ev.stopPropagation(); onDelete(r); });
       wrap.append(del); return wrap;
     },
@@ -1596,11 +1602,12 @@ function wirePlayerList(cfg) {
 
   const columns = cfg.columns.slice();
   columns.push({
-    title: "", field: "_act", headerSort: false, width: 84, cssClass: "grid-actions-cell",
+    title: "", field: "_act", headerSort: false, width: 48, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const r = cell.getData();
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-icon danger"; del.textContent = "✕";
+      del.title = "Delete"; del.setAttribute("aria-label", "Delete");
       del.addEventListener("click", async (ev) => {
         ev.stopPropagation();
         if (!(await confirmDialog("Delete?"))) return;

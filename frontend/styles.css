@@ -397,8 +397,20 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
   border-bottom-color: var(--muted); border-top-color: var(--muted);
 }
-.grid-actions { display: flex; gap: 0.2rem; justify-content: flex-end; align-items: center; }
+.grid-actions { display: flex; gap: 0.15rem; justify-content: flex-end; align-items: center; }
 .grid-actions-cell { overflow: visible; }
+/* Compact icon buttons in grid action columns (Edit ✎, Delete ✕). */
+.btn-icon {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--accent); font-size: 1rem; line-height: 1;
+  width: 1.6rem; height: 1.6rem; border-radius: 4px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.12s;
+}
+.btn-icon:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.btn-icon.danger { color: var(--bad); }
+.btn-icon.danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Per-column header filter inputs (themed for light + dark). */
 .tabulator .tabulator-header-filter input,
 .tabulator .tabulator-header-filter select {
