@@ -1,8 +1,29 @@
-// Minimal vanilla JS (no framework). Two areas:
+// ============================================================================
+// CourtOps Tennis — frontend (single file, vanilla JS, no framework).
+//
+// Two areas:
 //  * Setup — persistent master data (tournaments catalog, sites, officials,
 //    players, rates, hotels, distances) via generic master-detail CRUD.
 //  * Tournament workspace — an active tournament (shown in the context bar,
-//    persisted) scopes Sites / Roster / Assignments / Room blocks.
+//    persisted) scopes Sites / Roster / Assignments / Room blocks / Part B.
+//
+// Sections (rough line ranges — search the headers if these drift):
+//   Theme + small helpers (esc, api, toast, setMsg, confirmDialog, chip)
+//   Keyboard shortcuts + help modal
+//   Type-in searchable comboboxes (enhanceSelect / syncCombos)
+//   Caches + labels + tabs + two-level menu + sizeLists
+//   Active tournament state (setActive / updateActiveUI)
+//   GRIDS registry + grid helpers (wireEntity, makeListGrid, makeReadGrid,
+//     wirePlayerList) — these factories own Tabulator wiring
+//   Tournament workspace pages (Sites toggle, Roster, Import, Assignments,
+//     Room blocks, Availability, Inbox + Part B lists, T-shirts, Pairing,
+//     Doubles, Reports)
+//   Setup entity configs (tournamentsCrud … distancesCrud)
+//   CSV export helpers
+//   FORM_MODALS — wraps workspace add-forms as modal overlays
+//   ARIA enhancement for every .detail-pane (role=dialog + focus management)
+//   Auth + role-based views (admin vs official)
+// ============================================================================
 
 // ---- theme (light/dark) — applied ASAP to avoid a flash, persisted locally ----
 function applyTheme(t) {
@@ -89,6 +110,60 @@ function confirmDialog(message, okLabel = "Delete") {
     document.addEventListener("keydown", onKey);
   });
 }
+
+// Keyboard shortcuts: `/` focuses the active panel's filter, `n`/`N` triggers
+// its + New / + Add button, `?` opens the shortcuts help. Skipped while the
+// user is typing in a field. Esc-to-close-modal is handled by the detail-pane
+// MutationObserver block elsewhere.
+function showShortcuts() {
+  let m = document.getElementById("shortcuts-modal");
+  if (!m) {
+    m = document.createElement("div"); m.id = "shortcuts-modal"; m.className = "modal";
+    m.innerHTML = `
+      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+        <h3 id="shortcuts-title" style="margin-top:0">Keyboard shortcuts</h3>
+        <table class="shortcuts"><tbody>
+          <tr><th><kbd>/</kbd></th><td>Focus the page filter</td></tr>
+          <tr><th><kbd>n</kbd></th><td>Add a new record on the active panel</td></tr>
+          <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
+          <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
+        </tbody></table>
+        <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
+      </div>`;
+    document.body.appendChild(m);
+    const close = () => { m.hidden = true; };
+    m.querySelector("#shortcuts-close").addEventListener("click", close);
+    m.addEventListener("click", (e) => { if (e.target === m) close(); });
+  }
+  m.hidden = false;
+  requestAnimationFrame(() => m.querySelector("#shortcuts-close").focus());
+}
+const _shortcutsBtn = document.getElementById("shortcuts-btn");
+if (_shortcutsBtn) _shortcutsBtn.addEventListener("click", showShortcuts);
+document.addEventListener("keydown", (e) => {
+  if (e.defaultPrevented) return;
+  const a = document.activeElement;
+  const inField = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "button";
+  if (inField) return;
+  // Skip while a confirm dialog or shortcuts modal is open.
+  const sm = document.getElementById("shortcuts-modal");
+  if (sm && !sm.hidden) {
+    if (e.key === "Escape") { sm.hidden = true; e.preventDefault(); }
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "/") {
+    const p = document.querySelector(".panel.active");
+    const f = p && p.querySelector("input.filter, input[type=search]");
+    if (f) { e.preventDefault(); f.focus(); f.select(); }
+  } else if (e.key === "n" || e.key === "N") {
+    const p = document.querySelector(".panel.active");
+    const t = p && (p.querySelector(".new-btn:not(.add-trigger)") || p.querySelector(".add-trigger"));
+    if (t) { e.preventDefault(); t.click(); }
+  } else if (e.key === "?") {
+    e.preventDefault(); showShortcuts();
+  }
+});
 
 // Colored status chip for known tokens (selection status, email status, etc.).
 const BADGE = {
@@ -514,6 +589,8 @@ function wireEntity(cfg) {
       title: titles[i] || c.key, field: c.key,
       formatter: c.fmt ? (cell) => esc(c.fmt(cell.getData())) : undefined,
     };
+    if (c.hozAlign) col.hozAlign = c.hozAlign;
+    if (c.width) col.width = c.width;
     // Narrow, non-growing ID column so fitColumns distributes the extra width
     // to the *meaningful* (name / city / …) columns.
     if (c.key === "id") { col.width = 64; col.widthGrow = 0; }
@@ -2155,7 +2232,7 @@ const ratesCrud = wireEntity({
   path: "/rates", singular: "rate", panelId: "panel-rates", formId: "rate-form", msgId: "rate-msg",
   columns: [{ key: "id" },
     { key: "cert_type", edit: { editor: "list", params: { values: ["roving_official", "chair_umpire", "tournament_referee", "deputy_referee", "referee_in_training"] } } },
-    { key: "rate_per_day", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2), edit: { editor: "number", params: { min: 0, step: 0.01 } } },
+    { key: "rate_per_day", hozAlign: "right", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2), edit: { editor: "number", params: { min: 0, step: 0.01 } } },
     { key: "effective_from", edit: { editor: "date" } }],
   transform: (o) => { o.rate_per_day = Number(o.rate_per_day); if (o.effective_from == null) delete o.effective_from; return o; },
 });
@@ -2170,7 +2247,7 @@ const distancesCrud = wireEntity({
     { key: "id" },
     { key: "official", fmt: (d) => (officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : d.official_id) },
     { key: "site", fmt: (d) => (sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : d.site_id) },
-    { key: "one_way_miles", edit: { editor: "number", params: { min: 0, step: 0.1 } } },
+    { key: "one_way_miles", hozAlign: "right", width: 110, edit: { editor: "number", params: { min: 0, step: 0.1 } } },
   ],
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });

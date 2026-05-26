@@ -1,52 +1,10 @@
-:root {
-  --bg: #f4f6f8;
-  --card: #ffffff;
-  --ink: #1f2933;
-  --muted: #556070;      /* ~6:1 on white — small helper/label text clears AA */
-  --accent: #2e6f40;
-  --accent-ink: #ffffff;
-  --border: #d9e0e6;
-  --ok: #2e7d32;
-  --bad: #c62828;
-  --sel: #e7f1ea;
-  --field-bg: #ffffff;   /* input/select/textarea background */
-  --zebra: #f7f9fa;      /* even table rows */
-  --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
-  color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
-}
-
-/* Dark theme — toggled via data-theme on <html> (persisted in localStorage). */
-:root[data-theme="dark"] {
-  --bg: #11161b;
-  --card: #1a2027;
-  --ink: #e6edf3;
-  --muted: #aab6c4;        /* +contrast on dark card (≈5.4:1) */
-  --accent: #3aa05c;       /* brighter green so filled accent buttons clear AA on dark */
-  --accent-ink: #ffffff;
-  --border: #2d363f;
-  --ok: #5bbf6a;
-  --bad: #e26d6d;
-  --sel: #2c3f3a;          /* tinted toward accent so selection reads above zebra */
-  --field-bg: #11161b;
-  --zebra: #1f262e;
-  --elev: #1e252d;
-  color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
-}
-/* The UA calendar glyph is too faint on our very dark field, so in dark mode we
-   replace it with an explicit light SVG calendar — guaranteed visible. */
-:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
-  opacity: 1;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e6edf3' stroke-width='2' stroke-linecap='round'><rect x='3' y='4.5' width='18' height='17' rx='2'/><line x1='8' y1='2.5' x2='8' y2='6.5'/><line x1='16' y1='2.5' x2='16' y2='6.5'/><line x1='3' y1='9.5' x2='21' y2='9.5'/></svg>");
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 15px 15px;
-}
+/* Design tokens live in tokens.css (loaded before this file in index.html).
+ * Everything below this point references them via var(--…). */
 
 * { box-sizing: border-box; }
 
 /* Keyboard focus visibility (was missing) */
-:focus-visible { outline: 2px solid #1f6feb; outline-offset: 2px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 /* Global request progress bar */
 .progress { position: fixed; top: 0; left: 0; width: 100%; height: 3px; z-index: 2000; pointer-events: none; overflow: hidden; }
@@ -119,11 +77,12 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .pill.ok { background: var(--ok); }
 .pill.bad { background: var(--bad); }
 
-#theme-toggle {
+#theme-toggle, #shortcuts-btn {
   background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
   padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
 }
-#theme-toggle:hover { background: rgba(255, 255, 255, 0.32); }
+#theme-toggle:hover, #shortcuts-btn:hover { background: rgba(255, 255, 255, 0.32); }
+#shortcuts-btn { padding: 0.12rem 0.45rem; }
 #user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
 #logout-btn {
   background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
@@ -205,7 +164,7 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .tab.disabled { opacity: 0.45; }
 
 /* Use the full window width (back-office data app) — no centered narrow column. */
-main { padding: 1.25rem 1.75rem; }
+main { padding: 1.25rem 1.75rem; max-width: 1440px; margin: 0 auto; }
 
 /* ---- panels ---- */
 .panel { display: none; }
@@ -390,8 +349,11 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator-row { background: var(--card); color: var(--ink); border-bottom: 1px solid var(--border); }
 .tabulator-row.tabulator-row-even { background: var(--zebra); }
 .tabulator-row.tabulator-selectable:hover { background: var(--bg); }
-.tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even { background: var(--sel); }
-.tabulator .tabulator-cell { padding: 0.32rem 0.5rem; border-right: 0; }
+.tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even {
+  background: var(--sel);
+  box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar — visible for keyboard nav */
+}
+.tabulator .tabulator-cell { padding: 0.38rem 0.55rem; border-right: 0; }
 .tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
 .tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents {
   color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
@@ -409,6 +371,17 @@ button[type="submit"]:hover { filter: brightness(1.05); }
    Lodging summary, CVB totals). Otherwise they stretch to the panel width and
    the data sits in a tiny left-island with a sea of whitespace. */
 .grid-mount--compact { max-width: 520px; }
+
+/* Keyboard shortcuts help modal */
+table.shortcuts { border-collapse: collapse; }
+table.shortcuts th { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; font-weight: normal; min-width: 3rem; }
+table.shortcuts td { padding: 0.3rem 0; color: var(--ink); }
+kbd {
+  display: inline-block; padding: 0.05rem 0.4rem; min-width: 1rem; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem;
+  background: var(--bg); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border);
+}
 /* Compact icon buttons in grid action columns (Edit ✎, Delete ✕). */
 .btn-icon {
   appearance: none; border: 0; background: transparent; cursor: pointer;
