@@ -1494,6 +1494,7 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   const tableEl = document.getElementById(tableId);
   const panelId = tableEl.closest(".panel")?.id;
   const mount = document.createElement("div"); mount.className = "grid-mount";
+  if (opts.compact) mount.classList.add("grid-mount--compact");
   tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
   if (exportName) {
     const csv = document.createElement("button");
@@ -1701,8 +1702,8 @@ const divflexList = wirePlayerList({
 
 const cvbGrid = makeReadGrid("cvb-table", [
   { title: "Hotel", field: "hotel_name" },
-  { title: "Stays", field: "stays", hozAlign: "right", width: 110 },
-], "cvb-hotel-totals", "No player hotel data yet.");
+  { title: "Stays", field: "stays", hozAlign: "right", width: 110, widthGrow: 0 },
+], "cvb-hotel-totals", "No player hotel data yet.", { compact: true });
 async function loadCvb() {
   try { cvbGrid.setData(await api("/hotel-analytics")); }
   catch (e) { cvbGrid.setData([]); setMsg("photel-msg", e.message, false); }
@@ -1710,8 +1711,8 @@ async function loadCvb() {
 // Per-tournament hotel summary: players per hotel (selected only, alphabetical).
 const hotelSummaryGrid = makeReadGrid("hotel-summary-table", [
   { title: "Hotel", field: "hotel_name" },
-  { title: "Players", field: "players", hozAlign: "right", width: 110 },
-], "hotel-summary", "No hotels entered for selected players yet.");
+  { title: "Players", field: "players", hozAlign: "right", width: 110, widthGrow: 0 },
+], "hotel-summary", "No hotels entered for selected players yet.", { compact: true });
 async function loadHotelSummary() {
   if (!active) return;
   try { hotelSummaryGrid.setData(await api(`/tournaments/${active.id}/hotel-summary`)); }
@@ -1720,8 +1721,8 @@ async function loadHotelSummary() {
 // Per-tournament lodging-plan summary: players per plan (Hotel/Commuter/…).
 const lodgingSummaryGrid = makeReadGrid("lodging-summary-table", [
   { title: "Lodging plan", field: "lodging_plan" },
-  { title: "Players", field: "players", hozAlign: "right", width: 110 },
-], "lodging-summary", "No lodging plans entered for selected players yet.");
+  { title: "Players", field: "players", hozAlign: "right", width: 110, widthGrow: 0 },
+], "lodging-summary", "No lodging plans entered for selected players yet.", { compact: true });
 async function loadLodgingSummary() {
   if (!active) return;
   try { lodgingSummaryGrid.setData(await api(`/tournaments/${active.id}/lodging-summary`)); }

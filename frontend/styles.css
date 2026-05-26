@@ -405,6 +405,10 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 }
 .grid-actions { display: flex; gap: 0.15rem; justify-content: flex-end; align-items: center; }
 .grid-actions-cell { overflow: visible; }
+/* Compact, content-sized grids for small aggregate summaries (Hotel summary,
+   Lodging summary, CVB totals). Otherwise they stretch to the panel width and
+   the data sits in a tiny left-island with a sea of whitespace. */
+.grid-mount--compact { max-width: 520px; }
 /* Compact icon buttons in grid action columns (Edit ✎, Delete ✕). */
 .btn-icon {
   appearance: none; border: 0; background: transparent; cursor: pointer;
