@@ -1552,7 +1552,8 @@ const inboxGrid = makeReadGrid("inbox-table", [
   { title: "Classification", field: "classification", cssClass: "editable-cell",
     editor: "list", editorParams: { values: EMAIL_CLASSES },
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
-  { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status) },
+  { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
+    headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
   { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       // The target is the row's classification (now inline-editable in its own
@@ -1597,9 +1598,17 @@ inboxGrid.grid.on("cellEdited", async (cell) => {
   try { await _inboxPutClass(cell.getData(), cell.getValue()); cell.getRow().reformat(); }
   catch (e) { setMsg("email-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} }
 });
+let _inboxFilterInit = false;
 async function loadInbox() {
   if (!active) return;
   inboxGrid.setData(await api(`/emails?tournament_id=${active.id}`));
+  // Default to "new" only so filed mail doesn't pile up visually; the user
+  // can still pick "filed" or clear the filter. One-time so we respect the
+  // user's manual choice on subsequent loads in the same session.
+  if (!_inboxFilterInit) {
+    _inboxFilterInit = true;
+    try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
+  }
 }
 onSubmit(document.getElementById("email-form"), async (e) => {
   e.preventDefault(); if (!active) return;
