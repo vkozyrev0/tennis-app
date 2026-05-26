@@ -20,13 +20,13 @@
   --bg: #11161b;
   --card: #1a2027;
   --ink: #e6edf3;
-  --muted: #9aa7b4;
-  --accent: #2e7d46;
+  --muted: #aab6c4;        /* +contrast on dark card (≈5.4:1) */
+  --accent: #3aa05c;       /* brighter green so filled accent buttons clear AA on dark */
   --accent-ink: #ffffff;
   --border: #2d363f;
   --ok: #5bbf6a;
   --bad: #e26d6d;
-  --sel: #25313a;
+  --sel: #2c3f3a;          /* tinted toward accent so selection reads above zebra */
   --field-bg: #11161b;
   --zebra: #1f262e;
   --elev: #1e252d;
@@ -84,6 +84,13 @@
 .badge-bad { background: #fde3e3; color: #a02020; }
 .badge-info { background: #e3eefb; color: #1d4f91; }
 .badge-muted { background: #eceff2; color: #54616e; }
+/* Dark-mode badges: deeper backgrounds with lighter ink so the same status
+   palette doesn't pop as a bright square against the dark surface. */
+:root[data-theme="dark"] .badge-ok { background: #1d3a26; color: #9fdca8; }
+:root[data-theme="dark"] .badge-warn { background: #3a2f15; color: #f3d27d; }
+:root[data-theme="dark"] .badge-bad { background: #3a1f1f; color: #ed9b9b; }
+:root[data-theme="dark"] .badge-info { background: #1d2a3f; color: #9ec0ed; }
+:root[data-theme="dark"] .badge-muted { background: #232b34; color: #aab6c4; }
 
 body {
   margin: 0;
@@ -237,6 +244,13 @@ main { padding: 1.25rem 1.75rem; }
 .list-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
 .list-toolbar .filter { flex: 1; }
 .list-toolbar .export-btn { margin: 0; }  /* don't let the export-btn margin stretch the row */
+/* Global filter inputs read as "search across the whole list" — magnifier
+   icon + slight indent — so the per-column header filters look distinct. */
+input.filter[type="search"] {
+  padding-left: 1.6rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238792a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>");
+  background-repeat: no-repeat; background-position: 0.45rem center; background-size: 1rem;
+}
 
 .new-btn {
   background: var(--accent);
@@ -271,8 +285,7 @@ main { padding: 1.25rem 1.75rem; }
 .row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
 .row label {
   flex: 1 1 130px; display: flex; flex-direction: column;
-  font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.03em; color: var(--muted);
+  font-size: 0.78rem; font-weight: 500; color: var(--muted);
 }
 
 input, select, textarea {
@@ -396,10 +409,24 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 }
 .tabulator .tabulator-header-filter input::placeholder { color: var(--muted); }
 .tabulator .tabulator-header .tabulator-col .tabulator-header-filter { margin-top: 1px; }
-/* In-grid editable cells: subtle affordance (double-click to edit). */
-.tabulator .tabulator-cell.editable-cell { cursor: cell; }
-.tabulator .tabulator-cell.editable-cell:hover { box-shadow: inset 0 0 0 1px var(--border); }
-.tabulator .tabulator-cell.tabulator-editing { box-shadow: inset 0 0 0 2px var(--accent, #2563eb); padding: 0; }
+/* In-grid editable cells: an *always-on* affordance (the accent right-edge)
+   tells you which cells respond to a click, before you hover. Hover shows a
+   subtle pencil + a full ring. Editing hides the pencil and adds a strong ring. */
+.tabulator .tabulator-cell.editable-cell {
+  cursor: cell; position: relative;
+  box-shadow: inset -2px 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.tabulator .tabulator-cell.editable-cell:hover {
+  box-shadow: inset 0 0 0 1px var(--border), inset -2px 0 0 var(--accent);
+}
+.tabulator .tabulator-cell.editable-cell::after {
+  content: "✎"; position: absolute; right: 0.35rem; top: 50%;
+  transform: translateY(-50%); font-size: 0.72em; color: var(--muted);
+  opacity: 0; transition: opacity 0.12s; pointer-events: none;
+}
+.tabulator .tabulator-cell.editable-cell:hover::after { opacity: 0.55; }
+.tabulator .tabulator-cell.tabulator-editing { box-shadow: inset 0 0 0 2px var(--accent); padding: 0; }
+.tabulator .tabulator-cell.tabulator-editing::after { display: none; }
 .tabulator .tabulator-cell.tabulator-editing input,
 .tabulator .tabulator-cell.tabulator-editing select {
   background: var(--card); color: var(--ink); border: 0; padding: 0.32rem 0.5rem; width: 100%; box-sizing: border-box;

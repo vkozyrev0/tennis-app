@@ -416,12 +416,19 @@ function fillActiveSelect(rows) {
 }
 
 function setActive(id) {
+  const prev = active;
   active = id ? tournamentsById[id] || null : null;
   activeSelect.value = active ? String(active.id) : "";
   if (active) localStorage.setItem("activeTid", active.id);
   else localStorage.removeItem("activeTid");
   syncCombos();
   updateActiveUI();
+  // Switching the active tournament mid-edit would otherwise leave a modal open
+  // against a different tournament's data — close any open detail and toast.
+  if (prev && active && prev.id !== active.id && typeof closeOpenDetail === "function") {
+    closeOpenDetail();
+    if (typeof toast === "function") toast(`Switched to ${active.name}`, true);
+  }
 }
 
 function updateActiveUI() {
@@ -2214,6 +2221,44 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
   form.addEventListener("reset", closeM);  // success path and Cancel both reset → close
   form._openModal = openM;                  // openForm() (file-from-email) opens it
 }
+
+// Promote every detail-pane to a proper ARIA dialog (role + aria-modal +
+// aria-labelledby) and watch the `detail-open` class to focus the first input
+// on open and restore focus on close. One pass at load — no per-site changes.
+(function _enhanceDetailDialogs() {
+  const obs = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.attributeName !== "class") continue;
+      const dlg = m.target;
+      const opening = dlg.classList.contains("detail-open");
+      const wasOpen = m.oldValue && m.oldValue.split(/\s+/).includes("detail-open");
+      if (opening && !wasOpen) {
+        dlg._prevFocus = document.activeElement;
+        requestAnimationFrame(() => {
+          // Prefer the first form field over the close button (querySelector
+          // picks by DOM order, so a multi-query gets us field-first).
+          const f = dlg.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])')
+            || dlg.querySelector('button:not([disabled])');
+          if (f) try { f.focus(); } catch (_) {}
+        });
+      } else if (!opening && wasOpen && dlg._prevFocus && typeof dlg._prevFocus.focus === "function") {
+        try { dlg._prevFocus.focus(); } catch (_) {}
+      }
+    }
+  });
+  for (const dlg of document.querySelectorAll(".detail-pane")) {
+    if (!dlg.hasAttribute("role")) {
+      dlg.setAttribute("role", "dialog");
+      dlg.setAttribute("aria-modal", "true");
+      const title = dlg.querySelector(".detail-title");
+      if (title) {
+        if (!title.id) title.id = "dlg-" + Math.random().toString(36).slice(2, 8);
+        dlg.setAttribute("aria-labelledby", title.id);
+      }
+    }
+    obs.observe(dlg, { attributes: true, attributeOldValue: true, attributeFilter: ["class"] });
+  }
+})();
 
 // Give every workspace list table its own scrollbar (like the Setup lists), so a
 // long roster/inbox scrolls within the card instead of the whole page. Runs after
