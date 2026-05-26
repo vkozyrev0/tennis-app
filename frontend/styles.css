@@ -357,7 +357,11 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator .tabulator-header .tabulator-col {
   background: var(--card); border-right: 0;
 }
-.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.4rem 0.5rem; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.25rem 0.45rem; }
+/* Compact column header labels. */
+.tabulator .tabulator-col-title {
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;
+}
 .tabulator-row { background: var(--card); color: var(--ink); border-bottom: 1px solid var(--border); }
 .tabulator-row.tabulator-row-even { background: var(--zebra); }
 .tabulator-row.tabulator-selectable:hover { background: var(--bg); }
@@ -374,11 +378,12 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .tabulator .tabulator-header-filter input,
 .tabulator .tabulator-header-filter select {
   background: var(--card); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 4px;
-  padding: 2px 4px; width: 100%; box-sizing: border-box; font: inherit;
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 3px; width: 100%; box-sizing: border-box;
+  font-family: inherit; font-size: 0.7rem; height: 1.4rem;
 }
 .tabulator .tabulator-header-filter input::placeholder { color: var(--muted); }
-.tabulator .tabulator-header .tabulator-col .tabulator-header-filter { margin-top: 2px; }
+.tabulator .tabulator-header .tabulator-col .tabulator-header-filter { margin-top: 1px; }
 /* In-grid editable cells: subtle affordance (double-click to edit). */
 .tabulator .tabulator-cell.editable-cell { cursor: cell; }
 .tabulator .tabulator-cell.editable-cell:hover { box-shadow: inset 0 0 0 1px var(--border); }
