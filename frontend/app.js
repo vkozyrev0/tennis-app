@@ -913,10 +913,26 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] },
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 72, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 132, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
+        // Per-row Withdraw shortcut: opens the withdrawal form on the right
+        // tab with the player pre-filled. Disabled when already withdrawn.
+        const wd = document.createElement("button"); wd.type = "button"; wd.className = "btn-link"; wd.textContent = "Withdraw…";
+        wd.disabled = e.selection_status === "withdrawn";
+        wd.title = wd.disabled ? "Player is already withdrawn" : "File a withdrawal for this player";
+        wd.addEventListener("click", (ev) => {
+          ev.stopPropagation(); if (wd.disabled) return;
+          // Switch tab first — the tab handler refreshes some selects, which
+          // would otherwise wipe our preset value. Set the player after, then
+          // open the modal so syncCombos shows the chosen name in the combobox.
+          document.querySelector('.tab[data-target="panel-t-withdrawals"]').click();
+          const wdForm = document.getElementById("withdrawal-form");
+          wdForm.player_ref.value = e.player_id;
+          openForm(wdForm);
+          if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
+        });
         const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
         ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
         ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
@@ -928,7 +944,7 @@ const rosterGrid = new Tabulator(rosterMount, {
           try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) { rosterShowNew(); rosterCloseModal(); } await loadRoster(); }
           catch (err) { setMsg("roster-msg", err.message, false); }
         });
-        wrap.append(ed, dl); return wrap;
+        wrap.append(wd, ed, dl); return wrap;
       } },
   ],
 });
