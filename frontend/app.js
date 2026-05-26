@@ -475,6 +475,7 @@ function wireEntity(cfg) {
   const submitBtn = form.querySelector('button[type="submit"]');
   const deleteBtn = form.querySelector(".delete");
   const cancelBtn = form.querySelector(".cancel");
+  cancelBtn.textContent = "Cancel";  // the legacy "New" label is misleading now that clicking it closes the modal
   let items = [];
   let selectedId = null;
   let built = false, pending = null;
@@ -628,7 +629,7 @@ function wireEntity(cfg) {
   }
   function showNew() {
     selectedId = null; fillForm(null);
-    title.textContent = "New " + cfg.singular;
+    title.textContent = "New " + cfg.singular[0].toUpperCase() + cfg.singular.slice(1);
     submitBtn.textContent = "Create";
     deleteBtn.hidden = true;
     applySelection();
@@ -636,7 +637,7 @@ function wireEntity(cfg) {
   }
   function select(item) {
     selectedId = item.id; fillForm(item);
-    title.textContent = `${cfg.singular} #${item.id}`;
+    title.textContent = `${cfg.singular[0].toUpperCase() + cfg.singular.slice(1)} #${item.id}`;
     submitBtn.textContent = "Save";
     deleteBtn.hidden = false;
     applySelection();
@@ -902,6 +903,7 @@ onSubmit(rosterForm, async () => {
     rosterCloseModal();
   } catch (err) { setMsg("roster-msg", err.message, false); }
 });
+rosterForm.querySelector(".cancel").textContent = "Cancel";
 rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
 document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
 document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
