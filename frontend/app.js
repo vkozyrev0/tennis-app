@@ -513,6 +513,9 @@ function wireEntity(cfg) {
       title: titles[i] || c.key, field: c.key,
       formatter: c.fmt ? (cell) => esc(c.fmt(cell.getData())) : undefined,
     };
+    // Narrow, non-growing ID column so fitColumns distributes the extra width
+    // to the *meaningful* (name / city / …) columns.
+    if (c.key === "id") { col.width = 64; col.widthGrow = 0; }
     if (c.edit) {
       col.editor = c.edit.editor;
       if (c.edit.params) col.editorParams = c.edit.params;
@@ -550,7 +553,7 @@ function wireEntity(cfg) {
   });
 
   const table = new Tabulator(mount, {
-    index: "id", layout: "fitDataFill", maxHeight: "calc(100vh - 16rem)",
+    index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
     editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
@@ -767,7 +770,7 @@ const rosterMount = rosterTableEl.closest(".list-scroll") || rosterTableEl.paren
 rosterMount.classList.remove("list-scroll"); rosterMount.innerHTML = ""; rosterMount.classList.add("grid-mount");
 let rosterBuilt = false, rosterPending = null;
 const rosterGrid = new Tabulator(rosterMount, {
-  index: "id", layout: "fitDataFill", maxHeight: "calc(100vh - 16rem)",
+  index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
   placeholder: "No players on this roster yet.",
   columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true },
   editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
@@ -1467,7 +1470,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   });
   let built = false, pending = null;
   const grid = new Tabulator(mount, {
-    index: "id", layout: "fitDataFill", maxHeight: "55vh", placeholder,
+    index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: cols,
   });
@@ -1493,7 +1496,7 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   }
   let built = false, pending = null, pendingFilter = null;
   const grid = new Tabulator(mount, {
-    layout: "fitDataFill", maxHeight: opts.maxHeight || "55vh", placeholder,
+    layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
     renderVertical: "basic",
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: _autoHeaderFilters(columns),
     ...(opts.index ? { index: opts.index } : {}),
@@ -1619,7 +1622,7 @@ function wirePlayerList(cfg) {
   });
   let built = false, pending = null;
   const table = new Tabulator(mount, {
-    index: "id", layout: "fitDataFill", maxHeight: "55vh", placeholder: cfg.empty,
+    index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, minWidth: 80, maxWidth: 440, tooltip: true }, columns: _autoHeaderFilters(columns),
   });
