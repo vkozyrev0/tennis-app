@@ -556,7 +556,7 @@ function wireEntity(cfg) {
   const table = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
     placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
-    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true },
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
     editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
     renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
     columns,
@@ -773,7 +773,7 @@ let rosterBuilt = false, rosterPending = null;
 const rosterGrid = new Tabulator(rosterMount, {
   index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
   placeholder: "No players on this roster yet.",
-  columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true },
+  columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
   editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
   renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
   columns: [
@@ -1479,7 +1479,7 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
   const grid = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: cols,
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: cols,
   });
   grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
   if (onCellEdited) grid.on("cellEdited", onCellEdited);
@@ -1505,7 +1505,7 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   const grid = new Tabulator(mount, {
     layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
     renderVertical: "basic",
-    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: _autoHeaderFilters(columns),
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
     ...(opts.index ? { index: opts.index } : {}),
     ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
   });
@@ -1517,7 +1517,17 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
   if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return {
     grid,
-    setData: (rows) => { if (built) grid.setData(rows); else pending = rows; },
+    // Read-only summary grids are often loaded async AFTER their panel becomes
+    // visible (loadCvb / loadHotelSummary / …). If the grid was built while
+    // hidden, fitColumns has nothing to size against — schedule a redraw once
+    // data lands so columns expand to fill the now-visible container.
+    setData: (rows) => {
+      if (built) {
+        const p = grid.setData(rows);
+        if (p && typeof p.then === "function") p.then(() => { try { grid.redraw(true); } catch (_) {} });
+        else requestAnimationFrame(() => { try { grid.redraw(true); } catch (_) {} });
+      } else pending = rows;
+    },
     setFilter: (fn) => { if (built) grid.setFilter(fn); else pendingFilter = fn; },
   };
 }
@@ -1631,7 +1641,7 @@ function wirePlayerList(cfg) {
   const table = new Tabulator(mount, {
     index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true }, columns: _autoHeaderFilters(columns),
+    columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
   });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
   // In-grid edit: PUT only the editable fields (cfg.editFields maps field→true);
