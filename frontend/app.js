@@ -1280,55 +1280,60 @@ const FILE_TARGETS = {
   doubles: { label: "Doubles", tab: "panel-t-doubles", form: document.getElementById("doubles-form"), msg: "doubles-msg" },
 };
 
+// Inbox grid. Classification is an inline list-editor (double-click); the per-row
+// File-target picker + File / Suggest / Delete buttons live in the actions column.
+async function _inboxPutClass(m, classification) {
+  await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification, status: m.status }) });
+}
+const inboxGrid = makeReadGrid("inbox-table", [
+  { title: "Received", field: "received_at", width: 110, formatter: (c) => esc((c.getData().received_at || "").slice(0, 10)) },
+  { title: "From", field: "from_address" },
+  { title: "Subject", field: "subject" },
+  { title: "Classification", field: "classification", cssClass: "editable-cell",
+    editor: "list", editorParams: { values: EMAIL_CLASSES } },
+  { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status) },
+  { title: "", field: "_act", headerSort: false, width: 230, cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const m = cell.getData(); const row = cell.getRow();
+      const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      const tgt = document.createElement("select");
+      for (const k of Object.keys(FILE_TARGETS)) { const o = document.createElement("option"); o.value = k; o.textContent = FILE_TARGETS[k].label; tgt.appendChild(o); }
+      if (FILE_TARGETS[m.classification]) tgt.value = m.classification;
+      const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
+      sgBtn.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        try {
+          const res = await api(`/emails/${m.id}/suggest`, { method: "POST" });
+          await _inboxPutClass(m, res.classification);
+          row.update({ classification: res.classification }); row.reformat();
+          setMsg("email-msg", `suggested: ${res.classification}`, true);
+        } catch (e) { setMsg("email-msg", e.message, false); }
+      });
+      const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
+      fileBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        const t = FILE_TARGETS[tgt.value];
+        t.form.source_email_id.value = m.id;
+        document.querySelector(`.tab[data-target="${t.tab}"]`).click();
+        openForm(t.form);
+        setMsg(t.msg, `filing from email #${m.id}`, true);
+        const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
+        if (focusEl) focusEl.focus();
+      });
+      const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
+      del.addEventListener("click", async (ev) => { ev.stopPropagation(); if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
+      wrap.append(sgBtn, tgt, fileBtn, del); return wrap;
+    } },
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id" });
+// Persist an inline classification edit (double-click the cell).
+inboxGrid.grid.on("cellEdited", async (cell) => {
+  if (cell.getField() !== "classification" || cell.getValue() === cell.getOldValue()) return;
+  try { await _inboxPutClass(cell.getData(), cell.getValue()); cell.getRow().reformat(); }
+  catch (e) { setMsg("email-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} }
+});
 async function loadInbox() {
   if (!active) return;
-  const rows = await api(`/emails?tournament_id=${active.id}`);
-  const tbody = document.querySelector("#inbox-table tbody");
-  tbody.innerHTML = "";
-  for (const m of rows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc((m.received_at || "").slice(0, 10))}</td><td>${esc(m.from_address)}</td>` +
-      `<td>${esc(m.subject)}</td><td class="cls"></td><td>${chip(m.status)}</td><td class="actions"></td>`;
-    const sel = document.createElement("select");
-    EMAIL_CLASSES.forEach((c) => { const o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o); });
-    sel.value = m.classification || "unclassified";
-    sel.addEventListener("change", async () => {
-      try { await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification: sel.value, status: m.status }) }); }
-      catch (e) { setMsg("email-msg", e.message, false); }
-    });
-    tr.querySelector(".cls").appendChild(sel);
-    const cell = tr.querySelector(".actions");
-    // File into a list: pick a target (defaults to the classification if fileable).
-    const tgt = document.createElement("select");
-    for (const k of Object.keys(FILE_TARGETS)) { const o = document.createElement("option"); o.value = k; o.textContent = FILE_TARGETS[k].label; tgt.appendChild(o); }
-    if (FILE_TARGETS[m.classification]) tgt.value = m.classification;
-    const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
-    fileBtn.addEventListener("click", () => {
-      const t = FILE_TARGETS[tgt.value];
-      t.form.source_email_id.value = m.id;
-      document.querySelector(`.tab[data-target="${t.tab}"]`).click();
-      openForm(t.form);
-      setMsg(t.msg, `filing from email #${m.id}`, true);
-      const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
-      if (focusEl) focusEl.focus();
-    });
-    const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
-    sgBtn.addEventListener("click", async () => {
-      try {
-        const res = await api(`/emails/${m.id}/suggest`, { method: "POST" });
-        sel.value = res.classification;
-        if (FILE_TARGETS[res.classification]) tgt.value = res.classification;
-        await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification: res.classification, status: m.status }) });
-        setMsg("email-msg", `suggested: ${res.classification}`, true);
-      } catch (e) { setMsg("email-msg", e.message, false); }
-    });
-    cell.append(sgBtn, tgt, fileBtn);
-    const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-    del.addEventListener("click", async () => { if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
-    cell.append(del);
-    tbody.appendChild(tr);
-  }
-  if (rows.length === 0) tbody.innerHTML = '<tr><td class="empty" colspan="6">Inbox empty — add a forwarded email above.</td></tr>';
+  inboxGrid.setData(await api(`/emails?tournament_id=${active.id}`));
 }
 onSubmit(document.getElementById("email-form"), async (e) => {
   e.preventDefault(); if (!active) return;

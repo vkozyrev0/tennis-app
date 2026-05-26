@@ -7,6 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
+- **✅ Tabulator grid — Inbox** (phase 6) — the review Inbox, previously kept as a
+  custom table for its interactive per-row controls, is now a grid too:
+  **Classification** is an inline `list` editor (click to change, persists on edit),
+  **Status** shows the colour badge, and the actions column keeps the File-target
+  picker + **Suggest** / **File →** / **Delete** buttons (Suggest re-formats the row
+  so the classification + target default refresh). This makes **every list in the
+  app** a Tabulator grid — the only remaining hand-built table is the **print
+  report** (a weekday-matrix artifact with its own print CSS), which stays by design.
 - **✅ Tabulator grid — Room blocks, Availability & Name history** (phase 5) —
   the remaining workspace/sub-detail tables convert: **Room blocks** (via
   `makeListGrid`, now extended with an optional **Edit** action alongside Delete —
