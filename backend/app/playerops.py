@@ -15,9 +15,13 @@ def upsert_player(cur, usta_number, first_name, last_name, gender=None) -> int:
                 (first_name, last_name, gender, pid),
             )
         return pid
+    # gender is NOT NULL at the DB level (migration 0026). The Setup +
+    # roster-inline-create paths supply it; Part B email-filing paths don't —
+    # default to 'female' placeholder and let the TD correct via the Setup
+    # Players grid (inline gender editor).
     cur.execute(
         "INSERT INTO player (usta_number, first_name, last_name, gender) VALUES (%s,%s,%s,%s) RETURNING id",
-        (usta_number, first_name, last_name, gender),
+        (usta_number, first_name, last_name, gender or "female"),
     )
     return cur.fetchone()["id"]
 

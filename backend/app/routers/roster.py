@@ -138,9 +138,12 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
                     )
                 updated += 1
             else:
+                # gender is NOT NULL at the DB level (migration 0026). The CSV
+                # roster import doesn't carry it yet — default to 'female'
+                # placeholder so the import doesn't fail; TD edits via Players grid.
                 cur.execute(
-                    "INSERT INTO player (usta_number, first_name, last_name) "
-                    "VALUES (%s, %s, %s) RETURNING id",
+                    "INSERT INTO player (usta_number, first_name, last_name, gender) "
+                    "VALUES (%s, %s, %s, 'female') RETURNING id",
                     (usta, first, last),
                 )
                 pid = cur.fetchone()["id"]

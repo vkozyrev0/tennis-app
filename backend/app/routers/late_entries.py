@@ -47,8 +47,11 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
                     (body.first_name, body.last_name, pid),
                 )
         else:
+            # gender is required at the DB level (migration 0026). Email-filed
+            # players don't carry gender; default to 'female' placeholder and
+            # let the TD correct it via Setup → Players grid.
             cur.execute(
-                "INSERT INTO player (usta_number, first_name, last_name) VALUES (%s,%s,%s) RETURNING id",
+                "INSERT INTO player (usta_number, first_name, last_name, gender) VALUES (%s,%s,%s,'female') RETURNING id",
                 (body.usta_number, body.first_name, body.last_name),
             )
             pid = cur.fetchone()["id"]

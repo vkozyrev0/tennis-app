@@ -72,7 +72,7 @@ class PlayerCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    gender: Optional[Gender] = None
+    gender: Gender  # required — drives the division/event picker
     birthdate: Optional[date] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -187,8 +187,11 @@ class RosterEntryCreate(BaseModel):
 
     @model_validator(mode="after")
     def _id_or_usta(self):
-        if self.player_id is None and not (self.usta_number and self.usta_number.strip()):
-            raise ValueError("either player_id or usta_number is required")
+        if self.player_id is None:
+            if not (self.usta_number and self.usta_number.strip()):
+                raise ValueError("either player_id or usta_number is required")
+            if self.gender is None:
+                raise ValueError("gender is required when creating a new player")
         return self
 
 

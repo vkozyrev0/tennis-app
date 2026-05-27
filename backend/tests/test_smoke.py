@@ -47,7 +47,9 @@ def _official(**kw):
 
 
 def _player(**kw):
-    return _ok(client.post("/api/players", json={"usta_number": "U" + uuid.uuid4().hex[:8], **kw}))
+    # gender is required on /api/players; default to "female" so tests that
+    # don't care about it stay terse. Override via kw when needed.
+    return _ok(client.post("/api/players", json={"usta_number": "U" + uuid.uuid4().hex[:8], "gender": "female", **kw}))
 
 
 def _hotel(**kw):
@@ -95,8 +97,8 @@ def test_official_and_player_crud():
     assert client.put(f"/api/officials/{o['id']}", json={"first_name": "F", "last_name": "Z"}).status_code == 200
     assert client.delete(f"/api/officials/{o['id']}").status_code == 204
     num = "U" + uuid.uuid4().hex[:8]
-    p = _ok(client.post("/api/players", json={"usta_number": num}))
-    assert client.post("/api/players", json={"usta_number": num}).status_code == 409
+    p = _ok(client.post("/api/players", json={"usta_number": num, "gender": "female"}))
+    assert client.post("/api/players", json={"usta_number": num, "gender": "female"}).status_code == 409
     assert client.delete(f"/api/players/{p['id']}").status_code == 204
 
 
@@ -163,9 +165,8 @@ def test_roster_inline_create_player():
     assert r.status_code == 422, r.text
 
 
-def test_player_gender_crud_and_constraint():
-    """PlayerCreate/Out carry gender; the column accepts male/female/null
-    and rejects anything else (DB CHECK)."""
+def test_player_gender_required_and_constraint():
+    """gender is required (Pydantic Literal + NOT NULL); accepts male/female only."""
     p = _ok(client.post("/api/players", json={
         "usta_number": "GEN" + uuid.uuid4().hex[:6], "first_name": "G", "last_name": "Test",
         "gender": "female"}))
@@ -173,10 +174,13 @@ def test_player_gender_crud_and_constraint():
     upd = _ok(client.put(f"/api/players/{p['id']}",
                          json={**p, "gender": "male"}), 200)
     assert upd["gender"] == "male"
-    # clear gender
-    cleared = _ok(client.put(f"/api/players/{p['id']}", json={**p, "gender": None}), 200)
-    assert cleared["gender"] is None
-    # bad value rejected by the model (422 from Pydantic Literal)
+    # null gender → 422 (Pydantic required)
+    nulled = client.put(f"/api/players/{p['id']}", json={**p, "gender": None})
+    assert nulled.status_code == 422
+    # missing gender field → 422 (required)
+    no_gender = client.post("/api/players", json={"usta_number": "MISSING" + uuid.uuid4().hex[:4]})
+    assert no_gender.status_code == 422
+    # bad value → 422 (Literal)
     bad = client.put(f"/api/players/{p['id']}", json={**p, "gender": "nonbinary"})
     assert bad.status_code == 422
 
@@ -262,10 +266,11 @@ def test_roster_import_normalizes_tshirt_sizes():
 
 def test_player_city_state():
     p = _ok(client.post("/api/players", json={
-        "usta_number": "CS" + uuid.uuid4().hex[:6], "city": "Atlanta", "state": "GA"}))
+        "usta_number": "CS" + uuid.uuid4().hex[:6], "gender": "female",
+        "city": "Atlanta", "state": "GA"}))
     assert p["city"] == "Atlanta" and p["state"] == "GA"
     upd = client.put(f"/api/players/{p['id']}", json={
-        "usta_number": p["usta_number"], "city": "Macon", "state": "GA"}).json()
+        "usta_number": p["usta_number"], "gender": "female", "city": "Macon", "state": "GA"}).json()
     assert upd["city"] == "Macon"
 
 
@@ -328,9 +333,9 @@ def test_hotel_confidential_report():
     t, h = _tournament(), _hotel()
     # two selected players staying at the hotel
     p1 = _ok(client.post("/api/players", json={
-        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Alice", "last_name": "Adams"}))
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Alice", "last_name": "Adams", "gender": "female"}))
     p2 = _ok(client.post("/api/players", json={
-        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Bob", "last_name": "Brown"}))
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Bob", "last_name": "Brown", "gender": "male"}))
     for p in (p1, p2):
         client.post(f"/api/tournaments/{t['id']}/players",
                     json={"player_id": p["id"], "selection_status": "selected"})
@@ -737,7 +742,7 @@ def test_officials_report_totals():
 
 def test_player_history_capture():
     p = _player(first_name="A", last_name="Before")
-    r = client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "After"})
+    r = client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "After", "gender": "female"})
     assert r.status_code == 200 and r.json()["last_name"] == "After"
     hist = client.get(f"/api/players/{p['id']}/history").json()
     assert len(hist) >= 1
@@ -761,7 +766,7 @@ def test_roster_point_in_time_name():
     finally:
         conn.close()
     # rename -> history row 'Maiden' valid [2024-01-01, now); current 'Married'
-    client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "Married"})
+    client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "Married", "gender": "female"})
 
     t_old = _tournament(play_start_date="2024-06-01", play_end_date="2024-06-03")
     t_new = _tournament(play_start_date="2027-06-01", play_end_date="2027-06-03")

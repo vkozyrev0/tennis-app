@@ -187,9 +187,9 @@
           <form id="player-form" autocomplete="off">
             <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" /></label></div>
             <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
-            <div class="row"><label>Gender
-              <select name="gender">
-                <option value="">— unspecified —</option>
+            <div class="row"><label>Gender *
+              <select name="gender" required>
+                <option value="">— pick one —</option>
                 <option value="male">Male (Boys / Men)</option>
                 <option value="female">Female (Girls / Women)</option>
               </select></label><label>City <input name="city" /></label><label>State <input name="state" maxlength="2" /></label></div>
@@ -327,9 +327,9 @@
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
                 <label>First name <input name="first_name" /></label>
                 <label>Last name <input name="last_name" /></label>
-                <label>Gender
-                  <select name="gender">
-                    <option value="">— unspecified —</option>
+                <label>Gender *
+                  <select name="gender" required>
+                    <option value="">— pick one —</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
                   </select>
