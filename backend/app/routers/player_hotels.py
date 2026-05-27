@@ -120,6 +120,79 @@ def lodging_summary(tournament_id: int, conn=Depends(db_dep)):
         return cur.fetchall()
 
 
+@router.get("/api/tournaments/{tournament_id}/hotel-confidential-report")
+def hotel_confidential_report(tournament_id: int, conn=Depends(db_dep)):
+    """Confidential per-hotel roster for the tournament: a summary pivot (hotel
+    → players + officials counts), then a detail list of each person as
+    "F. Last" (first initial + last name) per the TD's privacy requirement.
+    Only selected players (no withdrawals/alternates); officials are pulled
+    from their hotel assignment (assignment.room_block → hotel)."""
+    with conn.cursor() as cur:
+        # Selected players, grouped under their hotel (case-insensitive name).
+        cur.execute(
+            """
+            SELECT TRIM(s.hotel_name) AS hotel_name, p.first_name, p.last_name
+            FROM player_hotel_stay s
+            JOIN player p ON p.id = s.player_id
+            JOIN tournament_entry e
+              ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
+            WHERE s.tournament_id = %s
+              AND e.selection_status = 'selected'
+              AND NULLIF(TRIM(s.hotel_name), '') IS NOT NULL
+            ORDER BY lower(TRIM(s.hotel_name)), p.last_name, p.first_name
+            """,
+            (tournament_id,),
+        )
+        players = cur.fetchall()
+        # Officials whose hotel assignment points at a room_block in a hotel.
+        cur.execute(
+            """
+            SELECT h.name AS hotel_name, o.first_name, o.last_name
+            FROM assignment a
+            JOIN room_block rb ON rb.id = a.room_block_id
+            JOIN hotel h ON h.id = rb.hotel_id
+            JOIN official o ON o.id = a.official_id
+            WHERE a.tournament_id = %s
+            ORDER BY h.name, o.last_name, o.first_name
+            """,
+            (tournament_id,),
+        )
+        officials = cur.fetchall()
+
+        def initial_of(s):
+            return (s[0] + ". ") if s else ""
+        def fmt(row):
+            return {"hotel_name": row["hotel_name"],
+                    "name": initial_of(row["first_name"]) + (row["last_name"] or "—")}
+
+        # Build the pivot.
+        summary = {}
+        for p in players:
+            key = (p["hotel_name"] or "").strip()
+            summary.setdefault(key, {"players": 0, "officials": 0})["players"] += 1
+        for o in officials:
+            key = (o["hotel_name"] or "").strip()
+            summary.setdefault(key, {"players": 0, "officials": 0})["officials"] += 1
+        summary_rows = sorted(
+            [{"hotel_name": k, "players": v["players"], "officials": v["officials"],
+              "total": v["players"] + v["officials"]} for k, v in summary.items()],
+            key=lambda x: x["hotel_name"].lower(),
+        )
+
+        return {
+            "tournament_id": tournament_id,
+            "summary": summary_rows,
+            "players": [fmt(p) for p in players],
+            "officials": [fmt(o) for o in officials],
+            "totals": {
+                "players": len(players),
+                "officials": len(officials),
+                "total": len(players) + len(officials),
+                "hotels": len(summary_rows),
+            },
+        }
+
+
 @router.get("/api/hotel-analytics")
 def hotel_analytics(conn=Depends(db_dep)):
     """Players per hotel across all tournaments (for CVB negotiations) — selected

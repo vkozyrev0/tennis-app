@@ -606,7 +606,9 @@
     <section class="panel tpanel" id="panel-t-photels">
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
       <div class="t-content card">
-        <h3>Player hotels — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(where players reported they're staying)</span></h3>
+        <h3>Player hotels — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(where players reported they're staying)</span>
+          <button type="button" id="photel-report-btn" class="export-btn no-print" style="float:right" title="Open a confidential hotel report (summary + initials-only detail) ready to print">⎙ Confidential report</button>
+        </h3>
         <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
         <form id="photel-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />

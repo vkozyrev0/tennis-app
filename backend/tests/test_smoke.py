@@ -299,6 +299,39 @@ def test_player_hotel_fk_dedup():
     assert summ.get(hname) == 2
 
 
+def test_hotel_confidential_report():
+    """First page: pivot (hotel → players + officials counts). Following pages:
+    each player/official as first-initial + last name. Selected only on the
+    player side; officials come via assignment.room_block_id."""
+    t, h = _tournament(), _hotel()
+    # two selected players staying at the hotel
+    p1 = _ok(client.post("/api/players", json={
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Alice", "last_name": "Adams"}))
+    p2 = _ok(client.post("/api/players", json={
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Bob", "last_name": "Brown"}))
+    for p in (p1, p2):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
+        client.post(f"/api/tournaments/{t['id']}/player-hotels",
+                    json={"usta_number": p["usta_number"], "hotel_name": h["name"]})
+    # one official with a hotel via a room_block + assignment
+    o = _ok(client.post("/api/officials", json={"first_name": "Cara", "last_name": "Clark"}))
+    blk = _ok(client.post("/api/room-blocks", json={
+        "hotel_id": h["id"], "tournament_id": t["id"], "kind": "official", "room_count": 5}))
+    _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                    json={"official_id": o["id"], "room_block_id": blk["id"]}))
+    rep = client.get(f"/api/tournaments/{t['id']}/hotel-confidential-report").json()
+    # pivot row for our hotel: 2 players + 1 official = 3
+    row = next(r for r in rep["summary"] if r["hotel_name"] == h["name"])
+    assert row["players"] == 2 and row["officials"] == 1 and row["total"] == 3
+    # initials format
+    names = [p["name"] for p in rep["players"]]
+    assert "A. Adams" in names and "B. Brown" in names
+    assert any(o["name"] == "C. Clark" for o in rep["officials"])
+    # totals
+    assert rep["totals"]["players"] == 2 and rep["totals"]["officials"] == 1
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()

@@ -1981,6 +1981,69 @@ const photelList = wirePlayerList({
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
+// Confidential per-hotel roster: summary pivot + initials-only detail; opens
+// in a new window with a print-ready stylesheet and auto-triggers Print so
+// the TD can hand it to ops/CVB/etc. without exposing full player names.
+async function openHotelConfidentialReport() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  try {
+    const data = await api(`/tournaments/${active.id}/hotel-confidential-report`);
+    const win = window.open("", "_blank", "noopener");
+    if (!win) { toast("Allow pop-ups for this site to print the report", false); return; }
+    const e = esc;
+    const summaryRows = data.summary.length
+      ? data.summary.map((r) => `<tr><td>${e(r.hotel_name)}</td><td class="num">${r.players}</td><td class="num">${r.officials}</td><td class="num"><strong>${r.total}</strong></td></tr>`).join("")
+      : `<tr><td colspan="4" class="empty">No hotel data yet.</td></tr>`;
+    const playerRows = data.players.length
+      ? data.players.map((p) => `<tr><td>${e(p.name)}</td><td>${e(p.hotel_name)}</td></tr>`).join("")
+      : `<tr><td colspan="2" class="empty">No players with a hotel on file.</td></tr>`;
+    const officialRows = data.officials.length
+      ? data.officials.map((o) => `<tr><td>${e(o.name)}</td><td>${e(o.hotel_name)}</td></tr>`).join("")
+      : `<tr><td colspan="2" class="empty">No officials with a hotel assignment.</td></tr>`;
+    const t = active.name;
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Hotel report — ${e(t)}</title>
+      <style>
+        body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.2cm; font-size: 12px; }
+        h1 { font-size: 18px; margin: 0 0 0.2rem; }
+        h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom: 2px solid #2e6f40; padding-bottom: 0.2rem; color: #2e6f40; }
+        .meta { color: #556070; font-size: 11px; margin-bottom: 0.4rem; }
+        table { border-collapse: collapse; width: 100%; margin: 0.4rem 0 0.8rem; }
+        th, td { border: 1px solid #d9e0e6; padding: 5px 8px; text-align: left; font-size: 11px; }
+        th { background: #f4f6f8; font-weight: 700; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        td.empty { color: #556070; font-style: italic; text-align: center; }
+        tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
+        .pagebreak { page-break-before: always; }
+        @media print { @page { margin: 1.2cm; } }
+        @media print { .noprint { display: none; } }
+        .noprint { margin-top: 1rem; }
+        .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+      </style></head><body>
+      <h1>Confidential hotel report</h1>
+      <div class="meta">${e(t)} · ${e(active.play_start_date || "")} → ${e(active.play_end_date || "")} · names shown as first-initial + last name</div>
+
+      <h2>Hotel summary — ${data.totals.hotels} hotel(s), ${data.totals.total} guest(s)</h2>
+      <table><thead><tr><th>Hotel</th><th class="num">Players</th><th class="num">Officials</th><th class="num">Total</th></tr></thead>
+        <tbody>${summaryRows}
+          <tr class="totals"><td>Totals</td><td class="num">${data.totals.players}</td><td class="num">${data.totals.officials}</td><td class="num">${data.totals.total}</td></tr>
+        </tbody></table>
+
+      <div class="pagebreak"></div>
+      <h2>Players (${data.totals.players})</h2>
+      <table><thead><tr><th>Name</th><th>Hotel</th></tr></thead><tbody>${playerRows}</tbody></table>
+
+      <h2>Officials (${data.totals.officials})</h2>
+      <table><thead><tr><th>Name</th><th>Hotel</th></tr></thead><tbody>${officialRows}</tbody></table>
+
+      <div class="noprint"><button onclick="window.print()">Print this report</button>
+        <button onclick="window.close()">Close</button></div>
+      <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
+    </body></html>`);
+    win.document.close();
+  } catch (err) { setMsg("photel-msg", err.message, false); }
+}
+document.getElementById("photel-report-btn").addEventListener("click", openHotelConfidentialReport);
+
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
 let tshirtRows = [];
 // Canonical size codes smallest→largest, and code→label for display.
