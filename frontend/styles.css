@@ -751,6 +751,11 @@ td.toggle { white-space: nowrap; }
 
 /* ---- reports ---- */
 .report-toolbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
+/* The report-toolbar h3 is a flex CHILD (siblings = Print/CSV buttons), so it
+   needs `flex: 1; margin: 0` to fill the leading space and push the actions
+   right. Distinct from `.h3-flex` (which makes the h3 itself a flex CONTAINER
+   for inline action buttons inside the heading). Critique pass 3 regression. */
+.report-toolbar > h3 { flex: 1; margin: 0; }
 #report-print, #report-csv {
   padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
   border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
