@@ -199,6 +199,50 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// =================== Division + Event lookup lists ===================
+// USTA divisions vary by tournament type. The Setup → Tournament `type`
+// (junior|adult) drives which list backs the form datalists. Values are stored
+// as-typed (free-text input + suggestions) so historic data isn't lost; new
+// data tends to come from the list.
+const DIVISIONS_JUNIOR = [
+  { code: "B10", label: "Boys 10 & Under" }, { code: "G10", label: "Girls 10 & Under" },
+  { code: "B12", label: "Boys 12 & Under" }, { code: "G12", label: "Girls 12 & Under" },
+  { code: "B14", label: "Boys 14 & Under" }, { code: "G14", label: "Girls 14 & Under" },
+  { code: "B16", label: "Boys 16 & Under" }, { code: "G16", label: "Girls 16 & Under" },
+  { code: "B18", label: "Boys 18 & Under" }, { code: "G18", label: "Girls 18 & Under" },
+];
+const DIVISIONS_ADULT = [
+  { code: "NTRP 2.5 Men", label: "NTRP 2.5 Men" }, { code: "NTRP 2.5 Women", label: "NTRP 2.5 Women" },
+  { code: "NTRP 3.0 Men", label: "NTRP 3.0 Men" }, { code: "NTRP 3.0 Women", label: "NTRP 3.0 Women" },
+  { code: "NTRP 3.5 Men", label: "NTRP 3.5 Men" }, { code: "NTRP 3.5 Women", label: "NTRP 3.5 Women" },
+  { code: "NTRP 4.0 Men", label: "NTRP 4.0 Men" }, { code: "NTRP 4.0 Women", label: "NTRP 4.0 Women" },
+  { code: "NTRP 4.5 Men", label: "NTRP 4.5 Men" }, { code: "NTRP 4.5 Women", label: "NTRP 4.5 Women" },
+  { code: "NTRP Open Men", label: "NTRP Open Men" }, { code: "NTRP Open Women", label: "NTRP Open Women" },
+  { code: "Combo 6.0", label: "Combo 6.0 (doubles only)" },
+  { code: "Combo 7.0", label: "Combo 7.0 (doubles only)" },
+  { code: "Combo 8.0", label: "Combo 8.0 (doubles only)" },
+  { code: "Combo 9.0", label: "Combo 9.0 (doubles only)" },
+];
+const EVENTS_JUNIOR = ["Singles", "Doubles"];
+const EVENTS_ADULT = ["Men's Singles", "Women's Singles", "Men's Doubles", "Women's Doubles", "Mixed Doubles"];
+
+function _populateDatalist(id, items) {
+  const dl = document.getElementById(id);
+  if (!dl) return;
+  dl.innerHTML = items.map((it) => {
+    const value = typeof it === "string" ? it : it.code;
+    const label = typeof it === "string" ? "" : (it.label === it.code ? "" : it.label);
+    return `<option value="${esc(value)}"${label ? ` label="${esc(label)}"` : ""}>${esc(label || value)}</option>`;
+  }).join("");
+}
+function refreshDivisionLists() {
+  // Default to junior when no tournament is active so the form still has
+  // useful suggestions on first open.
+  const isAdult = active && active.type === "adult";
+  _populateDatalist("divisions-list", isAdult ? DIVISIONS_ADULT : DIVISIONS_JUNIOR);
+  _populateDatalist("events-list", isAdult ? EVENTS_ADULT : EVENTS_JUNIOR);
+}
+
 // Colored status chip for known tokens (selection status, email status, etc.).
 const BADGE = {
   selected: "ok", alternate: "warn", withdrawn: "bad",
@@ -558,6 +602,7 @@ function updateActiveUI() {
     p.querySelector(".needs-active-note").hidden = !!active;
     p.querySelector(".t-content").hidden = !active;
   });
+  refreshDivisionLists();  // datalists track the active tournament's type
   if (active) {
     info.textContent = `${active.type} · ${active.play_start_date} → ${active.play_end_date}`;
     loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); loadPairing(); loadDoubles(); photelList.load(); loadReports();

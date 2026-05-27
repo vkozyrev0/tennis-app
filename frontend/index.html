@@ -315,7 +315,7 @@
             <form id="roster-form" autocomplete="off">
               <div class="row roster-pick-row">
                 <label>Player <select name="player_id" id="roster-player" required></select></label>
-                <label>Division <input name="age_division" /></label>
+                <label>Division <input name="age_division" list="divisions-list" /></label>
               </div>
               <div class="row roster-new-row" hidden>
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
@@ -327,7 +327,7 @@
               </div>
               <div class="row">
                 <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
-                <label>Events <input name="events" /></label>
+                <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
               </div>
               <div class="row">
                 <label>T-shirt
@@ -451,8 +451,8 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Age division <input name="age_division" /></label>
-            <label>Events <input name="events" /></label>
+            <label>Age division <input name="age_division" list="divisions-list" /></label>
+            <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
           </div>
           <div class="row">
             <label>Request date <input type="date" name="request_date" /></label>
@@ -479,7 +479,7 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Events <input name="events" /></label>
+            <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
             <label>Reason <input name="reason" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
@@ -528,8 +528,8 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Home division <input name="home_division" /></label>
-            <label>Willing divisions <input name="willing_divisions" placeholder="comma-separated" /></label>
+            <label>Home division <input name="home_division" list="divisions-list" /></label>
+            <label>Willing divisions <input name="willing_divisions" list="divisions-list" placeholder="comma-separated" /></label>
           </div>
           <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="divflex-msg"></span></div>
         </form>
@@ -549,7 +549,7 @@
         <form id="pairing-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>Age division <input name="age_division" /></label>
+            <label>Age division <input name="age_division" list="divisions-list" /></label>
             <label>Relationship
               <select name="relationship"><option value="same_club">same club</option><option value="siblings">siblings</option></select>
             </label>
@@ -581,7 +581,7 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Age division <input name="age_division" /></label>
+            <label>Age division <input name="age_division" list="divisions-list" /></label>
             <label>Random pairing <input type="checkbox" id="doubles-random" name="wants_random" /></label>
             <label id="doubles-partner-wrap">Partner <select name="partner_ref" class="player-ref"></select></label>
           </div>
@@ -713,6 +713,12 @@
       </div>
     </div>
   </div>
+  <!-- Shared lookup lists for division + events. JS repopulates based on the
+       active tournament's type (junior vs adult). Inputs reference them via
+       `list="divisions-list"` / `list="events-list"` — datalists let the TD
+       pick a suggestion or type a free-form value for edge cases. -->
+  <datalist id="divisions-list"></datalist>
+  <datalist id="events-list"></datalist>
   <script src="/vendor/tabulator.min.js"></script>
   <script src="/app.js"></script>
 </body>
