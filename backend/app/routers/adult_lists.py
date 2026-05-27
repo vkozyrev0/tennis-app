@@ -45,7 +45,7 @@ def list_sched(tournament_id: int, conn=Depends(db_dep)):
 def create_sched(tournament_id: int, body: SchedAvoidCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         _tournament_or_404(cur, tournament_id)
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
         cur.execute(
             "INSERT INTO scheduling_avoidance (tournament_id, player_id, avoid_day, "
             "avoid_time_range, source_email_id) VALUES (%s,%s,%s,%s,%s) RETURNING id",
@@ -92,7 +92,7 @@ def list_divflex(tournament_id: int, conn=Depends(db_dep)):
 def create_divflex(tournament_id: int, body: DivFlexCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         _tournament_or_404(cur, tournament_id)
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
         cur.execute(
             "INSERT INTO division_flexibility (tournament_id, player_id, home_division, "
             "willing_divisions, source_email_id) VALUES (%s,%s,%s,%s,%s) RETURNING id",

@@ -6,7 +6,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
-from ._models_common import EmailStatus
+from ._models_common import EmailStatus, Gender
 
 
 # ---------- Email inbox ----------
@@ -41,6 +41,11 @@ class LateEntryCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    # Audit B1: optional on every inbox *Create so a TD filing an email
+    # about a brand-new player can supply it and skip the "create in Setup
+    # first" detour. Routers thread it into upsert_player; when omitted on
+    # an existing player it stays None and no UPDATE happens.
+    gender: Optional[Gender] = None
     age_division: Optional[str] = None
     events: Optional[str] = None
     request_date: Optional[date] = None
@@ -75,6 +80,7 @@ class WithdrawalCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
     events: Optional[str] = None
     reason: Optional[str] = None
     notes: Optional[str] = None
@@ -107,6 +113,7 @@ class DoublesRequestCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
     age_division: Optional[str] = None
     wants_random: bool = False
     partner_usta: Optional[str] = None
@@ -162,6 +169,7 @@ class PairingMemberIn(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
 
 
 class PairingAvoidanceUpdate(BaseModel):
@@ -203,6 +211,7 @@ class PlayerHotelCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
     hotel_name: Optional[str] = None
     lodging_plan: Optional[str] = None
     source_email_id: Optional[int] = None
@@ -237,6 +246,7 @@ class SchedAvoidCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
     avoid_day: Optional[str] = None
     avoid_time_range: Optional[str] = None
     source_email_id: Optional[int] = None
@@ -264,6 +274,7 @@ class DivFlexCreate(BaseModel):
     usta_number: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    gender: Optional[Gender] = None  # audit B1
     home_division: Optional[str] = None
     willing_divisions: Optional[str] = None
     source_email_id: Optional[int] = None

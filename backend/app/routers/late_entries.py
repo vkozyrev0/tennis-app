@@ -41,7 +41,7 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         # we intentionally don't pass body.gender — late-entry emails carry
         # name + division but not gender, and existing players keep their
         # registered gender. New players are rejected by upsert_player.
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
 
         # Put them on the roster (source=late_entry) if not already there.
         cur.execute(

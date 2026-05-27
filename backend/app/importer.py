@@ -112,13 +112,18 @@ def validate(data: dict, cols, cur) -> str | None:
         # in Setup; we don't invent genders for them.
         gender = _norm_gender(data.get("gender"))
         canonical = _s(data.get("usta_number"))
-        if gender and len(unknown) == 1 and unknown[0] == canonical:
+        # Drop the canonical from the unknown list when gender is set — that
+        # one will be created at merge. What remains is what the TD actually
+        # has to fix (audit B4).
+        actionable = [u for u in unknown
+                      if not (gender and u == canonical)]
+        if not actionable:
             return None
-        if not gender and canonical and canonical in unknown:
+        if not gender and canonical and canonical in unknown and len(unknown) == 1:
             return (f"player {canonical} isn't in Setup yet — gender column is "
                     f"required for new players (or add them via Setup → Players first)")
         return ("player(s) not in Setup yet — add them via Setup → Players first: "
-                + ", ".join(unknown))
+                + ", ".join(actionable))
     return None
 
 
@@ -268,8 +273,15 @@ def _merge_pairing(cur, tid, d):
 
 def _merge_doubles(cur, tid, d):
     """Doubles request (audit import/export #9). One row per request; mutual
-    verification fires naturally when both sides land in the batch. Players
-    must already exist in Setup AND on the tournament roster."""
+    verification fires naturally when both sides land in the batch.
+
+    Audit B3: the requester's player record is upserted here (a `gender`
+    column on the row creates them; without gender, an unknown USTA fails).
+    Neither the requester nor the partner is checked against the tournament
+    roster — roster-membership enforcement only fires at *pair-creation*
+    time (`doubles.py:_make_pair`, audit F15), not on the request itself.
+    Importing requests for un-rostered players is therefore allowed; pairing
+    them is not."""
     usta = _s(d.get("usta_number"))
     if not usta:
         raise ValueError("usta_number is required")

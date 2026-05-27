@@ -72,7 +72,7 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
         # NULL-division requests would pair across divisions (audit §3.6).
         if body.wants_random and not (body.age_division or "").strip():
             raise HTTPException(status_code=400, detail="random pairing requires an age division")
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
         partner = (body.partner_usta or "").strip() or None
         cur.execute(
             """

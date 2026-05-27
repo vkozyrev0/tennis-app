@@ -1376,14 +1376,18 @@ async function rosterSignInExport() {
 }
 // --- Data → Import page: per-type upload → staging → merge (built from /api/import/types) ---
 function _importRefresh() {
-  // Audit (fifth-pass #1): refresh every grid that an importer can touch,
-  // including the staged-importer additions for pairing / doubles / distances.
+  // Audit (fifth-pass #1 + seventh-pass B2): refresh every grid that an
+  // importer can touch. Roster + Part B grids are tournament-scoped; Setup →
+  // Players and Distances are cross-tournament and can be filled by an
+  // importer creating new player rows or new distance entries.
   if (active) {
     loadRoster(); loadLate(); loadWithdrawals();
     schedList.load(); divflexList.load(); photelList.load();
     loadPairing(); loadDoubles();
   }
-  // Distances live in Setup (cross-tournament), so refresh independent of `active`.
+  if (typeof playersCrud !== "undefined" && playersCrud.refresh) {
+    playersCrud.refresh().catch(() => {});
+  }
   if (typeof distancesCrud !== "undefined" && distancesCrud.refresh) {
     distancesCrud.refresh().catch(() => {});
   }

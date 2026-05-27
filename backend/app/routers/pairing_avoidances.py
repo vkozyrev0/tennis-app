@@ -62,7 +62,7 @@ def create_pairing(tournament_id: int, body: PairingAvoidanceCreate, conn=Depend
         for i, m in enumerate(body.members, start=1):
             cur.execute("SAVEPOINT member")
             try:
-                pid = upsert_player(cur, m.usta_number, m.first_name, m.last_name)
+                pid = upsert_player(cur, m.usta_number, m.first_name, m.last_name, m.gender)
                 cur.execute("RELEASE SAVEPOINT member")
                 if pid not in seen:
                     seen.add(pid)

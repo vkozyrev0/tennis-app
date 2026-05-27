@@ -41,7 +41,7 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
         # One canonical hotel row per name (case-insensitive) — FK keeps names consistent.
         hid, hname = upsert_hotel(cur, body.hotel_name)
         lodging = " ".join((body.lodging_plan or "").split()) or None

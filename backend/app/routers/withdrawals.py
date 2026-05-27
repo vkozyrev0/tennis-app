@@ -37,7 +37,7 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
 
         # Audit M6: consolidated on the shared helper (refuses unknown players
         # without a gender; updates name on existing ones).
-        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
 
         # Was the player an alternate? (read before we flip the status)
         cur.execute(
