@@ -801,10 +801,15 @@ function _redrawPanelGrids(panelId) {
 // table.setData() directly.
 function deferredSetData(table) {
   const state = { built: false, pending: null };
-  table.on("tableBuilt", () => {
+  const onBuilt = () => {
     state.built = true;
     if (state.pending !== null) { table.setData(state.pending); state.pending = null; }
-  });
+  };
+  table.on("tableBuilt", onBuilt);
+  // Cover the case where Tabulator fires tableBuilt synchronously inside its
+  // constructor — our listener is registered AFTER `new Tabulator()` returns,
+  // so the sync-fire is missed and pending never flushes. Check the flag.
+  if (table.initialized) onBuilt();
   const fn = (rows) => { if (state.built) table.setData(rows); else state.pending = rows; };
   fn._state = state;  // makeListGrid uses .built directly to gate filter installs
   return fn;
@@ -964,7 +969,13 @@ function wireEntity(cfg) {
       table.download("csv", filename);
     }
   });
-  table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
+  // Tabulator can fire tableBuilt synchronously (small grids, hidden mount,
+  // some timing windows) — in which case the listener below registers AFTER
+  // the event and never sees it. Cover the sync case with an explicit check
+  // on `table.initialized`. (Critical regression discovered in preview.)
+  const onBuilt = () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); };
+  table.on("tableBuilt", onBuilt);
+  if (table.initialized) onBuilt();
   // Single click only highlights the row (keeps double-click free for in-grid
   // editing); use the Edit button to open the form overlay.
   table.on("rowClick", (e, row) => { selectedId = row.getData().id; applySelection(); });
@@ -1070,16 +1081,16 @@ function wireEntity(cfg) {
     } catch (err) { setMsg(cfg.msgId, err.message, false); }
   }
   async function refresh() {
-    // Audit P36: swap the "no records yet — add one" placeholder for a neutral
-    // "loading…" while the fetch is in flight, so first-paint doesn't show a
-    // misleading empty-state message.
-    if (built) table.setPlaceholder("Loading…");
+    // Note: Tabulator 6.3.1 doesn't expose `setPlaceholder` at runtime. The
+    // empty-state text is set once at construction via the `placeholder`
+    // option (above). An earlier audit (P36) tried to swap to "Loading…"
+    // here and back — it threw and the surrounding try/catch in adminInit
+    // swallowed the error, leaving every Setup grid blank. Reverted: just
+    // call setData.
     items = await api(cfg.path);
     if (cfg.onLoad) cfg.onLoad(items);
-    if (built) {
-      await table.setData(items);
-      table.setPlaceholder(`No ${cfg.singular}s yet — use the form to add one.`);
-    } else { pending = items; }
+    if (built) await table.setData(items);
+    else pending = items;
     applySelection();
   }
   form.addEventListener("submit", async (e) => {
@@ -2054,7 +2065,9 @@ function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdi
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: cols,
   });
-  grid.on("tableBuilt", () => { built = true; if (pending) { grid.setData(pending); pending = null; } });
+  const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
+  grid.on("tableBuilt", _onBuilt);
+  if (grid.initialized) _onBuilt();  // covers sync-fire race
   if (onCellEdited) grid.on("cellEdited", onCellEdited);
   if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
@@ -2083,11 +2096,13 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
     ...(opts.index ? { index: opts.index } : {}),
     ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
   });
-  grid.on("tableBuilt", () => {
+  const _onBuilt = () => {
     built = true;
     if (pending) { grid.setData(pending); pending = null; }
     if (pendingFilter) { grid.setFilter(pendingFilter); pendingFilter = null; }
-  });
+  };
+  grid.on("tableBuilt", _onBuilt);
+  if (grid.initialized) _onBuilt();  // covers sync-fire race
   if (panelId) (GRIDS[panelId] ||= []).push(grid);
   return {
     grid,
@@ -2250,7 +2265,9 @@ function wirePlayerList(cfg) {
     renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
     columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
   });
-  table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } });
+  const _onBuilt = () => { built = true; if (pending) { table.setData(pending); pending = null; } };
+  table.on("tableBuilt", _onBuilt);
+  if (table.initialized) _onBuilt();  // covers sync-fire race
   // In-grid edit: PUT only the editable fields (cfg.editFields maps field→true);
   // identity columns (player/usta) stay read-only.
   if (cfg.editFields) table.on("cellEdited", async (cell) => {
@@ -3300,7 +3317,7 @@ async function adminInit() {
     }
   } catch (_) {}
   for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, divisionsCrud, eventsCrud, tournamentsCrud]) {
-    try { await c.refresh(); } catch (e) { /* health pill shows DB issues */ }
+    try { await c.refresh(); } catch (e) { /* health pill surfaces DB issues */ }
   }
   const saved = localStorage.getItem("activeTid");
   if (saved && tournamentsById[saved]) setActive(saved);
