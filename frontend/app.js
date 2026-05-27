@@ -593,7 +593,24 @@ _groups.forEach((g) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "gbtn";
   b.dataset.group = g.dataset.group;
-  b.textContent = g.querySelector(".menu-label").textContent;
+  // Inline SVG icon from the sprite — one per group. Stroke uses
+  // currentColor so the icon follows the button's text color (white on the
+  // green nav bar; the active state inherits it the same way).
+  const iconNs = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(iconNs, "svg");
+  svg.setAttribute("class", "gicon");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = document.createElementNS(iconNs, "use");
+  use.setAttribute("href", `#i-${g.dataset.group}`);
+  svg.appendChild(use);
+  const labelText = g.querySelector(".menu-label").textContent;
+  const label = document.createElement("span");
+  label.textContent = labelText;
+  b.append(svg, label);
+  // aria-label keeps the button identifiable when the label is visually
+  // hidden under the icon-only narrow-viewport CSS rule.
+  b.setAttribute("aria-label", labelText);
   if (g.classList.contains("group-active")) b.classList.add("active");
   b.addEventListener("click", () => activateGroup(g.dataset.group));
   _groupsEl.appendChild(b);

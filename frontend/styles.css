@@ -153,9 +153,21 @@ header h1 { margin: 0; font-size: 0.92rem; }
   padding: 0.3rem 0.85rem;
   cursor: pointer;
   border-radius: 6px 6px 0 0;
+  display: inline-flex; align-items: center; gap: 0.4rem;
 }
 .gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .gbtn.active { background: #245733; color: #fff; }
+/* Level-1 nav group icon. 14px monochrome; stroke follows currentColor so
+   it tracks the button's text color (default rgba white, full white on
+   hover/active). The "preferences" sliders icon has a couple of small
+   accent-filled dots which inherit `--accent` from the page tokens. */
+.gicon { width: 14px; height: 14px; flex-shrink: 0; }
+@media (max-width: 480px) {
+  /* On phones, drop the label and show icon-only — saves horizontal real
+     estate in the level-1 bar. aria-label on the button keeps it accessible. */
+  .gbtn > span { display: none; }
+  .gbtn { padding: 0.32rem 0.6rem; }
+}
 
 /* level 2 — the active group's tabs */
 .menu {
