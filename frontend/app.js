@@ -3103,6 +3103,8 @@ document.getElementById("roster-signin-csv").addEventListener("click", rosterSig
 document.getElementById("roster-signin-template").addEventListener("click", rosterSignInTemplate);
 document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);
+// Design-crit pass 6: wire the previously-orphan reportTemplateExport.
+document.getElementById("report-template").addEventListener("click", reportTemplateExport);
 
 // =================== Workspace add-forms as modal overlays (grid stays primary) ===================
 // Each add-form becomes a centered modal opened by a "＋ Add X" button; the grid
