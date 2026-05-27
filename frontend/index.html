@@ -13,7 +13,7 @@
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
       <button type="button" id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
-      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts">?</button>
+      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd>?</kbd> Shortcuts</button>
       <span id="user-box" hidden><span id="username-label"></span>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
@@ -71,6 +71,9 @@
       <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
       <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
       <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
+    </div>
+    <div class="menu-group tgroup" data-group="preferences">
+      <span class="menu-label">Player preferences</span>
       <button class="tab needs-active" data-target="panel-t-sched">Scheduling</button>
       <button class="tab needs-active" data-target="panel-t-divflex">Div. flex</button>
       <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoid.</button>
@@ -338,7 +341,7 @@
         <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
         <button type="button" id="tshirt-order-csv" class="export-btn no-print">⬇ Order CSV (size → qty)</button>
-        <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" style="max-width:320px" />
+        <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" class="filter--narrow" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
           <tbody></tbody>
@@ -377,7 +380,7 @@
     <section class="panel tpanel" id="panel-t-roster">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
-        <h3>Roster — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(import on the Data → Import page)</span></h3>
+        <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
@@ -392,6 +395,15 @@
           <div class="detail-pane">
             <h3 class="detail-title" id="roster-title">New roster entry</h3>
             <form id="roster-form" autocomplete="off">
+              <!-- Segmented control: pick existing player vs create new one
+                   inline. Replaces the old hidden btn-link toggle so the two
+                   states are visible up-front (audit design-crit #4). -->
+              <div class="seg-toggle" role="tablist" aria-label="Player source">
+                <button type="button" id="roster-mode-pick" class="seg-btn seg-active"
+                        role="tab" aria-selected="true">Pick existing</button>
+                <button type="button" id="roster-mode-new" class="seg-btn"
+                        role="tab" aria-selected="false">+ New player</button>
+              </div>
               <div class="row roster-pick-row">
                 <label>Player <select name="player_id" id="roster-player" required></select></label>
                 <label>Division <input name="age_division" list="divisions-list" /></label>
@@ -407,9 +419,6 @@
                     <option value="female">Female</option>
                   </select>
                 </label>
-              </div>
-              <div class="row" style="margin-top:-0.2rem;margin-bottom:0.4rem">
-                <button type="button" id="roster-mode-toggle" class="btn-link" style="font-size:0.78rem">+ New player not on file →</button>
               </div>
               <div class="row">
                 <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
@@ -448,7 +457,7 @@
             <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
             <label>Hotel assignment <select name="room_block_id" id="asg-room-block"></select></label>
           </div>
-          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="asg-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="asg-msg"></span></div>
         </form>
         <div id="asg-list"></div>
       </div>
@@ -458,7 +467,7 @@
     <section class="panel tpanel" id="panel-t-roomblocks">
       <div class="needs-active-note">Select a tournament in the bar above to manage its room blocks.</div>
       <div class="t-content card">
-        <h3>Room blocks — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(rooms reserved at hotels for this tournament)</span></h3>
+        <h3>Room blocks — <span class="t-name"></span> <span class="h3-subtitle">(rooms reserved at hotels for this tournament)</span></h3>
         <form id="trb-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>Hotel <select name="hotel_id" id="trb-hotel" required></select></label>
@@ -475,7 +484,7 @@
             <label>Check-out <input type="date" name="check_out" /></label>
             <label>Cancellation <input name="cancellation_info" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="trb-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="trb-msg"></span></div>
         </form>
         <table id="trb-table" class="list-table"><thead><tr><th>ID</th><th>Hotel</th><th>Type</th><th>Rooms</th><th>Left</th><th>Check-in</th><th>Check-out</th><th></th></tr></thead><tbody></tbody></table>
       </div>
@@ -507,11 +516,11 @@
       <div class="needs-active-note">Select a tournament in the bar above to manage its t-shirt order.</div>
       <div class="t-content card">
         <h3>T-shirts — <span class="t-name"></span>
-          <span class="muted" style="font-size:0.78rem;font-weight:normal">(per-tournament inventory + order tracking)</span>
+          <span class="h3-subtitle">(per-tournament inventory + order tracking)</span>
         </h3>
         <p class="muted">Edit the on-hand count for each size, then "Place order" to snapshot today's requested numbers. After that, withdrawals + late entries will shift the requested column; the snapshot column shows what you actually ordered.</p>
-        <div id="tshirt-order-status" class="muted" style="margin-bottom:0.5rem"></div>
-        <div class="actions-row" style="margin-bottom:0.5rem">
+        <div id="tshirt-order-status" class="muted mb-half"></div>
+        <div class="actions-row mb-half">
           <button type="button" id="tshirt-order-save">Save inventory</button>
           <button type="button" id="tshirt-order-place">Place order (snapshot today)</button>
           <button type="button" id="tshirt-order-cancel" class="btn-link danger" hidden>Cancel order</button>
@@ -545,7 +554,7 @@
             <label>Subject <input name="subject" /></label>
           </div>
           <div class="row">
-            <label style="flex:1 1 100%">Body <textarea name="body" rows="2"></textarea></label>
+            <label class="label--full">Body <textarea name="body" rows="2"></textarea></label>
           </div>
           <div class="actions-row"><button type="submit">Save</button><span class="msg" id="email-msg"></span></div>
         </form>
@@ -574,7 +583,7 @@
             <label>Request date <input type="date" name="request_date" /></label>
             <label>Request time <input name="request_time" placeholder="e.g. 2:30 PM" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="late-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="late-msg"></span></div>
         </form>
         <table id="late-table" class="list-table">
           <thead><tr><th>Date</th><th>Time</th><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th></th></tr></thead>
@@ -599,7 +608,7 @@
             <label>Reason <input name="reason" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="withdrawal-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="withdrawal-msg"></span></div>
         </form>
         <table id="withdrawal-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th>Alt?</th><th>Reason</th><th>Notes</th><th></th></tr></thead>
@@ -623,7 +632,7 @@
             <label>Avoid day <input name="avoid_day" placeholder="e.g. Sat" /></label>
             <label>Avoid time <input name="avoid_time_range" placeholder="e.g. before 10am" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="sched-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="sched-msg"></span></div>
         </form>
         <table id="sched-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Avoid day</th><th>Avoid time</th><th></th></tr></thead>
@@ -647,7 +656,7 @@
             <label>Home division <input name="home_division" list="divisions-list" /></label>
             <label>Willing divisions <input name="willing_divisions" list="divisions-list" placeholder="comma-separated" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="divflex-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="divflex-msg"></span></div>
         </form>
         <table id="divflex-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Home</th><th>Willing</th><th></th></tr></thead>
@@ -674,7 +683,7 @@
           <div class="actions-row">
             <button type="button" id="pairing-add-member" class="btn-link">+ member</button>
             <button type="submit">Save</button>
-            <button type="button" class="cancel">Clear</button>
+            <button type="button" class="cancel">Cancel</button>
             <span class="msg" id="pairing-msg"></span>
           </div>
         </form>
@@ -701,7 +710,7 @@
             <label>Random pairing <input type="checkbox" id="doubles-random" name="wants_random" /></label>
             <label id="doubles-partner-wrap">Partner <select name="partner_ref" class="player-ref"></select></label>
           </div>
-          <div class="actions-row"><button type="submit">File request</button><button type="button" class="cancel">Clear</button><span class="msg" id="doubles-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="doubles-msg"></span></div>
         </form>
 
         <h4>Pending requests &amp; random queue</h4>
@@ -722,8 +731,8 @@
     <section class="panel tpanel" id="panel-t-photels">
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
       <div class="t-content card">
-        <h3>Player hotels — <span class="t-name"></span> <span class="muted" style="font-size:0.78rem;font-weight:normal">(where players reported they're staying)</span>
-          <button type="button" id="photel-report-btn" class="export-btn no-print" style="float:right" title="Open a confidential hotel report (summary + initials-only detail) ready to print">⎙ Confidential report</button>
+        <h3>Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
+          <button type="button" id="photel-report-btn" class="export-btn no-print h3-action" title="Open a confidential hotel report (summary + initials-only detail) ready to print">⎙ Confidential report</button>
         </h3>
         <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
         <form id="photel-form" autocomplete="off" class="inline-form">
@@ -745,7 +754,7 @@
               </select>
             </label>
           </div>
-          <div class="actions-row"><button type="submit">Add</button><button type="button" class="cancel">Clear</button><span class="msg" id="photel-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="photel-msg"></span></div>
         </form>
         <table id="photel-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th>Lodging plan</th><th></th></tr></thead>
@@ -774,7 +783,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to view its reports.</div>
       <div class="t-content card" id="report-card">
         <div class="report-toolbar no-print">
-          <h3 style="margin:0;flex:1"><span class="t-name"></span> — Staffing Plan</h3>
+          <h3 class="h3--flex"><span class="t-name"></span> — Staffing Plan</h3>
           <button type="button" id="report-print">Print</button>
           <button type="button" id="report-csv">⬇ CSV</button>
         </div>
@@ -806,10 +815,10 @@
         <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
         <div class="row"><label>Phone <input name="phone" /></label><label>Email <input name="email" type="email" /></label></div>
         <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
-        <div class="actions-row"><button type="submit">Save profile</button><span class="msg" id="me-msg"></span></div>
+        <div class="actions-row"><button type="submit">Save</button><span class="msg" id="me-msg"></span></div>
       </form>
     </section>
-    <section class="card" style="margin-top:1.25rem">
+    <section class="card section-spacer">
       <h2>My availability</h2>
       <div class="row">
         <label>Tournament <select id="me-tournament"></select></label>

@@ -89,7 +89,13 @@ header h1 { margin: 0; font-size: 0.92rem; }
   padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
 }
 #theme-toggle:hover, #shortcuts-btn:hover { background: rgba(255, 255, 255, 0.32); }
-#shortcuts-btn { padding: 0.12rem 0.45rem; }
+#shortcuts-btn { padding: 0.12rem 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem; }
+/* The hotkey chip inside the header button needs to stay readable on the
+   accent-green background — override the default kbd styling. */
+#shortcuts-btn kbd {
+  background: rgba(255, 255, 255, 0.95); color: var(--accent); border: 0;
+  box-shadow: none; padding: 0 0.3rem; font-size: 0.7rem; font-weight: 700;
+}
 #user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
 #logout-btn {
   background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
@@ -473,6 +479,56 @@ kbd {
 }
 .tabulator-edit-list .tabulator-edit-list-placeholder { color: var(--muted); }
 
+/* ---- Reusable design-system bits (design-crit cleanup) -----------------
+   - .h3-subtitle: the small "(context)" span trailing a section heading.
+     Was repeated as inline style four times in HTML (audit design-crit #6).
+   - .seg-toggle / .seg-btn: segmented control (Roster pick-vs-new). */
+.h3-subtitle { font-size: 0.78rem; font-weight: normal; color: var(--muted); margin-left: 0.4rem; }
+
+.seg-toggle {
+  display: inline-flex; gap: 0; margin-bottom: 0.6rem;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+  background: var(--bg);
+}
+.seg-btn {
+  appearance: none; border: 0; padding: 0.35rem 0.85rem;
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  background: transparent; color: var(--muted);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover { background: var(--card); color: var(--ink); }
+.seg-btn.seg-active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Floating "Confidential report" button on the Player hotels page. Previously
+   `style="float:right"` inline; moved here (audit design-crit #6). */
+.h3-action { float: right; }
+
+/* Misc layout helpers replacing inline styles. */
+.filter--narrow { max-width: 320px; }
+.mb-half { margin-bottom: 0.5rem; }
+.section-spacer { margin-top: 1.25rem; }
+.label--full { flex: 1 1 100% !important; }
+.h3--flex { margin: 0; flex: 1; }
+form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 0.82rem; padding: 0.28rem 0.4rem; border: 1px solid var(--border); border-radius: 5px; background: var(--field-bg); color: var(--ink); }
+
+/* Narrow viewport: collapse the header's auxiliary actions onto a second row
+   so the title + context-bar don't crash into each other (design-crit #5).
+   The context-bar already wraps via flex; constrain its select. */
+@media (max-width: 720px) {
+  header h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+  #user-box { margin-left: auto; }
+  #context-bar { width: 100%; margin-top: 0.35rem; }
+  #active-tournament, #context-bar .combo-input { min-width: 0; flex: 1; }
+}
+
+/* Detail-pane modal on narrow viewports: stack form rows vertically so the
+   2-3 fields per .row don't squish to 100px each (design-crit #9). */
+@media (max-width: 600px) {
+  .detail-pane { width: calc(100vw - 1rem); padding: 0.85rem 1rem; }
+  .detail-pane .row label { flex: 1 1 100%; }
+}
+
 /* ---- list scroll container (own scrollbar; header stays pinned) ---- */
 .list-scroll {
   /* JS keeps --list-max in sync with the real space below the list (sizeLists);
@@ -579,13 +635,45 @@ a.export-btn { text-decoration: none; }
 }
 .card h3 { margin-top: 0; }
 .needs-active-note {
-  /* Audit P37: route through theme tokens so the warn block adapts in dark mode. */
+  /* Audit P37 + design-crit #8: warn block now lays out the message + a
+     "Pick tournament" action button side-by-side so the empty state is
+     instructive AND actionable, not just informational. */
   background: var(--warn-bg, #fff8e6);
   border: 1px solid var(--warn-border, #f0e0a8);
   color: var(--warn-ink, #8a6d3b);
   border-radius: 8px;
-  padding: 1rem 1.25rem;
+  padding: 0.85rem 1.1rem;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.85rem;
 }
+.needs-active-note button {
+  appearance: none; border: 1px solid var(--warn-ink, #8a6d3b);
+  background: var(--warn-ink, #8a6d3b); color: var(--warn-bg, #fff8e6);
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+  padding: 0.32rem 0.7rem; border-radius: 5px; cursor: pointer;
+  margin-left: auto;
+}
+.needs-active-note button:hover { filter: brightness(1.1); }
+/* Design-crit #3: the app uses two form patterns deliberately.
+ *
+ *   1. Setup CRUDs (tournaments, sites, officials, players, rates, hotels,
+ *      distances, divisions, events) use the .detail-pane MODAL pattern.
+ *      Records have many fields, are edited one-at-a-time, and the grid is
+ *      the primary surface — the modal is the secondary surface that opens
+ *      from a row's ✎ button.
+ *
+ *   2. Workspace lists (Part-B file-from-inbox tabs: late, withdrawals,
+ *      sched, divflex, pairing, doubles, photels, plus room-blocks +
+ *      assignments + availability) use the .inline-form pattern. These are
+ *      short forms (3–5 fields), the TD fills them rapidly while triaging
+ *      the inbox, and seeing the form + the resulting list together gives
+ *      immediate feedback.
+ *
+ * The `details.addbox` pattern below is available if a workspace form ever
+ * outgrows the inline pattern (collapse-by-default), but no current form
+ * needs it. Settling on ONE pattern would force one of the two contexts
+ * into a worse UX — kept distinct, documented here so future contributors
+ * don't merge them by accident.
+ */
 .inline-form .row { margin-bottom: 0.5rem; }
 
 /* Collapsible workspace add-forms (list stays primary) */

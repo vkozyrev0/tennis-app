@@ -685,7 +685,23 @@ function updateActiveUI() {
   document.querySelectorAll(".needs-active").forEach((t) => t.classList.toggle("disabled", !active));
   document.querySelectorAll(".t-name").forEach((s) => (s.textContent = active ? active.name : ""));
   document.querySelectorAll(".tpanel").forEach((p) => {
-    p.querySelector(".needs-active-note").hidden = !!active;
+    const note = p.querySelector(".needs-active-note");
+    note.hidden = !!active;
+    // Design-crit #8: turn the static warning into an actionable empty state.
+    // Inject a "Pick tournament" button once that focuses the context-bar
+    // select so a keyboard user reaches the picker in one tab.
+    if (!note.dataset.actionWired) {
+      note.dataset.actionWired = "1";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Pick tournament";
+      btn.addEventListener("click", () => {
+        const sel = document.getElementById("active-tournament");
+        sel.focus();
+        try { sel.showPicker?.(); } catch (_) {}
+      });
+      note.appendChild(btn);
+    }
     p.querySelector(".t-content").hidden = !active;
   });
   refreshDivisionLists();  // datalists track the active tournament's type
@@ -1280,22 +1296,23 @@ function rosterSetMode(mode) {
   rosterMode = mode;
   const pickRow = rosterForm.querySelector(".roster-pick-row");
   const newRow = rosterForm.querySelector(".roster-new-row");
-  const toggle = document.getElementById("roster-mode-toggle");
+  const pickBtn = document.getElementById("roster-mode-pick");
+  const newBtn = document.getElementById("roster-mode-new");
   const picker = rosterForm.querySelector("[name='player_id']");
   pickRow.hidden = mode !== "pick";
   newRow.hidden = mode !== "new";
   picker.required = mode === "pick";
-  // also disable the hidden controls so they don't submit values from the
-  // other mode (browsers skip disabled inputs in form serialization).
   picker.disabled = mode !== "pick";
-  newRow.querySelectorAll("input").forEach((el) => { el.disabled = mode !== "new"; });
-  toggle.textContent = mode === "new" ? "← Pick an existing player" : "+ New player not on file →";
-  // Audit N28: announce the toggle's state to screen readers.
-  toggle.setAttribute("aria-pressed", mode === "new" ? "true" : "false");
+  newRow.querySelectorAll("input, select").forEach((el) => { el.disabled = mode !== "new"; });
+  // Design-crit #4: segmented control reflects the active state via class +
+  // aria-selected so screen readers also see the toggle.
+  pickBtn.classList.toggle("seg-active", mode === "pick");
+  newBtn.classList.toggle("seg-active", mode === "new");
+  pickBtn.setAttribute("aria-selected", mode === "pick" ? "true" : "false");
+  newBtn.setAttribute("aria-selected", mode === "new" ? "true" : "false");
 }
-document.getElementById("roster-mode-toggle").addEventListener("click", () => {
-  rosterSetMode(rosterMode === "pick" ? "new" : "pick");
-});
+document.getElementById("roster-mode-pick").addEventListener("click", () => rosterSetMode("pick"));
+document.getElementById("roster-mode-new").addEventListener("click", () => rosterSetMode("new"));
 // Prev/Next record navigation (parity with the Setup master/detail forms).
 const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
 const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn"; rosterPrev.textContent = "‹ Prev";
