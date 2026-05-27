@@ -433,6 +433,13 @@ def test_import_merge_per_type_smoke():
         "pairing_avoidances": f"usta_1,usta_2,age_division,relationship\n{p_a['usta_number']},{p_b['usta_number']},B12,siblings\n",
         "doubles_requests": f"usta_number,age_division,wants_random,partner_usta\n{p_a['usta_number']},G14,false,{p_b['usta_number']}\n",
     }
+    # Track which types are expected to produce a conflict-note when re-merged
+    # (their `_exists` branch fires). Doubles uniquely uses a separate
+    # `pending` status path, but a duplicate request still annotates.
+    conflict_expected = {
+        "late_entries", "withdrawals", "scheduling_avoidances",
+        "division_flexibility", "player_hotels", "doubles_requests",
+    }
     for key, csv_data in rows_by_type.items():
         up = client.post(f"/api/import/tournaments/{t['id']}/{key}",
                          files={"file": (f"{key}.csv", csv_data, "text/csv")})
@@ -442,6 +449,14 @@ def test_import_merge_per_type_smoke():
         m = client.post(f"/api/import/batches/{b['batch_id']}/merge").json()
         assert m["merged"] == 1, f"{key} merge: {m}"
         assert m["failed"] == 0, f"{key} failed: {m}"
+        # Fifth-pass #6: re-merge the same row to exercise the conflict path.
+        if key in conflict_expected:
+            up2 = client.post(f"/api/import/tournaments/{t['id']}/{key}",
+                              files={"file": (f"{key}.csv", csv_data, "text/csv")})
+            assert up2.status_code == 201, f"{key} re-stage: {up2.text}"
+            m2 = client.post(f"/api/import/batches/{up2.json()['batch_id']}/merge").json()
+            assert m2["merged"] == 1, f"{key} re-merge: {m2}"
+            assert len(m2["conflicts"]) >= 1, f"{key} expected conflict note, got {m2}"
 
 
 def test_import_distances_setup_catalog():

@@ -87,18 +87,38 @@ def parse_file(filename: str, raw: bytes, cols) -> list[dict]:
 
 
 def validate(data: dict, cols, cur) -> str | None:
-    """Audit F18: `cur` is now required so a future caller can't accidentally
-    skip the staging-time gender check by forgetting to pass it."""
+    """Audit F18 + fifth-pass #3: `cur` is required and every USTA-bearing
+    field is pre-checked against `player` so missing-gender errors surface at
+    *staging* time across wide formats (pairing_avoidances usta_1..usta_6;
+    doubles_requests partner_usta) — not just the canonical usta_number."""
     missing = [c.canon for c in cols if c.required and not _s(data.get(c.canon))]
     if missing:
         return "missing " + ", ".join(missing)
-    # Audit T2: surface the gender requirement at *staging* time so the TD
-    # sees "30 invalid (missing gender)" before clicking Merge, not after.
-    usta = _s(data.get("usta_number"))
-    if usta:
-        cur.execute("SELECT 1 FROM player WHERE usta_number = %s", (usta,))
-        if cur.fetchone() is None and _norm_gender(data.get("gender")) is None:
-            return f"player {usta} isn't in Setup yet — gender column is required for new players"
+    # Collect every USTA #-shaped field the row carries.
+    usta_keys = ["usta_number", "partner_usta"] + [f"usta_{n}" for n in range(1, 7)]
+    ustas = [_s(data.get(k)) for k in usta_keys]
+    unknown = []
+    for u in ustas:
+        if not u:
+            continue
+        cur.execute("SELECT 1 FROM player WHERE usta_number = %s", (u,))
+        if cur.fetchone() is None:
+            unknown.append(u)
+    if unknown:
+        # Roster + per-row Part B importers carry their own gender column —
+        # for those, an unknown canonical `usta_number` is OK *if* gender is
+        # set (the merge will create the player). Every other unknown USTA #
+        # (partner_usta, usta_1..usta_6 in wide formats) must already exist
+        # in Setup; we don't invent genders for them.
+        gender = _norm_gender(data.get("gender"))
+        canonical = _s(data.get("usta_number"))
+        if gender and len(unknown) == 1 and unknown[0] == canonical:
+            return None
+        if not gender and canonical and canonical in unknown:
+            return (f"player {canonical} isn't in Setup yet — gender column is "
+                    f"required for new players (or add them via Setup → Players first)")
+        return ("player(s) not in Setup yet — add them via Setup → Players first: "
+                + ", ".join(unknown))
     return None
 
 
@@ -296,6 +316,10 @@ def _merge_distance(cur, tid, d):
         first, last = _s(d.get("first_name")), _s(d.get("last_name"))
         if not last:
             raise ValueError("official_id or (first_name, last_name) is required")
+        # Fifth-pass #4: collect ALL matches and reject if ambiguous, so a
+        # duplicate last_name doesn't get a row written against an arbitrary
+        # official by storage order. Caller must use official_id or supply
+        # first_name to disambiguate.
         if first:
             cur.execute(
                 "SELECT id FROM official WHERE lower(last_name) = lower(%s) "
@@ -307,44 +331,60 @@ def _merge_distance(cur, tid, d):
                 "SELECT id FROM official WHERE lower(last_name) = lower(%s)",
                 (last,),
             )
-        row = cur.fetchone()
-        if row is None:
+        rows = cur.fetchall()
+        if not rows:
             raise ValueError(f"official {first or ''} {last} not found")
-        oid = row["id"]
+        if len(rows) > 1:
+            raise ValueError(
+                f"official {first or ''} {last} is ambiguous ({len(rows)} matches) — supply first_name or official_id"
+            )
+        oid = rows[0]["id"]
     # Resolve site.
     sid = _coerce_int(d.get("site_id"))
     if sid is None:
         code, name = _s(d.get("site_code")), _s(d.get("site_name"))
         if code:
             cur.execute("SELECT id FROM site WHERE code = %s", (code,))
-            row = cur.fetchone()
+            rows = cur.fetchall()
         elif name:
             cur.execute("SELECT id FROM site WHERE lower(name) = lower(%s)", (name,))
-            row = cur.fetchone()
+            rows = cur.fetchall()
         else:
             raise ValueError("site_id, site_code, or site_name is required")
-        if row is None:
+        if not rows:
             raise ValueError(f"site {code or name} not found")
-        sid = row["id"]
-    source = _s(d.get("source")) or "manual"
+        if len(rows) > 1:
+            raise ValueError(
+                f"site {code or name} is ambiguous ({len(rows)} matches) — supply site_id"
+            )
+        sid = rows[0]["id"]
+    raw_source = _s(d.get("source"))
+    source = raw_source or "manual"
+    source_note = None
     if source not in ("manual", "geocoded"):
+        # Fifth-pass #7: surface the coercion to the TD rather than silently
+        # downgrading. The merge still proceeds (data lands) — the conflict
+        # note bubbles up in /import/batches/{id}/merge#conflicts.
+        source_note = f"source {source!r} not recognized — stored as 'manual'"
         source = "manual"
     cur.execute("SELECT id FROM official_site_distance WHERE official_id = %s AND site_id = %s", (oid, sid))
     existing = cur.fetchone()
-    conflict = None
+    notes = []
     if existing:
         cur.execute(
             "UPDATE official_site_distance SET one_way_miles = %s, source = %s WHERE id = %s",
             (miles_f, source, existing["id"]),
         )
-        conflict = "distance already on file — overwritten"
+        notes.append("distance already on file — overwritten")
     else:
         cur.execute(
             "INSERT INTO official_site_distance (official_id, site_id, one_way_miles, source) "
             "VALUES (%s, %s, %s, %s)",
             (oid, sid, miles_f, source),
         )
-    return conflict
+    if source_note:
+        notes.append(source_note)
+    return "; ".join(notes) if notes else None
 
 
 def _merge_photel(cur, tid, d):
@@ -432,8 +472,8 @@ TYPES = {
                                             _SRC_EMAIL],
                          "merge": _merge_doubles},
     # Setup-catalog importer (audit import/export #7). Not per-tournament.
-    "distances": {"label": "Distances (Setup catalog)",
-                  "desc": "Official↔site one-way mileage. Match by ids OR by labels (last/first + site code/name).",
+    "distances": {"label": "Distances (Setup catalog — global)",
+                  "desc": "Official↔site one-way mileage. Tournament context is ignored (data is global). Match by ids OR by labels (last/first + site code/name). Ambiguous labels are rejected with a row error.",
                   "cols": [
                       Col("official_id", {"officialid"}),
                       Col("first_name", {"firstname", "first"}),

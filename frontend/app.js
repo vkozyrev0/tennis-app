@@ -1376,8 +1376,17 @@ async function rosterSignInExport() {
 }
 // --- Data → Import page: per-type upload → staging → merge (built from /api/import/types) ---
 function _importRefresh() {
-  if (!active) return;
-  loadRoster(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); photelList.load();
+  // Audit (fifth-pass #1): refresh every grid that an importer can touch,
+  // including the staged-importer additions for pairing / doubles / distances.
+  if (active) {
+    loadRoster(); loadLate(); loadWithdrawals();
+    schedList.load(); divflexList.load(); photelList.load();
+    loadPairing(); loadDoubles();
+  }
+  // Distances live in Setup (cross-tournament), so refresh independent of `active`.
+  if (typeof distancesCrud !== "undefined" && distancesCrud.refresh) {
+    distancesCrud.refresh().catch(() => {});
+  }
 }
 function _renderBatch(el, body) {
   el.innerHTML = `<div class="muted">Staged ${body.total}: <strong>${body.valid} valid</strong>, ${body.invalid} invalid.</div>`;
@@ -2560,7 +2569,20 @@ const pairingGrid = makeListGrid("pairing-table", [
       }) });
       setMsg("pairing-msg", "saved", true); loadPairing();
     } catch (err) { setMsg("pairing-msg", err.message, false); try { cell.restoreOldValue(); } catch (_) {} loadPairing(); }
-  });
+  },
+  // Fifth-pass #2: wide-format columns matching importer.TYPES["pairing_avoidances"].
+  // Emit up to 6 USTA #s + division + relationship so the CSV round-trips.
+  [
+    { header: "usta_1", key: "_u1", fmt: (r) => (r.members?.[0]?.usta_number) || "" },
+    { header: "usta_2", key: "_u2", fmt: (r) => (r.members?.[1]?.usta_number) || "" },
+    { header: "usta_3", key: "_u3", fmt: (r) => (r.members?.[2]?.usta_number) || "" },
+    { header: "usta_4", key: "_u4", fmt: (r) => (r.members?.[3]?.usta_number) || "" },
+    { header: "usta_5", key: "_u5", fmt: (r) => (r.members?.[4]?.usta_number) || "" },
+    { header: "usta_6", key: "_u6", fmt: (r) => (r.members?.[5]?.usta_number) || "" },
+    { header: "age_division", key: "age_division" },
+    { header: "relationship", key: "relationship" },
+    { header: "source_email_id", key: "source_email_id" },
+  ]);
 async function loadPairing() {
   if (!active) return;
   pairingGrid.setData(await api(`/tournaments/${active.id}/pairing-avoidances`));
@@ -2616,7 +2638,17 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
     const r = cell.getRow().getData();
     try { await api(`/doubles-requests/${r.id}`, { method: "PUT", body: JSON.stringify({ age_division: r.age_division || null }) }); setMsg("doubles-msg", "saved", true); loadDoubles(); }
     catch (e) { setMsg("doubles-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadDoubles(); }
-  });
+  },
+  // Fifth-pass #2: re-importable columns for doubles requests.
+  [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "age_division", key: "age_division" },
+    { header: "wants_random", key: "wants_random" },
+    { header: "partner_usta", key: "partner_usta" },
+    { header: "source_email_id", key: "source_email_id" },
+  ]);
 const doublesPairGrid = makeListGrid("doubles-pair-table", [
   { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
   { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
@@ -2630,7 +2662,17 @@ const doublesPairGrid = makeListGrid("doubles-pair-table", [
     const d = cell.getRow().getData();
     try { await api(`/doubles-pairs/${d.id}`, { method: "PUT", body: JSON.stringify({ age_division: d.age_division || null }) }); setMsg("doubles-msg", "saved", true); loadDoubles(); }
     catch (e) { setMsg("doubles-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadDoubles(); }
-  });
+  },
+  // Fifth-pass #2: pairs are derived (no importer), but emit a snake_case
+  // CSV anyway so downstream tooling has stable headers; no source_email_id
+  // (pairs aren't filed individually).
+  [
+    { header: "age_division", key: "age_division" },
+    { header: "pairing_type", key: "pairing_type" },
+    { header: "player1", key: "player1" },
+    { header: "player2", key: "player2" },
+    { header: "verified", key: "verified" },
+  ]);
 async function loadDoubles() {
   if (!active) return;
   const data = await api(`/tournaments/${active.id}/doubles`);
