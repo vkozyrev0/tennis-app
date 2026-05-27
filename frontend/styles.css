@@ -654,6 +654,10 @@ a.export-btn { text-decoration: none; }
   padding: 0.85rem 1.1rem;
   display: flex; align-items: center; flex-wrap: wrap; gap: 0.85rem;
 }
+/* Author CSS would normally beat the UA default `[hidden] { display: none }`
+   at equal specificity, so adding `display: flex` above made `hidden` a
+   no-op visually. Restore it explicitly. */
+.needs-active-note[hidden] { display: none; }
 .needs-active-note button {
   appearance: none; border: 1px solid var(--warn-ink, #8a6d3b);
   background: var(--warn-ink, #8a6d3b); color: var(--warn-bg, #fff8e6);
