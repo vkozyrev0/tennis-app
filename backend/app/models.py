@@ -66,6 +66,33 @@ class OfficialOut(OfficialCreate):
 
 # ---------- Player ----------
 Gender = Literal["male", "female"]
+TournamentType = Literal["junior", "adult"]
+
+
+# Setup catalog: divisions + events (previously hardcoded constants — see
+# migration 0027). gender = NULL means "any gender" so the same row is shown
+# for both M and F players (Combo doubles; junior Singles/Doubles; Mixed Doubles).
+class DivisionCreate(BaseModel):
+    code: str
+    label: str
+    tournament_type: TournamentType
+    gender: Optional[Gender] = None
+    sort_order: int = 0
+
+
+class DivisionOut(DivisionCreate):
+    id: int
+
+
+class TournamentEventCreate(BaseModel):
+    name: str
+    tournament_type: TournamentType
+    gender: Optional[Gender] = None
+    sort_order: int = 0
+
+
+class TournamentEventOut(TournamentEventCreate):
+    id: int
 
 
 class PlayerCreate(BaseModel):

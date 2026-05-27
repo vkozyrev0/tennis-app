@@ -200,31 +200,11 @@ document.addEventListener("keydown", (e) => {
 });
 
 // =================== Division + Event lookup lists ===================
-// USTA divisions vary by tournament type. The Setup → Tournament `type`
-// (junior|adult) drives which list backs the form datalists. Values are stored
-// as-typed (free-text input + suggestions) so historic data isn't lost; new
-// data tends to come from the list.
-const DIVISIONS_JUNIOR = [
-  { code: "B10", label: "Boys 10 & Under" }, { code: "G10", label: "Girls 10 & Under" },
-  { code: "B12", label: "Boys 12 & Under" }, { code: "G12", label: "Girls 12 & Under" },
-  { code: "B14", label: "Boys 14 & Under" }, { code: "G14", label: "Girls 14 & Under" },
-  { code: "B16", label: "Boys 16 & Under" }, { code: "G16", label: "Girls 16 & Under" },
-  { code: "B18", label: "Boys 18 & Under" }, { code: "G18", label: "Girls 18 & Under" },
-];
-const DIVISIONS_ADULT = [
-  { code: "NTRP 2.5 Men", label: "NTRP 2.5 Men" }, { code: "NTRP 2.5 Women", label: "NTRP 2.5 Women" },
-  { code: "NTRP 3.0 Men", label: "NTRP 3.0 Men" }, { code: "NTRP 3.0 Women", label: "NTRP 3.0 Women" },
-  { code: "NTRP 3.5 Men", label: "NTRP 3.5 Men" }, { code: "NTRP 3.5 Women", label: "NTRP 3.5 Women" },
-  { code: "NTRP 4.0 Men", label: "NTRP 4.0 Men" }, { code: "NTRP 4.0 Women", label: "NTRP 4.0 Women" },
-  { code: "NTRP 4.5 Men", label: "NTRP 4.5 Men" }, { code: "NTRP 4.5 Women", label: "NTRP 4.5 Women" },
-  { code: "NTRP Open Men", label: "NTRP Open Men" }, { code: "NTRP Open Women", label: "NTRP Open Women" },
-  { code: "Combo 6.0", label: "Combo 6.0 (doubles only)" },
-  { code: "Combo 7.0", label: "Combo 7.0 (doubles only)" },
-  { code: "Combo 8.0", label: "Combo 8.0 (doubles only)" },
-  { code: "Combo 9.0", label: "Combo 9.0 (doubles only)" },
-];
-const EVENTS_JUNIOR = ["Singles", "Doubles"];
-const EVENTS_ADULT = ["Men's Singles", "Women's Singles", "Men's Doubles", "Women's Doubles", "Mixed Doubles"];
+// Loaded from the Setup catalog (/api/divisions, /api/events) on init and
+// refreshed when those CRUDs change. The TD can add/edit/remove rows from the
+// Setup tabs without a code change — see migration 0027 for the seed data.
+let divisionsAll = [];
+let eventsAll = [];
 
 function _populateDatalist(id, items) {
   const dl = document.getElementById(id);
@@ -235,39 +215,19 @@ function _populateDatalist(id, items) {
     return `<option value="${esc(value)}"${label ? ` label="${esc(label)}"` : ""}>${esc(label || value)}</option>`;
   }).join("");
 }
-// Filter divisions by gender so the picker only shows what's playable:
-//   junior + male   → B10..B18
-//   junior + female → G10..G18
-//   adult + male    → NTRP Men + Combo (doubles)
-//   adult + female  → NTRP Women + Combo (doubles)
-//   anything + null → all (no gender on file)
+// Filter divisions / events by tournament type + (optional) player gender.
+// The catalog rows carry `tournament_type` and `gender` (null = any), so the
+// rule reduces to: row matches its tournament_type AND (row.gender is null OR
+// row.gender equals the player's gender OR no gender supplied).
 function _divisionsFor(type, gender) {
-  if (type === "adult") {
-    return DIVISIONS_ADULT.filter((d) => {
-      if (d.code.startsWith("Combo")) return true;       // mixed/doubles
-      if (!gender) return true;
-      if (gender === "male") return d.code.endsWith("Men");
-      if (gender === "female") return d.code.endsWith("Women");
-      return true;
-    });
-  }
-  return DIVISIONS_JUNIOR.filter((d) => {
-    if (!gender) return true;
-    if (gender === "male") return d.code.startsWith("B");
-    if (gender === "female") return d.code.startsWith("G");
-    return true;
-  });
+  return divisionsAll.filter((d) => d.tournament_type === type
+    && (d.gender == null || !gender || d.gender === gender));
 }
 function _eventsFor(type, gender) {
-  if (type === "adult") {
-    if (!gender) return EVENTS_ADULT;
-    return EVENTS_ADULT.filter((e) =>
-      e.includes("Mixed") ||
-      (gender === "male" && e.startsWith("Men's")) ||
-      (gender === "female" && e.startsWith("Women's"))
-    );
-  }
-  return EVENTS_JUNIOR;  // Singles / Doubles apply to both
+  return eventsAll
+    .filter((e) => e.tournament_type === type
+      && (e.gender == null || !gender || e.gender === gender))
+    .map((e) => e.name);
 }
 function refreshDivisionLists(gender) {
   // Default to junior when no tournament is active so the form still has
@@ -2626,6 +2586,43 @@ const distancesCrud = wireEntity({
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });
 
+// Setup → Divisions catalog (rows back the form datalists; gender = null means
+// the row applies to both genders, e.g. Combo doubles).
+const divisionsCrud = wireEntity({
+  path: "/divisions", singular: "division", panelId: "panel-divisions", formId: "division-form", msgId: "division-msg",
+  columns: [
+    { key: "id" },
+    { key: "code", edit: { editor: "input" } },
+    { key: "label", edit: { editor: "input" } },
+    { key: "tournament_type",
+      edit: { editor: "list", params: { values: ["junior", "adult"] } } },
+    { key: "gender", fmt: (d) => d.gender || "any",
+      edit: { editor: "list", params: { values: [{label:"any", value:""}, {label:"male", value:"male"}, {label:"female", value:"female"}] } } },
+    { key: "sort_order", hozAlign: "right", width: 80,
+      edit: { editor: "number", params: { min: 0, step: 10 } } },
+  ],
+  transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
+  onLoad: (rows) => { divisionsAll = rows.slice(); refreshDivisionLists(); },
+});
+
+// Setup → Events catalog (Singles/Doubles for juniors; Men's/Women's/Mixed
+// Singles/Doubles for adults — gender = null means "any").
+const eventsCrud = wireEntity({
+  path: "/events", singular: "event", panelId: "panel-events", formId: "event-form", msgId: "event-msg",
+  columns: [
+    { key: "id" },
+    { key: "name", edit: { editor: "input" } },
+    { key: "tournament_type",
+      edit: { editor: "list", params: { values: ["junior", "adult"] } } },
+    { key: "gender", fmt: (e) => e.gender || "any",
+      edit: { editor: "list", params: { values: [{label:"any", value:""}, {label:"male", value:"male"}, {label:"female", value:"female"}] } } },
+    { key: "sort_order", hozAlign: "right", width: 80,
+      edit: { editor: "number", params: { min: 0, step: 10 } } },
+  ],
+  transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
+  onLoad: (rows) => { eventsAll = rows.slice(); refreshDivisionLists(); },
+});
+
 // =================== Generic CSV export for list tables ===================
 function _csvDownload(matrix, filename) {
   const csv = matrix
@@ -2764,7 +2761,7 @@ let adminLoaded = false;
 async function adminInit() {
   if (adminLoaded) return;
   adminLoaded = true;
-  for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, tournamentsCrud]) {
+  for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, divisionsCrud, eventsCrud, tournamentsCrud]) {
     try { await c.refresh(); } catch (e) { /* health pill shows DB issues */ }
   }
   const saved = localStorage.getItem("activeTid");

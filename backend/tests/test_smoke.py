@@ -165,6 +165,35 @@ def test_roster_inline_create_player():
     assert r.status_code == 422, r.text
 
 
+def test_divisions_events_catalog():
+    """Seed populates junior + adult divisions and events; CRUD round-trips."""
+    divs = client.get("/api/divisions").json()
+    codes = {d["code"] for d in divs}
+    # spot-check the seed
+    assert {"B10", "G18", "NTRP 3.0 Men", "NTRP Open Women", "Combo 6.0"} <= codes
+    juniors = client.get("/api/divisions?tournament_type=junior").json()
+    assert {d["code"] for d in juniors} >= {"B12", "G16"}
+    assert all(d["tournament_type"] == "junior" for d in juniors)
+    evts = client.get("/api/events").json()
+    names = {e["name"] for e in evts}
+    assert {"Singles", "Doubles", "Men's Singles", "Mixed Doubles"} <= names
+
+    # Create a custom division, edit it, delete it.
+    code = "CUSTOM" + uuid.uuid4().hex[:4]
+    d = _ok(client.post("/api/divisions", json={
+        "code": code, "label": "Custom Division", "tournament_type": "adult",
+        "gender": "male", "sort_order": 999}))
+    assert d["code"] == code and d["gender"] == "male"
+    upd = _ok(client.put(f"/api/divisions/{d['id']}", json={
+        **d, "label": "Custom Updated"}), 200)
+    assert upd["label"] == "Custom Updated"
+    # duplicate code → 409
+    dup = client.post("/api/divisions", json={
+        "code": code, "label": "x", "tournament_type": "adult", "gender": "male"})
+    assert dup.status_code == 409
+    assert client.delete(f"/api/divisions/{d['id']}").status_code == 204
+
+
 def test_player_gender_required_and_constraint():
     """gender is required (Pydantic Literal + NOT NULL); accepts male/female only."""
     p = _ok(client.post("/api/players", json={

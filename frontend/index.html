@@ -45,6 +45,8 @@
       <button class="tab" data-target="panel-rates">Rates</button>
       <button class="tab" data-target="panel-hotels">Hotels</button>
       <button class="tab" data-target="panel-distances">Distances</button>
+      <button class="tab" data-target="panel-divisions">Divisions</button>
+      <button class="tab" data-target="panel-events">Events</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
     </div>
     <div class="menu-group" data-group="data">
@@ -254,6 +256,77 @@
             <div class="row"><label>Official <select name="official_id" id="dist-official" required></select></label><label>Site <select name="site_id" id="dist-site" required></select></label></div>
             <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="distance-msg"></span></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Divisions (Setup catalog) -->
+    <section class="panel" id="panel-divisions">
+      <div class="master-detail">
+        <div class="list-pane">
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter divisions…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Label</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="detail-pane">
+          <h3 class="detail-title"></h3>
+          <form id="division-form" autocomplete="off">
+            <div class="row">
+              <label>Code * <input name="code" required placeholder="e.g. B12 or NTRP 3.5 Men" /></label>
+              <label>Label * <input name="label" required placeholder="e.g. Boys 12 & Under" /></label>
+            </div>
+            <div class="row">
+              <label>Tournament type *
+                <select name="tournament_type" required>
+                  <option value="junior">junior</option>
+                  <option value="adult">adult</option>
+                </select>
+              </label>
+              <label>Gender (blank = any)
+                <select name="gender">
+                  <option value="">— any —</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
+                </select>
+              </label>
+              <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
+            </div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="division-msg"></span></div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- Events (Setup catalog) -->
+    <section class="panel" id="panel-events">
+      <div class="master-detail">
+        <div class="list-pane">
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter events…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="detail-pane">
+          <h3 class="detail-title"></h3>
+          <form id="event-form" autocomplete="off">
+            <div class="row">
+              <label>Name * <input name="name" required placeholder="e.g. Singles or Men's Doubles" /></label>
+              <label>Tournament type *
+                <select name="tournament_type" required>
+                  <option value="junior">junior</option>
+                  <option value="adult">adult</option>
+                </select>
+              </label>
+            </div>
+            <div class="row">
+              <label>Gender (blank = any)
+                <select name="gender">
+                  <option value="">— any —</option>
+                  <option value="male">male</option>
+                  <option value="female">female</option>
+                </select>
+              </label>
+              <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
+            </div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="event-msg"></span></div>
           </form>
         </div>
       </div>
