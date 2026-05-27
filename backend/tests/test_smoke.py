@@ -146,17 +146,39 @@ def test_distance_crud():
 
 def test_roster_inline_create_player():
     """The roster +New form lets a TD enter a walk-in player by USTA # alone;
-    the backend upserts via player_ops, no need to pre-create in Setup."""
+    the backend upserts via player_ops, no need to pre-create in Setup. The
+    gender is carried through so the picker shows the right division list."""
     t = _tournament()
     num = "WALKIN" + uuid.uuid4().hex[:6]
     e = _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
         "usta_number": num, "first_name": "Walter", "last_name": "Inn",
-        "age_division": "B16", "selection_status": "selected",
+        "gender": "male", "age_division": "B16", "selection_status": "selected",
     }))
     assert e["usta_number"] == num and e["first_name"] == "Walter"
+    # The new player picked up the gender we sent through the inline-create path.
+    pl = next(p for p in client.get("/api/players").json() if p["usta_number"] == num)
+    assert pl["gender"] == "male"
     # neither id nor usta_number → 422
     r = client.post(f"/api/tournaments/{t['id']}/players", json={"age_division": "B14"})
     assert r.status_code == 422, r.text
+
+
+def test_player_gender_crud_and_constraint():
+    """PlayerCreate/Out carry gender; the column accepts male/female/null
+    and rejects anything else (DB CHECK)."""
+    p = _ok(client.post("/api/players", json={
+        "usta_number": "GEN" + uuid.uuid4().hex[:6], "first_name": "G", "last_name": "Test",
+        "gender": "female"}))
+    assert p["gender"] == "female"
+    upd = _ok(client.put(f"/api/players/{p['id']}",
+                         json={**p, "gender": "male"}), 200)
+    assert upd["gender"] == "male"
+    # clear gender
+    cleared = _ok(client.put(f"/api/players/{p['id']}", json={**p, "gender": None}), 200)
+    assert cleared["gender"] is None
+    # bad value rejected by the model (422 from Pydantic Literal)
+    bad = client.put(f"/api/players/{p['id']}", json={**p, "gender": "nonbinary"})
+    assert bad.status_code == 422
 
 
 def test_roster():

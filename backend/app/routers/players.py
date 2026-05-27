@@ -6,7 +6,7 @@ from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
-_COLS = "id, usta_number, first_name, last_name, birthdate, city, state, updated_at"
+_COLS = "id, usta_number, first_name, last_name, gender, birthdate, city, state, updated_at"
 
 
 @router.get("", response_model=list[PlayerOut])
@@ -46,9 +46,9 @@ def create_player(body: PlayerCreate, conn=Depends(db_dep)):
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO player (usta_number, first_name, last_name, birthdate, city, state)
-                VALUES (%(usta_number)s, %(first_name)s, %(last_name)s, %(birthdate)s,
-                        %(city)s, %(state)s)
+                INSERT INTO player (usta_number, first_name, last_name, gender, birthdate, city, state)
+                VALUES (%(usta_number)s, %(first_name)s, %(last_name)s, %(gender)s,
+                        %(birthdate)s, %(city)s, %(state)s)
                 RETURNING {_COLS}
                 """,
                 body.model_dump(),
@@ -69,6 +69,7 @@ def update_player(player_id: int, body: PlayerCreate, conn=Depends(db_dep)):
                     usta_number = %(usta_number)s,
                     first_name = %(first_name)s,
                     last_name = %(last_name)s,
+                    gender = %(gender)s,
                     birthdate = %(birthdate)s,
                     city = %(city)s,
                     state = %(state)s

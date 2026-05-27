@@ -212,7 +212,7 @@ def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(d
             # lets a TD add a walk-in directly from the Roster form.
             pid = body.player_id
             if pid is None:
-                pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
+                pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
             cur.execute(
                 """
                 INSERT INTO tournament_entry

@@ -180,14 +180,19 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" /><button type="button" class="new-btn">+ New</button></div>
-          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th></th></tr></thead><tbody></tbody></table></div>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th>Gender</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="player-form" autocomplete="off">
             <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" /></label></div>
             <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
-            <div class="row"><label>City <input name="city" /></label><label>State <input name="state" maxlength="2" /></label></div>
+            <div class="row"><label>Gender
+              <select name="gender">
+                <option value="">— unspecified —</option>
+                <option value="male">Male (Boys / Men)</option>
+                <option value="female">Female (Girls / Women)</option>
+              </select></label><label>City <input name="city" /></label><label>State <input name="state" maxlength="2" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="player-msg"></span></div>
           </form>
           <div id="player-history" hidden>
@@ -322,6 +327,13 @@
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
                 <label>First name <input name="first_name" /></label>
                 <label>Last name <input name="last_name" /></label>
+                <label>Gender
+                  <select name="gender">
+                    <option value="">— unspecified —</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </label>
               </div>
               <div class="row" style="margin-top:-0.2rem;margin-bottom:0.4rem">
                 <button type="button" id="roster-mode-toggle" class="btn-link" style="font-size:0.78rem">+ New player not on file →</button>

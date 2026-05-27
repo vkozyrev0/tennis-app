@@ -235,13 +235,69 @@ function _populateDatalist(id, items) {
     return `<option value="${esc(value)}"${label ? ` label="${esc(label)}"` : ""}>${esc(label || value)}</option>`;
   }).join("");
 }
-function refreshDivisionLists() {
+// Filter divisions by gender so the picker only shows what's playable:
+//   junior + male   → B10..B18
+//   junior + female → G10..G18
+//   adult + male    → NTRP Men + Combo (doubles)
+//   adult + female  → NTRP Women + Combo (doubles)
+//   anything + null → all (no gender on file)
+function _divisionsFor(type, gender) {
+  if (type === "adult") {
+    return DIVISIONS_ADULT.filter((d) => {
+      if (d.code.startsWith("Combo")) return true;       // mixed/doubles
+      if (!gender) return true;
+      if (gender === "male") return d.code.endsWith("Men");
+      if (gender === "female") return d.code.endsWith("Women");
+      return true;
+    });
+  }
+  return DIVISIONS_JUNIOR.filter((d) => {
+    if (!gender) return true;
+    if (gender === "male") return d.code.startsWith("B");
+    if (gender === "female") return d.code.startsWith("G");
+    return true;
+  });
+}
+function _eventsFor(type, gender) {
+  if (type === "adult") {
+    if (!gender) return EVENTS_ADULT;
+    return EVENTS_ADULT.filter((e) =>
+      e.includes("Mixed") ||
+      (gender === "male" && e.startsWith("Men's")) ||
+      (gender === "female" && e.startsWith("Women's"))
+    );
+  }
+  return EVENTS_JUNIOR;  // Singles / Doubles apply to both
+}
+function refreshDivisionLists(gender) {
   // Default to junior when no tournament is active so the form still has
   // useful suggestions on first open.
-  const isAdult = active && active.type === "adult";
-  _populateDatalist("divisions-list", isAdult ? DIVISIONS_ADULT : DIVISIONS_JUNIOR);
-  _populateDatalist("events-list", isAdult ? EVENTS_ADULT : EVENTS_JUNIOR);
+  const type = (active && active.type) || "junior";
+  _populateDatalist("divisions-list", _divisionsFor(type, gender || null));
+  _populateDatalist("events-list", _eventsFor(type, gender || null));
 }
+// When a division/events input gains focus, infer the player gender from the
+// containing form (player_ref combobox, roster's player_id picker, or the
+// inline-create gender select) and refresh the shared datalists accordingly.
+function _inferFormGender(form) {
+  if (!form || typeof playersById !== "object") return null;
+  const pref = form.querySelector("[name='player_ref']");
+  if (pref && pref.value) return (playersById[pref.value] || {}).gender || null;
+  const picker = form.querySelector("[name='player_id']");
+  if (picker && picker.value && !picker.disabled) {
+    return (playersById[picker.value] || {}).gender || null;
+  }
+  const newRow = form.querySelector(".roster-new-row [name='gender']");
+  if (newRow && !newRow.disabled && newRow.value) return newRow.value;
+  return null;
+}
+document.addEventListener("focusin", (e) => {
+  const t = e.target;
+  if (!t || t.tagName !== "INPUT") return;
+  const list = t.getAttribute("list");
+  if (list !== "divisions-list" && list !== "events-list") return;
+  refreshDivisionLists(_inferFormGender(t.closest("form")));
+});
 
 // Colored status chip for known tokens (selection status, email status, etc.).
 const BADGE = {
@@ -2535,7 +2591,13 @@ async function loadPlayerHistory(id) {
 
 const playersCrud = wireEntity({
   path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
-  columns: [{ key: "id" }, { key: "usta_number", edit: { editor: "input" } }, { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") }],
+  columns: [
+    { key: "id" },
+    { key: "usta_number", edit: { editor: "input" } },
+    { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") },
+    { key: "gender", fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "",
+      edit: { editor: "list", params: { values: [{ label: "—", value: "" }, { label: "Male", value: "male" }, { label: "Female", value: "female" }] } } },
+  ],
   onLoad: (rows) => { for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects(); },
   onSelect: (p) => loadPlayerHistory(p.id),
   onNew: () => { document.getElementById("player-history").hidden = true; },
