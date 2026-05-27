@@ -459,6 +459,33 @@ def test_import_merge_per_type_smoke():
             assert len(m2["conflicts"]) >= 1, f"{key} expected conflict note, got {m2}"
 
 
+def test_import_doubles_new_player_with_gender():
+    """Sixth-pass: a doubles_requests CSV with a never-seen `usta_number` plus
+    a `gender` column passes staging (gender-escape-hatch in validate()) AND
+    successfully creates the player at merge time. Was a regression where
+    `_merge_doubles` dropped the gender arg into upsert_player."""
+    t = _tournament()
+    # Pre-existing partner for the mutual flow.
+    partner = _player(first_name="Pre", last_name="Made", gender="male")
+    client.post(f"/api/tournaments/{t['id']}/players",
+                json={"player_id": partner["id"], "selection_status": "selected"})
+    new_usta = "DOUB" + uuid.uuid4().hex[:6]
+    # The new player must also be on the roster for _make_pair, but doubles
+    # requests don't require it. Just exercise the create path.
+    csv_data = (
+        "usta_number,first_name,last_name,gender,age_division,wants_random,partner_usta\n"
+        f"{new_usta},Brand,New,female,G14,false,{partner['usta_number']}\n"
+    )
+    up = _ok(client.post(f"/api/import/tournaments/{t['id']}/doubles_requests",
+                         files={"file": ("d.csv", csv_data, "text/csv")}))
+    assert up["valid"] == 1 and up["invalid"] == 0, up
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 1 and m["failed"] == 0, m
+    # Player exists in Setup with the gender we sent.
+    pl = next((p for p in client.get("/api/players").json() if p["usta_number"] == new_usta), None)
+    assert pl is not None and pl["gender"] == "female"
+
+
 def test_import_distances_setup_catalog():
     """Audit import/export #7: distance Setup catalog importer resolves
     official + site by ids OR by labels, updates existing pairs."""

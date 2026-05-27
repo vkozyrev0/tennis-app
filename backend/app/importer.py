@@ -237,9 +237,14 @@ def _merge_pairing(cur, tid, d):
             members.append(u)
     if len(members) < 2:
         raise ValueError("pairing-avoidance group needs at least 2 USTA numbers (usta_1..)")
+    # Sixth-pass: pass the row's gender column (if any) for parity with the
+    # other merge fns. Today validate() rejects unknown USTAs in pairing rows
+    # because `cols` doesn't include gender, so this is purely defensive —
+    # if `cols` ever grows a gender alias, new players become creatable.
+    gender = _norm_gender(d.get("gender"))
     seen: list[int] = []
     for u in members:
-        pid = upsert_player(cur, u, None, None)  # 400 if not in Setup
+        pid = upsert_player(cur, u, None, None, gender)  # 400 if not in Setup + no gender
         if pid not in seen:
             seen.append(pid)
     if len(seen) < 2:
@@ -268,7 +273,9 @@ def _merge_doubles(cur, tid, d):
     usta = _s(d.get("usta_number"))
     if not usta:
         raise ValueError("usta_number is required")
-    pid = upsert_player(cur, usta, _s(d.get("first_name")), _s(d.get("last_name")))
+    # Sixth-pass: pass gender so a new-player row that passed staging via the
+    # gender-escape-hatch in validate() can actually create the player here.
+    pid = upsert_player(cur, usta, _s(d.get("first_name")), _s(d.get("last_name")), _norm_gender(d.get("gender")))
     wants_random = str(d.get("wants_random") or "").strip().lower() in ("1", "true", "yes", "y", "random")
     partner = _s(d.get("partner_usta"))
     if not wants_random and not partner:
