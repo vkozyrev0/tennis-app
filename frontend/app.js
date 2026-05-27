@@ -3184,10 +3184,25 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
 // on open and restore focus on close. One pass at load — no per-site changes.
 // Design-crit pass 7 #2: focus-trap by marking the rest of the document
 // `inert` while any .detail-open dialog is visible. `inert` removes focus
-// + click + screen-reader access from the subtree, so Tab can't escape
-// the modal and AT users hear only the dialog. Background elements outside
-// the .detail-pane / .detail-backdrop / .modal stack.
+// + click + screen-reader access from the subtree.
+//
+// SUBTLETY: every `.detail-pane` lives inside its `<section class="panel">`,
+// which lives inside `<main>`. If we inert `<main>` wholesale, the dialog
+// (a child of main) becomes uninteractable too. Solution: at first use,
+// hoist every .detail-pane to be a direct child of <body>. They're already
+// `position: fixed` so visual layout doesn't shift, but DOM-wise they're
+// now siblings of main rather than descendants — main-inert no longer
+// inherits into them.
+let _detailPanesHoisted = false;
+function _hoistDetailPanes() {
+  if (_detailPanesHoisted) return;
+  for (const dlg of document.querySelectorAll(".detail-pane")) {
+    document.body.appendChild(dlg);  // appendChild moves the existing node
+  }
+  _detailPanesHoisted = true;
+}
 function _setBackgroundInert(on) {
+  if (on) _hoistDetailPanes();
   for (const el of [document.querySelector("header"),
                     document.querySelector("nav.menu-l1"),
                     document.querySelector("nav.menu"),
