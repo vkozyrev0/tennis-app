@@ -1,58 +1,63 @@
-# CourtOps Tennis — Planning Docs
+# CourtOps Tennis — Documentation
 
-Planning and audit for the CourtOps tennis project, derived from
-`Tennis information for Claude.docx` (the TD's vision).
+Back-office tooling for a USTA Tournament Director. Two loosely-coupled halves:
 
-## What's here
-| Doc | Purpose |
-|-----|---------|
-| [vision-summary.md](vision-summary.md) | Normalized restatement of the vision — the source-of-truth digest. |
-| [audit.md](audit.md) | The single audit & findings register — collisions, consistency/validity gaps, doc-vs-source discrepancies, sample-data evidence, decisions (D1–D8), status, and a priority shortlist. |
-| [data-model.md](data-model.md) | Proposed entities & relationships, with collisions already resolved. |
-| [roadmap.md](roadmap.md) | Phased build plan (Phase 0 → 5) and dependency map. |
+- **Officials app** — officials declare availability; the TD confirms
+  assignments, lodging, and computes pay + mileage.
+- **Player operations** — a **review inbox** where parent/player email
+  is human-reviewed and filed into structured lists (roster, late
+  entries, withdrawals, scheduling avoidances, division flex, doubles,
+  pairing avoidances, player hotels, t-shirts).
 
-## The system in one paragraph
-Back-office tooling for a USTA Tournament Director, in two loosely-coupled halves:
-**(A) an officials app** — officials declare availability, the TD confirms
-assignments, lodging, and computes pay + mileage; and **(B) player operations** —
-a **review inbox** where parent/player email (forwarded to a dedicated address) is
-**human-reviewed** and filed into structured lists (doubles, withdrawals, late
-entries, avoidances, t-shirt sizes, hotels). No automated parsing in the initial
-build; an email-triage agent is a possible future enhancement.
+The app is a single-page admin tool with a Setup catalog (durable
+master data) and a per-tournament workspace (scoped operations).
 
-## Status — TD review complete (2026-05-24)
-The Tournament Director reviewed the audit; **all findings are now resolved — no
-open items**. Notable confirmed requirements:
-- **Two deadline dates** — registration deadline ≠ late-entry deadline; plus the
-  match-play window (audit §2.5).
-- **Pay is per day per certification** — an official can work different roles on
-  different days, each at its own rate (audit §3.2).
-- **TD supplies a per-tournament roster** (`TournamentEntry`) keyed by USTA ID with
-  selection status, t-shirt size, dietary preference — source of truth for the
-  alternate list and t-shirt history (audit §4.1).
-- **Dietary on the confirmed-officials report**; **hotel date mismatch = report
-  alert** (audit §2.3, §3.4); **random pairing is binding** (audit §3.6);
-  **encryption + non-public** for minors' and officials' data (audit §5).
-- **No automated email parsing (D5)** — inbound email is **human-reviewed** and
-  filed; the triage agent is a future enhancement (audit §5.1).
-- **Roster ingestion = spreadsheet (CSV/XLSX) upload** mapped to `TournamentEntry`
-  (audit §3.8).
-- **POC stack (D6):** **Postgres** (localhost, default admin creds for the POC),
-  a **Python API server**, and a **pure HTML/CSS** frontend (roadmap §Stack).
+## Docs
 
-## What's still open
-- **Nothing.** All decisions D1–D8 are made. Remaining work is execution.
-  (POC uses default DB creds — harden before any shared deployment; see roadmap
-  §Stack security note.)
+| File | Purpose |
+|------|---------|
+| [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
+| [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
+| [roadmap.md](roadmap.md) | What's shipped, what's open. |
+| [changelog.md](changelog.md) | Chronological log of shipped work. |
+| [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 
-## Other solid points
-- 🟢 The email→classify→extract→list spine is sound; for now it runs as **human
-  review**, with an agent as a natural future upgrade.
-- 🟢 CVB loop: player hotel data → negotiate comp rooms → officials' inventory.
+## Quickstart
 
-See [audit.md §7](audit.md) for the full decision table (D1–D8).
+```bash
+# Backend
+cd backend
+python -m venv .venv && source .venv/Scripts/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env                                   # edit PG* settings if needed
+python migrate.py                                      # creates + migrates `courtops`
+python seed.py                                         # idempotent: admin user, rates, demo data
+uvicorn app.main:app --reload --port 8000              # serves API at /api + frontend at /
 
-## Recommended next step
-Execute Phase 0 — scaffold the POC stack (Postgres + Python API + HTML/CSS) and
-the core schema — then the CRUD slice of Phase 1 (officials admin tool + roster
-import). The fastest path to something usable.
+# Then open http://localhost:8000 and sign in with: admin / admin
+```
+
+Frontend has no build step — it's pure HTML/CSS/JS served straight from
+`frontend/`. Tabulator 6.3.1 is vendored.
+
+## Tests
+
+```bash
+cd backend
+python -m pytest -q                                    # 54 tests including test_td_e2e.py
+```
+
+`test_td_e2e.py::test_td_full_workflow` walks the full TD workflow at
+the API boundary — useful as both a smoke test and a worked example
+of every shipped feature.
+
+## Status
+
+The original TD audit (D1–D8) is closed. Eight subsequent code/UX
+critique passes are also closed; the running findings register is
+folded into `changelog.md`. Active open items live in `roadmap.md`
+under "Open work".
+
+POC stack: **Postgres** (localhost) · **FastAPI + psycopg3** · **vanilla
+HTML/CSS/JS**. The POC defaults to `admin/admin`; harden before any
+shared deployment (see roadmap §Stack security note).

@@ -331,13 +331,45 @@ dropdown lists **only `official` blocks**; the Reports tab has an
 ---
 
 ## What's been built since this plan was written
-The dated, per-change record (19 UI/UX passes, the code+docs audit follow-ups, and
-post-audit improvements) lives in **[changelog.md](changelog.md)** — this plan file
-stays forward-looking. At a glance, delivered themes:
-- **Navigation / density** — two-level section menu; condensed toolbar; full-width layout.
-- **Lists / inputs** — viewport-bounded scrollers + Prev/Next nav; type-in comboboxes;
-  required-field affordance; Part B forms reference the existing Players list.
-- **Data** — CSV export + fill-in templates; t-shirt order-quantity totals.
-- **Robustness** — busy-on-submit; toasts; confirm modal; ARIA + `:focus-visible`.
-- **Correctness / security** — tournament-scoped assignment site; off-window-day flags;
-  session expiry + reset-invalidation; report N+1 removed; assorted validation fixes.
+The dated, per-change record lives in **[changelog.md](changelog.md)**. At a
+glance, themes delivered through 2026-05-27:
+- **Navigation / density** — two-level section menu; the workspace tabs split
+  into 5 groups (Setup, Tournament, Staffing, Player requests, Player
+  preferences); condensed toolbar; full-width layout; ARIA tab semantics.
+- **Lists / inputs** — viewport-bounded scrollers + Prev/Next nav; type-in
+  comboboxes; required-field affordance; segmented control on Roster
+  (Pick existing | + New player); 9-type staged importer registry + a
+  parametrized round-trip test for every type.
+- **Data + IO** — CSV export with `exportCols` so every list round-trips
+  through its matching importer; t-shirt inventory + order snapshot;
+  Setup-page CSV templates auto-generated from the registry.
+- **Schema additions** (migrations 0017–0027) — `player.gender` required;
+  `player.city`/`state`; lodging plan; `hotel_id` FK on player hotels;
+  configurable `division` + `tournament_event` catalogs; `tshirt_order`
+  per-tournament snapshot; `import_batch` / `import_row` staging tables.
+- **Robustness / accessibility** — busy-on-submit; toasts; confirm modal;
+  focus-trap modals via `inert`; UTC date arithmetic everywhere;
+  optimistic concurrency on `/api/players` PUT (`X-If-Updated-At`);
+  global `[hidden] { display: none !important }` so `el.hidden` actually
+  hides on `display: flex` elements.
+- **Correctness / security** — tournament-scoped assignment site;
+  off-window-day flags; session expiry + rotation on login + GC of the
+  rate-limit dict; `samesite=strict` + `secure` cookie; per-route
+  cross-account username guard on the official-account PUT; hotel
+  analytics counts stays per `(player, tournament)` for the CVB number;
+  pairing-avoidance validates all members up front then commits as a unit.
+
+## Open work (as of 2026-05-27)
+- **Google Maps geocoding** for auto-distance (Phase 2) — needs API key
+  + network egress. Manual entry + the workbook backfill cover the gap.
+- **Dedicated forwarding-address auto-ingest** (D4) — needs mail infra;
+  manual paste into the review inbox is the working POC path.
+- **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM
+  that reads minors' email content requires the **cloud-vs-local privacy
+  call first**.
+- **PII encryption at rest / retention** + **DB hardening** — tied to the
+  post-POC deployment switch (dedicated DB user, secrets, TLS).
+- **Multi-user TD access** (D8) — single-admin POC for now.
+- **Lower-priority polish** — utility-class system for buttons (cosmetic
+  refactor); inline "add distance" affordance on the assignments tab;
+  structured assignment-card layout.

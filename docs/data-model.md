@@ -217,8 +217,10 @@ even a USTA number may be corrected — so edits must be **historized** (see
 | `id` | PK (surrogate, stable; all FKs point here) |
 | `usta_number` | unique business key; correctable, change tracked |
 | `first_name`, `last_name` | mutable; change tracked |
-| `birthdate` | optional, **stored**; could later *suggest* a division (suggestion still 🔭); the division actually played is per-roster |
-| `updated_at` | timestamp of the current version (start of its validity) |
+| `gender` | **required** `male`/`female`; drives the gender-aware division/event picker (migrations 0025 + 0026) |
+| `birthdate` | optional at the API boundary; required on the Setup-page form (inline-create from roster/inbox flows may upsert without it) |
+| `city`, `state` | optional address-of-record (migration 0019) |
+| `updated_at` | timestamp of the current version; sent back as `X-If-Updated-At` for optimistic concurrency on PUT |
 
 > Per-tournament attributes — **age division, selection status, t-shirt size,
 > dietary preference** — live on `TournamentEntry`, not on `Player`, because they
@@ -429,6 +431,62 @@ future tournament (late entries never pick a size on the USTA site; the TD recor
 it on their `TournamentEntry`, `source = late_entry`). F1 satisfied — history
 kept, not collapsed. Surfaced via `GET /api/tshirts` (a derived cross-tournament
 list) on the **T-shirts** Setup tab.
+
+### TshirtOrder  ✅ *built (migration 0024)*
+Per-tournament inventory + order snapshot tracking. Lets the TD enter on-hand
+counts per size, then "Place order" snapshots today's *requested* counts
+(derived from selected players' `t_shirt_size`). After that, withdrawals + late
+entries shift `requested` live while `snapshot` shows what was actually
+ordered.
+| Field | Notes |
+|-------|-------|
+| `tournament_id` | PK · FK → Tournament |
+| `ordered_at` | date the order was placed (NULL = no order yet) |
+| `on_hand` | JSON map of `{size_code: count}`, sparse (TD-edited sizes only) |
+| `snapshot` | JSON map of `{size_code: requested_at_order_time}` |
+
+Canonical size codes: `YS YM YL AS AM AL AXL` (shared with the importer's
+`norm_shirt`). Surfaced at the **Tournament → T-shirts** tab.
+
+### Division + TournamentEvent  ✅ *built (migration 0027)*
+Configurable catalogs that replaced hardcoded division/event constants.
+Filterable by `tournament_type` (junior/adult) and `gender` (NULL means
+"any") so the roster picker shows the right list. Editable from
+**Setup → Divisions / Events**.
+| Table | Fields |
+|-------|--------|
+| `division` | `id`, `code` (unique), `label`, `tournament_type`, `gender` (nullable), `sort_order` |
+| `tournament_event` | `id`, `name` (unique), `tournament_type`, `gender` (nullable), `sort_order` |
+
+Seed populates 26 divisions (10 junior B/G10..18 + 16 adult NTRP + Combo) +
+7 events (Singles/Doubles juniors + Men's/Women's/Mixed Singles/Doubles).
+
+### ImportBatch / ImportRow  ✅ *built (migration 0020)*
+Staged-import pipeline (parse → validate → review → merge). A TD uploads a
+CSV/XLSX file via **Data → Import**; rows are parsed + per-row validated and
+land in `import_row` first. After the review summary, valid rows merge into
+the main tables; failed/conflict rows are surfaced with row-level errors.
+| Table | Fields |
+|-------|--------|
+| `import_batch` | `id`, `tournament_id`, `import_type`, `filename`, `status` (`staged`/`merged`/`discarded`), `created_at` |
+| `import_row` | `id`, `batch_id` (FK), `row_num`, `data` (JSON), `valid`, `error`, `merged` |
+
+Registered import types (`importer.TYPES`, audit-resolved circular dep):
+- **Setup catalog**: `distances` (resolves official + site by id OR label)
+- **Roster**: `roster` (direct-merge endpoint also routes through this)
+- **Part B**: `late_entries`, `withdrawals`, `scheduling_avoidances`,
+  `division_flexibility`, `player_hotels`
+- **Wide-format**: `pairing_avoidances` (usta_1..usta_6 + division +
+  relationship), `doubles_requests` (mutual sides pair automatically when
+  both rows land in the same batch)
+
+Every type has CSV + XLSX templates auto-generated from the column
+declarations and a parametrized round-trip smoke test.
+
+### PlayerHotelStay (additions since 0016)  ✅
+Migration 0018 added `lodging_plan` (Hotel / Commuter / At another's house /
+…); 0023 added `hotel_id` FK so the canonical hotel name is referenced, not
+free-text-duplicated.
 
 ---
 

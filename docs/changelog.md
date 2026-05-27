@@ -605,3 +605,127 @@ infrastructure or a privacy decision, so they're intentionally left open:
 Still open from the UI review (no external dep, just lower priority): a full
 button-style **utility-class system** (cosmetic refactor), the inline "add
 distance" fix on assignments, and the structured assignment-card layout.
+
+## Setup catalogs + lookups (2026-05-25 → 2026-05-26)
+- **Division + event datalists** (#71) — replaced hardcoded constants with
+  `<datalist>` lookups on every roster/inbox form.
+- **Player hotels grid** (#72) — Division / Player / Hotel layout with a
+  hotel-name autocomplete that upserts via the Hotels table so spelling
+  stays canonical.
+- **Confidential hotel report** (#73) — print-ready popup with summary pivot
+  + initials-only player detail (minors' PII per audit §5).
+- **T-shirt inventory + order tracking** (#74, migration 0024) — per-tournament
+  `tshirt_order` row; "Place order" snapshots today's requested counts.
+  Withdrawals + late entries shift the live `requested` column after.
+
+## Gender + division catalogs (2026-05-26)
+- **Player.gender required** (#75, #76, migrations 0025 + 0026) — gender drives
+  the gender-aware division/event picker. Inbox flows refuse new players
+  without gender (400 directing the TD to Setup → Players first).
+- **Configurable divisions + events** (#77, migration 0027) — catalogs editable
+  from Setup → Divisions / Events. Seed populates 26 divisions + 7 events.
+- **Setup CSV export** (#78) — every CRUD's `⬇ CSV` emits the full importable
+  column set, so exports round-trip through the staged importer.
+- **Realistic demo players** (#79) — 32 USTA-shaped rows (16 boys + 16 girls).
+
+## Code + design audit passes 1–8 (2026-05-26 → 2026-05-27)
+
+Eight critique passes ran a comprehensive review of the running codebase and
+closed ~130 line-level findings. Headline wins:
+
+**Security & data integrity**
+- Login rate-limit + lockout + GC; `secure` + `samesite=strict` cookie +
+  session rotation; password length cap; `/me` router-level guard.
+- Optimistic concurrency on `/api/players` PUT via the custom `X-If-Updated-At`
+  header (chose custom header over `If-Unmodified-Since` because some
+  proxies/WAFs reject ISO-8601 in the RFC-7232 slot).
+- `room_block` PUT no longer accepts a body `tournament_id` (had let a TD
+  reassign a block by editing the request); also rejects downsizing
+  `room_count` below the current assignment count.
+- `set_official_account` checks for cross-account username theft before
+  overwriting (an admin couldn't claim the `admin` username).
+- `update_my_profile` persists `lat`/`lng` on the official self-service PUT
+  (was silently dropping them).
+- Gender required end-to-end at *staging* time so the TD sees "30 invalid"
+  before clicking Merge.
+- `hotel_analytics` now counts per `(player, tournament)` stay, not distinct
+  player — the CVB negotiation number was wrong before.
+
+**Import / export**
+- Direct-merge roster endpoint consolidated onto the staged importer's
+  registry. Single source of truth for header aliases, parse, validate,
+  shirt normalization, gender pre-check.
+- Importer registry grew to **9 types**: `roster, late_entries, withdrawals,
+  scheduling_avoidances, division_flexibility, player_hotels, distances,
+  pairing_avoidances, doubles_requests`. Distances resolves official + site
+  by id OR by label. Pairing is wide-format (usta_1..usta_6 + division +
+  relationship). Doubles pairs automatically when both sides land together.
+- `exportCols` on every workspace + Part-B list so `⬇ CSV` emits the full
+  importer-shaped column set, not just visible columns.
+- Parametrized round-trip smoke test for every importer type, plus template
+  header equivalence to catch future drift between merge and template.
+
+**UX / accessibility**
+- **ARIA tab semantics on the main nav** — `role=tablist/tab/tabpanel` wired
+  at init + `aria-controls`/`aria-labelledby`/`aria-selected` kept in sync.
+  Screen readers now announce "tab 1 of 11, Tournaments".
+- **Focus-trap modals** via the `inert` attribute on header/nav/main while
+  any `.detail-open` dialog or visible `.modal` exists.
+- **Global `[hidden] { display: none !important }`** rule — author CSS at
+  equal specificity was beating the UA `[hidden]` default, so `el.hidden`
+  was a no-op on `display: flex` elements.
+- First-run empty state on the tournament selector (zero tournaments →
+  "create one in Setup → Tournaments", disabled).
+- "Pick tournament" action button on `.needs-active-note` empty states.
+- Segmented control on Roster (`Pick existing | + New player`); `aria-selected`
+  reflects state.
+- Player-requests menu group split: **Player requests** (Inbox, Late,
+  Withdrawals — 3 tabs) + **Player preferences** (Sched, Div flex, Pairing,
+  Doubles, Hotels — 5 tabs). Was one 8-tab catch-all.
+- Microcopy unified to one verb per action — every submit is "Save", every
+  cancel is "Cancel".
+- Date arithmetic everywhere parses + steps in UTC so DST boundaries don't
+  skip a day.
+- Reports toolbar got a `⬇ Template` button (was dead code with only the
+  CSS rule); sign-in template wired too.
+- Header collapses under 768px; detail-pane modal stacks form rows
+  vertically under 600px.
+
+**Architecture**
+- `backend/app/models.py` (~600 lines) split into a façade re-exporting from
+  `_models_common`, `_models_setup`, `_models_workspace`, `_models_inbox`,
+  `_models_auth`. External callers unchanged.
+- Backend shared helpers: `playerops.upsert_player` (one path for every
+  player-touching call site), `playerops.norm_gender`, `playerops.mark_email_filed`,
+  `shirtops.norm_shirt` (Python) + `frontend/app/shirts.js` (mirror).
+- `frontend/app.js` is now an ES module (`<script type="module">`) with
+  `frontend/app/util.js` extracted (esc, date formatters, csv download,
+  humanize-detail). First sibling module — pattern is in place for more.
+
+**Bug regressions caught + fixed within the same session**
+- Setup grids empty on initial load: a `table.setPlaceholder(...)` call
+  (Tabulator 6.3.1 doesn't have it) threw before the API fetch.
+- `.needs-active-note` rendering on top of populated content from the
+  `[hidden]` cascade override (above).
+
+## End-to-end TD workflow test (2026-05-27)
+- **`tests/test_td_e2e.py::test_td_full_workflow`** walks the full TD
+  workflow at the API boundary — same routes the UI calls, in the same
+  order: Setup catalog → tournament → roster (3 add flavors) → availability
+  → room blocks → assignments (pay/mileage snapshots) → Part B inbox →
+  preferences (sched, divflex, pairing, doubles) → player hotels →
+  t-shirt order → reports → optimistic concurrency. **54/54 backend
+  tests pass.**
+
+## Docs consolidation (2026-05-27)
+- `data-model.md` brought current through migration 0027 (gender, division
+  + event catalogs, tshirt_order, import staging, lodging_plan, city/state).
+- `changelog.md` (this file) closed the gap with the last ~20 commits.
+- `README.md` rewritten with a quickstart + clearer doc index; old
+  "no open items" status replaced with a pointer to `roadmap.md` and the
+  changelog for active polish work.
+- `design-audit.md` deleted — its content is folded into this changelog
+  (the 130-item line-level register served its purpose during the polish
+  pass; the highlights live here now).
+- `audit.md` retained as a historical archive of the TD-audit D1–D8
+  register; header updated to make the archive status explicit.

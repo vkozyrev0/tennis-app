@@ -1,4 +1,15 @@
-# CourtOps Tennis — Audit & Findings Register
+# CourtOps Tennis — Audit & Findings Register   *(ARCHIVED, 2026-05-27)*
+
+> **Historical document.** This is the closed register from the original
+> TD-vision audit (decisions D1–D8 + collisions + consistency gaps). Every
+> item here is resolved; the TD review on 2026-05-24 confirmed each
+> answer. Kept as an archive of *why* the data model + roadmap look the
+> way they do.
+>
+> **For the current state of the app**, see `roadmap.md` (what's shipped /
+> open) and `changelog.md` (chronological log). The line-level critique
+> register that ran during the post-launch polish phase is folded into
+> `changelog.md` under "Audit passes 1–8".
 
 The single register of everything that needs a decision or a fix. Audits the
 vision for **validity** (is it buildable / well-defined?), **internal
