@@ -1963,11 +1963,20 @@ const photelList = wirePlayerList({
   path: "/player-hotels", del: "/player-hotels", exportName: "player-hotels",
   empty: "No player hotels reported yet.",
   editFields: { hotel_name: true, lodging_plan: true },
+  // Three-column layout per requirements: division, player name, hotel name.
+  // Hotel cell editor offers existing hotel names as autocomplete suggestions
+  // but also accepts a new name (freetext); the backend upserts via the
+  // Hotels table so the spelling stays canonical.
   columns: [
-    { title: "Player", field: "last_name", formatter: _playerCell },
-    { title: "USTA #", field: "usta_number" },
-    { title: "Hotel", field: "hotel_name", editor: "input", cssClass: "editable-cell" },
-    { title: "Lodging plan", field: "lodging_plan", editor: "input", cssClass: "editable-cell" },
+    { title: "Division", field: "age_division" },
+    { title: "Player", field: "last_name", formatter: _playerCell,
+      headerFilterFunc: (t, _v, d) => ([d.last_name, d.first_name, d.usta_number].filter(Boolean).join(" ").toLowerCase().includes(String(t).toLowerCase())) },
+    { title: "Hotel", field: "hotel_name", cssClass: "editable-cell",
+      editor: "list",
+      editorParams: () => ({
+        values: Object.values(hotelsById || {}).map((h) => h.name).sort((a, b) => a.localeCompare(b)),
+        autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true,
+      }) },
   ],
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });

@@ -10,8 +10,12 @@ router = APIRouter(tags=["player-ops"])
 
 _PH = """
 SELECT s.id, s.tournament_id, s.player_id, s.hotel_id, s.hotel_name, s.lodging_plan,
-       s.source_email_id, p.usta_number, p.first_name, p.last_name
-FROM player_hotel_stay s JOIN player p ON p.id = s.player_id
+       s.source_email_id, p.usta_number, p.first_name, p.last_name,
+       te.age_division
+FROM player_hotel_stay s
+JOIN player p ON p.id = s.player_id
+LEFT JOIN tournament_entry te
+       ON te.tournament_id = s.tournament_id AND te.player_id = s.player_id
 """
 
 

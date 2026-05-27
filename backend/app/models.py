@@ -423,6 +423,7 @@ class PlayerHotelOut(BaseModel):
     usta_number: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    age_division: Optional[str] = None
     hotel_id: Optional[int] = None
     hotel_name: Optional[str] = None
     lodging_plan: Optional[str] = None
