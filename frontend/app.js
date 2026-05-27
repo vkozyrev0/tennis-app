@@ -3391,6 +3391,7 @@ function applyAuth(who) {
   document.getElementById("user-box").hidden = !logged;
   document.getElementById("username-label").textContent = who ? `${who.username} (${who.role})` : "";
   document.getElementById("menu").hidden = !isAdmin;
+  document.getElementById("menu-groups").hidden = !isAdmin;
   document.querySelector("main:not(#official-app)").hidden = !isAdmin;
   document.getElementById("context-bar").hidden = !isAdmin;
   document.getElementById("official-app").hidden = !isOfficial;
