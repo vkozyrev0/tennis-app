@@ -52,18 +52,40 @@ def create_pairing(tournament_id: int, body: PairingAvoidanceCreate, conn=Depend
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        # Audit T5 + F4: validate every member up front and collect ALL errors
+        # before raising, so a TD with 3 unknown members sees one combined
+        # 400 instead of fixing them one at a time. Each member resolution
+        # runs inside its own savepoint so a 400 doesn't poison the outer tx.
+        resolved: list[int] = []
+        seen: set[int] = set()
+        member_errors: list[str] = []
+        for i, m in enumerate(body.members, start=1):
+            cur.execute("SAVEPOINT member")
+            try:
+                pid = upsert_player(cur, m.usta_number, m.first_name, m.last_name)
+                cur.execute("RELEASE SAVEPOINT member")
+                if pid not in seen:
+                    seen.add(pid)
+                    resolved.append(pid)
+            except HTTPException as e:
+                cur.execute("ROLLBACK TO SAVEPOINT member")
+                member_errors.append(f"member {i} ({m.usta_number}): {e.detail}")
+        if member_errors:
+            raise HTTPException(status_code=400, detail="; ".join(member_errors))
+        # Audit T4: enforce ≥2 *distinct* members (the Pydantic validator only
+        # counts the raw list length; duplicates collapse here).
+        if len(resolved) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="a pairing-avoidance group needs at least 2 distinct players",
+            )
         cur.execute(
             "INSERT INTO pairing_avoidance (tournament_id, age_division, relationship, source_email_id) "
             "VALUES (%s,%s,%s,%s) RETURNING id",
             (tournament_id, body.age_division, body.relationship, body.source_email_id),
         )
         gid = cur.fetchone()["id"]
-        seen = set()
-        for m in body.members:
-            pid = upsert_player(cur, m.usta_number, m.first_name, m.last_name)
-            if pid in seen:
-                continue
-            seen.add(pid)
+        for pid in resolved:
             cur.execute(
                 "INSERT INTO pairing_avoidance_member (pairing_avoidance_id, player_id) VALUES (%s,%s)",
                 (gid, pid),
@@ -74,8 +96,10 @@ def create_pairing(tournament_id: int, body: PairingAvoidanceCreate, conn=Depend
 
 @router.put("/api/pairing-avoidances/{group_id}", response_model=PairingAvoidanceOut)
 def update_pairing(group_id: int, body: PairingAvoidanceUpdate, conn=Depends(db_dep)):
-    """Edit the group's `age_division` / `relationship`. Membership stays managed
-    via add (POST) + delete; changing who's in a group means delete + re-add."""
+    """Edit the group's `age_division` / `relationship` only. Audit M7:
+    `PairingAvoidanceUpdate` intentionally has no `members` field; callers
+    that need to change who's in the group must DELETE + recreate (the model
+    docstring on PairingAvoidanceUpdate makes this contract explicit)."""
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE pairing_avoidance SET age_division = %s, relationship = %s WHERE id = %s",

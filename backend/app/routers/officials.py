@@ -87,6 +87,19 @@ def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_
         cur.execute("SELECT id FROM official WHERE id = %s", (official_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="official not found")
+        # Audit N4: the old ON CONFLICT (username) DO UPDATE let an admin
+        # overwrite ANY existing user_account (including the admin account
+        # itself) and bind it to a different official_id. Refuse the conflict
+        # when the existing row belongs to a different official.
+        cur.execute(
+            "SELECT id, role, official_id FROM user_account WHERE username = %s",
+            (body.username,),
+        )
+        existing = cur.fetchone()
+        if existing and (existing["role"] != "official"
+                         or (existing["official_id"] is not None
+                             and existing["official_id"] != official_id)):
+            raise HTTPException(status_code=409, detail="username already in use")
         try:
             cur.execute(
                 """

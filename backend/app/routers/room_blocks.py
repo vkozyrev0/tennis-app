@@ -21,9 +21,12 @@ VALUES
 RETURNING {_COLS}
 """
 
+# Note: tournament_id is intentionally NOT updated here — re-assigning a block
+# between tournaments via PUT would silently move its assignments. If a TD needs
+# that, they can delete + recreate. See audit C4.
 _UPDATE = f"""
 UPDATE room_block SET
-    hotel_id = %(hotel_id)s, tournament_id = %(tournament_id)s, kind = %(kind)s,
+    hotel_id = %(hotel_id)s, kind = %(kind)s,
     confirmation_number = %(confirmation_number)s,
     cancellation_info = %(cancellation_info)s, check_in = %(check_in)s,
     check_out = %(check_out)s, room_count = %(room_count)s
@@ -73,6 +76,19 @@ def create_room_block(body: RoomBlockCreate, conn=Depends(db_dep)):
 def update_room_block(block_id: int, body: RoomBlockCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
+            # Audit F9: reject a downsize below the current assignment count.
+            # The capacity check was only on assignment CRUD, so a PUT could
+            # silently leave rooms_remaining negative.
+            cur.execute(
+                "SELECT count(*) AS n FROM assignment WHERE room_block_id = %s",
+                (block_id,),
+            )
+            assigned = cur.fetchone()["n"]
+            if body.room_count < assigned:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{assigned} officials are already assigned to this block; raise room_count or release them first",
+                )
             cur.execute(_UPDATE, {**body.model_dump(), "id": block_id})
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="room block not found")

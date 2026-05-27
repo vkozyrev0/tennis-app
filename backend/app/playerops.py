@@ -1,8 +1,32 @@
 """Shared helpers for Part B list filing."""
+from fastapi import HTTPException
+
+
+def norm_gender(v):
+    """Normalize free-text gender to 'male'/'female'; return None on missing/
+    unknown. Audit F14: moved here from `importer.py` so it sits in a leaf
+    module — both roster.py and importer.py import from here, avoiding a
+    cross-router cycle if importer.py later wants to use anything roster owns.
+    """
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if s in {"m", "male", "boy", "b", "man"}:
+        return "male"
+    if s in {"f", "female", "girl", "g", "woman", "w"}:
+        return "female"
+    return None
 
 
 def upsert_player(cur, usta_number, first_name, last_name, gender=None) -> int:
-    """Find a player by USTA number (updating name/gender if given) or create them."""
+    """Find a player by USTA number (updating name/gender if given) or create them.
+
+    Audit N1: when creating a brand-new player we must NOT silently default
+    gender to 'female' — that corrupted gender-aware division filtering for
+    every boys' inbox flow. Callers that don't carry gender must catch the
+    `gender required` error and surface it to the TD. The DB column stays
+    NOT NULL (migration 0026); the helper just refuses to invent a value.
+    """
     cur.execute("SELECT id FROM player WHERE usta_number = %s", (usta_number,))
     p = cur.fetchone()
     if p:
@@ -15,13 +39,16 @@ def upsert_player(cur, usta_number, first_name, last_name, gender=None) -> int:
                 (first_name, last_name, gender, pid),
             )
         return pid
-    # gender is NOT NULL at the DB level (migration 0026). The Setup +
-    # roster-inline-create paths supply it; Part B email-filing paths don't —
-    # default to 'female' placeholder and let the TD correct via the Setup
-    # Players grid (inline gender editor).
+    if not gender:
+        # Surface a 400 instead of a 500 so Part B file flows get a clear
+        # "add the player in Setup first" message rather than a stack trace.
+        raise HTTPException(
+            status_code=400,
+            detail=f"player {usta_number} isn't in Setup → Players yet — add them there first (gender is required)",
+        )
     cur.execute(
         "INSERT INTO player (usta_number, first_name, last_name, gender) VALUES (%s,%s,%s,%s) RETURNING id",
-        (usta_number, first_name, last_name, gender or "female"),
+        (usta_number, first_name, last_name, gender),
     )
     return cur.fetchone()["id"]
 

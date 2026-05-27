@@ -26,7 +26,11 @@ def verify_pw(password: str, stored: str) -> bool:
         _algo, iters, salt, h = stored.split("$")
         dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(iters))
         return hmac.compare_digest(dk.hex(), h)
-    except Exception:
+    except Exception as e:
+        # Audit P15: a bricked admin account used to manifest as "wrong
+        # password" with no signal — log so the hash parse failure is visible.
+        import logging
+        logging.warning("verify_pw failed to parse stored hash: %r", e)
         return False
 
 

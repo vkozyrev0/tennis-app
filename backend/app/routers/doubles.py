@@ -30,6 +30,20 @@ JOIN player p2 ON p2.id = d.player2_id
 
 
 def _make_pair(cur, tid, division, p1, p2, ptype):
+    # Audit F15: both players must be on this tournament's roster. Random
+    # pairing already implies that; mutual could reach here if a request named
+    # a partner who never registered — refuse rather than make a phantom pair.
+    cur.execute(
+        "SELECT player_id FROM tournament_entry WHERE tournament_id = %s AND player_id IN (%s, %s)",
+        (tid, p1, p2),
+    )
+    on_roster = {r["player_id"] for r in cur.fetchall()}
+    missing = [pid for pid in (p1, p2) if pid not in on_roster]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"doubles pair members aren't on the tournament roster: {missing}",
+        )
     cur.execute(
         "INSERT INTO doubles_pair (tournament_id, age_division, player1_id, player2_id, "
         "pairing_type, verified) VALUES (%s,%s,%s,%s,%s,true) RETURNING id",
@@ -116,14 +130,26 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
 @router.put("/api/doubles-requests/{req_id}")
 def update_request(req_id: int, body: DoublesRequestUpdate, conn=Depends(db_dep)):
     """Edit a request's `age_division`. Player / partner / random / verification
-    stay system-managed — to change those, delete and re-file."""
+    stay system-managed — to change those, delete and re-file.
+
+    Audit F16: once the request is paired, editing its division here would
+    diverge from `doubles_pair.age_division` (which is what scheduling reads).
+    Either both must move together or neither. Keep it simple: refuse.
+    """
     with conn.cursor() as cur:
+        cur.execute("SELECT status FROM doubles_request WHERE id = %s", (req_id,))
+        existing = cur.fetchone()
+        if existing is None:
+            raise HTTPException(status_code=404, detail="not found")
+        if existing["status"] == "paired":
+            raise HTTPException(
+                status_code=409,
+                detail="request is already paired — edit the pair's division instead",
+            )
         cur.execute(
             "UPDATE doubles_request SET age_division = %s WHERE id = %s",
             (body.age_division, req_id),
         )
-        if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="not found")
         cur.execute(_REQ + " WHERE r.id = %s", (req_id,))
         return cur.fetchone()
 

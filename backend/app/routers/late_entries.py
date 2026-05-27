@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..models import LateEntryCreate, LateEntryOut, LateEntryUpdate
+from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["late-entries"])
 
@@ -35,26 +36,12 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
 
-        # Upsert the player by USTA number.
-        cur.execute("SELECT id FROM player WHERE usta_number = %s", (body.usta_number,))
-        p = cur.fetchone()
-        if p:
-            pid = p["id"]
-            if body.first_name or body.last_name:
-                cur.execute(
-                    "UPDATE player SET first_name = COALESCE(%s, first_name), "
-                    "last_name = COALESCE(%s, last_name) WHERE id = %s",
-                    (body.first_name, body.last_name, pid),
-                )
-        else:
-            # gender is required at the DB level (migration 0026). Email-filed
-            # players don't carry gender; default to 'female' placeholder and
-            # let the TD correct it via Setup → Players grid.
-            cur.execute(
-                "INSERT INTO player (usta_number, first_name, last_name, gender) VALUES (%s,%s,%s,'female') RETURNING id",
-                (body.usta_number, body.first_name, body.last_name),
-            )
-            pid = cur.fetchone()["id"]
+        # Audit M6: consolidated on the shared helper, which also raises a 400
+        # with the same wording when the player isn't yet in Setup. Note P18:
+        # we intentionally don't pass body.gender — late-entry emails carry
+        # name + division but not gender, and existing players keep their
+        # registered gender. New players are rejected by upsert_player.
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
 
         # Put them on the roster (source=late_entry) if not already there.
         cur.execute(
@@ -81,12 +68,8 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         )
         new_id = cur.fetchone()["id"]
 
-        # Mark the source email filed, if provided.
-        if body.source_email_id:
-            cur.execute(
-                "UPDATE email_message SET status = 'filed', classification = 'late_entry' WHERE id = %s",
-                (body.source_email_id,),
-            )
+        # Audit F7: use the shared helper instead of an inline UPDATE.
+        mark_email_filed(cur, body.source_email_id, "late_entry")
 
         cur.execute(_SELECT + " WHERE le.id = %s", (new_id,))
         return cur.fetchone()

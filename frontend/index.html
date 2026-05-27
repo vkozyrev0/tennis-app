@@ -110,8 +110,7 @@
             <div class="actions-row">
               <button type="submit">Save</button>
               <button type="button" class="delete" hidden>Delete</button>
-              <button type="button" class="cancel">New</button>
-              <button type="button" id="work-on-btn" hidden>Work on this →</button>
+              <button type="button" class="cancel">Cancel</button>
               <span class="msg" id="tournament-msg"></span>
             </div>
           </form>
@@ -132,7 +131,7 @@
             <div class="row"><label>Code <input name="code" /></label><label>Name <input name="name" required /></label></div>
             <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
             <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="site-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="site-msg"></span></div>
           </form>
         </div>
       </div>
@@ -153,13 +152,13 @@
             <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
             <div class="row"><label>Phone <input name="phone" /></label><label>Email <input name="email" type="email" /></label></div>
             <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="official-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="official-msg"></span></div>
           </form>
           <div id="official-certs" hidden>
             <h4>Certifications</h4>
             <div id="cert-chips" class="days"></div>
             <div class="cert-add">
-              <select id="cert-type"><option value="roving_official">Roving official</option><option value="chair_umpire">Chair umpire</option><option value="tournament_referee">Tournament referee</option><option value="deputy_referee">Deputy referee</option><option value="referee_in_training">Referee in training</option></select>
+              <select id="cert-type" data-enum="cert_type"></select>
               <button type="button" id="cert-add-btn" class="btn-link">+ add</button>
               <span class="msg" id="cert-msg"></span>
             </div>
@@ -187,7 +186,7 @@
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="player-form" autocomplete="off">
-            <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" /></label></div>
+            <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" required /></label></div>
             <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
             <div class="row"><label>Gender *
               <select name="gender" required>
@@ -195,7 +194,7 @@
                 <option value="male">Male (Boys / Men)</option>
                 <option value="female">Female (Girls / Women)</option>
               </select></label><label>City <input name="city" /></label><label>State <input name="state" maxlength="2" /></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="player-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="player-msg"></span></div>
           </form>
           <div id="player-history" hidden>
             <h4>Name history</h4>
@@ -215,9 +214,9 @@
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="rate-form" autocomplete="off">
-            <div class="row"><label>Certification <select name="cert_type"><option value="roving_official">Roving official</option><option value="chair_umpire">Chair umpire</option><option value="tournament_referee">Tournament referee</option><option value="deputy_referee">Deputy referee</option><option value="referee_in_training">Referee in training</option></select></label><label>Rate per day ($) <input type="number" name="rate_per_day" min="0" step="0.01" required /></label></div>
+            <div class="row"><label>Certification <select name="cert_type" data-enum="cert_type"></select></label><label>Rate per day ($) <input type="number" name="rate_per_day" min="0" step="0.01" required /></label></div>
             <div class="row"><label>Effective from <input type="date" name="effective_from" /></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="rate-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="rate-msg"></span></div>
           </form>
         </div>
       </div>
@@ -237,7 +236,7 @@
             <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
             <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
             <div class="row"><label>Phone <input name="phone" /></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="hotel-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="hotel-msg"></span></div>
           </form>
         </div>
       </div>
@@ -254,8 +253,8 @@
           <h3 class="detail-title"></h3>
           <form id="distance-form" autocomplete="off">
             <div class="row"><label>Official <select name="official_id" id="dist-official" required></select></label><label>Site <select name="site_id" id="dist-site" required></select></label></div>
-            <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="distance-msg"></span></div>
+            <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" max="1000" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="distance-msg"></span></div>
           </form>
         </div>
       </div>
@@ -291,7 +290,7 @@
               </label>
               <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
             </div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="division-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="division-msg"></span></div>
           </form>
         </div>
       </div>
@@ -326,7 +325,7 @@
               </label>
               <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
             </div>
-            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">New</button><span class="msg" id="event-msg"></span></div>
+            <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="event-msg"></span></div>
           </form>
         </div>
       </div>
@@ -386,6 +385,7 @@
               <button type="button" id="roster-new" class="new-btn">+ New</button>
               <button type="button" id="roster-csv" class="export-btn no-print">⬇ CSV</button>
               <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in</button>
+              <button type="button" id="roster-signin-template" class="export-btn no-print" title="Empty sign-in sheet template">⬇ Sign-in template</button>
             </div>
             <div class="list-scroll"><table id="roster-table" class="list-table"><thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table></div>
           </div>
@@ -430,7 +430,7 @@
                 </label>
                 <label>Dietary <input name="dietary_preference" /></label>
               </div>
-              <div class="actions-row"><button type="submit">Add player</button><button type="button" class="cancel">New</button><span class="msg" id="roster-msg"></span></div>
+              <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="roster-msg"></span></div>
             </form>
           </div>
         </div>
@@ -448,7 +448,7 @@
             <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
             <label>Hotel assignment <select name="room_block_id" id="asg-room-block"></select></label>
           </div>
-          <div class="actions-row"><button type="submit">Add official</button><button type="button" class="cancel">Clear</button><span class="msg" id="asg-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="asg-msg"></span></div>
         </form>
         <div id="asg-list"></div>
       </div>
@@ -475,7 +475,7 @@
             <label>Check-out <input type="date" name="check_out" /></label>
             <label>Cancellation <input name="cancellation_info" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Add block</button><button type="button" class="cancel">Clear</button><span class="msg" id="trb-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="trb-msg"></span></div>
         </form>
         <table id="trb-table" class="list-table"><thead><tr><th>ID</th><th>Hotel</th><th>Type</th><th>Rooms</th><th>Left</th><th>Check-in</th><th>Check-out</th><th></th></tr></thead><tbody></tbody></table>
       </div>
@@ -547,7 +547,7 @@
           <div class="row">
             <label style="flex:1 1 100%">Body <textarea name="body" rows="2"></textarea></label>
           </div>
-          <div class="actions-row"><button type="submit">Add email</button><span class="msg" id="email-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><span class="msg" id="email-msg"></span></div>
         </form>
         <table id="inbox-table" class="list-table">
           <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>Classification</th><th>Status</th><th></th></tr></thead>
@@ -574,7 +574,7 @@
             <label>Request date <input type="date" name="request_date" /></label>
             <label>Request time <input name="request_time" placeholder="e.g. 2:30 PM" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Add late entry</button><button type="button" class="cancel">Clear</button><span class="msg" id="late-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="late-msg"></span></div>
         </form>
         <table id="late-table" class="list-table">
           <thead><tr><th>Date</th><th>Time</th><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th></th></tr></thead>
@@ -599,7 +599,7 @@
             <label>Reason <input name="reason" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
-          <div class="actions-row"><button type="submit">Add withdrawal</button><button type="button" class="cancel">Clear</button><span class="msg" id="withdrawal-msg"></span></div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Clear</button><span class="msg" id="withdrawal-msg"></span></div>
         </form>
         <table id="withdrawal-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th>Alt?</th><th>Reason</th><th>Notes</th><th></th></tr></thead>
@@ -673,7 +673,7 @@
           <div id="pairing-members"></div>
           <div class="actions-row">
             <button type="button" id="pairing-add-member" class="btn-link">+ member</button>
-            <button type="submit">Add group</button>
+            <button type="submit">Save</button>
             <button type="button" class="cancel">Clear</button>
             <span class="msg" id="pairing-msg"></span>
           </div>
@@ -838,6 +838,11 @@
   <datalist id="divisions-list"></datalist>
   <datalist id="events-list"></datalist>
   <script src="/vendor/tabulator.min.js"></script>
-  <script src="/app.js"></script>
+  <!-- Audit A47: app.js is now an ES module so it can import from /app/*.js.
+       util.js holds the dependency-free helpers (esc, date formatters, csv
+       download, error humanizer). The rest of app.js stays a single module
+       for now — further per-section splits can land incrementally without
+       touching the HTML again. -->
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

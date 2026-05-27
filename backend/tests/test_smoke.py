@@ -47,9 +47,11 @@ def _official(**kw):
 
 
 def _player(**kw):
-    # gender is required on /api/players; default to "female" so tests that
-    # don't care about it stay terse. Override via kw when needed.
-    return _ok(client.post("/api/players", json={"usta_number": "U" + uuid.uuid4().hex[:8], "gender": "female", **kw}))
+    # gender + birthdate are required on /api/players; default both so tests
+    # that don't care about them stay terse. Override via kw when needed.
+    return _ok(client.post("/api/players", json={
+        "usta_number": "U" + uuid.uuid4().hex[:8],
+        "gender": "female", "birthdate": "2010-01-01", **kw}))
 
 
 def _hotel(**kw):
@@ -97,8 +99,8 @@ def test_official_and_player_crud():
     assert client.put(f"/api/officials/{o['id']}", json={"first_name": "F", "last_name": "Z"}).status_code == 200
     assert client.delete(f"/api/officials/{o['id']}").status_code == 204
     num = "U" + uuid.uuid4().hex[:8]
-    p = _ok(client.post("/api/players", json={"usta_number": num, "gender": "female"}))
-    assert client.post("/api/players", json={"usta_number": num, "gender": "female"}).status_code == 409
+    p = _ok(client.post("/api/players", json={"usta_number": num, "gender": "female", "birthdate": "2010-01-01"}))
+    assert client.post("/api/players", json={"usta_number": num, "gender": "female", "birthdate": "2010-01-01"}).status_code == 409
     assert client.delete(f"/api/players/{p['id']}").status_code == 204
 
 
@@ -198,7 +200,7 @@ def test_player_gender_required_and_constraint():
     """gender is required (Pydantic Literal + NOT NULL); accepts male/female only."""
     p = _ok(client.post("/api/players", json={
         "usta_number": "GEN" + uuid.uuid4().hex[:6], "first_name": "G", "last_name": "Test",
-        "gender": "female"}))
+        "gender": "female", "birthdate": "2010-01-01"}))
     assert p["gender"] == "female"
     upd = _ok(client.put(f"/api/players/{p['id']}",
                          json={**p, "gender": "male"}), 200)
@@ -207,8 +209,14 @@ def test_player_gender_required_and_constraint():
     nulled = client.put(f"/api/players/{p['id']}", json={**p, "gender": None})
     assert nulled.status_code == 422
     # missing gender field → 422 (required)
-    no_gender = client.post("/api/players", json={"usta_number": "MISSING" + uuid.uuid4().hex[:4]})
+    no_gender = client.post("/api/players", json={"usta_number": "MISSING" + uuid.uuid4().hex[:4], "birthdate": "2010-01-01"})
     assert no_gender.status_code == 422
+    # Audit N3: birthdate is optional at the API boundary (inline-create from
+    # roster + inbox flows don't have one) — Setup form still has HTML-side
+    # `required`, but the model accepts None.
+    no_bd = client.post("/api/players", json={
+        "usta_number": "NOBD" + uuid.uuid4().hex[:4], "gender": "female"})
+    assert no_bd.status_code == 201
     # bad value → 422 (Literal)
     bad = client.put(f"/api/players/{p['id']}", json={**p, "gender": "nonbinary"})
     assert bad.status_code == 422
@@ -253,9 +261,9 @@ def test_roster_csv_import():
     t = _tournament()
     u1, u2 = "IMP" + uuid.uuid4().hex[:6], "IMP" + uuid.uuid4().hex[:6]
     csv_data = (
-        "USTA #,First,Last,Division,T-Shirt,Status\n"
-        f"{u1},Amy,Ace,G16,M,selected\n"
-        f"{u2},Bob,Bell,B14,L,alternate\n"
+        "USTA #,First,Last,Gender,Division,T-Shirt,Status\n"
+        f"{u1},Amy,Ace,F,G16,M,selected\n"
+        f"{u2},Bob,Bell,M,B14,L,alternate\n"
     )
     r = client.post(f"/api/tournaments/{t['id']}/players/import",
                     files={"file": ("roster.csv", csv_data, "text/csv")})
@@ -275,11 +283,55 @@ def test_roster_csv_import():
     assert amy["first_name"] == "Amelia"
 
 
+def test_player_put_optimistic_concurrency():
+    """Audit M19: a PUT with a stale `X-If-Updated-At` header is rejected."""
+    p = _player(first_name="Conc", last_name="Race")
+    first_ts = p["updated_at"]
+    # Update once — bumps updated_at via the player_history trigger.
+    upd = _ok(client.put(f"/api/players/{p['id']}",
+                         json={**p, "city": "Atlanta"}), 200)
+    assert upd["updated_at"] != first_ts
+    # Now another tab tries to write with the *original* timestamp → 409.
+    stale = client.put(
+        f"/api/players/{p['id']}",
+        json={**p, "city": "Macon"},
+        headers={"X-If-Updated-At": first_ts},
+    )
+    assert stale.status_code == 409, stale.text
+    # Sending the current timestamp succeeds.
+    fresh = client.put(
+        f"/api/players/{p['id']}",
+        json={**upd, "city": "Macon"},
+        headers={"X-If-Updated-At": upd["updated_at"]},
+    )
+    assert fresh.status_code == 200
+
+
+def test_roster_import_requires_gender_for_new_players():
+    """Audit C1: roster CSV must carry gender for any new player it creates."""
+    t = _tournament()
+    u_new = "GENNEW" + uuid.uuid4().hex[:6]
+    # Existing player already has a gender — no need to send one for the update.
+    existing = _player(first_name="Old", last_name="Hat")
+    csv_data = (
+        "USTA #,First,Last\n"
+        f"{u_new},New,Player\n"           # missing gender → rejected
+        f"{existing['usta_number']},Old,Hat\n"  # existing → OK
+    )
+    r = _ok(client.post(f"/api/tournaments/{t['id']}/players/import",
+                        files={"file": ("roster.csv", csv_data, "text/csv")}), 200)
+    assert r["created_players"] == 0
+    # After consolidating on playerops.upsert_player, the error wording matches
+    # the inbox flows ("isn't in Setup → Players yet").
+    assert any("Setup" in e and "gender" in e for e in r["errors"])
+    assert r["entries"] == 1  # only the existing player was rostered
+
+
 def test_roster_import_normalizes_tshirt_sizes():
     t = _tournament()
     ids = ["TS" + uuid.uuid4().hex[:6] for _ in range(5)]
-    csv_data = "USTA #,First,T-Shirt\n" + "".join(
-        f"{i},N,{sz}\n" for i, sz in zip(ids, ["YM", "Adult Large", "xl", "youth small", "AS"])
+    csv_data = "USTA #,First,Gender,T-Shirt\n" + "".join(
+        f"{i},N,F,{sz}\n" for i, sz in zip(ids, ["YM", "Adult Large", "xl", "youth small", "AS"])
     )
     r = client.post(f"/api/tournaments/{t['id']}/players/import",
                     files={"file": ("roster.csv", csv_data, "text/csv")})
@@ -296,21 +348,23 @@ def test_roster_import_normalizes_tshirt_sizes():
 def test_player_city_state():
     p = _ok(client.post("/api/players", json={
         "usta_number": "CS" + uuid.uuid4().hex[:6], "gender": "female",
-        "city": "Atlanta", "state": "GA"}))
+        "birthdate": "2010-01-01", "city": "Atlanta", "state": "GA"}))
     assert p["city"] == "Atlanta" and p["state"] == "GA"
     upd = client.put(f"/api/players/{p['id']}", json={
-        "usta_number": p["usta_number"], "gender": "female", "city": "Macon", "state": "GA"}).json()
+        "usta_number": p["usta_number"], "gender": "female", "birthdate": "2010-01-01",
+        "city": "Macon", "state": "GA"}).json()
     assert upd["city"] == "Macon"
 
 
 def test_import_staging_and_merge():
     t = _tournament()
     ids = ["IS" + uuid.uuid4().hex[:6] for _ in range(3)]
-    # one valid, one valid, one invalid (missing USTA #)
-    csv_data = ("USTA #,First,Division,T-Shirt\n"
-                f"{ids[0]},Ann,G12,YM\n"
-                f"{ids[1]},Bea,G14,Adult Large\n"
-                ",NoUsta,G16,AS\n")
+    # one valid, one valid, one invalid (missing USTA #). Audit N1: gender is
+    # required when creating a new player.
+    csv_data = ("USTA #,First,Gender,Division,T-Shirt\n"
+                f"{ids[0]},Ann,F,G12,YM\n"
+                f"{ids[1]},Bea,F,G14,Adult Large\n"
+                ",NoUsta,F,G16,AS\n")
     up = client.post(f"/api/import/tournaments/{t['id']}/roster",
                      files={"file": ("roster.csv", csv_data, "text/csv")})
     assert up.status_code == 201, up.text
@@ -333,7 +387,88 @@ def test_import_staging_and_merge():
     # templates download in both formats
     assert client.get("/api/import/template/roster?fmt=csv").status_code == 200
     assert client.get("/api/import/template/roster?fmt=xlsx").status_code == 200
-    assert {x["key"] for x in client.get("/api/import/types").json()} >= {"roster", "withdrawals", "player_hotels"}
+    # Audit import/export #4 + #10: every importer type has a downloadable
+    # template that round-trips through validate + merge. Catches a future
+    # registry entry that forgets a column or whose merge function disagrees
+    # with the template's header names.
+    types = {x["key"]: x for x in client.get("/api/import/types").json()}
+    assert types.keys() >= {
+        "roster", "late_entries", "withdrawals", "scheduling_avoidances",
+        "division_flexibility", "player_hotels", "distances",
+        "pairing_avoidances", "doubles_requests",
+    }
+    for key in types:
+        csv_t = client.get(f"/api/import/template/{key}?fmt=csv")
+        assert csv_t.status_code == 200, key
+        xlsx_t = client.get(f"/api/import/template/{key}?fmt=xlsx")
+        assert xlsx_t.status_code == 200, key
+        # Template headers cover every canonical column the registry declares
+        # (header order matches `cols`); the importer's parse_file uses these
+        # names as the alias map's "canon" key, so an upload of the template
+        # itself parses cleanly even when it has zero data rows.
+        header_line = csv_t.content.decode("utf-8-sig").splitlines()[0]
+        assert set(header_line.split(",")) == set(types[key]["columns"]), key
+
+
+def test_import_merge_per_type_smoke():
+    """Audit import/export #4: every Part-B importer can stage + merge a
+    synthetic single-row CSV without raising. Catches a future merge fn that
+    breaks against its own template (column-name drift, missing INSERT col)."""
+    t = _tournament()
+    # Need a pre-existing player in Setup for inbox flows that refuse new
+    # players without a gender (audit N1).
+    p_a = _player(first_name="Aa", last_name="Bb")
+    p_b = _player(first_name="Cc", last_name="Dd", gender="male")
+    # Pre-roster for doubles (audit F15 requires entries on tournament_entry).
+    for p in (p_a, p_b):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
+    # Per-type synthetic rows. roster is already exercised; skip here.
+    rows_by_type = {
+        "late_entries": f"usta_number,age_division,events\n{p_a['usta_number']},G14,Singles\n",
+        "withdrawals": f"usta_number,reason\n{p_a['usta_number']},Injured\n",
+        "scheduling_avoidances": f"usta_number,avoid_day,avoid_time_range\n{p_a['usta_number']},Saturday,morning\n",
+        "division_flexibility": f"usta_number,home_division,willing_divisions\n{p_a['usta_number']},NTRP 3.5,NTRP 4.0\n",
+        "player_hotels": f"usta_number,hotel_name,lodging_plan\n{p_a['usta_number']},Marriott Demo,Hotel\n",
+        "pairing_avoidances": f"usta_1,usta_2,age_division,relationship\n{p_a['usta_number']},{p_b['usta_number']},B12,siblings\n",
+        "doubles_requests": f"usta_number,age_division,wants_random,partner_usta\n{p_a['usta_number']},G14,false,{p_b['usta_number']}\n",
+    }
+    for key, csv_data in rows_by_type.items():
+        up = client.post(f"/api/import/tournaments/{t['id']}/{key}",
+                         files={"file": (f"{key}.csv", csv_data, "text/csv")})
+        assert up.status_code == 201, f"{key}: {up.text}"
+        b = up.json()
+        assert b["valid"] == 1 and b["invalid"] == 0, f"{key} staging: {b}"
+        m = client.post(f"/api/import/batches/{b['batch_id']}/merge").json()
+        assert m["merged"] == 1, f"{key} merge: {m}"
+        assert m["failed"] == 0, f"{key} failed: {m}"
+
+
+def test_import_distances_setup_catalog():
+    """Audit import/export #7: distance Setup catalog importer resolves
+    official + site by ids OR by labels, updates existing pairs."""
+    t = _tournament()  # body endpoint requires a tournament context even though distances are global
+    o = _official(first_name="Imp", last_name="Driver" + uuid.uuid4().hex[:4])
+    s = _site(code="IMPS" + uuid.uuid4().hex[:3], name="Imp Site")
+    # First import by labels (last_name + site_code).
+    csv1 = f"last_name,first_name,site_code,one_way_miles\n{o['last_name']},{o['first_name']},{s['code']},42.5\n"
+    up = _ok(client.post(f"/api/import/tournaments/{t['id']}/distances",
+                         files={"file": ("d.csv", csv1, "text/csv")}))
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 1, m
+    # Find the new row and verify the value.
+    rows = client.get("/api/distances").json()
+    found = [r for r in rows if r["official_id"] == o["id"] and r["site_id"] == s["id"]]
+    assert len(found) == 1 and float(found[0]["one_way_miles"]) == 42.5
+    # Second import by ids overwrites (conflict note expected).
+    csv2 = f"official_id,site_id,one_way_miles,source\n{o['id']},{s['id']},60,geocoded\n"
+    up2 = _ok(client.post(f"/api/import/tournaments/{t['id']}/distances",
+                          files={"file": ("d2.csv", csv2, "text/csv")}))
+    m2 = client.post(f"/api/import/batches/{up2['batch_id']}/merge").json()
+    assert m2["merged"] == 1 and len(m2["conflicts"]) == 1
+    rows = client.get("/api/distances").json()
+    found = [r for r in rows if r["official_id"] == o["id"] and r["site_id"] == s["id"]]
+    assert float(found[0]["one_way_miles"]) == 60 and found[0]["source"] == "geocoded"
 
 
 def test_player_hotel_fk_dedup():
@@ -362,9 +497,9 @@ def test_hotel_confidential_report():
     t, h = _tournament(), _hotel()
     # two selected players staying at the hotel
     p1 = _ok(client.post("/api/players", json={
-        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Alice", "last_name": "Adams", "gender": "female"}))
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Alice", "last_name": "Adams", "gender": "female", "birthdate": "2010-01-01"}))
     p2 = _ok(client.post("/api/players", json={
-        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Bob", "last_name": "Brown", "gender": "male"}))
+        "usta_number": "RPT" + uuid.uuid4().hex[:6], "first_name": "Bob", "last_name": "Brown", "gender": "male", "birthdate": "2010-01-01"}))
     for p in (p1, p2):
         client.post(f"/api/tournaments/{t['id']}/players",
                     json={"player_id": p["id"], "selection_status": "selected"})
@@ -479,7 +614,10 @@ def test_inbox_and_late_entry_filing():
     assert em["status"] == "new" and em["classification"] == "unclassified"
     assert any(m["id"] == em["id"] for m in client.get(f"/api/emails?tournament_id={t['id']}").json())
 
+    # Audit N1: late-entry filing now requires the player to exist in Setup
+    # first (no more silent gender='female' default). Pre-create them.
     num = "LATE" + uuid.uuid4().hex[:6]
+    _player(usta_number=num, first_name="Lee", last_name="Tardy", gender="male")
     le = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries", json={
         "usta_number": num, "first_name": "Lee", "last_name": "Tardy",
         "age_division": "B16", "events": "Singles", "request_date": "2026-05-30",
@@ -582,6 +720,10 @@ def test_withdrawal_update_keeps_reason_rule():
 def test_doubles_mutual_verification():
     t = _tournament()
     a, b = _player(), _player()
+    # Audit F15: doubles pair members must be on the tournament roster.
+    for p in (a, b):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
     # first email (A names B): pending, no pair yet
     r1 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
         "usta_number": a["usta_number"], "age_division": "G14", "partner_usta": b["usta_number"]}))
@@ -599,6 +741,9 @@ def test_doubles_mutual_verification():
 def test_doubles_random_queue():
     t = _tournament()
     a, b = _player(), _player()
+    for p in (a, b):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
     # first random: queued (waiting)
     r1 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests",
                          json={"usta_number": a["usta_number"], "age_division": "B16", "wants_random": True}))
@@ -631,21 +776,28 @@ def test_pairing_avoidance_group():
 
 
 def test_player_hotels_analytics_and_tshirts():
-    t, p = _tournament(), _player()
-    # the player must be IN the tournament (selected) to count in hotel summaries
-    client.post(f"/api/tournaments/{t['id']}/players",
-                json={"player_id": p["id"], "selection_status": "selected"})
+    """Audit F1 + F25: hotel-analytics counts *stays* (one per (player,
+    tournament)) — a player attending two tournaments at the same hotel must
+    show 2, not 1. Per-tournament summary counts distinct players (1)."""
+    t1, t2, p = _tournament(), _tournament(), _player()
+    for t in (t1, t2):
+        client.post(f"/api/tournaments/{t['id']}/players",
+                    json={"player_id": p["id"], "selection_status": "selected"})
     hname = "Marriott " + uuid.uuid4().hex[:4]
-    s = _ok(client.post(f"/api/tournaments/{t['id']}/player-hotels",
-                        json={"usta_number": p["usta_number"], "hotel_name": hname}))
-    assert s["hotel_name"] == hname
-    # CVB analytics aggregates this hotel
-    totals = client.get("/api/hotel-analytics").json()
-    assert any(r["hotel_name"] == hname and r["stays"] >= 1 for r in totals)
-    # per-tournament hotel summary too
-    summ = client.get(f"/api/tournaments/{t['id']}/hotel-summary").json()
-    assert any(r["hotel_name"] == hname and r["players"] >= 1 for r in summ)
-    assert client.delete(f"/api/player-hotels/{s['id']}").status_code == 204
+    s1 = _ok(client.post(f"/api/tournaments/{t1['id']}/player-hotels",
+                         json={"usta_number": p["usta_number"], "hotel_name": hname}))
+    s2 = _ok(client.post(f"/api/tournaments/{t2['id']}/player-hotels",
+                         json={"usta_number": p["usta_number"], "hotel_name": hname}))
+    assert s1["hotel_name"] == hname and s2["hotel_name"] == hname
+    # CVB analytics: same player at the same hotel in 2 tournaments = 2 stays.
+    totals = {r["hotel_name"]: r["stays"] for r in client.get("/api/hotel-analytics").json()}
+    assert totals.get(hname, 0) >= 2, totals
+    # Per-tournament summary still counts distinct players (1).
+    summ = {r["hotel_name"]: r["players"] for r in
+            client.get(f"/api/tournaments/{t1['id']}/hotel-summary").json()}
+    assert summ.get(hname) == 1
+    assert client.delete(f"/api/player-hotels/{s1['id']}").status_code == 204
+    assert client.delete(f"/api/player-hotels/{s2['id']}").status_code == 204
 
 
 def test_summaries_exclude_withdrawn_and_alternates():
@@ -771,7 +923,7 @@ def test_officials_report_totals():
 
 def test_player_history_capture():
     p = _player(first_name="A", last_name="Before")
-    r = client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "After", "gender": "female"})
+    r = client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "After", "gender": "female", "birthdate": "2010-01-01"})
     assert r.status_code == 200 and r.json()["last_name"] == "After"
     hist = client.get(f"/api/players/{p['id']}/history").json()
     assert len(hist) >= 1
@@ -795,7 +947,7 @@ def test_roster_point_in_time_name():
     finally:
         conn.close()
     # rename -> history row 'Maiden' valid [2024-01-01, now); current 'Married'
-    client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "Married", "gender": "female"})
+    client.put(f"/api/players/{p['id']}", json={"usta_number": p["usta_number"], "first_name": "A", "last_name": "Married", "gender": "female", "birthdate": "2010-01-01"})
 
     t_old = _tournament(play_start_date="2024-06-01", play_end_date="2024-06-03")
     t_new = _tournament(play_start_date="2027-06-01", play_end_date="2027-06-03")

@@ -1,0 +1,183 @@
+"""Setup-tab catalog models: site/tournament/official/player/hotel/rate/distance,
+plus the configurable division + event catalogs (audit A50)."""
+from datetime import date, datetime
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, model_validator
+
+from ._models_common import CertType, Gender, TournamentType
+
+
+# ---------- Site ----------
+class SiteCreate(BaseModel):
+    code: Optional[str] = None
+    name: str
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class SiteOut(SiteCreate):
+    id: int
+
+
+class SiteIds(BaseModel):
+    site_ids: list[int] = []
+
+
+# ---------- Tournament ----------
+class TournamentCreate(BaseModel):
+    name: str
+    type: Literal["junior", "adult"]
+    play_start_date: date
+    play_end_date: date
+    registration_deadline: Optional[date] = None
+    late_entry_deadline: Optional[date] = None
+
+    @model_validator(mode="after")
+    def _dates_ok(self):
+        if self.play_end_date < self.play_start_date:
+            raise ValueError("play_end_date must be on or after play_start_date")
+        return self
+
+
+class TournamentOut(TournamentCreate):
+    id: int
+
+
+# ---------- Official ----------
+class OfficialCreate(BaseModel):
+    first_name: str
+    last_name: str
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    dietary_restrictions: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+
+
+class OfficialOut(OfficialCreate):
+    id: int
+
+
+# ---------- Division + Event catalog ----------
+class DivisionCreate(BaseModel):
+    code: str
+    label: str
+    tournament_type: TournamentType
+    gender: Optional[Gender] = None
+    sort_order: int = 0
+
+
+class DivisionOut(DivisionCreate):
+    id: int
+
+
+class TournamentEventCreate(BaseModel):
+    name: str
+    tournament_type: TournamentType
+    gender: Optional[Gender] = None
+    sort_order: int = 0
+
+
+class TournamentEventOut(TournamentEventCreate):
+    id: int
+
+
+# ---------- Player ----------
+class PlayerCreate(BaseModel):
+    usta_number: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    gender: Gender  # required — drives the division/event picker
+    # Optional at the API boundary: inline-create from roster + inbox upserts
+    # don't have a DOB yet (audit N3). The Setup-page form keeps `required` in
+    # HTML so a TD entering a fresh player still has to supply one.
+    birthdate: Optional[date] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+
+
+class PlayerOut(PlayerCreate):
+    id: int
+    updated_at: Optional[datetime] = None
+
+
+class PlayerHistoryOut(BaseModel):
+    id: int
+    player_id: int
+    usta_number: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    birthdate: Optional[date] = None
+    valid_from: datetime
+    valid_to: datetime
+    change_type: str
+
+
+# ---------- Certification rate ----------
+class CertificationRateCreate(BaseModel):
+    cert_type: CertType
+    rate_per_day: float = Field(ge=0)
+    effective_from: date = Field(default_factory=date.today)
+
+
+class CertificationRateOut(CertificationRateCreate):
+    id: int
+
+
+# ---------- Hotel (property) ----------
+class HotelCreate(BaseModel):
+    name: str
+    website: Optional[str] = None
+    street: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class HotelOut(HotelCreate):
+    id: int
+
+
+# ---------- Room block (inventory at a hotel) ----------
+class RoomBlockCreate(BaseModel):
+    hotel_id: int
+    tournament_id: Optional[int] = None
+    kind: Literal["player", "official"] = "player"
+    confirmation_number: Optional[str] = None
+    cancellation_info: Optional[str] = None
+    check_in: Optional[date] = None
+    check_out: Optional[date] = None
+    room_count: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def _dates_ok(self):
+        if self.check_in and self.check_out and self.check_out < self.check_in:
+            raise ValueError("check_out must be on or after check_in")
+        return self
+
+
+class RoomBlockOut(RoomBlockCreate):
+    id: int
+    rooms_remaining: Optional[int] = None
+
+
+# ---------- Official <-> Site distance ----------
+class DistanceCreate(BaseModel):
+    official_id: int
+    site_id: int
+    one_way_miles: float = Field(ge=0, le=1000)
+    source: Literal["geocoded", "manual"] = "manual"
+
+
+class DistanceOut(DistanceCreate):
+    id: int

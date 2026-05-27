@@ -1,5 +1,5 @@
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from ..db import db_dep
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
@@ -7,6 +7,12 @@ from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 router = APIRouter(prefix="/api/players", tags=["players"])
 
 _COLS = "id, usta_number, first_name, last_name, gender, birthdate, city, state, updated_at"
+
+# Audit F6: PlayerCreate is shared between POST and PUT bodies; the PUT path
+# accepts spread `{**p, "city": "..."}` payloads that may carry id/updated_at,
+# which Pydantic v2 silently ignores (default `extra="ignore"`). This is
+# intentional — if anyone tightens to `extra="forbid"` later, every Setup PUT
+# test breaks and the test naming becomes the contract.
 
 
 @router.get("", response_model=list[PlayerOut])
@@ -59,10 +65,35 @@ def create_player(body: PlayerCreate, conn=Depends(db_dep)):
 
 
 @router.put("/{player_id}", response_model=PlayerOut)
-def update_player(player_id: int, body: PlayerCreate, conn=Depends(db_dep)):
-    # The player_history trigger snapshots the prior values and bumps updated_at.
+def update_player(
+    player_id: int,
+    body: PlayerCreate,
+    conn=Depends(db_dep),
+    x_if_updated_at: str | None = Header(default=None, alias="X-If-Updated-At"),
+):
+    """Audit M19 + F5: optimistic concurrency via a custom `X-If-Updated-At`
+    header carrying the ISO `updated_at` the client last saw. We switched
+    away from `If-Unmodified-Since` because RFC 7232 defines that as an
+    HTTP-date (RFC 1123); some proxies and WAFs reject ISO 8601 values, so
+    a custom header is the portable choice. The header is optional —
+    callers that don't care skip the check.
+
+    The player_history trigger snapshots the prior values and bumps updated_at.
+    """
     try:
         with conn.cursor() as cur:
+            if x_if_updated_at:
+                cur.execute(
+                    "SELECT updated_at FROM player WHERE id = %s", (player_id,)
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=404, detail="player not found")
+                if row["updated_at"] and row["updated_at"].isoformat() != x_if_updated_at:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="player was modified elsewhere — reload and try again",
+                    )
             cur.execute(
                 f"""
                 UPDATE player SET
@@ -72,7 +103,11 @@ def update_player(player_id: int, body: PlayerCreate, conn=Depends(db_dep)):
                     gender = %(gender)s,
                     birthdate = %(birthdate)s,
                     city = %(city)s,
-                    state = %(state)s
+                    state = %(state)s,
+                    -- Audit M19: bump updated_at on every PUT so optimistic
+                    -- concurrency works even for non-history-tracked fields
+                    -- (the player_history trigger only records *name* changes).
+                    updated_at = now()
                 WHERE id = %(id)s
                 RETURNING {_COLS}
                 """,

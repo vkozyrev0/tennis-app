@@ -53,7 +53,7 @@ async def upload(tournament_id: int, import_type: str,
         errors = []
         valid = 0
         for r in rows:
-            err = importer.validate(r["data"], cfg["cols"])
+            err = importer.validate(r["data"], cfg["cols"], cur)
             if err is None:
                 valid += 1
             else:
@@ -101,15 +101,41 @@ def merge_batch(batch_id: int, conn=Depends(db_dep)):
             try:
                 note = merge(cur, tid, r["data"])  # conflict note (str) or None
                 cur.execute("RELEASE SAVEPOINT imp")
-                cur.execute("UPDATE import_row SET merged = true, error = %s WHERE id = %s",
-                            (note, r["id"]))
+                # Audit M10: the bookkeeping UPDATE runs outside the merge
+                # savepoint — wrap it so a constraint hit here doesn't abort
+                # the whole batch transaction.
+                cur.execute("SAVEPOINT imp_bk")
+                try:
+                    cur.execute("UPDATE import_row SET merged = true, error = %s WHERE id = %s",
+                                (note, r["id"]))
+                    cur.execute("RELEASE SAVEPOINT imp_bk")
+                except Exception:
+                    cur.execute("ROLLBACK TO SAVEPOINT imp_bk")
                 merged += 1
                 if note:
                     conflicts.append({"row": r["row_num"], "detail": note})
+            except HTTPException as e:
+                # Audit T3: preserve the helpful 400 detail instead of stringifying
+                # the HTTPException repr (which leaked status codes into the UI).
+                cur.execute("ROLLBACK TO SAVEPOINT imp")
+                msg = str(e.detail)[:300]
+                cur.execute("SAVEPOINT imp_bk")
+                try:
+                    cur.execute("UPDATE import_row SET error = %s WHERE id = %s", (msg, r["id"]))
+                    cur.execute("RELEASE SAVEPOINT imp_bk")
+                except Exception:
+                    cur.execute("ROLLBACK TO SAVEPOINT imp_bk")
+                errors.append({"row": r["row_num"], "error": msg})
             except Exception as e:  # row-level failure: keep the rest of the batch
                 cur.execute("ROLLBACK TO SAVEPOINT imp")
-                cur.execute("UPDATE import_row SET error = %s WHERE id = %s", (str(e)[:300], r["id"]))
-                errors.append({"row": r["row_num"], "error": str(e)})
+                msg = str(e)[:300]
+                cur.execute("SAVEPOINT imp_bk")
+                try:
+                    cur.execute("UPDATE import_row SET error = %s WHERE id = %s", (msg, r["id"]))
+                    cur.execute("RELEASE SAVEPOINT imp_bk")
+                except Exception:
+                    cur.execute("ROLLBACK TO SAVEPOINT imp_bk")
+                errors.append({"row": r["row_num"], "error": msg})
         cur.execute("UPDATE import_batch SET status = 'merged' WHERE id = %s", (batch_id,))
     return {"merged": merged, "failed": len(errors), "conflicts": conflicts[:50],
             "errors": errors[:50]}

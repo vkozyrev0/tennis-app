@@ -82,28 +82,27 @@ def delete_player_hotel(row_id: int, conn=Depends(db_dep)):
     return Response(status_code=204)
 
 
-# Count distinct players per hotel. Names are grouped case-insensitively (after
-# trimming) for consistency and a representative spelling is shown; blanks are
-# excluded; only players who are *in* the tournament (selection_status='selected')
-# count — no withdrawals or alternates. Ordered alphabetically.
-_HOTEL_SUMMARY = """
-SELECT min(TRIM(s.hotel_name)) AS hotel_name, count(DISTINCT s.player_id) AS players
-FROM player_hotel_stay s
-JOIN tournament_entry e
-  ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
-WHERE e.selection_status = 'selected'
-  AND NULLIF(TRIM(s.hotel_name), '') IS NOT NULL
-  {extra}
-GROUP BY lower(TRIM(s.hotel_name))
-ORDER BY lower(TRIM(s.hotel_name))
-"""
-
-
 @router.get("/api/tournaments/{tournament_id}/hotel-summary")
 def hotel_summary(tournament_id: int, conn=Depends(db_dep)):
-    """Per-tournament: players per hotel (selected only, alphabetical, consistent)."""
+    """Per-tournament: players per hotel (selected only, alphabetical, consistent).
+    Audit F20: dropped the .format()-over-SQL pattern in favor of an inline
+    query; the variant for cross-tournament analytics lives in hotel_analytics."""
     with conn.cursor() as cur:
-        cur.execute(_HOTEL_SUMMARY.format(extra="AND s.tournament_id = %s"), (tournament_id,))
+        cur.execute(
+            """
+            SELECT min(TRIM(s.hotel_name)) AS hotel_name,
+                   count(DISTINCT s.player_id) AS players
+            FROM player_hotel_stay s
+            JOIN tournament_entry e
+              ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
+            WHERE e.selection_status = 'selected'
+              AND NULLIF(TRIM(s.hotel_name), '') IS NOT NULL
+              AND s.tournament_id = %s
+            GROUP BY lower(TRIM(s.hotel_name))
+            ORDER BY lower(TRIM(s.hotel_name))
+            """,
+            (tournament_id,),
+        )
         return cur.fetchall()
 
 
@@ -203,10 +202,23 @@ def hotel_confidential_report(tournament_id: int, conn=Depends(db_dep)):
 
 @router.get("/api/hotel-analytics")
 def hotel_analytics(conn=Depends(db_dep)):
-    """Players per hotel across all tournaments (for CVB negotiations) — selected
-    players only, names consistent + alphabetical."""
+    """Stays per hotel across all tournaments (for CVB negotiations) — selected
+    players only, names consistent + alphabetical. Audit F1: each
+    (player, tournament) is one *stay*, so a returning regular shows up once
+    per tournament — not collapsed to a single player_id."""
     with conn.cursor() as cur:
-        cur.execute(_HOTEL_SUMMARY.format(extra="").replace("AS players", "AS stays"))
+        cur.execute(
+            """
+            SELECT min(TRIM(s.hotel_name)) AS hotel_name, count(*) AS stays
+            FROM player_hotel_stay s
+            JOIN tournament_entry e
+              ON e.tournament_id = s.tournament_id AND e.player_id = s.player_id
+            WHERE e.selection_status = 'selected'
+              AND NULLIF(TRIM(s.hotel_name), '') IS NOT NULL
+            GROUP BY lower(TRIM(s.hotel_name))
+            ORDER BY lower(TRIM(s.hotel_name))
+            """
+        )
         return cur.fetchall()
 
 

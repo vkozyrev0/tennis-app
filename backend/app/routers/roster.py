@@ -1,174 +1,62 @@
-"""Tournament <-> Player roster (tournament_entry) + CSV/XLSX import."""
-import csv
-import io
-import re
+"""Tournament <-> Player roster (tournament_entry) + CSV/XLSX direct-merge import.
 
+The direct-merge endpoint here and the staged importer in `importer.py` share a
+single source of truth: header aliases, parse/validate, and the merge function
+all live in `importer.py`. This file owns the *immediate-write* UX (no staging
+review) for the TD's official USTA roster upload, plus the regular CRUD."""
 import psycopg
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from openpyxl import load_workbook
 
+from .. import importer
 from ..db import db_dep
 from ..models import RosterEntryCreate, RosterEntryOut
 from ..playerops import upsert_player
+from ..shirtops import norm_shirt as _norm_shirt
 
 router = APIRouter(tags=["roster"])
-
-# Map many header spellings (USTA exports vary) to canonical roster fields (§3.8).
-_HEADER_ALIASES = {
-    "usta_number": {"ustanumber", "usta", "ustano", "ustaid", "usta"},
-    "first_name": {"firstname", "first", "givenname"},
-    "last_name": {"lastname", "last", "surname", "familyname"},
-    "age_division": {"agedivision", "division", "div", "age"},
-    "events": {"events", "event"},
-    "selection_status": {"selectionstatus", "status", "selection"},
-    "t_shirt_size": {"tshirtsize", "tshirt", "shirt", "shirtsize", "size"},
-    "dietary_preference": {"dietarypreference", "dietary", "diet", "dietaryrestrictions"},
-}
-_VALID_STATUS = {"selected", "alternate", "withdrawn"}
-
-
-def _norm(h: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (h or "").strip().lower())
-
-
-def _canon_headers(headers) -> dict:
-    """{column_index: canonical_field} for recognised headers."""
-    alias_to_canon = {}
-    for canon, aliases in _HEADER_ALIASES.items():
-        alias_to_canon[canon] = canon
-        for a in aliases:
-            alias_to_canon[a] = canon
-    out = {}
-    for i, h in enumerate(headers or []):
-        key = alias_to_canon.get(_norm(str(h) if h is not None else ""))
-        if key:
-            out[i] = key
-    return out
-
-
-def _parse_rows(filename: str, raw: bytes) -> list[dict]:
-    name = (filename or "").lower()
-    records = []
-    if name.endswith((".xlsx", ".xlsm")):
-        ws = load_workbook(io.BytesIO(raw), data_only=True, read_only=True).active
-        it = ws.iter_rows(values_only=True)
-        cmap = _canon_headers(next(it, []) or [])
-        for r in it:
-            rec = {key: (r[i] if i < len(r) else None) for i, key in cmap.items()}
-            if any(v not in (None, "") for v in rec.values()):
-                records.append(rec)
-    else:  # CSV / TSV
-        text = raw.decode("utf-8-sig", errors="replace")
-        reader = csv.reader(io.StringIO(text))
-        cmap = _canon_headers(next(reader, []))
-        for r in reader:
-            rec = {key: (r[i] if i < len(r) else None) for i, key in cmap.items()}
-            if any(v not in (None, "") for v in rec.values()):
-                records.append(rec)
-    return records
-
-
-def _s(v):
-    if v is None:
-        return None
-    s = str(v).strip()
-    return s or None
-
-
-# Canonical t-shirt sizes (must match the roster form dropdown).
-_SHIRT_CANON = {
-    ("youth", "small"): "Youth Small", ("youth", "medium"): "Youth Medium",
-    ("youth", "large"): "Youth Large", ("adult", "small"): "Adult Small",
-    ("adult", "medium"): "Adult Medium", ("adult", "large"): "Adult Large",
-    ("adult", "xl"): "Adult Extra Large",
-}
-_SHIRT_SIZE = {
-    "s": "small", "sm": "small", "small": "small",
-    "m": "medium", "med": "medium", "medium": "medium",
-    "l": "large", "lg": "large", "large": "large",
-    "xl": "xl", "xlarge": "xl", "extralarge": "xl", "xxl": "xl", "xxxl": "xl",
-}
-
-
-def _norm_shirt(v):
-    """Normalize a free-text t-shirt size (abbreviated or full) to a canonical
-    label; unrecognized values pass through unchanged so nothing is lost."""
-    if v is None:
-        return None
-    raw = str(v).strip()
-    s = re.sub(r"[^a-z]", "", raw.lower())  # 'Youth M' -> 'youthm', 'YM' -> 'ym'
-    if not s:
-        return raw or None
-    # Split off a youth/adult marker; default to adult when none is given.
-    if s.startswith(("youth", "yth", "junior", "jr")) or (s[0] == "y" and len(s) <= 4):
-        group, rest = "youth", re.sub(r"^(youth|yth|junior|jr|y)", "", s, count=1)
-    elif s.startswith("adult") or (s[0] == "a" and len(s) <= 4):
-        group, rest = "adult", re.sub(r"^(adult|a)", "", s, count=1)
-    else:
-        group, rest = "adult", s
-    size = _SHIRT_SIZE.get(rest)
-    return _SHIRT_CANON.get((group, size), raw)
 
 
 @router.post("/api/tournaments/{tournament_id}/players/import")
 async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=Depends(db_dep)):
-    """Upload a CSV/XLSX roster; upsert players (by USTA #) and their entries (§3.8)."""
-    records = _parse_rows(file.filename, await file.read())
+    """Upload a CSV/XLSX roster; upsert players (by USTA #) and their entries.
+
+    Audit (import/export #1): consolidated on `importer.parse_file` +
+    `importer._merge_roster` so this path can't drift from the staged importer
+    on header aliases, the gender pre-check, or shirt normalization. The
+    response shape is preserved for the existing frontend.
+    """
+    cfg = importer.TYPES["roster"]
+    records = importer.parse_file(file.filename, await file.read(), cfg["cols"])
     created = updated = upserted = 0
     errors: list[str] = []
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
-        for idx, rec in enumerate(records, start=2):  # row 1 = headers
-            usta = _s(rec.get("usta_number"))
-            if not usta:
-                errors.append(f"row {idx}: missing USTA number")
+        for rec in records:
+            row_num = rec["row_num"] + 1  # +1 to count the header row, matching the old wording
+            err = importer.validate(rec["data"], cfg["cols"], cur)
+            if err:
+                errors.append(f"row {row_num}: {err}")
                 continue
-            first, last = _s(rec.get("first_name")), _s(rec.get("last_name"))
-            cur.execute("SELECT id FROM player WHERE usta_number = %s", (usta,))
-            p = cur.fetchone()
-            if p:
-                pid = p["id"]
-                if first or last:
-                    cur.execute(
-                        "UPDATE player SET first_name = COALESCE(%s, first_name), "
-                        "last_name = COALESCE(%s, last_name) WHERE id = %s",
-                        (first, last, pid),
-                    )
-                updated += 1
-            else:
-                # gender is NOT NULL at the DB level (migration 0026). The CSV
-                # roster import doesn't carry it yet — default to 'female'
-                # placeholder so the import doesn't fail; TD edits via Players grid.
-                cur.execute(
-                    "INSERT INTO player (usta_number, first_name, last_name, gender) "
-                    "VALUES (%s, %s, %s, 'female') RETURNING id",
-                    (usta, first, last),
-                )
-                pid = cur.fetchone()["id"]
-                created += 1
-            status = (_s(rec.get("selection_status")) or "selected").lower()
-            if status not in _VALID_STATUS:
-                status = "selected"
-            cur.execute(
-                """
-                INSERT INTO tournament_entry
-                    (tournament_id, player_id, age_division, events, selection_status,
-                     t_shirt_size, dietary_preference, source)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'usta_roster')
-                ON CONFLICT (tournament_id, player_id) DO UPDATE SET
-                    age_division = EXCLUDED.age_division, events = EXCLUDED.events,
-                    selection_status = EXCLUDED.selection_status,
-                    t_shirt_size = EXCLUDED.t_shirt_size,
-                    dietary_preference = EXCLUDED.dietary_preference
-                """,
-                (tournament_id, pid, _s(rec.get("age_division")), _s(rec.get("events")),
-                 status, _norm_shirt(_s(rec.get("t_shirt_size"))), _s(rec.get("dietary_preference"))),
-            )
-            upserted += 1
+            cur.execute("SAVEPOINT row")
+            try:
+                cur.execute("SELECT 1 FROM player WHERE usta_number = %s",
+                            (rec["data"]["usta_number"],))
+                existed = cur.fetchone() is not None
+                cfg["merge"](cur, tournament_id, rec["data"])
+                cur.execute("RELEASE SAVEPOINT row")
+                if existed:
+                    updated += 1
+                else:
+                    created += 1
+                upserted += 1
+            except HTTPException as e:
+                cur.execute("ROLLBACK TO SAVEPOINT row")
+                errors.append(f"row {row_num}: {e.detail}")
     return {"created_players": created, "updated_players": updated,
             "entries": upserted, "errors": errors}
+
 
 # Names are resolved POINT-IN-TIME: the version of the player's name valid as of
 # the tournament's play_start_date (policy A). Falls back to the current name when
@@ -234,6 +122,8 @@ def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(d
         raise HTTPException(status_code=409, detail="player already on this tournament roster")
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(status_code=400, detail="tournament_id or player_id does not exist")
+    except psycopg.errors.CheckViolation as e:
+        raise HTTPException(status_code=400, detail=f"invalid value: {e.diag.constraint_name or 'check failed'}")
 
 
 @router.put("/api/roster/{entry_id}", response_model=RosterEntryOut)
@@ -261,6 +151,8 @@ def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_
         raise HTTPException(status_code=409, detail="player already on this tournament roster")
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(status_code=400, detail="player_id does not exist")
+    except psycopg.errors.CheckViolation as e:
+        raise HTTPException(status_code=400, detail=f"invalid value: {e.diag.constraint_name or 'check failed'}")
 
 
 @router.delete("/api/roster/{entry_id}", status_code=204)

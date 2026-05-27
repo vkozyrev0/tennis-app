@@ -1,3 +1,15 @@
+// Audit A47: imports from sibling ESM module(s). app.js itself is now loaded
+// as <script type="module">.
+import {
+  esc, fmtDOW, fmtMDY as _fmtMDY, dowLong as _dowLong,
+  isoToUTCDate as _isoToUTCDate, fmtIsoUTC as _fmtIsoUTC,
+  humanizeDetail as _humanizeDetail, csvDownload as _csvDownload,
+} from "./app/util.js";
+import {
+  SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
+  SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
+} from "./app/shirts.js";
+
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
 //
@@ -49,17 +61,31 @@ function _progress(delta) {
   const p = document.getElementById("progress");
   if (p) p.classList.toggle("active", _inflight > 0);
 }
+// _humanizeDetail now imported from ./app/util.js (audit A47).
 async function api(path, options) {
   _progress(1);
   try {
-    const res = await fetch("/api" + path, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    const body = res.status === 204 ? null : await res.json();
+    const hasBody = options && options.body;
+    // Only set Content-Type when there's a body, and never on FormData (which
+    // needs the browser to set the multipart boundary itself).
+    const headers = hasBody && !(options.body instanceof FormData)
+      ? { "Content-Type": "application/json" } : {};
+    const res = await fetch("/api" + path, { ...options, headers: { ...headers, ...(options && options.headers) } });
+    let body = null;
+    if (res.status !== 204) {
+      try { body = await res.json(); }
+      catch (_) { /* non-JSON error page (HTML 5xx, gateway, etc.) */ }
+    }
     if (!res.ok) {
-      const detail = body && body.detail ? body.detail : res.statusText;
-      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      const detail = body && body.detail !== undefined ? body.detail : res.statusText;
+      // Audit F3: a 401 anywhere outside the login path means the session
+      // expired — surface it once and prompt re-login so panels don't just
+      // silently blank out (the old Promise.allSettled fix in N14 still kept
+      // every individual rejection's message but never re-prompted).
+      if (res.status === 401 && !path.startsWith("/auth/")) {
+        document.dispatchEvent(new CustomEvent("auth-expired"));
+      }
+      throw new Error(_humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));
     }
     return body;
   } finally {
@@ -120,13 +146,16 @@ document.addEventListener("input", (e) => {
 }, true);
 
 // Styled confirm dialog (replaces native confirm); returns a Promise<bool>.
-function confirmDialog(message, okLabel = "Delete") {
+function confirmDialog(message, okLabel = "Delete", okKind = "danger") {
   return new Promise((resolve) => {
     const m = document.getElementById("confirm-modal");
     const ok = document.getElementById("confirm-ok");
     const cancel = document.getElementById("confirm-cancel");
     document.getElementById("confirm-text").textContent = message;
     ok.textContent = okLabel;
+    // Audit P41: reset class state every open so a previous "danger" label
+    // doesn't leak into a benign confirm (e.g. order cancellation).
+    ok.className = "confirm-ok " + (okKind === "danger" ? "danger" : "primary");
     m.hidden = false;
     ok.focus();
     const done = (v) => {
@@ -159,6 +188,7 @@ function showShortcuts() {
         <table class="shortcuts"><tbody>
           <tr><th><kbd>/</kbd></th><td>Focus the page filter</td></tr>
           <tr><th><kbd>n</kbd></th><td>Add a new record on the active panel</td></tr>
+          <tr><th><kbd>1</kbd>-<kbd>9</kbd></th><td>Jump to the Nth tab in the current menu</td></tr>
           <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
           <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
         </tbody></table>
@@ -196,6 +226,13 @@ document.addEventListener("keydown", (e) => {
     if (t) { e.preventDefault(); t.click(); }
   } else if (e.key === "?") {
     e.preventDefault(); showShortcuts();
+  } else if (/^[1-9]$/.test(e.key)) {
+    // Audit P46: numeric keys jump to the Nth tab in the currently visible
+    // menu group, giving keyboard parity with mouse tab clicks.
+    const tabs = [...document.querySelectorAll(".menu .tab")].filter((t) =>
+      t.offsetParent !== null);  // visible only
+    const idx = Number(e.key) - 1;
+    if (tabs[idx]) { e.preventDefault(); tabs[idx].click(); tabs[idx].focus(); }
   }
 });
 
@@ -281,12 +318,18 @@ function openForm(form) {
     form._openModal();
     return;
   }
-  if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
+  scheduleComboSync();
 }
-function esc(v) {
-  if (v === null || v === undefined) return "";
-  return String(v).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// Audit M27: many sites called scheduleComboSync() ad-hoc; this
+// coalesces concurrent requests into a single rAF so combo-display refresh
+// runs at most once per frame regardless of how many fillSelect calls fired.
+let _comboScheduled = false;
+function scheduleComboSync() {
+  if (_comboScheduled || typeof syncCombos !== "function") return;
+  _comboScheduled = true;
+  requestAnimationFrame(() => { _comboScheduled = false; syncCombos(); });
 }
+// esc() now imported from ./app/util.js (audit A47).
 function formObj(form) {
   const o = {};
   for (const el of form.elements) if (el.name) o[el.name] = el.value === "" ? null : el.value;
@@ -298,19 +341,41 @@ function onSubmit(form, handler) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = form.querySelector('button[type="submit"]');
+    // Audit M31 + N8/N9: disable just the named inputs (so the handler can't
+    // see a half-edited form mid-flight) while leaving Cancel + close buttons
+    // active so a stuck request can still be escaped. Snapshot which inputs
+    // were *enabled* before we toggled, so we don't re-enable a field the
+    // handler legitimately disabled (e.g. mode toggles in roster).
+    const inputs = [...form.elements].filter((el) => el.name);
+    const wasEnabled = inputs.filter((el) => !el.disabled);
+    inputs.forEach((el) => (el.disabled = true));
     if (btn) btn.disabled = true;
-    try { await handler(e); } finally { if (btn) btn.disabled = false; }
+    form.classList.add("is-submitting");
+    try { await handler(e); }
+    finally {
+      // Re-enable only those inputs the handler didn't itself disable.
+      wasEnabled.forEach((el) => { if (el.isConnected) el.disabled = false; });
+      form.classList.remove("is-submitting");
+      if (btn) btn.disabled = false;
+    }
   });
 }
 function fillSelect(el, items, labelFn, none = true) {
   if (!el) return;
   const cur = el.value;
-  el.innerHTML = none ? '<option value="">— none —</option>' : "";
+  // Audit M26: build options inside a DocumentFragment so the enhanceSelect
+  // MutationObserver fires once per fill instead of once per option.
+  const frag = document.createDocumentFragment();
+  if (none) {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "— none —";
+    frag.appendChild(o);
+  }
   for (const it of items) {
     const o = document.createElement("option");
     o.value = it.id; o.textContent = labelFn(it);
-    el.appendChild(o);
+    frag.appendChild(o);
   }
+  el.replaceChildren(frag);
   el.value = cur;
 }
 
@@ -416,7 +481,7 @@ function enhanceSelect(sel) {
 function enhanceAllSelects() { document.querySelectorAll("select").forEach(enhanceSelect); }
 function syncCombos() { document.querySelectorAll("select[data-combo]").forEach((s) => s._comboSync && s._comboSync()); }
 // form.reset() doesn't fire change — resync combos after any reset.
-document.addEventListener("reset", () => requestAnimationFrame(syncCombos), true);
+document.addEventListener("reset", () => scheduleComboSync(), true);
 
 // ---- caches + labels ----
 const sitesById = {}, tournamentsById = {}, officialsById = {}, playersById = {}, hotelsById = {};
@@ -424,23 +489,29 @@ const officialLabel = (o) => `${o.last_name}, ${o.first_name}`;
 const siteLabel = (s) => (s.code ? s.code + " — " : "") + s.name;
 const playerLabel = (p) => `${[p.last_name, p.first_name].filter(Boolean).join(", ") || "?"} (${p.usta_number})`;
 
-// Certifications (value -> label) and a date formatter that appends the weekday.
-const CERTS = [
+// Certifications (value -> label). Audit F23: seeded as a fallback but
+// overwritten from `/api/enums` at adminInit() time so the backend stays
+// the single source of truth even for display strings.
+let CERTS = [
   ["roving_official", "Roving official"],
   ["chair_umpire", "Chair umpire"],
   ["tournament_referee", "Tournament referee"],
   ["deputy_referee", "Deputy referee"],
   ["referee_in_training", "Referee in training"],
 ];
-const CERT_LABEL = Object.fromEntries(CERTS);
+let CERT_LABEL = Object.fromEntries(CERTS);
 const certLabel = (v) => CERT_LABEL[v] || v;
-function fmtDOW(iso) {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  return iso + " (" + d.toLocaleDateString("en-US", { weekday: "short" }) + ")";
-}
+// fmtDOW / _fmtIsoUTC / _isoToUTCDate now imported from ./app/util.js (A47).
 
+// Setup CRUDs each call refreshAllSelects from their onLoad — on first paint
+// that fires 5+ times in the same animation frame. Coalesce via rAF.
+let _refreshAllSelectsScheduled = false;
 function refreshAllSelects() {
+  if (_refreshAllSelectsScheduled) return;
+  _refreshAllSelectsScheduled = true;
+  requestAnimationFrame(() => { _refreshAllSelectsScheduled = false; _refreshAllSelectsImpl(); });
+}
+function _refreshAllSelectsImpl() {
   fillSelect(document.getElementById("dist-official"), Object.values(officialsById), officialLabel, false);
   fillSelect(document.getElementById("dist-site"), Object.values(sitesById), siteLabel, false);
   fillSelect(document.getElementById("roster-player"), Object.values(playersById), playerLabel, false);
@@ -475,8 +546,20 @@ function fillPlayerRefs() { document.querySelectorAll("select.player-ref").forEa
 function expandPlayerRef(b, field = "player_ref") {
   const id = b[field];
   delete b[field];
-  const p = id ? playersById[id] : null;
-  if (p) { b.usta_number = p.usta_number; b.first_name = p.first_name || null; b.last_name = p.last_name || null; }
+  if (!id) return b;
+  const p = playersById[id];
+  if (!p) {
+    // Audit M21 + N10: stale cache. Kick off a refresh so the next attempt
+    // succeeds; surface the error to the user immediately rather than
+    // submitting a half-formed body.
+    if (typeof playersCrud !== "undefined" && playersCrud.refresh) {
+      playersCrud.refresh().catch(() => {});
+    }
+    throw new Error("selected player isn't loaded — refreshing the player list, try again in a moment");
+  }
+  b.usta_number = p.usta_number;
+  b.first_name = p.first_name || null;
+  b.last_name = p.last_name || null;
   return b;
 }
 
@@ -536,30 +619,14 @@ _menuEl.addEventListener("click", (e) => {
   const grpEl = tab.closest(".menu-group");
   if (grpEl) _markGroup(grpEl.dataset.group);  // keep level-1 in sync (e.g. file-from-email jumps)
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.target));
-  // Refresh tournament-scoped panels on open so they always reflect current data.
-  const loaders = {
-    "panel-t-sites": () => loadTSites(),
-    "panel-t-roster": () => loadRoster(),
-    "panel-t-assignments": () => loadAssignments(),
-    "panel-t-roomblocks": () => loadRoomBlocks(),
-    "panel-t-availability": () => loadAvailability(),
-    "panel-t-tshirt-order": () => loadTshirtOrder(),
-    "panel-t-inbox": () => loadInbox(),
-    "panel-t-late": () => loadLate(),
-    "panel-t-withdrawals": () => loadWithdrawals(),
-    "panel-t-sched": () => schedList.load(),
-    "panel-t-divflex": () => divflexList.load(),
-    "panel-t-pairing": () => loadPairing(),
-    "panel-t-doubles": () => loadDoubles(),
-    "panel-t-photels": () => photelList.load(),
-    "panel-t-reports": () => loadReports(),
-  };
-  if (active && loaders[tab.dataset.target]) loaders[tab.dataset.target]();
+  // Refresh tournament-scoped panels on open so they always reflect current
+  // data. Built once and shared with updateActiveUI (audit M14).
+  if (!Object.keys(_tournamentLoaders).length) _populateTournamentLoaders();
+  if (active && _tournamentLoaders[tab.dataset.target]) _tournamentLoaders[tab.dataset.target]();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-import") buildImportPage();
   // Tabulator can't lay out columns while hidden — redraw the grid(s) when shown.
-  const grids = GRIDS[tab.dataset.target];
-  if (grids) requestAnimationFrame(() => grids.forEach((g) => { try { g.redraw(true); } catch (_) {} }));
+  _redrawPanelGrids(tab.dataset.target);
   sizeLists();
 });
 
@@ -601,12 +668,14 @@ function setActive(id) {
   updateActiveUI();
   // Switching the active tournament mid-edit would otherwise leave a modal open
   // against a different tournament's data — close any open detail and toast.
-  if (prev && active && prev.id !== active.id) {
-    if (typeof closeOpenDetail === "function") closeOpenDetail();
-    // Also reset workspace add-forms — a half-filled form left from the previous
-    // tournament shouldn't submit against the new one.
+  // Audit F21: toast on every transition (set/cleared/switched).
+  const prevId = prev ? prev.id : null;
+  const nextId = active ? active.id : null;
+  if (prevId !== nextId) {
+    closeOpenDetail();
     document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
-    if (typeof toast === "function") toast(`Switched to ${active.name}`, true);
+    if (active) toast(`Switched to ${active.name}`, true);
+    else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
   }
 }
 
@@ -622,15 +691,81 @@ function updateActiveUI() {
   refreshDivisionLists();  // datalists track the active tournament's type
   if (active) {
     info.textContent = `${active.type} · ${active.play_start_date} → ${active.play_end_date}`;
-    loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); loadPairing(); loadDoubles(); photelList.load(); loadReports(); loadTshirtOrder();
+    // Audit M14: only refresh the currently-visible tournament tab; the rest
+    // load lazily on tab activation (tab click handler has the loader map).
+    // Audit N11: ensure the loader map is populated before we look anything
+    // up — on initial-load setActive() runs before any tab click, so the
+    // tab-click-handler's lazy init hasn't fired yet.
+    if (!Object.keys(_tournamentLoaders).length) _populateTournamentLoaders();
+    const activePanel = document.querySelector(".tab.active")?.dataset.target;
+    if (activePanel && _tournamentLoaders[activePanel]) _tournamentLoaders[activePanel]();
   } else {
     info.textContent = "";
   }
+}
+// Loader map shared between the tab-switch click handler and updateActiveUI.
+// Populated lazily because schedList/divflexList/photelList are `const`s
+// defined later in the file (audit M14 + N11).
+const _tournamentLoaders = {};
+function _populateTournamentLoaders() {
+  Object.assign(_tournamentLoaders, {
+    "panel-t-sites": () => loadTSites(),
+    "panel-t-roster": () => loadRoster(),
+    "panel-t-assignments": () => loadAssignments(),
+    "panel-t-roomblocks": () => loadRoomBlocks(),
+    "panel-t-availability": () => loadAvailability(),
+    "panel-t-tshirt-order": () => loadTshirtOrder(),
+    "panel-t-inbox": () => loadInbox(),
+    "panel-t-late": () => loadLate(),
+    "panel-t-withdrawals": () => loadWithdrawals(),
+    "panel-t-sched": () => schedList.load(),
+    "panel-t-divflex": () => divflexList.load(),
+    "panel-t-pairing": () => loadPairing(),
+    "panel-t-doubles": () => loadDoubles(),
+    "panel-t-photels": () => photelList.load(),
+    "panel-t-reports": () => loadReports(),
+  });
 }
 activeSelect.addEventListener("change", () => setActive(activeSelect.value));
 
 // =================== generic master-detail CRUD (Setup), Tabulator grid ======
 const GRIDS = {};  // panelId -> Tabulator (redrawn when its tab becomes visible)
+// Audit M24: one place that redraws every Tabulator inside a panel when its
+// tab becomes visible. Called from the tab-click handler + anywhere else that
+// reveals a previously-hidden grid (e.g. player history sub-panel).
+function _redrawPanelGrids(panelId) {
+  const grids = GRIDS[panelId];
+  if (!grids) return;
+  requestAnimationFrame(() => grids.forEach((g) => { try { g.redraw(true); } catch (_) {} }));
+}
+// Audit M12: shared "deferred setData" pattern — Tabulator can't accept data
+// until `tableBuilt` fires; without this helper every grid factory carried
+// its own `built / pending` pair. Returns a function callers use in place of
+// table.setData() directly.
+function deferredSetData(table) {
+  const state = { built: false, pending: null };
+  table.on("tableBuilt", () => {
+    state.built = true;
+    if (state.pending !== null) { table.setData(state.pending); state.pending = null; }
+  });
+  const fn = (rows) => { if (state.built) table.setData(rows); else state.pending = rows; };
+  fn._state = state;  // makeListGrid uses .built directly to gate filter installs
+  return fn;
+}
+// Audit A48: an IntersectionObserver also catches *any* panel that becomes
+// visible (history sub-panels, modals revealing a grid, etc.) without each
+// caller having to wire up its own redraw. The Tabulator grids inside that
+// panel can't lay out columns while their container is `display:none`.
+const _panelObserver = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting && e.target.id) _redrawPanelGrids(e.target.id);
+  }
+}, { threshold: 0 });
+function _observePanel(el) { if (el) _panelObserver.observe(el); }
+// Walk the DOM after init wires panels.
+requestAnimationFrame(() => {
+  document.querySelectorAll(".panel").forEach(_observePanel);
+});
 // Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
 const _playerCell = (cell) => {
   const d = cell.getData();
@@ -643,7 +778,13 @@ document.body.appendChild(_detailBackdrop);
 let _closeOpenDetail = null;
 function closeOpenDetail() { if (_closeOpenDetail) _closeOpenDetail(); }
 _detailBackdrop.addEventListener("click", closeOpenDetail);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeOpenDetail(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  // Let Tabulator cell editors swallow Escape themselves; otherwise the user
+  // canceling a cell edit accidentally closes the surrounding modal (C8).
+  if (document.querySelector(".tabulator-editing")) return;
+  closeOpenDetail();
+});
 
 function wireEntity(cfg) {
   const panel = document.getElementById(cfg.panelId);
@@ -661,7 +802,7 @@ function wireEntity(cfg) {
   const submitBtn = form.querySelector('button[type="submit"]');
   const deleteBtn = form.querySelector(".delete");
   const cancelBtn = form.querySelector(".cancel");
-  cancelBtn.textContent = "Cancel";  // the legacy "New" label is misleading now that clicking it closes the modal
+  // (label is set in index.html now — audit P35.)
   let items = [];
   let selectedId = null;
   let built = false, pending = null;
@@ -717,10 +858,13 @@ function wireEntity(cfg) {
       if (c.edit && c.edit.editor === "list") {
         col.headerFilter = "list";
         col.headerFilterParams = { values: c.edit.params.values, clearable: true };
+        // List filter: exact match on the raw field value (not substring on the
+        // formatted label) — otherwise "female" matches a "male" filter, etc.
+        col.headerFilterFunc = (term, _v, data) => String(data[c.key] ?? "") === String(term);
       } else {
         col.headerFilter = "input";
+        if (c.fmt) col.headerFilterFunc = (term, _v, data) => c.fmt(data).toLowerCase().includes(String(term).toLowerCase());
       }
-      if (c.fmt) col.headerFilterFunc = (term, _v, data) => c.fmt(data).toLowerCase().includes(String(term).toLowerCase());
     }
     return col;
   });
@@ -750,7 +894,19 @@ function wireEntity(cfg) {
     columns,
   });
   (GRIDS[cfg.panelId] ||= []).push(table);
-  csvBtn.addEventListener("click", () => table.download("csv", cfg.path.replace(/^\//, "") + ".csv"));
+  // Setup CSV exports include every importable column (not just what's visible
+  // in the grid), so a round-trip via spreadsheet / re-import keeps all fields.
+  csvBtn.addEventListener("click", () => {
+    const filename = cfg.path.replace(/^\//, "") + ".csv";
+    if (cfg.exportCols && cfg.exportCols.length) {
+      const headers = cfg.exportCols.map((c) => c.header);
+      const rows = table.getData("active").map((r) =>
+        cfg.exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
+      _csvDownload([headers, ...rows], cfg.path.replace(/^\//, ""));
+    } else {
+      table.download("csv", filename);
+    }
+  });
   table.on("tableBuilt", () => { built = true; if (pending) { table.setData(pending); pending = null; } applySelection(); });
   // Single click only highlights the row (keeps double-click free for in-grid
   // editing); use the Edit button to open the form overlay.
@@ -765,7 +921,12 @@ function wireEntity(cfg) {
     try {
       let body = { ...data }; delete body._act;
       if (cfg.transform) body = cfg.transform(body);
-      await api(`${cfg.path}/${data.id}`, { method: "PUT", body: JSON.stringify(body) });
+      // Audit M19 + M8: send the snapshot's updated_at only when the entity
+      // opts in (cfg.optimisticConcurrency); avoids implicit feature-detection
+      // on payload shape if some future *Out model adds an unrelated updated_at.
+      const headers = cfg.optimisticConcurrency && data.updated_at
+        ? { "X-If-Updated-At": data.updated_at } : {};
+      await api(`${cfg.path}/${data.id}`, { method: "PUT", body: JSON.stringify(body), headers });
       setMsg(cfg.msgId, "saved", true);
       await refresh();
       if (cfg.afterChange) cfg.afterChange();
@@ -805,7 +966,15 @@ function wireEntity(cfg) {
   function matchesFilter(data) {
     const q = filterInput.value.trim().toLowerCase();
     if (!q) return true;
-    return cfg.columns.map((c) => (c.fmt ? c.fmt(data) : data[c.key])).concat(Object.values(data)).join(" ").toLowerCase().includes(q);
+    // Only match the values the user can actually *see* in the grid; otherwise
+    // typing a number matches arbitrary internal ids (audit C6).
+    const visible = cfg.columns
+      .filter((c) => c.key !== "id")
+      .map((c) => (c.fmt ? c.fmt(data) : data[c.key]))
+      .filter((v) => v !== null && v !== undefined)
+      .join(" ")
+      .toLowerCase();
+    return visible.includes(q);
   }
 
   function fillForm(item) {
@@ -814,7 +983,7 @@ function wireEntity(cfg) {
       const v = item ? item[el.name] : null;
       el.value = v === null || v === undefined ? "" : v;
     }
-    requestAnimationFrame(syncCombos);  // refresh type-in dropdown displays
+    scheduleComboSync();  // refresh type-in dropdown displays
   }
   function showNew() {
     selectedId = null; fillForm(null);
@@ -844,9 +1013,16 @@ function wireEntity(cfg) {
     } catch (err) { setMsg(cfg.msgId, err.message, false); }
   }
   async function refresh() {
+    // Audit P36: swap the "no records yet — add one" placeholder for a neutral
+    // "loading…" while the fetch is in flight, so first-paint doesn't show a
+    // misleading empty-state message.
+    if (built) table.setPlaceholder("Loading…");
     items = await api(cfg.path);
     if (cfg.onLoad) cfg.onLoad(items);
-    if (built) await table.setData(items); else pending = items;
+    if (built) {
+      await table.setData(items);
+      table.setPlaceholder(`No ${cfg.singular}s yet — use the form to add one.`);
+    } else { pending = items; }
     applySelection();
   }
   form.addEventListener("submit", async (e) => {
@@ -856,7 +1032,14 @@ function wireEntity(cfg) {
       let body = formObj(form);
       if (cfg.transform) body = cfg.transform(body);
       const editing = selectedId != null;
-      const saved = await api(editing ? `${cfg.path}/${selectedId}` : cfg.path, { method: editing ? "PUT" : "POST", body: JSON.stringify(body) });
+      // Audit M19 + M8: include `X-If-Updated-At` only when the entity
+      // opts in. items.find() returns the row-as-of-modal-open, which is
+      // exactly the snapshot we want to detect "another tab wrote first".
+      const orig = editing && cfg.optimisticConcurrency
+        ? items.find((it) => it.id === selectedId) : null;
+      const headers = orig && orig.updated_at ? { "X-If-Updated-At": orig.updated_at } : {};
+      const saved = await api(editing ? `${cfg.path}/${selectedId}` : cfg.path,
+        { method: editing ? "PUT" : "POST", body: JSON.stringify(body), headers });
       if (saved && saved.id != null) selectedId = saved.id;
       setMsg(cfg.msgId, editing ? "saved" : "created", true);
       await refresh();
@@ -869,7 +1052,12 @@ function wireEntity(cfg) {
   deleteBtn.addEventListener("click", () => { if (selectedId != null) removeItem(selectedId); });
   newBtn.addEventListener("click", () => { showNew(); openModal(); });
   cancelBtn.addEventListener("click", closeModal);
-  filterInput.addEventListener("input", () => { if (built) table.setFilter(matchesFilter); });
+  // Audit M32: debounce typing so we don't run setFilter on every keystroke.
+  let _filterTimer = 0;
+  filterInput.addEventListener("input", () => {
+    clearTimeout(_filterTimer);
+    _filterTimer = setTimeout(() => { if (built) table.setFilter(matchesFilter); }, 120);
+  });
   showNew();
   return { refresh };
 }
@@ -907,7 +1095,10 @@ const tSitesGrid = makeReadGrid("t-sites-table", [
   { title: "Code", field: "code" },
   { title: "Name", field: "name" },
   { title: "City", field: "city" },
-], null, "No sites match.", {
+// Import/export #6: "t-sites" gets its own CSV export so a TD can hand the
+// venue list to ops; rows reflect every site, with an `assigned` flag for
+// whether it's currently part of the active tournament.
+], "tournament-sites", "No sites match.", {
   index: "id",
   rowFormatter: (row) => row.getElement().classList.toggle("row-selected", tSitesSelected.has(row.getData().id)),
 });
@@ -942,7 +1133,7 @@ rosterCloseBtn.type = "button"; rosterCloseBtn.className = "detail-close"; roste
 rosterDetail.insertBefore(rosterCloseBtn, rosterDetail.firstChild);
 function rosterOpenModal() {
   rosterDetail.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = rosterCloseModal;
-  if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
+  scheduleComboSync();
 }
 function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; }
 rosterCloseBtn.addEventListener("click", rosterCloseModal);
@@ -975,7 +1166,9 @@ const rosterGrid = new Tabulator(rosterMount, {
       headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
       formatter: (cell) => chip(cell.getData().selection_status) },
     { title: "Shirt", field: "t_shirt_size", cssClass: "editable-cell",
-      editor: "list", editorParams: { values: ["", "Youth Small", "Youth Medium", "Youth Large", "Adult Small", "Adult Medium", "Adult Large", "Adult Extra Large"] },
+      // Audit M28: source from the canonical list defined alongside _SHIRT_LABEL
+      // so the roster grid editor and the t-shirt order page can't drift.
+      editor: "list", editorParams: () => ({ values: ["", ...SHIRT_LABELS] }),
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
     { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 132, cssClass: "grid-actions-cell",
@@ -996,7 +1189,7 @@ const rosterGrid = new Tabulator(rosterMount, {
           const wdForm = document.getElementById("withdrawal-form");
           wdForm.player_ref.value = e.player_id;
           openForm(wdForm);
-          if (typeof syncCombos === "function") requestAnimationFrame(syncCombos);
+          scheduleComboSync();
         });
         const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
         ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
@@ -1042,7 +1235,14 @@ rosterGrid.on("cellEdited", async (cell) => {
 });
 function rosterMatches(data) {
   const q = document.getElementById("roster-filter").value.trim().toLowerCase();
-  return !q || JSON.stringify(data).toLowerCase().includes(q);
+  if (!q) return true;
+  // Match only the fields a TD can see in the grid — not internal ids
+  // (audit C6: typing "1" used to match player_id:1 et al.).
+  const hay = [data.first_name, data.last_name, data.usta_number,
+    data.age_division, data.events, data.selection_status,
+    data.t_shirt_size, data.dietary_preference]
+    .filter(Boolean).join(" ").toLowerCase();
+  return hay.includes(q);
 }
 function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("active").map((r) => r.getData()) : rosterRows; }
 function rosterMarkRows() {
@@ -1060,14 +1260,14 @@ function rosterSelect(e) {
   rosterForm.t_shirt_size.value = e.t_shirt_size || "";
   rosterForm.dietary_preference.value = e.dietary_preference || "";
   rosterTitle.textContent = "Edit: " + rosterName(e);
-  rosterSubmit.textContent = "Update player";
+  rosterSubmit.textContent = "Save";  // audit P40: one verb across all forms
   if (typeof syncCombos === "function") syncCombos();
   applyRosterSel();
 }
 function rosterShowNew() {
   rosterEditId = null; rosterForm.reset();
   rosterTitle.textContent = "New roster entry";
-  rosterSubmit.textContent = "Add player";
+  rosterSubmit.textContent = "Create";  // audit P40: matches wireEntity's "Create" on new
   rosterSetMode("pick");
   if (typeof syncCombos === "function") syncCombos();
   applyRosterSel();
@@ -1090,6 +1290,8 @@ function rosterSetMode(mode) {
   picker.disabled = mode !== "pick";
   newRow.querySelectorAll("input").forEach((el) => { el.disabled = mode !== "new"; });
   toggle.textContent = mode === "new" ? "← Pick an existing player" : "+ New player not on file →";
+  // Audit N28: announce the toggle's state to screen readers.
+  toggle.setAttribute("aria-pressed", mode === "new" ? "true" : "false");
 }
 document.getElementById("roster-mode-toggle").addEventListener("click", () => {
   rosterSetMode(rosterMode === "pick" ? "new" : "pick");
@@ -1243,10 +1445,10 @@ async function buildImportPage() {
       if (!file.files[0]) { msg.textContent = "choose a file"; msg.className = "msg bad"; return; }
       up.disabled = true; msg.textContent = "";
       try {
+        // Audit M25: route through api() so the progress bar runs and 422
+        // detail arrays get the same humanizer as the rest of the app.
         const fd = new FormData(); fd.append("file", file.files[0]);
-        const res = await fetch(`/api/import/tournaments/${active.id}/${t.key}`, { method: "POST", body: fd });
-        const body = await res.json();
-        if (!res.ok) throw new Error(body.detail || res.statusText);
+        const body = await api(`/import/tournaments/${active.id}/${t.key}`, { method: "POST", body: fd });
         file.value = "";
         _renderBatch(result, body);
       } catch (e) { msg.textContent = e.message; msg.className = "msg bad"; }
@@ -1260,21 +1462,37 @@ async function buildImportPage() {
 const asgForm = document.getElementById("asg-form");
 let asgEditId = null;
 // True when a work date falls outside the active tournament's play window.
+// Audit M23: string-compare only when all three values are valid `YYYY-MM-DD`
+// (the API always returns this form; defensive against any future drift).
+const _ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function _outOfWindow(d) {
-  return !!(active && d && (d < active.play_start_date || d > active.play_end_date));
+  if (!active || !d) return false;
+  if (!_ISO_DATE.test(d) || !_ISO_DATE.test(active.play_start_date)
+      || !_ISO_DATE.test(active.play_end_date)) return false;
+  return d < active.play_start_date || d > active.play_end_date;
 }
 async function loadAssignments() {
   if (!active) return;
   // Mileage site must be one of THIS tournament's sites (audit §3 — not any site).
-  const tSites = await api(`/tournaments/${active.id}/sites`);
+  // Audit M15 + N14: fire all four fetches in parallel; allSettled so one
+  // failure doesn't blank the whole panel.
+  const results = await Promise.allSettled([
+    api(`/tournaments/${active.id}/sites`),
+    api(`/room-blocks?tournament_id=${active.id}&kind=official`),
+    api(`/tournaments/${active.id}/assignments`),
+    api(`/tournaments/${active.id}/availability`),
+  ]);
+  const [tSitesR, rbListR, listR, availR] = results;
+  const tSites = tSitesR.status === "fulfilled" ? tSitesR.value : [];
+  const rbList = rbListR.status === "fulfilled" ? rbListR.value : [];
+  const list = listR.status === "fulfilled" ? listR.value : [];
+  const avail = availR.status === "fulfilled" ? availR.value : [];
+  for (const r of results) if (r.status === "rejected") toast(r.reason.message, false);
   fillSelect(document.getElementById("asg-site"), tSites, siteLabel);
-  const rbList = await api(`/room-blocks?tournament_id=${active.id}&kind=official`);
   fillSelect(document.getElementById("asg-room-block"), rbList, (b) => {
     const hn = hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : "hotel " + b.hotel_id;
     return `${hn} (${b.rooms_remaining}/${b.room_count} left)`;
   });
-  const list = await api(`/tournaments/${active.id}/assignments`);
-  const avail = await api(`/tournaments/${active.id}/availability`);
   const availByOfficial = {};
   for (const r of avail) (availByOfficial[r.official_id] ||= []).push(r.available_date);
   // Surface availability in the official picker for this tournament.
@@ -1284,7 +1502,12 @@ async function loadAssignments() {
   }, false);
   const box = document.getElementById("asg-list");
   box.innerHTML = "";
-  if (list.length === 0) { box.innerHTML = '<p class="muted">No officials assigned yet.</p>'; return; }
+  // Audit P42: match the Tabulator placeholder styling so empty states across
+  // the app look the same (✦ icon + centered muted text).
+  if (list.length === 0) {
+    box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon">✦</span> No officials assigned yet — pick one from the form above.</div>';
+    return;
+  }
   for (const a of list) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
 }
 function renderAssignment(a, availDates) {
@@ -1425,7 +1648,6 @@ function renderAssignment(a, availDates) {
 }
 function asgReset() { asgEditId = null; asgForm.reset(); asgForm.querySelector('button[type="submit"]').textContent = "Add official"; }
 onSubmit(asgForm, async (e) => {
-  e.preventDefault();
   const b = formObj(asgForm);
   b.official_id = Number(b.official_id);
   b.site_id = b.site_id ? Number(b.site_id) : null;
@@ -1485,7 +1707,6 @@ async function loadRoomBlocks() {
 }
 function trbReset() { trbEditId = null; trbForm.reset(); trbForm.querySelector('button[type="submit"]').textContent = "Add block"; }
 onSubmit(trbForm, async (e) => {
-  e.preventDefault();
   const b = formObj(trbForm);
   b.hotel_id = Number(b.hotel_id);
   b.tournament_id = active.id;
@@ -1501,8 +1722,15 @@ trbForm.querySelector(".cancel").addEventListener("click", trbReset);
 // --- Availability (per official, per tournament) ---
 let availAll = [];
 function _datesInRange(start, end) {
-  const out = []; const d = new Date(start + "T00:00:00"); const e = new Date(end + "T00:00:00");
-  while (d <= e) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1); }
+  // Audit N20: parse + step in UTC so a DST spring-forward/fall-back day
+  // doesn't skip or duplicate an ISO output.
+  const out = [];
+  const d = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  while (d <= e) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
   return out;
 }
 function renderAvailDates() {
@@ -1562,11 +1790,20 @@ async function renderAvailCerts(oid) {
 }
 async function loadAvailability() {
   if (!active) return;
-  fillSelect(document.getElementById("avail-official"), Object.values(officialsById), officialLabel, false);
+  // Audit M34: officialsById may be empty on first load (the Officials Setup
+  // tab hasn't refreshed yet). Fetch directly so the picker is always populated.
+  const sel = document.getElementById("avail-official");
+  const officials = Object.values(officialsById).length
+    ? Object.values(officialsById)
+    : await api("/officials");
+  fillSelect(sel, officials, officialLabel, false);
   availAll = await api(`/tournaments/${active.id}/availability`);
+  // Pick the current value once and feed it through both renderers, instead of
+  // letting renderAvailDates read .value while comboSync may still be settling.
+  const oid = sel.value ? Number(sel.value) : null;
   renderAvailDates();
   renderAvailTable();
-  renderAvailCerts(Number(document.getElementById("avail-official").value) || null);
+  renderAvailCerts(oid);
 }
 document.getElementById("avail-official").addEventListener("change", () => {
   renderAvailDates();
@@ -1592,6 +1829,11 @@ const EMAIL_CLASSES = ["unclassified", "late_entry", "withdrawal", "doubles",
   "pairing_avoidance", "scheduling_avoidance", "division_flex", "hotel", "other"];
 const lateForm = document.getElementById("late-form");
 const wdForm = document.getElementById("withdrawal-form");
+// Audit A49: FILE_TARGETS is keyed by *classification* (so the Inbox knows
+// where to file an email) while FORM_MODALS is keyed by *form id* (so the
+// generic modal wrapping logic knows which forms to overlay). They overlap
+// on form elements but the lookup keys differ — kept separate intentionally;
+// any TD-visible label drift between them should be flagged in code review.
 const FILE_TARGETS = {
   late_entry: { label: "Late entry", tab: "panel-t-late", form: lateForm, msg: "late-msg" },
   withdrawal: { label: "Withdrawal", tab: "panel-t-withdrawals", form: wdForm, msg: "withdrawal-msg" },
@@ -1673,7 +1915,7 @@ async function loadInbox() {
   }
 }
 onSubmit(document.getElementById("email-form"), async (e) => {
-  e.preventDefault(); if (!active) return;
+  if (!active) return;
   const b = formObj(e.target); b.tournament_id = active.id;
   try { await api("/emails", { method: "POST", body: JSON.stringify(b) }); setMsg("email-msg", "added", true); e.target.reset(); loadInbox(); }
   catch (err) { setMsg("email-msg", err.message, false); markInvalid(e.target, err.message); }
@@ -1696,14 +1938,27 @@ function _autoHeaderFilters(cols) {
   }
   return cols;
 }
-function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited) {
+function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited, exportCols) {
+  // Import/export #3: exportCols (when given) drives a *re-importable* CSV
+  // export with snake_case headers, not just the visible Tabulator columns.
+  // Each entry is { header, key, fmt? }; fmt(row) lets you compute e.g. a
+  // comma-joined player USTA list for pairing-avoidance groups.
   const tableEl = document.getElementById(tableId);
   const panelId = tableEl.closest(".panel")?.id;
   const mount = document.createElement("div"); mount.className = "grid-mount";
   tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
   const csv = document.createElement("button");
   csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
-  csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
+  csv.addEventListener("click", () => {
+    if (exportCols && exportCols.length) {
+      const headers = exportCols.map((c) => c.header);
+      const rows = grid.getData("active").map((r) =>
+        exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
+      _csvDownload([headers, ...rows], exportName);
+    } else {
+      grid.download("csv", exportName + ".csv");
+    }
+  });
   mount.parentElement.insertBefore(csv, mount);
   const cols = _autoHeaderFilters(columns.slice());
   cols.push({
@@ -1800,14 +2055,26 @@ const lateGrid = makeListGrid("late-table", [
       }) });
       setMsg("late-msg", "saved", true); loadLate();
     } catch (err) { setMsg("late-msg", err.message, false); try { cell.restoreOldValue(); } catch (_) {} loadLate(); }
-  });
+  },
+  // Import/export #3: full importable column set with snake_case headers
+  // matching importer.TYPES["late_entries"]["cols"] aliases.
+  [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "age_division", key: "age_division" },
+    { header: "events", key: "events" },
+    { header: "request_date", key: "request_date" },
+    { header: "request_time", key: "request_time" },
+    { header: "source_email_id", key: "source_email_id" },
+  ]);
 async function loadLate() {
   if (!active) return;
   lateGrid.setData(await api(`/tournaments/${active.id}/late-entries`));
 }
 function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
 onSubmit(lateForm, async (e) => {
-  e.preventDefault(); if (!active) return;
+  if (!active) return;
   const b = expandPlayerRef(formObj(lateForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
@@ -1837,14 +2104,24 @@ const wdGrid = makeListGrid("withdrawal-table", [
       }) });
       setMsg("withdrawal-msg", "saved", true); loadWithdrawals();
     } catch (e) { setMsg("withdrawal-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadWithdrawals(); }
-  });
+  },
+  // Import/export #3: full importable column set.
+  [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "events", key: "events" },
+    { header: "reason", key: "reason" },
+    { header: "notes", key: "notes" },
+    { header: "source_email_id", key: "source_email_id" },
+  ]);
 async function loadWithdrawals() {
   if (!active) return;
   wdGrid.setData(await api(`/tournaments/${active.id}/withdrawals`));
 }
 function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
 onSubmit(wdForm, async (e) => {
-  e.preventDefault(); if (!active) return;
+  if (!active) return;
   const b = expandPlayerRef(formObj(wdForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
@@ -1865,7 +2142,18 @@ function wirePlayerList(cfg) {
   tableEl.remove();
   const csv = document.createElement("button");
   csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
-  csv.addEventListener("click", () => table.download("csv", cfg.exportName + ".csv"));
+  // Import/export #3: same exportCols pattern as wireEntity — CSV includes
+  // every field the matching importer can read back, not just visible cols.
+  csv.addEventListener("click", () => {
+    if (cfg.exportCols && cfg.exportCols.length) {
+      const headers = cfg.exportCols.map((c) => c.header);
+      const rows = table.getData("active").map((r) =>
+        cfg.exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
+      _csvDownload([headers, ...rows], cfg.exportName);
+    } else {
+      table.download("csv", cfg.exportName + ".csv");
+    }
+  });
   mount.parentElement.insertBefore(csv, mount);
 
   const columns = cfg.columns.slice();
@@ -1933,6 +2221,14 @@ const schedList = wirePlayerList({
     { title: "Avoid day", field: "avoid_day", editor: "input", cssClass: "editable-cell" },
     { title: "Avoid time", field: "avoid_time_range", editor: "input", cssClass: "editable-cell" },
   ],
+  exportCols: [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "avoid_day", key: "avoid_day" },
+    { header: "avoid_time_range", key: "avoid_time_range" },
+    { header: "source_email_id", key: "source_email_id" },
+  ],
 });
 const divflexList = wirePlayerList({
   formId: "divflex-form", msgId: "divflex-msg", tableId: "divflex-table",
@@ -1944,6 +2240,14 @@ const divflexList = wirePlayerList({
     { title: "USTA #", field: "usta_number" },
     { title: "Home", field: "home_division", editor: "input", cssClass: "editable-cell" },
     { title: "Willing", field: "willing_divisions", editor: "input", cssClass: "editable-cell" },
+  ],
+  exportCols: [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "home_division", key: "home_division" },
+    { header: "willing_divisions", key: "willing_divisions" },
+    { header: "source_email_id", key: "source_email_id" },
   ],
 });
 
@@ -1995,12 +2299,25 @@ const photelList = wirePlayerList({
         autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true,
       }) },
   ],
+  exportCols: [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" },
+    { header: "last_name", key: "last_name" },
+    { header: "hotel_name", key: "hotel_name" },
+    { header: "lodging_plan", key: "lodging_plan" },
+    { header: "source_email_id", key: "source_email_id" },
+  ],
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
 // Confidential per-hotel roster: summary pivot + initials-only detail; opens
 // in a new window with a print-ready stylesheet and auto-triggers Print so
 // the TD can hand it to ops/CVB/etc. without exposing full player names.
+//
+// Note on injection: every interpolated value goes through esc() (which
+// escapes &<>), so a player/hotel name containing `</style>` becomes
+// `&lt;/style&gt;` and cannot break out of the <style> block. The popup is
+// also a fresh document with no shared origin state.
 async function openHotelConfidentialReport() {
   if (!active) { toast("Select a tournament first", false); return; }
   try {
@@ -2063,14 +2380,8 @@ document.getElementById("photel-report-btn").addEventListener("click", openHotel
 
 // --- T-shirts (Setup: cumulative cross-tournament list) ---
 let tshirtRows = [];
-// Canonical size codes smallest→largest, and code→label for display.
-const _SHIRT_CODES = ["YS", "YM", "YL", "AS", "AM", "AL", "AXL"];
-const _SHIRT_LABEL = {
-  YS: "Youth Small", YM: "Youth Medium", YL: "Youth Large",
-  AS: "Adult Small", AM: "Adult Medium", AL: "Adult Large", AXL: "Adult Extra Large",
-};
-const _SIZE_TOKEN = { s: "S", sm: "S", small: "S", m: "M", med: "M", medium: "M",
-  l: "L", lg: "L", large: "L", xl: "XL", xlarge: "XL", extralarge: "XL", xxl: "XL", xxxl: "XL" };
+// Shirt constants now imported from ./app/shirts.js (audit M14): single
+// source of truth, declared before any reference (no TDZ).
 // Map any stored size (full name OR legacy code like "YM") to a canonical code,
 // so mixed historical data aggregates into one line; unknowns return as-is.
 function shirtCode(v) {
@@ -2119,7 +2430,11 @@ const tshirtGrid = makeReadGrid("tshirt-table", [
 ], "tshirts", "No t-shirt sizes recorded yet.");
 function tshirtMatches(data) {
   const q = document.getElementById("tshirt-filter").value.trim().toLowerCase();
-  return !q || JSON.stringify(data).toLowerCase().includes(q);
+  if (!q) return true;
+  const hay = [data.first_name, data.last_name, data.usta_number,
+    data.age_division, data.tournament_name, data.t_shirt_size]
+    .filter(Boolean).join(" ").toLowerCase();
+  return hay.includes(q);
 }
 function renderTshirts() {
   renderTshirtSummary();
@@ -2198,9 +2513,14 @@ async function placeTshirtOrder() {
 async function cancelTshirtOrder() {
   if (!active) return;
   if (!(await confirmDialog("Cancel the t-shirt order (clear date + snapshot)? Inventory stays."))) return;
-  try { await api(`/tournaments/${active.id}/tshirt-order`, { method: "DELETE" }); await loadTshirtOrder();
-        setMsg("tshirt-order-msg", "order cancelled", true); }
-  catch (e) { setMsg("tshirt-order-msg", e.message, false); }
+  try {
+    await api(`/tournaments/${active.id}/tshirt-order`, { method: "DELETE" });
+    // Audit N21: clear the cached snapshot synchronously — otherwise a quick
+    // "Cancel" → "Place" sequence within the same RAF reads the stale order.
+    _tshirtOrderState = null;
+    await loadTshirtOrder();
+    setMsg("tshirt-order-msg", "order cancelled", true);
+  } catch (e) { setMsg("tshirt-order-msg", e.message, false); }
 }
 document.getElementById("tshirt-order-save").addEventListener("click", saveTshirtInventory);
 document.getElementById("tshirt-order-place").addEventListener("click", placeTshirtOrder);
@@ -2246,7 +2566,7 @@ async function loadPairing() {
   pairingGrid.setData(await api(`/tournaments/${active.id}/pairing-avoidances`));
 }
 onSubmit(pairingForm, async (e) => {
-  e.preventDefault(); if (!active) return;
+  if (!active) return;
   const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => {
     const p = playersById[r.querySelector(".pm-player").value];
     return p ? { usta_number: p.usta_number, first_name: p.first_name || null, last_name: p.last_name || null } : null;
@@ -2318,7 +2638,7 @@ async function loadDoubles() {
   doublesPairGrid.setData(data.pairs);
 }
 onSubmit(doublesForm, async (e) => {
-  e.preventDefault(); if (!active) return;
+  if (!active) return;
   const me = playersById[doublesForm.player_ref.value];
   if (!me) { setMsg("doubles-msg", "select a player", false); return; }
   const partner = doublesForm.partner_ref.value ? playersById[doublesForm.partner_ref.value] : null;
@@ -2404,10 +2724,7 @@ async function loadReports() {
 function _reportColumns(t) {
   return _datesInRange(t.play_start_date, t.play_end_date).map((d) => ({ date: d, head: _dowLong(d) }));
 }
-function _dowLong(iso) { return new Date(iso + "T00:00:00").toLocaleDateString("en-US", { weekday: "long" }); }
-function _fmtMDY(iso) {
-  return iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }) : "";
-}
+// _dowLong / _fmtMDY now imported from ./app/util.js (A47).
 // Build the staffing-plan rows (header always; data rows when includeData).
 function _reportMatrix(includeData) {
   const cols = _reportColumns(reportData.tournament);
@@ -2443,26 +2760,29 @@ async function reportTemplateExport() {
 }
 
 // =================== Setup entity configs ===================
-const workOnBtn = document.getElementById("work-on-btn");
-workOnBtn.addEventListener("click", () => {
-  if (lastSelectedTournamentId) {
-    setActive(lastSelectedTournamentId);
-    document.querySelector('.tab[data-target="panel-t-sites"]').click();
-  }
-});
+// Audit M33: removed the form-detail "Work on this →" button — the per-row
+// rowAction button (below) is more discoverable and does the same thing.
 
 const tournamentsCrud = wireEntity({
   path: "/tournaments", singular: "tournament", panelId: "panel-tournaments", formId: "tournament-form", msgId: "tournament-msg",
   columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } },
     { key: "type", edit: { editor: "list", params: { values: ["junior", "adult"] } } }],
+  exportCols: [
+    { header: "name", key: "name" },
+    { header: "type", key: "type" },
+    { header: "play_start_date", key: "play_start_date" },
+    { header: "play_end_date", key: "play_end_date" },
+    { header: "registration_deadline", key: "registration_deadline" },
+    { header: "late_entry_deadline", key: "late_entry_deadline" },
+  ],
   onLoad: (rows) => {
     for (const k in tournamentsById) delete tournamentsById[k];
     rows.forEach((t) => (tournamentsById[t.id] = t));
     fillActiveSelect(rows);
     if (active && tournamentsById[active.id]) { active = tournamentsById[active.id]; updateActiveUI(); }
   },
-  onSelect: (t) => { lastSelectedTournamentId = t.id; workOnBtn.hidden = false; },
-  onNew: () => { lastSelectedTournamentId = null; workOnBtn.hidden = true; },
+  onSelect: (t) => { lastSelectedTournamentId = t.id; },
+  onNew: () => { lastSelectedTournamentId = null; },
   // "Work on →" right on the row: jump straight into the workspace for that tournament.
   rowAction: (t) => {
     const b = document.createElement("button");
@@ -2482,6 +2802,12 @@ const sitesCrud = wireEntity({
   path: "/sites", singular: "site", panelId: "panel-sites", formId: "site-form", msgId: "site-msg",
   columns: [{ key: "id" }, { key: "code", edit: { editor: "input" } },
     { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
+  exportCols: [
+    { header: "code", key: "code" }, { header: "name", key: "name" },
+    { header: "street", key: "street" }, { header: "city", key: "city" },
+    { header: "state", key: "state" }, { header: "zip", key: "zip" },
+    { header: "lat", key: "lat" }, { header: "lng", key: "lng" },
+  ],
   onLoad: (rows) => { for (const k in sitesById) delete sitesById[k]; rows.forEach((s) => (sitesById[s.id] = s)); refreshAllSelects(); if (active) renderTSites(); },
 });
 let certOfficialId = null;
@@ -2519,6 +2845,14 @@ document.getElementById("cert-add-btn").addEventListener("click", async () => {
 const officialsCrud = wireEntity({
   path: "/officials", singular: "official", panelId: "panel-officials", formId: "official-form", msgId: "official-msg",
   columns: [{ key: "id" }, { key: "name", fmt: officialLabel }, { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", ") }],
+  exportCols: [
+    { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
+    { header: "street", key: "street" }, { header: "city", key: "city" },
+    { header: "state", key: "state" }, { header: "zip", key: "zip" },
+    { header: "phone", key: "phone" }, { header: "email", key: "email" },
+    { header: "dietary_restrictions", key: "dietary_restrictions" },
+    { header: "lat", key: "lat" }, { header: "lng", key: "lng" },
+  ],
   onLoad: (rows) => { for (const k in officialsById) delete officialsById[k]; rows.forEach((o) => (officialsById[o.id] = o)); refreshAllSelects(); },
   onSelect: (o) => {
     loadCerts(o.id);
@@ -2551,12 +2885,19 @@ async function loadPlayerHistory(id) {
 
 const playersCrud = wireEntity({
   path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
+  optimisticConcurrency: true,  // audit M19/M8: send X-If-Updated-At on PUT
   columns: [
     { key: "id" },
     { key: "usta_number", edit: { editor: "input" } },
     { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") },
     { key: "gender", fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "—",
       edit: { editor: "list", params: { values: [{ label: "Male", value: "male" }, { label: "Female", value: "female" }] } } },
+  ],
+  exportCols: [
+    { header: "usta_number", key: "usta_number" },
+    { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
+    { header: "gender", key: "gender" }, { header: "birthdate", key: "birthdate" },
+    { header: "city", key: "city" }, { header: "state", key: "state" },
   ],
   onLoad: (rows) => { for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects(); },
   onSelect: (p) => loadPlayerHistory(p.id),
@@ -2568,11 +2909,22 @@ const ratesCrud = wireEntity({
     { key: "cert_type", edit: { editor: "list", params: { values: ["roving_official", "chair_umpire", "tournament_referee", "deputy_referee", "referee_in_training"] } } },
     { key: "rate_per_day", hozAlign: "right", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2), edit: { editor: "number", params: { min: 0, step: 0.01 } } },
     { key: "effective_from", edit: { editor: "date" } }],
+  exportCols: [
+    { header: "cert_type", key: "cert_type" },
+    { header: "rate_per_day", key: "rate_per_day" },
+    { header: "effective_from", key: "effective_from" },
+  ],
   transform: (o) => { o.rate_per_day = Number(o.rate_per_day); if (o.effective_from == null) delete o.effective_from; return o; },
 });
 const hotelsCrud = wireEntity({
   path: "/hotels", singular: "hotel", panelId: "panel-hotels", formId: "hotel-form", msgId: "hotel-msg",
   columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
+  exportCols: [
+    { header: "name", key: "name" }, { header: "website", key: "website" },
+    { header: "street", key: "street" }, { header: "city", key: "city" },
+    { header: "state", key: "state" }, { header: "zip", key: "zip" },
+    { header: "phone", key: "phone" },
+  ],
   onLoad: (rows) => { for (const k in hotelsById) delete hotelsById[k]; rows.forEach((h) => (hotelsById[h.id] = h)); refreshAllSelects(); },
 });
 const distancesCrud = wireEntity({
@@ -2582,6 +2934,16 @@ const distancesCrud = wireEntity({
     { key: "official", fmt: (d) => (officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : d.official_id) },
     { key: "site", fmt: (d) => (sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : d.site_id) },
     { key: "one_way_miles", hozAlign: "right", width: 110, edit: { editor: "number", params: { min: 0, step: 0.1 } } },
+  ],
+  // Distances export resolves the FK ids to human labels so the spreadsheet is
+  // usable on its own (re-import would need a matching tool to map back).
+  exportCols: [
+    { header: "official_id", key: "official_id" },
+    { header: "official", fmt: (d) => officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : "" },
+    { header: "site_id", key: "site_id" },
+    { header: "site", fmt: (d) => sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : "" },
+    { header: "one_way_miles", key: "one_way_miles" },
+    { header: "source", key: "source" },
   ],
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });
@@ -2601,6 +2963,11 @@ const divisionsCrud = wireEntity({
     { key: "sort_order", hozAlign: "right", width: 80,
       edit: { editor: "number", params: { min: 0, step: 10 } } },
   ],
+  exportCols: [
+    { header: "code", key: "code" }, { header: "label", key: "label" },
+    { header: "tournament_type", key: "tournament_type" },
+    { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
+  ],
   transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
   onLoad: (rows) => { divisionsAll = rows.slice(); refreshDivisionLists(); },
 });
@@ -2619,20 +2986,17 @@ const eventsCrud = wireEntity({
     { key: "sort_order", hozAlign: "right", width: 80,
       edit: { editor: "number", params: { min: 0, step: 10 } } },
   ],
+  exportCols: [
+    { header: "name", key: "name" },
+    { header: "tournament_type", key: "tournament_type" },
+    { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
+  ],
   transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
   onLoad: (rows) => { eventsAll = rows.slice(); refreshDivisionLists(); },
 });
 
 // =================== Generic CSV export for list tables ===================
-function _csvDownload(matrix, filename) {
-  const csv = matrix
-    .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
-    .join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  const a = document.createElement("a");
-  a.href = url; a.download = filename + ".csv"; a.click();
-  URL.revokeObjectURL(url);
-}
+// _csvDownload now imported from ./app/util.js (audit A47).
 // Visible column headers (skipping the trailing actions/blank column).
 function _visibleHeaders(table) {
   const ths = [...table.querySelectorAll("thead th")];
@@ -2664,6 +3028,8 @@ for (const [id, name] of Object.entries(EXPORTABLE)) {
 // Bespoke per-page exports (data isn't a plain table scrape).
 document.getElementById("roster-csv").addEventListener("click", () => rosterGrid.download("csv", "roster.csv"));
 document.getElementById("roster-signin-csv").addEventListener("click", rosterSignInExport);
+// Import/export #5: wire the previously-orphan template helper.
+document.getElementById("roster-signin-template").addEventListener("click", rosterSignInTemplate);
 document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrderExport);
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);
 
@@ -2690,7 +3056,7 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
   form.parentNode.insertBefore(trigger, form);
   form.parentNode.insertBefore(modal, form);
   modal.append(close, heading, form);
-  const openM = () => { modal.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeM; if (typeof syncCombos === "function") requestAnimationFrame(syncCombos); };
+  const openM = () => { modal.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeM; scheduleComboSync(); };
   const closeM = () => {
     modal.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null;
     // If this open was a file-from-email flow, return to the Inbox so the user
@@ -2718,16 +3084,27 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
       const opening = dlg.classList.contains("detail-open");
       const wasOpen = m.oldValue && m.oldValue.split(/\s+/).includes("detail-open");
       if (opening && !wasOpen) {
-        dlg._prevFocus = document.activeElement;
+        // Audit P44: snapshot both the DOM node and the row id (if any) — when
+        // the dialog closes and the grid has been re-rendered, the original
+        // node is gone; falling back to a selector by row id lets focus land
+        // on the same logical record instead of body.
+        const a = document.activeElement;
+        const row = a && a.closest && a.closest(".tabulator-row[data-id]");
+        dlg._prevFocus = a;
+        dlg._prevRowId = row ? row.getAttribute("data-id") : null;
         requestAnimationFrame(() => {
-          // Prefer the first form field over the close button (querySelector
-          // picks by DOM order, so a multi-query gets us field-first).
           const f = dlg.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])')
             || dlg.querySelector('button:not([disabled])');
           if (f) try { f.focus(); } catch (_) {}
         });
-      } else if (!opening && wasOpen && dlg._prevFocus && typeof dlg._prevFocus.focus === "function") {
-        try { dlg._prevFocus.focus(); } catch (_) {}
+      } else if (!opening && wasOpen) {
+        const prev = dlg._prevFocus;
+        if (prev && prev.isConnected && typeof prev.focus === "function") {
+          try { prev.focus(); } catch (_) {}
+        } else if (dlg._prevRowId) {
+          const restored = document.querySelector(`.tabulator-row[data-id="${dlg._prevRowId}"]`);
+          if (restored) try { restored.focus(); } catch (_) {}
+        }
       }
     }
   });
@@ -2761,12 +3138,38 @@ let adminLoaded = false;
 async function adminInit() {
   if (adminLoaded) return;
   adminLoaded = true;
+  // Audit M28/M29: populate every <select data-enum="…"> from /api/enums so
+  // there's one source of truth for cert / gender / status / shirt options.
+  // Audit F23: also seed the JS-side cert label map from the same payload so
+  // certLabel() never drifts from what the dropdowns show.
+  try {
+    const enums = await api("/enums");
+    _populateEnumSelects(enums);
+    if (Array.isArray(enums.cert_type)) {
+      CERTS = enums.cert_type.map((c) => [c.value, c.label]);
+      CERT_LABEL = Object.fromEntries(CERTS);
+    }
+  } catch (_) {}
   for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, divisionsCrud, eventsCrud, tournamentsCrud]) {
     try { await c.refresh(); } catch (e) { /* health pill shows DB issues */ }
   }
   const saved = localStorage.getItem("activeTid");
   if (saved && tournamentsById[saved]) setActive(saved);
   else updateActiveUI();
+}
+function _populateEnumSelects(enums) {
+  for (const sel of document.querySelectorAll("select[data-enum]")) {
+    const key = sel.getAttribute("data-enum");
+    const values = enums[key] || [];
+    const frag = document.createDocumentFragment();
+    for (const v of values) {
+      const o = document.createElement("option");
+      if (typeof v === "string") { o.value = v; o.textContent = v; }
+      else { o.value = v.value; o.textContent = v.label; }
+      frag.appendChild(o);
+    }
+    sel.replaceChildren(frag);
+  }
 }
 
 let meTournaments = [];
@@ -2803,6 +3206,17 @@ async function loadMyAvailability() {
   }
 }
 
+// Audit F3: one-shot listener so a stray flood of expired-session 401s
+// doesn't trigger a toast storm.
+let _authExpiredFired = false;
+document.addEventListener("auth-expired", () => {
+  if (_authExpiredFired) return;
+  _authExpiredFired = true;
+  toast("Session expired — please sign in again", false);
+  applyAuth(null);
+  setTimeout(() => { _authExpiredFired = false; }, 1000);
+});
+
 function applyAuth(who) {
   const logged = !!who;
   const isAdmin = logged && who.role === "admin";
@@ -2819,7 +3233,6 @@ function applyAuth(who) {
 }
 
 onSubmit(document.getElementById("login-form"), async (e) => {
-  e.preventDefault();
   const f = e.target;
   try {
     const who = await api("/auth/login", { method: "POST", body: JSON.stringify({ username: f.username.value, password: f.password.value }) });
@@ -2832,10 +3245,20 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   adminLoaded = false;
   applyAuth(null);
 });
+// Audit F27: explicit allow-list matches OfficialCreate so a future template
+// change can't silently introduce an extra input that breaks the PUT with a
+// confusing 422.
+const _ME_PROFILE_FIELDS = [
+  "first_name", "last_name", "street", "city", "state", "zip",
+  "phone", "email", "dietary_restrictions", "lat", "lng",
+];
 onSubmit(document.getElementById("me-form"), async (e) => {
-  e.preventDefault();
   const b = {};
-  for (const el of e.target.elements) if (el.name) b[el.name] = el.value === "" ? null : el.value;
+  for (const el of e.target.elements) {
+    if (!el.name) continue;
+    if (!_ME_PROFILE_FIELDS.includes(el.name)) continue;  // ignore stray inputs
+    b[el.name] = el.value === "" ? null : el.value;
+  }
   try { await api("/me/profile", { method: "PUT", body: JSON.stringify(b) }); setMsg("me-msg", "saved", true); }
   catch (err) { setMsg("me-msg", err.message, false); }
 });

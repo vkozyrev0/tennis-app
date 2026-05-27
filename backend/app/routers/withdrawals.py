@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..models import WithdrawalCreate, WithdrawalOut, WithdrawalUpdate
+from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["withdrawals"])
 
@@ -34,23 +35,9 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
 
-        cur.execute("SELECT id FROM player WHERE usta_number = %s", (body.usta_number,))
-        p = cur.fetchone()
-        if p:
-            pid = p["id"]
-            if body.first_name or body.last_name:
-                cur.execute(
-                    "UPDATE player SET first_name = COALESCE(%s, first_name), "
-                    "last_name = COALESCE(%s, last_name) WHERE id = %s",
-                    (body.first_name, body.last_name, pid),
-                )
-        else:
-            # gender is required at the DB level (migration 0026); see late_entries.py.
-            cur.execute(
-                "INSERT INTO player (usta_number, first_name, last_name, gender) VALUES (%s,%s,%s,'female') RETURNING id",
-                (body.usta_number, body.first_name, body.last_name),
-            )
-            pid = cur.fetchone()["id"]
+        # Audit M6: consolidated on the shared helper (refuses unknown players
+        # without a gender; updates name on existing ones).
+        pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name)
 
         # Was the player an alternate? (read before we flip the status)
         cur.execute(
@@ -86,11 +73,8 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
         )
         new_id = cur.fetchone()["id"]
 
-        if body.source_email_id:
-            cur.execute(
-                "UPDATE email_message SET status = 'filed', classification = 'withdrawal' WHERE id = %s",
-                (body.source_email_id,),
-            )
+        # Audit F7: use the shared helper instead of an inline UPDATE.
+        mark_email_filed(cur, body.source_email_id, "withdrawal")
 
         cur.execute(_SELECT + " WHERE w.id = %s", (new_id,))
         return cur.fetchone()
