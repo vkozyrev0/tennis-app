@@ -483,12 +483,18 @@ kbd {
    - .h3-subtitle: the small "(context)" span trailing a section heading.
      Was repeated as inline style four times in HTML (audit design-crit #6).
    - .seg-toggle / .seg-btn: segmented control (Roster pick-vs-new). */
-.h3-subtitle { font-size: 0.78rem; font-weight: normal; color: var(--muted); margin-left: 0.4rem; }
+/* design-crit pass 2 #6: rely on the literal HTML whitespace between sibling
+   spans for the gap — adding margin-left on top stacked an extra 0.4rem. */
+.h3-subtitle { font-size: 0.78rem; font-weight: normal; color: var(--muted); }
 
 .seg-toggle {
+  /* design-crit pass 2 #1: was `background: var(--bg)` which is lighter than
+     `--card` in light theme but DARKER than card in dark theme, making the
+     toggle read as a hole. `--zebra` is the same-direction tint vs card in
+     both themes (always slightly off the card surface). */
   display: inline-flex; gap: 0; margin-bottom: 0.6rem;
   border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
-  background: var(--bg);
+  background: var(--zebra);
 }
 .seg-btn {
   appearance: none; border: 0; padding: 0.35rem 0.85rem;
@@ -500,22 +506,25 @@ kbd {
 .seg-btn.seg-active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
-/* Floating "Confidential report" button on the Player hotels page. Previously
-   `style="float:right"` inline; moved here (audit design-crit #6). */
-.h3-action { float: right; }
+/* Inline-end action button next to an <h3> heading. design-crit pass 2 #3:
+   was `float: right`, which made the heading mixed-content + fragile on
+   wrap. Use flex on the parent <h3>, push the action with margin-inline-start.
+   The .h3-flex modifier opts the heading into flex layout. */
+.h3-flex { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem; }
+.h3-action { margin-inline-start: auto; }
 
 /* Misc layout helpers replacing inline styles. */
 .filter--narrow { max-width: 320px; }
 .mb-half { margin-bottom: 0.5rem; }
 .section-spacer { margin-top: 1.25rem; }
 .label--full { flex: 1 1 100% !important; }
-.h3--flex { margin: 0; flex: 1; }
 form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 0.82rem; padding: 0.28rem 0.4rem; border: 1px solid var(--border); border-radius: 5px; background: var(--field-bg); color: var(--ink); }
 
 /* Narrow viewport: collapse the header's auxiliary actions onto a second row
    so the title + context-bar don't crash into each other (design-crit #5).
-   The context-bar already wraps via flex; constrain its select. */
-@media (max-width: 720px) {
+   design-crit pass 2 #5: bumped from 720→768px so the standard tablet
+   portrait width hits the collapse rule instead of barely fitting cramped. */
+@media (max-width: 768px) {
   header h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
   #user-box { margin-left: auto; }
   #context-bar { width: 100%; margin-top: 0.35rem; }
@@ -650,9 +659,15 @@ a.export-btn { text-decoration: none; }
   background: var(--warn-ink, #8a6d3b); color: var(--warn-bg, #fff8e6);
   font: inherit; font-size: 0.78rem; font-weight: 600;
   padding: 0.32rem 0.7rem; border-radius: 5px; cursor: pointer;
-  margin-left: auto;
+  /* design-crit pass 2 #8: margin-inline-start so the button pushes to the
+     trailing edge ONLY while it shares the line with the message. After
+     wrap it sits left-aligned with the message above it. */
+  margin-inline-start: auto;
 }
 .needs-active-note button:hover { filter: brightness(1.1); }
+/* If the message line is so long that flex wraps the button to row 2,
+   reset the margin so it doesn't hug the right edge below left-aligned text. */
+@media (max-width: 480px) { .needs-active-note button { margin-inline-start: 0; } }
 /* Design-crit #3: the app uses two form patterns deliberately.
  *
  *   1. Setup CRUDs (tournaments, sites, officials, players, rates, hotels,

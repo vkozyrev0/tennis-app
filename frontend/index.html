@@ -13,7 +13,7 @@
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
       <button type="button" id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
-      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd>?</kbd> Shortcuts</button>
+      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd>?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
@@ -48,9 +48,10 @@
       <button class="tab" data-target="panel-divisions">Divisions</button>
       <button class="tab" data-target="panel-events">Events</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
-    </div>
-    <div class="menu-group" data-group="data">
-      <span class="menu-label">Data</span>
+      <!-- design-crit pass 2 #2: folded the orphan one-tab "Data" group into
+           Setup. Bulk import is a Setup workflow conceptually (you stage
+           records and merge them into the catalogs); keeping it as its own
+           group made it look stranded next to a 10-tab Setup. -->
       <button class="tab" data-target="panel-import">Import</button>
     </div>
     <div class="menu-group tgroup" data-group="tournament">
@@ -731,7 +732,7 @@
     <section class="panel tpanel" id="panel-t-photels">
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
       <div class="t-content card">
-        <h3>Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
+        <h3 class="h3-flex">Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
           <button type="button" id="photel-report-btn" class="export-btn no-print h3-action" title="Open a confidential hotel report (summary + initials-only detail) ready to print">⎙ Confidential report</button>
         </h3>
         <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
@@ -783,7 +784,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to view its reports.</div>
       <div class="t-content card" id="report-card">
         <div class="report-toolbar no-print">
-          <h3 class="h3--flex"><span class="t-name"></span> — Staffing Plan</h3>
+          <h3 class="h3-flex"><span class="t-name"></span> — Staffing Plan</h3>
           <button type="button" id="report-print">Print</button>
           <button type="button" id="report-csv">⬇ CSV</button>
         </div>

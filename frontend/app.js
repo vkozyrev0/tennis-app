@@ -698,7 +698,15 @@ function updateActiveUI() {
       btn.addEventListener("click", () => {
         const sel = document.getElementById("active-tournament");
         sel.focus();
-        try { sel.showPicker?.(); } catch (_) {}
+        // design-crit pass 2 #7: showPicker() works in Chrome/Edge but not
+        // Safari or older browsers — surface a hint so the user knows the
+        // picker is now the focused element they should expand.
+        if (typeof sel.showPicker === "function") {
+          try { sel.showPicker(); }
+          catch (_) { toast("Pick a tournament from the bar above", true); }
+        } else {
+          toast("Pick a tournament from the bar above", true);
+        }
       });
       note.appendChild(btn);
     }
