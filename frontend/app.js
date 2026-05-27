@@ -607,6 +607,30 @@ _menuEl.addEventListener("keydown", (e) => {
   const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
   next.focus();
 });
+// Design-crit pass 7 #1: wire ARIA tab semantics on the main nav at init.
+// Each .menu-group is a tablist; each .tab is a tab pointing at its .panel
+// via aria-controls; each .panel is a tabpanel. This lets a screen reader
+// announce "tab 1 of 11, Tournaments" instead of "button, Tournaments".
+document.querySelectorAll(".menu-group").forEach((g) => {
+  const label = g.querySelector(".menu-label");
+  g.setAttribute("role", "tablist");
+  if (label) g.setAttribute("aria-label", label.textContent.trim());
+});
+document.querySelectorAll(".tab").forEach((t) => {
+  const panelId = t.dataset.target;
+  if (!panelId) return;
+  if (!t.id) t.id = "tab-" + panelId;
+  t.setAttribute("role", "tab");
+  t.setAttribute("aria-controls", panelId);
+  t.setAttribute("aria-selected", t.classList.contains("active") ? "true" : "false");
+  const panel = document.getElementById(panelId);
+  if (panel) {
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", t.id);
+    if (!panel.hasAttribute("tabindex")) panel.setAttribute("tabindex", "-1");
+  }
+});
+
 _menuEl.addEventListener("click", (e) => {
   const tab = e.target.closest(".tab");
   if (!tab) return;
@@ -649,6 +673,15 @@ const activeSelect = document.getElementById("active-tournament");
 
 function fillActiveSelect(rows) {
   const cur = activeSelect.value;
+  // Design-crit pass 7 #3: signal the first-time empty state on the
+  // tournament selector itself, so a brand-new admin isn't stuck staring
+  // at an empty dropdown with no clue where to start.
+  if (!rows || rows.length === 0) {
+    activeSelect.innerHTML = '<option value="">— no tournaments yet — create one in Setup → Tournaments —</option>';
+    activeSelect.disabled = true;
+    return;
+  }
+  activeSelect.disabled = false;
   activeSelect.innerHTML = '<option value="">— select a tournament —</option>';
   for (const t of rows) {
     const o = document.createElement("option");
@@ -3149,6 +3182,33 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
 // Promote every detail-pane to a proper ARIA dialog (role + aria-modal +
 // aria-labelledby) and watch the `detail-open` class to focus the first input
 // on open and restore focus on close. One pass at load — no per-site changes.
+// Design-crit pass 7 #2: focus-trap by marking the rest of the document
+// `inert` while any .detail-open dialog is visible. `inert` removes focus
+// + click + screen-reader access from the subtree, so Tab can't escape
+// the modal and AT users hear only the dialog. Background elements outside
+// the .detail-pane / .detail-backdrop / .modal stack.
+function _setBackgroundInert(on) {
+  for (const el of [document.querySelector("header"),
+                    document.querySelector("nav.menu-l1"),
+                    document.querySelector("nav.menu"),
+                    document.querySelector("main")]) {
+    if (!el) continue;
+    if (on) el.setAttribute("inert", "");
+    else el.removeAttribute("inert");
+  }
+}
+function _anyDialogOpen() {
+  return !!document.querySelector(".detail-pane.detail-open")
+    || !!document.querySelector(".modal:not([hidden])");
+}
+function _refreshBackgroundInert() { _setBackgroundInert(_anyDialogOpen()); }
+
+// Confirm modal toggles via `hidden`, not class — observe that too.
+new MutationObserver(_refreshBackgroundInert).observe(
+  document.getElementById("confirm-modal"),
+  { attributes: true, attributeFilter: ["hidden"] },
+);
+
 (function _enhanceDetailDialogs() {
   const obs = new MutationObserver((muts) => {
     for (const m of muts) {
@@ -3156,6 +3216,7 @@ for (const [id, label] of Object.entries(FORM_MODALS)) {
       const dlg = m.target;
       const opening = dlg.classList.contains("detail-open");
       const wasOpen = m.oldValue && m.oldValue.split(/\s+/).includes("detail-open");
+      _refreshBackgroundInert();
       if (opening && !wasOpen) {
         // Audit P44: snapshot both the DOM node and the row id (if any) — when
         // the dialog closes and the grid has been re-rendered, the original
