@@ -20,6 +20,7 @@ master data) and a per-tournament workspace (scoped operations).
 | [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
 | [roadmap.md](roadmap.md) | What's shipped, what's open. |
 | [changelog.md](changelog.md) | Chronological log of shipped work. |
+| [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 
 ## Quickstart
