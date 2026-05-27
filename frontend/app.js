@@ -527,6 +527,7 @@ _menuEl.addEventListener("click", (e) => {
     "panel-t-assignments": () => loadAssignments(),
     "panel-t-roomblocks": () => loadRoomBlocks(),
     "panel-t-availability": () => loadAvailability(),
+    "panel-t-tshirt-order": () => loadTshirtOrder(),
     "panel-t-inbox": () => loadInbox(),
     "panel-t-late": () => loadLate(),
     "panel-t-withdrawals": () => loadWithdrawals(),
@@ -605,7 +606,7 @@ function updateActiveUI() {
   refreshDivisionLists();  // datalists track the active tournament's type
   if (active) {
     info.textContent = `${active.type} · ${active.play_start_date} → ${active.play_end_date}`;
-    loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); loadPairing(); loadDoubles(); photelList.load(); loadReports();
+    loadTSites(); loadRoster(); loadAssignments(); loadRoomBlocks(); loadAvailability(); loadInbox(); loadLate(); loadWithdrawals(); schedList.load(); divflexList.load(); loadPairing(); loadDoubles(); photelList.load(); loadReports(); loadTshirtOrder();
   } else {
     info.textContent = "";
   }
@@ -2111,6 +2112,83 @@ function renderTshirts() {
 }
 async function loadTshirts() { tshirtRows = await api("/tshirts"); renderTshirts(); }
 document.getElementById("tshirt-filter").addEventListener("input", () => tshirtGrid.setFilter(tshirtMatches));
+
+// --- T-shirt inventory + order tracking (per-tournament) ---
+// One row per canonical size (smallest to largest). Each row's On-hand cell is
+// an inline number input; Save inventory PUTs all 7 in one call. "Place order"
+// freezes today's requested counts as a snapshot so later roster drift is
+// visible in the Δ column.
+let _tshirtOrderState = null;
+function _renderTshirtOrder(data) {
+  _tshirtOrderState = data;
+  const tbody = document.querySelector("#tshirt-order-table tbody");
+  const hasSnapshot = !!data.ordered_at;
+  // Toggle the snapshot columns on/off (CSS class show/hide).
+  document.querySelectorAll("#tshirt-order-table .order-snapshot")
+    .forEach((el) => { el.style.display = hasSnapshot ? "" : "none"; });
+  tbody.innerHTML = data.rows.map((r) => {
+    const snap = r.snapshot;
+    const delta = (snap != null) ? (r.requested - snap) : null;
+    const dCls = (delta == null || delta === 0) ? "" : (delta > 0 ? "warn" : "muted");
+    const dStr = (delta == null) ? "—" : (delta > 0 ? `+${delta}` : `${delta}`);
+    return `<tr>
+      <td><strong>${esc(r.size)}</strong> <span class="muted">${esc(r.label)}</span></td>
+      <td class="num">${r.requested}</td>
+      <td class="num"><input type="number" min="0" step="1" data-size="${esc(r.size)}" value="${r.on_hand}" style="width:5rem;text-align:right" /></td>
+      <td class="num">${r.to_order}</td>
+      <td class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}">${snap == null ? "—" : snap}</td>
+      <td class="num order-snapshot ${dCls}" style="${hasSnapshot ? "" : "display:none"}">${dStr}</td>
+    </tr>`;
+  }).join("");
+  const t = data.totals;
+  document.getElementById("tshirt-order-totals").innerHTML =
+    `<th>Totals</th><th class="num">${t.requested}</th><th class="num">${t.on_hand}</th><th class="num">${t.to_order}</th>` +
+    `<th class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}">${t.snapshot == null ? "—" : t.snapshot}</th>` +
+    `<th class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}"></th>`;
+  const status = document.getElementById("tshirt-order-status");
+  if (data.ordered_at) {
+    status.innerHTML = `Order placed <strong>${esc(data.ordered_at)}</strong> — the Snapshot column shows what was requested at that moment.`;
+  } else {
+    status.innerHTML = `<em>No order placed yet.</em> Set inventory below, then click "Place order" to snapshot today's requested counts.`;
+  }
+  document.getElementById("tshirt-order-cancel").hidden = !data.ordered_at;
+  document.getElementById("tshirt-order-place").textContent = data.ordered_at
+    ? "Re-snapshot (replace order date)" : "Place order (snapshot today)";
+}
+async function loadTshirtOrder() {
+  if (!active) return;
+  try { _renderTshirtOrder(await api(`/tournaments/${active.id}/tshirt-order`)); }
+  catch (e) { setMsg("tshirt-order-msg", e.message, false); }
+}
+async function saveTshirtInventory() {
+  if (!active) return;
+  const inputs = document.querySelectorAll("#tshirt-order-table tbody input[data-size]");
+  const on_hand = {}; for (const i of inputs) on_hand[i.dataset.size] = Math.max(0, parseInt(i.value, 10) || 0);
+  try { _renderTshirtOrder(await api(`/tournaments/${active.id}/tshirt-inventory`, { method: "PUT", body: JSON.stringify({ on_hand }) }));
+        setMsg("tshirt-order-msg", "inventory saved", true); }
+  catch (e) { setMsg("tshirt-order-msg", e.message, false); }
+}
+async function placeTshirtOrder() {
+  if (!active) return;
+  const already = _tshirtOrderState && _tshirtOrderState.ordered_at;
+  const msg = already
+    ? `Re-snapshot the t-shirt order with today's requested counts? (replaces the existing snapshot from ${already})`
+    : "Place the t-shirt order? Today's requested counts will be saved as the order snapshot.";
+  if (!(await confirmDialog(msg, already ? "Re-snapshot" : "Place order"))) return;
+  try { _renderTshirtOrder(await api(`/tournaments/${active.id}/tshirt-order`, { method: "POST" }));
+        setMsg("tshirt-order-msg", "order snapshotted", true); }
+  catch (e) { setMsg("tshirt-order-msg", e.message, false); }
+}
+async function cancelTshirtOrder() {
+  if (!active) return;
+  if (!(await confirmDialog("Cancel the t-shirt order (clear date + snapshot)? Inventory stays."))) return;
+  try { await api(`/tournaments/${active.id}/tshirt-order`, { method: "DELETE" }); await loadTshirtOrder();
+        setMsg("tshirt-order-msg", "order cancelled", true); }
+  catch (e) { setMsg("tshirt-order-msg", e.message, false); }
+}
+document.getElementById("tshirt-order-save").addEventListener("click", saveTshirtInventory);
+document.getElementById("tshirt-order-place").addEventListener("click", placeTshirtOrder);
+document.getElementById("tshirt-order-cancel").addEventListener("click", cancelTshirtOrder);
 
 // --- Pairing avoidances (juniors; group of 2+ players) ---
 const pairingForm = document.getElementById("pairing-form");

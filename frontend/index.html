@@ -56,6 +56,7 @@
       <button class="tab needs-active" data-target="panel-t-sites">Sites</button>
       <button class="tab needs-active" data-target="panel-t-roster">Roster</button>
       <button class="tab needs-active" data-target="panel-t-availability">Availability</button>
+      <button class="tab needs-active" data-target="panel-t-tshirt-order">T-shirts</button>
     </div>
     <div class="menu-group tgroup" data-group="staffing">
       <span class="menu-label">Staffing</span>
@@ -413,6 +414,36 @@
         </div>
         <h4>All availability</h4>
         <table id="avail-table" class="list-table"><thead><tr><th>Official</th><th>Available dates</th><th>Hotel</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: T-shirt order tracking -->
+    <section class="panel tpanel" id="panel-t-tshirt-order">
+      <div class="needs-active-note">Select a tournament in the bar above to manage its t-shirt order.</div>
+      <div class="t-content card">
+        <h3>T-shirts — <span class="t-name"></span>
+          <span class="muted" style="font-size:0.78rem;font-weight:normal">(per-tournament inventory + order tracking)</span>
+        </h3>
+        <p class="muted">Edit the on-hand count for each size, then "Place order" to snapshot today's requested numbers. After that, withdrawals + late entries will shift the requested column; the snapshot column shows what you actually ordered.</p>
+        <div id="tshirt-order-status" class="muted" style="margin-bottom:0.5rem"></div>
+        <div class="actions-row" style="margin-bottom:0.5rem">
+          <button type="button" id="tshirt-order-save">Save inventory</button>
+          <button type="button" id="tshirt-order-place">Place order (snapshot today)</button>
+          <button type="button" id="tshirt-order-cancel" class="btn-link danger" hidden>Cancel order</button>
+          <span class="msg" id="tshirt-order-msg"></span>
+        </div>
+        <table id="tshirt-order-table" class="list-table">
+          <thead><tr>
+            <th>Size</th>
+            <th class="num">Requested</th>
+            <th class="num">On-hand</th>
+            <th class="num">To order</th>
+            <th class="num order-snapshot">Snapshot</th>
+            <th class="num order-snapshot">Δ vs snapshot</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot><tr id="tshirt-order-totals"></tr></tfoot>
+        </table>
       </div>
     </section>
 

@@ -332,6 +332,47 @@ def test_hotel_confidential_report():
     assert rep["totals"]["players"] == 2 and rep["totals"]["officials"] == 1
 
 
+def test_tshirt_order_lifecycle():
+    """T-shirt summary should report requested vs on_hand vs to_order per size,
+    then snapshot at order time so later roster changes can be compared."""
+    t = _tournament()
+    # Three selected players with t-shirt sizes (two YM + one AL).
+    for size in ("Youth Medium", "Youth Medium", "Adult Large"):
+        p = _player(first_name="A", last_name="P-" + uuid.uuid4().hex[:4])
+        _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+            "player_id": p["id"], "selection_status": "selected", "t_shirt_size": size}))
+    rep = client.get(f"/api/tournaments/{t['id']}/tshirt-order").json()
+    by = {r["size"]: r for r in rep["rows"]}
+    assert by["YM"]["requested"] == 2 and by["YM"]["on_hand"] == 0 and by["YM"]["to_order"] == 2
+    assert by["AL"]["requested"] == 1 and by["AL"]["to_order"] == 1
+    assert by["YS"]["requested"] == 0 and by["YS"]["to_order"] == 0
+    assert rep["ordered_at"] is None
+    assert rep["totals"]["requested"] == 3 and rep["totals"]["to_order"] == 3
+    # Set inventory: 1 YM on hand → to_order drops to 1
+    rep2 = client.put(f"/api/tournaments/{t['id']}/tshirt-inventory",
+                      json={"on_hand": {"YM": 1}}).json()
+    by2 = {r["size"]: r for r in rep2["rows"]}
+    assert by2["YM"]["on_hand"] == 1 and by2["YM"]["to_order"] == 1
+    # Place the order: ordered_at = today, snapshot frozen at current request
+    rep3 = client.post(f"/api/tournaments/{t['id']}/tshirt-order").json()
+    assert rep3["ordered_at"] is not None
+    by3 = {r["size"]: r for r in rep3["rows"]}
+    assert by3["YM"]["snapshot"] == 2 and by3["AL"]["snapshot"] == 1
+    # Add another YM player → live requested goes to 3, snapshot still 2
+    p = _player(first_name="Z", last_name="Z-" + uuid.uuid4().hex[:4])
+    _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+        "player_id": p["id"], "selection_status": "selected", "t_shirt_size": "Youth Medium"}))
+    rep4 = client.get(f"/api/tournaments/{t['id']}/tshirt-order").json()
+    by4 = {r["size"]: r for r in rep4["rows"]}
+    assert by4["YM"]["requested"] == 3 and by4["YM"]["snapshot"] == 2  # drift from order
+    # Cancel the order → snapshot + ordered_at cleared, inventory kept
+    assert client.delete(f"/api/tournaments/{t['id']}/tshirt-order").status_code == 204
+    rep5 = client.get(f"/api/tournaments/{t['id']}/tshirt-order").json()
+    assert rep5["ordered_at"] is None
+    assert all(r["snapshot"] is None for r in rep5["rows"])
+    assert {r["size"]: r["on_hand"] for r in rep5["rows"]}["YM"] == 1  # inventory survives
+
+
 def test_room_count_enforced():
     t = _tournament()
     h = _hotel()

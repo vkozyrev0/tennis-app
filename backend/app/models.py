@@ -446,6 +446,31 @@ class TShirtRow(BaseModel):
     t_shirt_size: Optional[str] = None
 
 
+# T-shirt order tracking — one row per tournament (see migration 0024). The
+# on_hand / snapshot dicts are size-code → count, sized in the canonical order
+# YS, YM, YL, AS, AM, AL, AXL on the way out.
+class TShirtOrderRow(BaseModel):
+    size: str
+    label: str
+    requested: int = 0      # live count from selected players right now
+    on_hand: int = 0        # current inventory the TD entered
+    to_order: int = 0       # max(0, requested - on_hand)
+    snapshot: Optional[int] = None  # what was needed when the order was placed
+
+
+class TShirtOrderOut(BaseModel):
+    tournament_id: int
+    ordered_at: Optional[date] = None
+    rows: list[TShirtOrderRow]
+    totals: dict  # { requested, on_hand, to_order, snapshot? }
+
+
+class TShirtInventoryUpdate(BaseModel):
+    # Sparse map: only the sizes the TD edited are present; missing sizes
+    # keep their current value.
+    on_hand: dict[str, int] = {}
+
+
 class SchedAvoidUpdate(BaseModel):
     avoid_day: Optional[str] = None
     avoid_time_range: Optional[str] = None
