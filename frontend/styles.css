@@ -490,12 +490,13 @@ kbd {
   border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border);
 }
 /* Compact icon buttons in grid action columns (Edit ✎, Delete ✕).
-   a11y #6: 44×44 minimum touch target (WCAG 2.5.5). Inner glyph stays small
-   so the row stays compact; padding/min-size expand the hit area. */
+   WCAG 2.5.8 (AA, target size minimum) = 24×24 px. We use 32×32 — comfortably
+   over the minimum without inflating row height. (Earlier 44×44 = 2.5.5 AAA,
+   which made every list row 56 px tall; we'd over-shot the AA target.) */
 .btn-icon {
   appearance: none; border: 0; background: transparent; cursor: pointer;
-  color: var(--accent); font-size: 1rem; line-height: 1;
-  min-width: 2.75rem; min-height: 2.75rem; border-radius: 4px; padding: 0.5rem;
+  color: var(--accent); font-size: 0.95rem; line-height: 1;
+  min-width: 2rem; min-height: 2rem; border-radius: 4px; padding: 0.25rem;
   display: inline-flex; align-items: center; justify-content: center;
   transition: background 0.12s;
 }

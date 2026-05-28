@@ -1262,7 +1262,7 @@ function wireEntity(cfg) {
     // rowAction button) fit without clipping. The old 72 px was narrower than
     // 2× 44 px → edit button overflowed left and got clipped by the previous
     // cell's right edge.
-    title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 192 : 100,
+    title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 160 : 84,
     cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const item = cell.getData();
