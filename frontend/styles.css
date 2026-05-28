@@ -224,11 +224,16 @@ header h1 { margin: 0; font-size: 0.92rem; }
 }
 .gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .gbtn.active { background: #245733; color: #fff; }
-/* Level-1 nav group icon. 14px monochrome; stroke follows currentColor so
-   it tracks the button's text color (default rgba white, full white on
-   hover/active). The "preferences" sliders icon has a couple of small
-   accent-filled dots which inherit `--accent` from the page tokens. */
-.gicon { width: 14px; height: 14px; flex-shrink: 0; }
+/* Level-1 nav group icon. 16 px stroke icons; each group gets a distinct
+   warm/cool hue (set as `color` so currentColor stroke follows). On hover and
+   when the group is active we bump saturation/brightness slightly. */
+.gicon { width: 16px; height: 16px; flex-shrink: 0; color: #ffffff; }
+.gbtn[data-group="setup"]       .gicon { color: #f9c74f; }  /* gold — Setup (gear) */
+.gbtn[data-group="tournament"]  .gicon { color: #ffb74d; }  /* amber — Tournament (trophy) */
+.gbtn[data-group="staffing"]    .gicon { color: #4cc9f0; }  /* cyan — Staffing (clipboard) */
+.gbtn[data-group="requests"]    .gicon { color: #f78fb3; }  /* pink — Player requests (envelope) */
+.gbtn[data-group="preferences"] .gicon { color: #c8a8ff; }  /* lavender — Preferences (sliders) */
+.gbtn:hover .gicon, .gbtn.active .gicon { filter: brightness(1.15) saturate(1.2); }
 @media (max-width: 480px) {
   /* On phones, drop the label and show icon-only — saves horizontal real
      estate in the level-1 bar. aria-label on the button keeps it accessible. */
