@@ -725,6 +725,152 @@ def test_roster_correction_import_updates_existing_and_late_adds():
     assert after[usta_untouched]["selection_status"] == "selected"  # never withdrawn
 
 
+def test_b3_hotel_answer_parse():
+    """B3: 'No, I am local' → 'Local / family'; unmappable → raw fallback."""
+    from app.importer import _parse_hotel_answer
+    assert _parse_hotel_answer("No, I am local") == ("Local / family", None)
+    assert _parse_hotel_answer(
+        "Yes, I plan to reserve accommodations for this tournament"
+    ) == ("Hotel", None)
+    # Commuter variants
+    assert _parse_hotel_answer("Commuter 1-2 hrs") == ("Commuter 1-2 hrs", None)
+    assert _parse_hotel_answer("Commuter 2+ hrs") == ("Commuter 2+ hrs", None)
+    # Unmappable — raw fallback
+    canon, raw = _parse_hotel_answer("Driving from Bermuda — TBD")
+    assert canon is None and raw == "Driving from Bermuda — TBD"
+    # Blanks
+    assert _parse_hotel_answer(None) == (None, None)
+    assert _parse_hotel_answer("") == (None, None)
+
+
+def test_b3_combined_tshirt_hotel_dietary_import():
+    """B3: t-shirt + hotel + dietary combined import.
+
+    Real-world CSV uses ONLY USTA #, "Preferred T-shirt Size", a free-text
+    hotel question, and "Dietary Restrictions". USTA #s not on the roster
+    are late-added; blank cells leave existing roster values intact."""
+    t = _tournament()
+    usta_existing = "EX" + uuid.uuid4().hex[:8]
+    usta_new      = "NW" + uuid.uuid4().hex[:8]
+
+    # B3 late-adds to the ROSTER but expects USTA #s to already be in the
+    # Setup → Players catalog. Create the "new" player in Setup first (the
+    # TD would do this via the Initial import for a different tournament or
+    # via Setup → Players manually).
+    _ok(client.post("/api/players",
+                    json={"usta_number": usta_new, "first_name": "Aanya",
+                          "last_name": "Sujay", "gender": "female",
+                          "birthdate": "2012-01-01"}))
+
+    # Seed an existing roster row with B2a so we can verify "blanks preserve".
+    init = (
+        "First name,Last name,Gender,ID,Events,Selection,T-Shirt,Dietary preference\n"
+        f"Anita,Bose,Female,{usta_existing},"
+        "\"Girls' Singles 14 & under\",SELECTED,Youth Medium,Vegetarian\n"
+    )
+    up_i = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_initial",
+        files={"file": ("init.csv", init, "text/csv")},
+    ))
+    client.post(f"/api/import/batches/{up_i['batch_id']}/merge")
+
+    # B3 CSV. First row mirrors the real file: Name (single string), UAID,
+    # Preferred T-shirt Size, the hotel question, dietary restrictions.
+    # Second row: ONLY UAID + hotel answer (everything else blank) — should
+    # preserve t-shirt + dietary on the existing row.
+    # Header column "Dietary Restrictions (Level 2, Level 3, or Level 4)"
+    # contains commas, so it must be CSV-quoted — same as the real file.
+    csv_data = (
+        "Name,UAID,Preferred T-shirt Size,Are you planning to stay overnight in a hotel?,"
+        "\"Dietary Restrictions (Level 2, Level 3, or Level 4)\"\n"
+        # Late-add: USTA new, full row.
+        f"Aanya Sujay,{usta_new},Youth Large,"
+        "\"Yes, I plan to reserve accommodations for this tournament\","
+        "Not vegan or vegetarian\n"
+        # Update existing: hotel answer only.
+        f"Anita Bose,{usta_existing},,\"No, I am local\",\n"
+    )
+    up = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/tshirt_hotel_dietary",
+        files={"file": ("thd.csv", csv_data, "text/csv")},
+    ))
+    assert up["total"] == 2 and up["valid"] == 2
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 2 and m["failed"] == 0
+
+    # Need to query roster row with lodging_plan column visible. The roster
+    # API doesn't surface it yet so probe via DB.
+    import psycopg
+    from app.config import settings
+    with psycopg.connect(settings.dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT p.usta_number, e.t_shirt_size, e.dietary_preference, "
+            "       e.lodging_plan, e.lodging_plan_raw "
+            "FROM tournament_entry e JOIN player p ON p.id = e.player_id "
+            "WHERE e.tournament_id = %s ORDER BY p.usta_number",
+            (t["id"],),
+        )
+        rows = {r[0]: r for r in cur.fetchall()}
+
+    # Late-added player has all three fields populated; hotel → 'Hotel'.
+    assert rows[usta_new][1] == "Youth Large"
+    assert rows[usta_new][2] == "Not vegan or vegetarian"
+    assert rows[usta_new][3] == "Hotel"
+    assert rows[usta_new][4] is None  # mapped, no raw fallback
+
+    # Existing player: t-shirt + dietary PRESERVED (blanks didn't overwrite);
+    # lodging_plan updated to 'Local / family'.
+    assert rows[usta_existing][1] == "Youth Medium"      # preserved
+    assert rows[usta_existing][2] == "Vegetarian"        # preserved
+    assert rows[usta_existing][3] == "Local / family"
+    assert rows[usta_existing][4] is None
+
+
+def test_b3_unmappable_hotel_answer_stored_raw():
+    """B3: a hotel answer that doesn't match any canonical lodging value is
+    preserved verbatim in lodging_plan_raw so the TD can triage it."""
+    t = _tournament()
+    usta = "WB" + uuid.uuid4().hex[:8]
+    # Seed roster.
+    init = (
+        "First name,Last name,Gender,ID,Events,Selection\n"
+        f"Ben,Cee,Male,{usta},\"Boys' Singles 14 & under\",SELECTED\n"
+    )
+    client.post(f"/api/import/tournaments/{t['id']}/roster_initial",
+                files={"file": ("i.csv", init, "text/csv")})
+    # Apply
+    bid = client.get(f"/api/import/batches?tournament_id={t['id']}").json()
+    # (no list endpoint — just re-fetch the response we discarded; easier to
+    # parse from the staging post)
+    re_up = _ok(client.post(f"/api/import/tournaments/{t['id']}/roster_initial",
+                            files={"file": ("i.csv", init, "text/csv")}))
+    client.post(f"/api/import/batches/{re_up['batch_id']}/merge")
+
+    csv = (
+        "UAID,Are you planning to stay overnight in a hotel?\n"
+        f"{usta},Driving from Bermuda — TBD\n"
+    )
+    up = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/tshirt_hotel_dietary",
+        files={"file": ("thd.csv", csv, "text/csv")},
+    ))
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 1 and m["failed"] == 0
+
+    import psycopg
+    from app.config import settings
+    with psycopg.connect(settings.dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT e.lodging_plan, e.lodging_plan_raw FROM tournament_entry e "
+            "JOIN player p ON p.id = e.player_id "
+            "WHERE p.usta_number = %s AND e.tournament_id = %s",
+            (usta, t["id"]),
+        )
+        plan, raw = cur.fetchone()
+    assert plan is None
+    assert raw == "Driving from Bermuda — TBD"
+
+
 def test_hotel_confidential_report():
     """First page: pivot (hotel → players + officials counts). Following pages:
     each player/official as first-initial + last name. Selected only on the

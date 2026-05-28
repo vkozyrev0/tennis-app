@@ -46,5 +46,10 @@ ALTER TABLE tournament_entry
 -- question ("No, I am local" / "Yes, I plan to reserve…") that mostly maps
 -- to the existing lodging_plan enum strings but sometimes won't. Store the
 -- raw answer as a fallback for TD review.
+-- The combined import stores the parsed lodging answer directly on the roster
+-- row so the t-shirt page reads it in one query. The detailed player_hotel_stay
+-- table (which has hotel_name + lodging_plan) stays available for the inbox /
+-- per-tab workflow — they coexist.
 ALTER TABLE tournament_entry
+  ADD COLUMN IF NOT EXISTS lodging_plan TEXT,
   ADD COLUMN IF NOT EXISTS lodging_plan_raw TEXT;

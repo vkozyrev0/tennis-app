@@ -587,6 +587,93 @@ def _parse_draw_status(raw):
     return None
 
 
+# ---- B3 combined T-shirt + Hotel + Dietary helpers -------------------------
+# The real "Tournament Players T-shirt-Hotel-Dietary" CSV asks a yes/no/local
+# hotel question rather than capturing a specific hotel name. Map the common
+# answers to our lodging_plan enum strings; whatever doesn't match the table
+# falls back to lodging_plan_raw (column added by migration 0028) for the TD
+# to triage on the player-hotels grid.
+_LODGING_MAP = [
+    # (substring -> canonical), checked in order (first match wins). All
+    # comparisons are case-insensitive.
+    ("local", "Local / family"),
+    ("commuter 2", "Commuter 2+ hrs"),
+    ("commuter 1", "Commuter 1-2 hrs"),
+    ("commuter", "Commuter"),
+    ("yes",   "Hotel"),  # "Yes, I plan to reserve..."
+    ("hotel", "Hotel"),
+]
+
+def _parse_hotel_answer(raw):
+    """Return (canonical_lodging_plan_or_None, raw_fallback_or_None)."""
+    if not raw:
+        return None, None
+    s = " ".join(str(raw).split())
+    low = s.lower()
+    for needle, canon in _LODGING_MAP:
+        if needle in low:
+            return canon, None
+    # Unmappable — store the raw answer for TD review.
+    return None, s
+
+
+# "Name" cells in this file are a single-string "First Last" (no comma);
+# split into first/last for the player upsert.
+def _split_name(raw):
+    if not raw:
+        return None, None
+    parts = str(raw).strip().split(None, 1)
+    if len(parts) == 1:
+        return parts[0], None
+    return parts[0], parts[1]
+
+
+def _merge_tshirt_hotel_dietary(cur, tid, d):
+    """B3: combined T-shirt + Hotel + Dietary import.
+
+    Behavior per the 2026-05-28 questionnaire:
+    - USTA # not on roster → late-add (insert new roster entry).
+    - Only non-empty cells overwrite — blanks leave existing values intact.
+    - Hotel free-text answer maps to lodging_plan via _LODGING_MAP;
+      unmappable answers go to lodging_plan_raw for TD review."""
+    # Allow either explicit first/last OR the single "Name" cell ("First Last").
+    first = _s(d.get("first_name")) or _split_name(d.get("name"))[0]
+    last  = _s(d.get("last_name"))  or _split_name(d.get("name"))[1]
+    pid = upsert_player(cur, d["usta_number"], first, last,
+                        _norm_gender(d.get("gender")))
+    canon_lodging, raw_lodging = _parse_hotel_answer(d.get("hotel_answer"))
+    existed = _exists(cur, "tournament_entry", tid, pid)
+    conflict = "roster row updated with t-shirt/hotel/dietary" if existed else None
+    cur.execute(
+        """
+        INSERT INTO tournament_entry
+            (tournament_id, player_id, t_shirt_size, dietary_preference, source)
+        VALUES (%s,%s,%s,%s,'manual')
+        ON CONFLICT (tournament_id, player_id) DO UPDATE SET
+            t_shirt_size       = COALESCE(EXCLUDED.t_shirt_size,
+                                          tournament_entry.t_shirt_size),
+            dietary_preference = COALESCE(EXCLUDED.dietary_preference,
+                                          tournament_entry.dietary_preference)
+        """,
+        (tid, pid,
+         _norm_shirt(_s(d.get("t_shirt_size"))),
+         _s(d.get("dietary_preference"))),
+    )
+    # Lodging_plan + raw fallback land on the same row separately so the
+    # COALESCE protection applies one column at a time.
+    if canon_lodging or raw_lodging:
+        cur.execute(
+            """
+            UPDATE tournament_entry SET
+                lodging_plan = COALESCE(%s, lodging_plan),
+                lodging_plan_raw = COALESCE(%s, lodging_plan_raw)
+            WHERE tournament_id = %s AND player_id = %s
+            """,
+            (canon_lodging, raw_lodging, tid, pid),
+        )
+    return conflict
+
+
 def _merge_roster_correction(cur, tid, d):
     """B2b Correction import. Applies post-withdrawal/alternate-promotion
     status changes from the USTA "Updated Status" CSV. Rules per the
@@ -839,6 +926,38 @@ TYPES = {
             Col("wtn_doubles", {"wtndoubles"}),
         ],
         "merge": _merge_roster_correction,
+    },
+    # B3: Combined T-shirt + Hotel + Dietary import — the post-questionnaire
+    # decision: replace the three per-tab imports (t-shirt size on roster,
+    # player_hotels, dietary on roster) with one upload that feeds all three
+    # values in a single row per player. Only non-empty cells overwrite.
+    "tshirt_hotel_dietary": {
+        "label": "T-shirt + Hotel + Dietary (combined)",
+        "desc": ("Single row per player carrying t-shirt size, lodging plan "
+                 "(parsed from the \"Are you planning to stay overnight in a "
+                 "hotel?\" question), and dietary restrictions. USTA #s not on "
+                 "the roster are late-added. Blank cells leave existing roster "
+                 "values intact (Initial roster's t-shirt won't be overwritten "
+                 "if the new file omits the column for a row)."),
+        "cols": [
+            Col("usta_number", {"ustanumber", "ustaid", "uaid", "usta", "id"}, required=True),
+            Col("name"),                          # "First Last" (no comma)
+            Col("first_name", {"firstname", "first"}),
+            Col("last_name", {"lastname", "last"}),
+            Col("gender", {"sex"}),
+            Col("t_shirt_size", {"tshirt", "shirt", "shirtsize", "size",
+                                 "preferredtshirtsize"}),
+            # Real-world column header is the literal question text — match it
+            # case-insensitively + ignore non-alphanumerics (the _norm() helper
+            # strips spaces/punctuation, so "Are you planning to stay overnight
+            # in a hotel?" normalizes to "areyouplanningtostayovernightinahotel".
+            Col("hotel_answer", {"hotelanswer", "areyouplanningtostayovernightinahotel",
+                                 "hotelquestion", "lodging", "lodgingplan",
+                                 "hotelplan", "hotel"}),
+            Col("dietary_preference", {"dietary", "diet", "dietaryrestrictions",
+                                       "dietaryrestrictionslevel2level3orlevel4"}),
+        ],
+        "merge": _merge_tshirt_hotel_dietary,
     },
     "player_hotels": {"label": "Player hotels",
                       "desc": "Each player's reported hotel and lodging plan.",
