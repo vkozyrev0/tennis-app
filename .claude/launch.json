@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "courtops",
+      "runtimeExecutable": "C:\\Users\\vkozy\\repos\\tennis-app\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "C:\\Users\\vkozy\\repos\\tennis-app\\backend",
+        "--port",
+        "8000"
+      ],
+      "port": 8000
+    }
+  ]
+}

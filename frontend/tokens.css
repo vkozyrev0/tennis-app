@@ -1,0 +1,59 @@
+/* ============================================================================
+ * CourtOps Tennis — design tokens
+ *
+ * Single source of truth for color, contrast, and theme. Component styles in
+ * styles.css consume these via `var(--…)`. Switching themes is done by setting
+ * data-theme="dark" on <html> (persisted in localStorage); native control
+ * colors (date-picker icon, scrollbars) follow color-scheme.
+ *
+ * Contrast targets (verified against the surfaces below):
+ *   --ink on --card    : AA body text (≥4.5:1)
+ *   --muted on --card  : AA secondary text (≥4.5:1 — ~6:1 light, ~5.4:1 dark)
+ *   --accent + --accent-ink : filled buttons clear AA both themes
+ * ========================================================================== */
+
+:root {
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --ink: #1f2933;
+  --muted: #556070;      /* ~6:1 on white — small helper/label text clears AA */
+  --accent: #2e6f40;
+  --accent-ink: #ffffff;
+  --border: #d9e0e6;
+  --ok: #2e7d32;
+  --bad: #c62828;
+  --sel: #e7f1ea;
+  --field-bg: #ffffff;   /* input/select/textarea background */
+  --zebra: #f7f9fa;      /* even table rows */
+  --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
+  color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
+}
+
+/* Dark theme — toggled via data-theme on <html> (persisted in localStorage). */
+:root[data-theme="dark"] {
+  --bg: #11161b;
+  --card: #1a2027;
+  --ink: #e6edf3;
+  --muted: #aab6c4;        /* +contrast on dark card (≈5.4:1) */
+  --accent: #3aa05c;       /* brighter green so filled accent buttons clear AA on dark */
+  --accent-ink: #ffffff;
+  --border: #2d363f;
+  --ok: #5bbf6a;
+  --bad: #e26d6d;
+  --sel: #2c3f3a;          /* tinted toward accent so selection reads above zebra */
+  --field-bg: #11161b;
+  --zebra: #1f262e;
+  --elev: #1e252d;
+  color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
+}
+
+/* The UA calendar glyph is too faint on our very dark field, so in dark mode we
+   replace it with an explicit light SVG calendar — guaranteed visible. */
+:root[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23e6edf3' stroke-width='2' stroke-linecap='round'><rect x='3' y='4.5' width='18' height='17' rx='2'/><line x1='8' y1='2.5' x2='8' y2='6.5'/><line x1='16' y1='2.5' x2='16' y2='6.5'/><line x1='3' y1='9.5' x2='21' y2='9.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 15px 15px;
+}

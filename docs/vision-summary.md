@@ -1,10 +1,10 @@
-# CorpOps Tennis — Vision Summary
+# CourtOps Tennis — Vision Summary
 
 > Normalized restatement of `Tennis information for Claude.docx`. This is the
 > source-of-truth digest the other docs build on. Where the original wording is
 > ambiguous, the ambiguity is flagged in [audit.md](audit.md), not resolved here.
 
-CorpOps Tennis is back-office tooling for a USTA tennis **Tournament Director (TD)**.
+CourtOps Tennis is back-office tooling for a USTA tennis **Tournament Director (TD)**.
 It has two largely separate halves:
 
 1. **Officials operations** — a two-sided app (officials + administrator) for

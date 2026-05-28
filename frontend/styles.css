@@ -1,0 +1,817 @@
+/* Design tokens live in tokens.css (loaded before this file in index.html).
+ * Everything below this point references them via var(--…). */
+
+* { box-sizing: border-box; }
+
+/* Global `hidden` attribute enforcement.
+   Components that use `display: flex/grid/etc.` at equal specificity beat
+   the user-agent default `[hidden] { display: none }`, so setting el.hidden
+   would silently no-op. `!important` keeps the HTML hidden attribute working
+   regardless of any later display rule. */
+[hidden] { display: none !important; }
+
+/* Keyboard focus visibility (was missing) */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Global request progress bar */
+.progress { position: fixed; top: 0; left: 0; width: 100%; height: 3px; z-index: 2000; pointer-events: none; overflow: hidden; }
+.progress.active::before {
+  content: ""; position: absolute; top: 0; height: 100%; width: 40%;
+  background: #1f6feb; animation: prog 0.9s linear infinite;
+}
+@keyframes prog { from { left: -40%; } to { left: 100%; } }
+
+/* Toasts */
+.toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 1000; }
+.toast {
+  min-width: 200px; max-width: 360px; padding: 0.6rem 0.9rem; border-radius: 8px;
+  color: var(--toast-ink, #fff); font-size: 0.9rem; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  animation: toast-in 0.15s ease-out;
+}
+/* Audit P39: dark theme uses lighter ink so the accent backgrounds remain
+   readable; explicit override so future palette changes don't regress contrast. */
+:root[data-theme="dark"] .toast { --toast-ink: #fff; }
+.toast.ok { background: var(--ok); }
+.toast.bad { background: var(--bad); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Confirm modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1500; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--card); border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+.modal-box p { margin: 0 0 0.5rem; }
+.modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+/* Status badges */
+.badge {
+  display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
+}
+.badge-ok { background: #e3f3e6; color: #1d6b2c; }
+.badge-warn { background: #fdf2d6; color: #8a6d1b; }
+.badge-bad { background: #fde3e3; color: #a02020; }
+.badge-info { background: #e3eefb; color: #1d4f91; }
+.badge-muted { background: #eceff2; color: #54616e; }
+/* Dark-mode badges: deeper backgrounds with lighter ink so the same status
+   palette doesn't pop as a bright square against the dark surface. */
+:root[data-theme="dark"] .badge-ok { background: #1d3a26; color: #9fdca8; }
+:root[data-theme="dark"] .badge-warn { background: #3a2f15; color: #f3d27d; }
+:root[data-theme="dark"] .badge-bad { background: #3a1f1f; color: #ed9b9b; }
+:root[data-theme="dark"] .badge-info { background: #1d2a3f; color: #9ec0ed; }
+:root[data-theme="dark"] .badge-muted { background: #232b34; color: #aab6c4; }
+
+/* Theme-aware "warn block" used by .needs-active-note (audit P37). */
+:root { --warn-bg: #fff8e6; --warn-border: #f0e0a8; --warn-ink: #8a6d3b; }
+:root[data-theme="dark"] { --warn-bg: #3a2f15; --warn-border: #5a4a25; --warn-ink: #f3d27d; }
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  line-height: 1.45;
+}
+
+header {
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.3rem 1rem 0.28rem;
+}
+header h1 { margin: 0; font-size: 0.92rem; }
+
+.pill {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 0.7rem;
+  vertical-align: middle;
+}
+.pill.ok { background: var(--ok); }
+.pill.bad { background: var(--bad); }
+
+#theme-toggle, #shortcuts-btn {
+  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
+}
+#theme-toggle:hover, #shortcuts-btn:hover { background: rgba(255, 255, 255, 0.32); }
+#shortcuts-btn { padding: 0.12rem 0.5rem; display: inline-flex; align-items: center; gap: 0.25rem; }
+/* The hotkey chip inside the header button needs to stay readable on the
+   accent-green background — override the default kbd styling. */
+#shortcuts-btn kbd {
+  background: rgba(255, 255, 255, 0.95); color: var(--accent); border: 0;
+  box-shadow: none; padding: 0 0.3rem; font-size: 0.7rem; font-weight: 700;
+}
+#user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
+#logout-btn {
+  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  padding: 0.12rem 0.5rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.3rem;
+}
+.login-card {
+  max-width: 360px; margin: 3rem auto; background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.login-card h2 { margin-top: 0; }
+
+/* ---- active tournament context bar ---- */
+#context-bar {
+  margin-top: 0.28rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 5px;
+  padding: 0.18rem 0.45rem;
+}
+#context-bar.has-active { background: rgba(255, 255, 255, 0.22); border-color: #fff; }
+.ctx-label { font-size: 0.68rem; opacity: 0.9; }
+#active-tournament { padding: 0.16rem 0.35rem; border-radius: 4px; border: 0; font: inherit; min-width: 180px; font-size: 0.74rem; }
+#context-bar .combo { width: auto; }
+#context-bar .combo-input { min-width: 180px; padding: 0.16rem 1.2rem 0.16rem 0.35rem; font-size: 0.74rem; border-radius: 4px; margin-top: 0; }
+.ctx-info { font-size: 0.68rem; opacity: 0.95; }
+
+/* ---- grouped menu ---- */
+/* level 1 — section groups (only one group's tabs show at a time) */
+.menu-l1 {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.25rem 1rem 0;
+  background: var(--accent);
+  flex-wrap: wrap;
+}
+.gbtn {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.10);
+  color: rgba(255, 255, 255, 0.9);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 0.85rem;
+  cursor: pointer;
+  border-radius: 6px 6px 0 0;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+}
+.gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+.gbtn.active { background: #245733; color: #fff; }
+/* Level-1 nav group icon. 14px monochrome; stroke follows currentColor so
+   it tracks the button's text color (default rgba white, full white on
+   hover/active). The "preferences" sliders icon has a couple of small
+   accent-filled dots which inherit `--accent` from the page tokens. */
+.gicon { width: 14px; height: 14px; flex-shrink: 0; }
+@media (max-width: 480px) {
+  /* On phones, drop the label and show icon-only — saves horizontal real
+     estate in the level-1 bar. aria-label on the button keeps it accessible. */
+  .gbtn > span { display: none; }
+  .gbtn { padding: 0.32rem 0.6rem; }
+}
+
+/* level 2 — the active group's tabs */
+.menu {
+  display: flex;
+  gap: 0.8rem;
+  padding: 0 1rem;
+  background: #245733;
+  flex-wrap: wrap;
+}
+.menu-group { display: none; align-items: flex-end; gap: 0.15rem; }
+.menu-group.group-active { display: flex; }
+.menu-label { display: none; }  /* group name now lives in the level-1 bar */
+.tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.28rem 0.6rem;
+  cursor: pointer;
+  border-radius: 5px 5px 0 0;
+}
+.tab:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.tab.active { background: var(--bg); color: var(--ink); font-weight: 600; }
+.tab.disabled { opacity: 0.45; }
+
+/* Use the full window width (back-office data app) — no centered narrow column. */
+main { padding: 1.25rem 1.75rem; max-width: 1440px; margin: 0 auto; }
+
+/* ---- panels ---- */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* The grid owns the full page width; the detail form opens as a modal overlay. */
+.master-detail { display: block; }
+
+.list-pane, .detail-pane {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem 1.1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Detail form as a centered modal (shown only when .detail-open). */
+.detail-pane {
+  position: fixed; z-index: 1600;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: min(680px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem); overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  display: none;
+}
+.detail-pane.detail-open { display: block; }
+.detail-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 1550; display: none; }
+.detail-backdrop.show { display: block; }
+.detail-close {
+  position: absolute; top: 0.5rem; right: 0.6rem;
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  font-size: 1.3rem; line-height: 1; color: var(--muted); padding: 0.1rem 0.3rem;
+}
+.detail-close:hover { color: var(--ink); }
+
+.list-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+.list-toolbar .filter { flex: 1; }
+.list-toolbar .export-btn { margin: 0; }  /* don't let the export-btn margin stretch the row */
+/* Global filter inputs read as "search across the whole list" — magnifier
+   icon + slight indent — so the per-column header filters look distinct. */
+input.filter[type="search"] {
+  padding-left: 1.6rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238792a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='7'/><path d='M21 21l-4.3-4.3'/></svg>");
+  background-repeat: no-repeat; background-position: 0.45rem center; background-size: 1rem;
+}
+
+.new-btn {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: 5px;
+  padding: 0.3rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.detail-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
+
+/* prev/next record navigation on the detail form */
+.detail-nav {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+.nav-btn {
+  appearance: none; border: 1px solid var(--border); background: var(--bg);
+  border-radius: 5px; padding: 0.2rem 0.55rem; font: inherit; font-size: 0.78rem;
+  cursor: pointer; color: var(--ink);
+}
+.nav-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); }
+.nav-btn:disabled { opacity: 0.4; cursor: default; }
+.nav-pos { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+
+/* ---- forms (compact) ---- */
+.row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.row label {
+  flex: 1 1 130px; display: flex; flex-direction: column;
+  font-size: 0.78rem; font-weight: 500; color: var(--muted);
+}
+
+input, select, textarea {
+  margin-top: 0.12rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--ink);
+  background: var(--field-bg);
+}
+
+/* type-in dropdowns (searchable comboboxes) */
+.combo { position: relative; display: block; }
+.combo-native {
+  position: absolute; left: 0; bottom: 0; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; margin: 0;
+}
+.combo::after {
+  content: "▾"; position: absolute; right: 0.45rem; top: 50%;
+  transform: translateY(-30%); pointer-events: none;
+  color: var(--muted); font-size: 0.65rem;
+}
+.combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
+.combo-list {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
+  margin-top: 2px; max-height: 240px; overflow-y: auto;
+  background: var(--elev); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+  /* reset inherited casing/spacing from <label>/header so options read normally */
+  text-transform: none; letter-spacing: normal; font-weight: 400;
+}
+/* Explicit colors so items never inherit the header's white or a label's grey. */
+.combo-item { padding: 0.3rem 0.5rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap; color: var(--ink); background: var(--elev); }
+.combo-item:hover, .combo-item.hi { background: var(--sel); color: var(--ink); }
+.combo-item.sel { font-weight: 600; }
+.combo-empty { padding: 0.4rem 0.5rem; color: var(--muted); font-size: 0.8rem; }
+
+.req { color: var(--bad); font-weight: 700; }
+
+/* Validation feedback only after the user has interacted (not on a pristine form). */
+input:user-invalid, select:user-invalid, textarea:user-invalid,
+.combo:has(select:user-invalid) .combo-input {
+  border-color: var(--bad);
+  background: rgba(198, 40, 40, 0.10);
+}
+
+.actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
+
+button[type="submit"] {
+  padding: 0.32rem 0.75rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 0;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+button[type="submit"]:hover { filter: brightness(1.05); }
+
+.delete, .cancel {
+  padding: 0.3rem 0.65rem;
+  background: transparent;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.delete { color: var(--bad); border: 1px solid var(--bad); }
+.delete:hover { background: #fdecec; }
+.cancel { color: var(--muted); border: 1px solid var(--border); }
+.cancel:hover { background: var(--bg); }
+
+.msg { margin-left: 0.4rem; font-size: 0.85rem; }
+.msg.ok { color: var(--ok); }
+.msg.bad { color: var(--bad); }
+
+/* ---- Tabulator grid (Setup lists) themed to our palette (light + dark) ---- */
+.grid-mount { margin-top: 0.1rem; }
+.tabulator {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+  font-family: inherit; font-size: 0.85rem; color: var(--ink);
+}
+.tabulator .tabulator-header {
+  background: var(--card); color: var(--muted);
+  border-bottom: 2px solid var(--border); font-weight: 600;
+}
+.tabulator .tabulator-header .tabulator-col {
+  background: var(--card); border-right: 0;
+}
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.25rem 0.45rem; }
+/* Compact column header labels. */
+.tabulator .tabulator-col-title {
+  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;
+}
+.tabulator-row { background: var(--card); color: var(--ink); border-bottom: 1px solid var(--border); }
+.tabulator-row.tabulator-row-even { background: var(--zebra); }
+.tabulator-row.tabulator-selectable:hover { background: var(--bg); }
+.tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even {
+  background: var(--sel);
+  box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar — visible for keyboard nav */
+}
+.tabulator .tabulator-cell { padding: 0.38rem 0.55rem; border-right: 0; }
+/* Field-level validation: server validation error highlights the offending
+   input via aria-invalid (set by markInvalid()) so the user sees what failed. */
+input.field-error, select.field-error, textarea.field-error,
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 25%, transparent);
+}
+/* Reserve scrollbar space so the right-edge action icons aren't crowded against
+   (or partially hidden by) the vertical scrollbar when it appears. */
+.tabulator .tabulator-tableholder { scrollbar-gutter: stable; }
+.tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
+.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents {
+  color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
+}
+.tabulator .tabulator-placeholder-contents::before {
+  content: "✦"; display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
+  opacity: 0.45; color: var(--accent);
+}
+/* Empty state for hand-built lists (assignments) — matches the Tabulator
+   placeholder so all empty states across the app look the same (audit P42). */
+.grid-empty {
+  color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
+  text-align: center;
+}
+.grid-empty-icon {
+  display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
+  opacity: 0.45; color: var(--accent);
+}
+.tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
+  border-bottom-color: var(--muted); border-top-color: var(--muted);
+}
+.grid-actions { display: flex; gap: 0.15rem; justify-content: flex-end; align-items: center; }
+.grid-actions-cell { overflow: visible; }
+/* Compact, content-sized grids for small aggregate summaries (Hotel summary,
+   Lodging summary, CVB totals). Otherwise they stretch to the panel width and
+   the data sits in a tiny left-island with a sea of whitespace. */
+.grid-mount--compact { max-width: 520px; }
+
+/* Keyboard shortcuts help modal */
+table.shortcuts { border-collapse: collapse; }
+table.shortcuts th { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; font-weight: normal; min-width: 3rem; }
+table.shortcuts td { padding: 0.3rem 0; color: var(--ink); }
+kbd {
+  display: inline-block; padding: 0.05rem 0.4rem; min-width: 1rem; text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem;
+  background: var(--bg); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border);
+}
+/* Compact icon buttons in grid action columns (Edit ✎, Delete ✕). */
+.btn-icon {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--accent); font-size: 1rem; line-height: 1;
+  width: 1.6rem; height: 1.6rem; border-radius: 4px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.12s;
+}
+.btn-icon:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.btn-icon.danger { color: var(--bad); }
+.btn-icon.danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Per-column header filter inputs (themed for light + dark). */
+.tabulator .tabulator-header-filter input,
+.tabulator .tabulator-header-filter select {
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 3px; width: 100%; box-sizing: border-box;
+  font-family: inherit; font-size: 0.7rem; height: 1.4rem;
+}
+.tabulator .tabulator-header-filter input::placeholder { color: var(--muted); }
+.tabulator .tabulator-header .tabulator-col .tabulator-header-filter { margin-top: 1px; }
+/* In-grid editable cells: an *always-on* affordance (the accent right-edge)
+   tells you which cells respond to a click, before you hover. Hover shows a
+   subtle pencil + a full ring. Editing hides the pencil and adds a strong ring. */
+.tabulator .tabulator-cell.editable-cell {
+  cursor: cell; position: relative;
+  box-shadow: inset -2px 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.tabulator .tabulator-cell.editable-cell:hover {
+  box-shadow: inset 0 0 0 1px var(--border), inset -2px 0 0 var(--accent);
+}
+.tabulator .tabulator-cell.editable-cell::after {
+  content: "✎"; position: absolute; right: 0.35rem; top: 50%;
+  transform: translateY(-50%); font-size: 0.72em; color: var(--muted);
+  opacity: 0; transition: opacity 0.12s; pointer-events: none;
+}
+.tabulator .tabulator-cell.editable-cell:hover::after { opacity: 0.55; }
+.tabulator .tabulator-cell.tabulator-editing { box-shadow: inset 0 0 0 2px var(--accent); padding: 0; }
+.tabulator .tabulator-cell.tabulator-editing::after { display: none; }
+.tabulator .tabulator-cell.tabulator-editing input,
+.tabulator .tabulator-cell.tabulator-editing select {
+  background: var(--card); color: var(--ink); border: 0; padding: 0.32rem 0.5rem; width: 100%; box-sizing: border-box;
+}
+/* The list-editor / list-header-filter dropdown is appended to <body>, so it
+   isn't covered by the .tabulator theme rules — theme it explicitly for light +
+   dark, keep options on one line (so long values aren't clipped in a narrow
+   column), and cap its height with a scrollbar. z-index beats our overlays. */
+.tabulator-edit-list {
+  background: var(--card); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  max-height: 260px; overflow-y: auto; z-index: 10050;
+}
+.tabulator-edit-list .tabulator-edit-list-item {
+  color: var(--ink); white-space: nowrap; padding: 0.3rem 0.6rem;
+}
+.tabulator-edit-list .tabulator-edit-list-item.active,
+.tabulator-edit-list .tabulator-edit-list-item.hover,
+.tabulator-edit-list .tabulator-edit-list-item:hover {
+  background: var(--sel); color: var(--ink);
+}
+.tabulator-edit-list .tabulator-edit-list-placeholder { color: var(--muted); }
+
+/* ---- Reusable design-system bits (design-crit cleanup) -----------------
+   - .h3-subtitle: the small "(context)" span trailing a section heading.
+     Was repeated as inline style four times in HTML (audit design-crit #6).
+   - .seg-toggle / .seg-btn: segmented control (Roster pick-vs-new). */
+/* design-crit pass 2 #6: rely on the literal HTML whitespace between sibling
+   spans for the gap — adding margin-left on top stacked an extra 0.4rem. */
+.h3-subtitle { font-size: 0.78rem; font-weight: normal; color: var(--muted); }
+
+.seg-toggle {
+  /* design-crit pass 2 #1: was `background: var(--bg)` which is lighter than
+     `--card` in light theme but DARKER than card in dark theme, making the
+     toggle read as a hole. `--zebra` is the same-direction tint vs card in
+     both themes (always slightly off the card surface). */
+  display: inline-flex; gap: 0; margin-bottom: 0.6rem;
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+  background: var(--zebra);
+}
+.seg-btn {
+  appearance: none; border: 0; padding: 0.35rem 0.85rem;
+  font: inherit; font-size: 0.78rem; cursor: pointer;
+  background: transparent; color: var(--muted);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover { background: var(--card); color: var(--ink); }
+.seg-btn.seg-active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Inline-end action button next to an <h3> heading. design-crit pass 2 #3:
+   was `float: right`, which made the heading mixed-content + fragile on
+   wrap. Use flex on the parent <h3>, push the action with margin-inline-start.
+   The .h3-flex modifier opts the heading into flex layout. */
+.h3-flex { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem; }
+.h3-action { margin-inline-start: auto; }
+
+/* Misc layout helpers replacing inline styles. */
+.filter--narrow { max-width: 320px; }
+.mb-half { margin-bottom: 0.5rem; }
+.section-spacer { margin-top: 1.25rem; }
+.label--full { flex: 1 1 100% !important; }
+form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 0.82rem; padding: 0.28rem 0.4rem; border: 1px solid var(--border); border-radius: 5px; background: var(--field-bg); color: var(--ink); }
+
+/* Narrow viewport: collapse the header's auxiliary actions onto a second row
+   so the title + context-bar don't crash into each other (design-crit #5).
+   design-crit pass 2 #5: bumped from 720→768px so the standard tablet
+   portrait width hits the collapse rule instead of barely fitting cramped. */
+@media (max-width: 768px) {
+  header h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+  #user-box { margin-left: auto; }
+  #context-bar { width: 100%; margin-top: 0.35rem; }
+  #active-tournament, #context-bar .combo-input { min-width: 0; flex: 1; }
+}
+
+/* Detail-pane modal on narrow viewports: stack form rows vertically so the
+   2-3 fields per .row don't squish to 100px each (design-crit #9). */
+@media (max-width: 600px) {
+  .detail-pane { width: calc(100vw - 1rem); padding: 0.85rem 1rem; }
+  .detail-pane .row label { flex: 1 1 100%; }
+}
+
+/* ---- list scroll container (own scrollbar; header stays pinned) ---- */
+.list-scroll {
+  /* JS keeps --list-max in sync with the real space below the list (sizeLists);
+     the calc() is a sane fallback before the first measurement. */
+  max-height: var(--list-max, calc(100vh - 200px));
+  min-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.list-scroll .list-table { border: 0; }
+.list-scroll .list-table th { top: -1px; }  /* pin against the container edge */
+
+/* Workspace list tables: own scrollbar. Cap shorter than the viewport so the
+   heading + add-form + table don't push the whole page into a scroll; min() also
+   protects short screens. */
+.tbl-scroll {
+  max-height: min(48vh, calc(100vh - 16rem));
+  overflow: auto;  /* both axes — the staffing-plan report can be wide */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-top: 0.3rem;
+}
+.tbl-scroll .list-table { border: 0; }
+.tbl-scroll .list-table th { top: -1px; }
+
+/* ---- list table ---- */
+.list-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.list-table th, .list-table td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.list-table th {
+  color: var(--muted); font-weight: 600;
+  position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.list-table tbody tr:nth-of-type(even) { background: var(--zebra); }  /* zebra */
+.list-table tbody tr { cursor: pointer; }
+.list-table tbody tr:hover { background: var(--bg); }
+.list-table tbody tr.selected { background: var(--sel); }
+.list-table td.empty { color: var(--muted); text-align: center; padding: 1rem; cursor: default; }
+.list-table td.actions { text-align: right; white-space: nowrap; }
+.btn-link {
+  margin-left: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.btn-link:hover:not(:disabled) { text-decoration: underline; }
+.btn-link:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
+.btn-link.danger { color: var(--bad); }
+
+/* Right-align numeric columns for scannability */
+#report-table .num, #report-totals .num,
+#panel-rates .list-table th:nth-child(3), #panel-rates .list-table td:nth-child(3),
+#panel-distances .list-table th:nth-child(4), #panel-distances .list-table td:nth-child(4),
+#trb-table th:nth-child(4), #trb-table td:nth-child(4),
+#trb-table th:nth-child(5), #trb-table td:nth-child(5) { text-align: right; }
+/* Center the weekday X columns on the staffing plan */
+#report-table .daycol { text-align: center; }
+
+/* Consistent styling for the few unclassed action buttons */
+/* Match the unclassed save buttons to the primary button look */
+#avail-save, #me-avail-save {
+  padding: 0.32rem 0.75rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 5px; font-family: inherit; font-size: 0.8rem; cursor: pointer;
+}
+
+.export-btn {
+  display: inline-block;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.export-btn:hover { background: var(--bg); }
+a.export-btn { text-decoration: none; }
+.import-result { margin-top: 0.4rem; }
+.import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
+.export-section { padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+.export-section:last-child { border-bottom: 0; }
+.export-section h4 { margin: 0 0 0.15rem; font-size: 0.95rem; }
+.export-section p { margin: 0 0 0.4rem; }
+.export-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.export-grid .export-btn { margin: 0; }
+
+/* ---- tournament workspace ---- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.card h3 { margin-top: 0; }
+.needs-active-note {
+  /* Audit P37 + design-crit #8: warn block now lays out the message + a
+     "Pick tournament" action button side-by-side so the empty state is
+     instructive AND actionable, not just informational. */
+  background: var(--warn-bg, #fff8e6);
+  border: 1px solid var(--warn-border, #f0e0a8);
+  color: var(--warn-ink, #8a6d3b);
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.85rem;
+}
+/* See the global `[hidden] { display: none !important }` rule at the top
+   of this file — that handles the `display: flex` override here. */
+.needs-active-note button {
+  appearance: none; border: 1px solid var(--warn-ink, #8a6d3b);
+  background: var(--warn-ink, #8a6d3b); color: var(--warn-bg, #fff8e6);
+  font: inherit; font-size: 0.78rem; font-weight: 600;
+  padding: 0.32rem 0.7rem; border-radius: 5px; cursor: pointer;
+  /* design-crit pass 2 #8: margin-inline-start so the button pushes to the
+     trailing edge ONLY while it shares the line with the message. After
+     wrap it sits left-aligned with the message above it. */
+  margin-inline-start: auto;
+}
+.needs-active-note button:hover { filter: brightness(1.1); }
+/* If the message line is so long that flex wraps the button to row 2,
+   reset the margin so it doesn't hug the right edge below left-aligned text. */
+@media (max-width: 480px) { .needs-active-note button { margin-inline-start: 0; } }
+/* Design-crit #3: the app uses two form patterns deliberately.
+ *
+ *   1. Setup CRUDs (tournaments, sites, officials, players, rates, hotels,
+ *      distances, divisions, events) use the .detail-pane MODAL pattern.
+ *      Records have many fields, are edited one-at-a-time, and the grid is
+ *      the primary surface — the modal is the secondary surface that opens
+ *      from a row's ✎ button.
+ *
+ *   2. Workspace lists (Part-B file-from-inbox tabs: late, withdrawals,
+ *      sched, divflex, pairing, doubles, photels, plus room-blocks +
+ *      assignments + availability) use the .inline-form pattern. These are
+ *      short forms (3–5 fields), the TD fills them rapidly while triaging
+ *      the inbox, and seeing the form + the resulting list together gives
+ *      immediate feedback.
+ *
+ * The `details.addbox` pattern below is available if a workspace form ever
+ * outgrows the inline pattern (collapse-by-default), but no current form
+ * needs it. Settling on ONE pattern would force one of the two contexts
+ * into a worse UX — kept distinct, documented here so future contributors
+ * don't merge them by accident.
+ */
+.inline-form .row { margin-bottom: 0.5rem; }
+
+/* Collapsible workspace add-forms (list stays primary) */
+details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: var(--elev); }
+details.addbox > summary {
+  cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--accent);
+  list-style: none; user-select: none;
+}
+details.addbox > summary::-webkit-details-marker { display: none; }
+details.addbox[open] > summary { border-bottom: 1px solid var(--border); }
+details.addbox > form { padding: 0.7rem 0.8rem; }
+.import-row {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+  margin-bottom: 0.7rem; padding-bottom: 0.7rem; border-bottom: 1px dashed var(--border);
+  font-size: 0.82rem;
+}
+.import-row button {
+  padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.import-row button.ghost {
+  background: transparent; color: var(--accent); border: 1px solid var(--border);
+}
+.import-row button.ghost:hover { background: var(--bg); border-color: var(--accent); }
+.t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
+.tshirt-summary { margin: 0.5rem 0 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.btn-link.add { color: var(--muted); }
+td.toggle { white-space: nowrap; }
+
+.checks { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+.check { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.88rem; color: var(--ink); }
+.check input { margin: 0; }
+
+.muted { color: var(--muted); font-size: 0.85rem; }
+.warn { color: var(--bad); font-weight: 600; }
+
+.asg {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.6rem;
+  background: var(--elev);
+}
+.asg-head { font-size: 0.9rem; position: relative; }
+.asg-name { font-size: 0.95rem; padding-right: 5rem; }
+.asg-meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.1rem; }
+.asg-badges { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.asg-actions { position: absolute; top: 0; right: 0; }
+.days { margin: 0.5rem 0 0.3rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chip {
+  background: var(--sel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+}
+.chip-x { border: 0; background: transparent; color: var(--bad); cursor: pointer; font-size: 0.9rem; padding: 0 0 0 0.1rem; }
+.add-day { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
+.add-day input, .add-day select { padding: 0.3rem 0.4rem; }
+
+/* ---- reports ---- */
+.report-toolbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
+/* The report-toolbar h3 is a flex CHILD (siblings = Print/CSV buttons), so it
+   needs `flex: 1; margin: 0` to fill the leading space and push the actions
+   right. Distinct from `.h3-flex` (which makes the h3 itself a flex CONTAINER
+   for inline action buttons inside the heading). Critique pass 3 regression. */
+.report-toolbar > h3 { flex: 1; margin: 0; }
+#report-print, #report-csv {
+  padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+#report-template {
+  padding: 0.3rem 0.7rem; background: transparent; color: var(--accent);
+  border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+#report-template:hover { background: var(--bg); border-color: var(--accent); }
+#report-table tfoot th { border-top: 2px solid var(--ink); font-weight: 700; text-align: left; }
+#report-meta { margin-bottom: 0.6rem; }
+
+/* ---- responsive ---- */
+@media (max-width: 720px) {
+  /* Both nav rows scroll horizontally instead of wrapping into many rows. */
+  .menu-l1, .menu { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .menu-group.group-active { flex-wrap: nowrap; }
+  .gbtn, .tab { white-space: nowrap; }
+  #context-bar { flex-wrap: wrap; }
+  #active-tournament, #context-bar .combo, #context-bar .combo-input { min-width: 140px; }
+}
+
+/* ---- print: show only the active report ---- */
+@media print {
+  /* Always print on white, even when the dark theme is active (saves ink / legible). */
+  :root, :root[data-theme="dark"] {
+    --bg: #fff; --card: #fff; --elev: #fff; --field-bg: #fff; --zebra: #fff;
+    --ink: #000; --muted: #333; --border: #bbb;
+  }
+  body { background: #fff; color: #000; }
+  header, .menu-l1, .menu, #context-bar, .no-print { display: none !important; }
+  .panel:not(.active) { display: none !important; }
+  .tpanel .needs-active-note { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .card { border: 0; box-shadow: none; padding: 0; }
+  /* don't clip scrollable tables when printing the report */
+  .list-scroll, .tbl-scroll { max-height: none !important; overflow: visible !important; border: 0; }
+}
