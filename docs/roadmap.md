@@ -373,3 +373,106 @@ glance, themes delivered through 2026-05-27:
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
   refactor); inline "add distance" affordance on the assignments tab;
   structured assignment-card layout.
+
+## Backlog (2026-05-28 questionnaire — decisions locked in)
+
+### B1. Division ↔ site assignment + t-shirt-by-location report
+Multi-site tournaments need to know which division is at which site so the
+TD can hand each site coordinator a t-shirt count sheet.
+
+- **Scope:** per tournament (each year picks its own assignment).
+- **Cardinality:** one division → one site (not split).
+- **UI:** **Tournament → Sites** panel — toggle divisions per site.
+- **Schema:** new `tournament_site_division (tournament_id, site_id,
+  division_id)` join row, **OR** add `site_id FK NULL` to the existing
+  per-tournament division-config row if one exists. Pick the lighter one.
+- **Report:** single table with a Site column + group/filter (existing
+  cumulative T-shirt grid pattern). Unassigned divisions → "Unassigned"
+  bucket (do not block the report).
+
+### B2. Roster — two import flavors
+Replace today's single "Roster" importer with **Initial** + **Correction**,
+sourced from the real spreadsheets the TD receives.
+
+#### B2a. Initial — "Tournament Full Player Data" (xlsx)
+Real columns from the June 2026 sample (24 cols, names verbatim):
+`First name, Last name, Gender, ID, WTN Singles, WTN Singles Confidence,
+WTN Doubles, WTN Doubles Confidence, Events, Selection, Payment status,
+Amount paid ($), Amount refunded ($), Total amount due ($),
+Amount outstanding ($), Card stored, Emails, Phone numbers, Answers,
+Year of birth, City, District, Section, State`.
+
+Behavior:
+- Upsert **Setup → Players** on USTA #: insert new + update existing
+  (name, gender, city, state, district, section, emails, phones, WTN).
+- Upsert **Roster row** for the active tournament: overwrite division,
+  events, status (parsed from `Selection`), payment fields.
+- `Year of birth` (YYYY) → store as `birthdate = YYYY-01-01` with a
+  `birthdate_precision = 'year'` column so we don't lie about full DOB.
+- `Selection` is comma-separated keywords ("SELECTED", "ALTERNATE",
+  "PRE_SELECTED", etc.) — derive `selection_status` (`selected` wins
+  over `alternate`; `alternate` wins over nothing).
+
+**Schema extensions** (new migration; columns NULLable):
+- `player`: + `emails TEXT`, `phones TEXT`, `district TEXT`,
+  `section TEXT`, `wtn_singles NUMERIC(4,2)`, `wtn_singles_conf TEXT`,
+  `wtn_doubles NUMERIC(4,2)`, `wtn_doubles_conf TEXT`,
+  `birthdate_precision TEXT CHECK IN ('day','year') DEFAULT 'day'`.
+- `roster`: + `payment_status TEXT`, `amount_paid NUMERIC(8,2)`,
+  `amount_refunded NUMERIC(8,2)`, `amount_due NUMERIC(8,2)`,
+  `amount_outstanding NUMERIC(8,2)`, `card_stored BOOL`.
+
+#### B2b. Correction — "Updated Status" (csv)
+Real columns (13): `Name, First Name, Last Name, Gender, Events, City,
+State, Tournament sign in, Draw status, Suspension points, USTA ID,
+WTN Singles, WTN Doubles`.
+
+Behavior:
+- USTA # not on roster → late-add (insert).
+- Roster rows **not** mentioned → leave alone.
+- Updates: `selection_status` (parsed from `Draw status` — comma-separated
+  keywords like "Alternate", "Withdrawn, Alternate" → withdrawn wins),
+  `age_division`, `events`, `signed_in BOOL` (from `Tournament sign in`),
+  `suspension_points INT` (NULLable), `wtn_singles`/`wtn_doubles`.
+
+**Schema:** add `roster.signed_in BOOL DEFAULT false`,
+`roster.suspension_points INT NULL` (or move suspension to `player`
+if it's player-wide rather than per-tournament — needs TD confirm).
+
+#### B2c. UX placement
+- Two **separate sections** on the Import page (`#import-roster_initial`
+  and `#import-roster_correction`).
+- Both **also surfaced** on the Tournament → Roster toolbar via the
+  existing `⬆ Import…` deep-link pattern.
+
+### B3. T-shirts page — combined T-shirt + Hotel + Dietary import
+Real columns from the sample (6): `Name, UAID, Tournament Name,
+Preferred T-shirt Size, Are you planning to stay overnight in a hotel?,
+Dietary Restrictions (Level 2, Level 3, or Level 4)`.
+
+Behavior:
+- USTA # (= `UAID`) not on roster → late-add to roster.
+- Update **only non-empty cells** (blanks don't overwrite).
+- `Hotel question` answers (free-text yes/no/local) map to existing
+  `lodging_plan` enum: "No, I am local" → `Local / family`,
+  "Yes, I plan to reserve…" → `Hotel`. Strict-match table at the
+  importer; unknown → keep raw string in a new `lodging_plan_raw` column
+  for TD review.
+- `Dietary Restrictions` → straight into `dietary_preference` (free text).
+
+**Replaces** the three per-tab imports (roster t-shirt size, player
+hotels, dietary) — those go away in favor of this one.
+**Page:** Tournament → T-shirts (per-tournament inventory + order).
+
+**Schema:** + `roster.lodging_plan_raw TEXT NULL` for un-mappable
+free-text answers; no other changes needed.
+
+---
+
+**Dependencies:** B2 + B3 both touch the `roster` table, so cluster them
+in one migration (likely 0028). B1's join table is independent.
+
+**Test files** for fixtures: live in repo root —
+`Tournament Full Player Data (June 2026).xlsx`,
+`Tournament Player's Updated Status … (June 2026).csv`,
+`Tournament Players T-shirt-Hotel-Dietary (June 2026).csv`.
