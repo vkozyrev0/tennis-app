@@ -473,13 +473,16 @@ def _year_to_date(v):
     return f"{n:04d}-01-01"
 
 
-# Map the verbose "Boys' Singles 14 & under" events strings the USTA sheet uses
-# into our (division, event) split. The Excel "Events" cell may hold multiple
-# comma-separated event names — all for the same division for a given player.
-_JUNIOR_EVENT_RE = re.compile(
-    r"(boys|girls)['’]?\s+(singles|doubles)\s+(\d+)\s*&\s*under",
-    re.IGNORECASE,
-)
+# Map the verbose junior-event strings the USTA sheets use into our
+# (division, event) split. The "Events" cell may hold multiple comma-separated
+# entries — all for the same division for a given player. Two patterns appear
+# in the real exports — the Initial sheet uses "Boys' Singles 14 & under"
+# (event-then-age) and the Correction sheet uses "Girls' 14 & under singles"
+# (age-then-event) — so we accept both orders.
+_JUNIOR_EVENT_RES = [
+    re.compile(r"(boys|girls)['’]?\s+(singles|doubles)\s+(\d+)\s*&\s*under", re.IGNORECASE),
+    re.compile(r"(boys|girls)['’]?\s+(\d+)\s*&\s*under\s+(singles|doubles)", re.IGNORECASE),
+]
 
 def _parse_events_and_division(raw):
     """Split 'Boys' Singles 14 & under, Boys' Doubles 14 & under' into
@@ -492,9 +495,19 @@ def _parse_events_and_division(raw):
     division = None
     events = []
     for p in parts:
-        m = _JUNIOR_EVENT_RE.search(p)
+        m = None
+        for rx in _JUNIOR_EVENT_RES:
+            m = rx.search(p)
+            if m:
+                break
         if m:
-            sex, evt, age = m.group(1).lower(), m.group(2).title(), int(m.group(3))
+            sex = m.group(1).lower()
+            # First regex: groups (sex, event, age); second: (sex, age, event).
+            g2, g3 = m.group(2), m.group(3)
+            if g2.isdigit():
+                age, evt = int(g2), g3.title()
+            else:
+                evt, age = g2.title(), int(g3)
             d = ("B" if sex == "boys" else "G") + str(age)
             division = division or d  # first one wins; all should match
             events.append(evt)
@@ -555,6 +568,72 @@ def _ext_player_initial(cur, pid, d):
             pid,
         ),
     )
+
+
+# ---- B2b Correction-import helpers -----------------------------------------
+# "Draw status" cells from the USTA "Updated Status" CSV are comma-separated
+# keywords describing the player's draw lifecycle ("Alternate", "Withdrawn",
+# "Main draw"). Precedence: withdrawn beats selected beats alternate.
+def _parse_draw_status(raw):
+    if not raw:
+        return None
+    tokens = {t.strip().lower() for t in str(raw).split(",") if t.strip()}
+    if "withdrawn" in tokens:
+        return "withdrawn"
+    if {"selected", "main draw", "maindraw", "main"} & tokens:
+        return "selected"
+    if "alternate" in tokens or "alt" in tokens:
+        return "alternate"
+    return None
+
+
+def _merge_roster_correction(cur, tid, d):
+    """B2b Correction import. Applies post-withdrawal/alternate-promotion
+    status changes from the USTA "Updated Status" CSV. Rules per the
+    2026-05-28 questionnaire:
+      - USTA # not on roster → late-add (insert with parsed status).
+      - USTA # already on roster → update status + division + events
+        + sign-in flag + suspension points. Other roster fields untouched.
+      - Roster rows NOT in the file → untouched (this importer never deletes).
+    Also propagates WTN/contact updates to Setup → Players (idempotent)."""
+    pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"),
+                        _norm_gender(d.get("gender")))
+    _ext_player_initial(cur, pid, d)  # WTN / city / state / etc. flow up
+    parsed_div, parsed_events = _parse_events_and_division(d.get("events"))
+    division = _s(d.get("age_division")) or parsed_div
+    events = parsed_events or _s(d.get("events"))
+    # Status: prefer the explicit Draw-status column; otherwise fall back to
+    # the canonical selection_status the template form would carry.
+    status = (_parse_draw_status(d.get("draw_status"))
+              or _parse_selection(d.get("selection_status")))
+    signed_in = _coerce_bool(d.get("signed_in"))
+    susp = _coerce_int(d.get("suspension_points"))
+    existed = _exists(cur, "tournament_entry", tid, pid)
+    conflict = "roster row updated" if existed else None
+    # INSERT for new rows, UPDATE for existing — UPSERT with COALESCE so a
+    # blank cell in the file doesn't blank an existing roster value.
+    cur.execute(
+        """
+        INSERT INTO tournament_entry
+            (tournament_id, player_id, age_division, events, selection_status,
+             signed_in, suspension_points, source)
+        VALUES (%s,%s,%s,%s,%s,
+                -- entry_source enum doesn't distinguish Initial vs Correction;
+                -- both come from the same USTA dashboard. Reuse the existing
+                -- value rather than ALTER TYPE for a tag the UI doesn't read.
+                COALESCE(%s::boolean, false), %s::int, 'usta_roster')
+        ON CONFLICT (tournament_id, player_id) DO UPDATE SET
+            age_division     = COALESCE(EXCLUDED.age_division, tournament_entry.age_division),
+            events           = COALESCE(EXCLUDED.events,       tournament_entry.events),
+            selection_status = COALESCE(EXCLUDED.selection_status, tournament_entry.selection_status),
+            signed_in        = COALESCE(%s::boolean, tournament_entry.signed_in),
+            suspension_points = COALESCE(%s::int,     tournament_entry.suspension_points)
+        """,
+        (tid, pid, division, events, status,
+         signed_in, susp,
+         signed_in, susp),
+    )
+    return conflict
 
 
 def _merge_roster_initial(cur, tid, d):
@@ -730,6 +809,36 @@ TYPES = {
             Col("card_stored", {"cardstored", "card"}),
         ],
         "merge": _merge_roster_initial,
+    },
+    # B2b: Correction import — "Updated Status" CSV from the USTA dashboard
+    # after withdrawals + alternate promotions are processed. Surgical updates
+    # to selection_status, division, events, sign-in, suspension points; rows
+    # not in the file are left alone; unknown USTAs are late-added.
+    "roster_correction": {
+        "label": "Roster — Correction (Updated Status)",
+        "desc": ("Post-withdrawal status corrections from the USTA "
+                 "\"Updated Status\" export. Updates selection_status, "
+                 "division, events, sign-in, suspension points on existing "
+                 "roster rows. Players not on the roster are late-added. "
+                 "Roster rows NOT in the file are left untouched. Other "
+                 "fields (t-shirt, dietary, payment) are preserved."),
+        "cols": [
+            Col("usta_number", {"ustanumber", "ustaid", "usta", "id"}, required=True),
+            Col("first_name", {"firstname", "first"}),
+            Col("last_name", {"lastname", "last", "surname"}),
+            Col("gender", {"sex"}),
+            Col("city"),
+            Col("state"),
+            Col("events", {"event"}),
+            Col("age_division", {"division", "div"}),
+            Col("selection_status", {"status", "selection"}),
+            Col("draw_status", {"drawstatus"}),
+            Col("signed_in", {"tournamentsignin", "signin", "signedin"}),
+            Col("suspension_points", {"suspensionpoints"}),
+            Col("wtn_singles", {"wtnsingles"}),
+            Col("wtn_doubles", {"wtndoubles"}),
+        ],
+        "merge": _merge_roster_correction,
     },
     "player_hotels": {"label": "Player hotels",
                       "desc": "Each player's reported hotel and lodging plan.",

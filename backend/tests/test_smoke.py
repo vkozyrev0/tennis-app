@@ -622,6 +622,107 @@ def test_roster_initial_event_parse():
     # Already-canonical bare names pass through, division None.
     div2, evts2 = _parse_events_and_division("Singles, Doubles")
     assert div2 is None and evts2 == "Singles, Doubles"
+    # B2b: the Correction file uses age-then-event word order — same parser
+    # must handle both.
+    div3, evts3 = _parse_events_and_division(
+        "Girls' 14 & under doubles, Girls' 14 & under singles"
+    )
+    assert div3 == "G14"
+    assert evts3 == "Doubles, Singles"
+
+
+def test_roster_correction_draw_status_precedence():
+    """B2b: 'Withdrawn, Alternate' → withdrawn; 'Alternate' alone → alternate."""
+    from app.importer import _parse_draw_status
+    assert _parse_draw_status("Withdrawn, Alternate") == "withdrawn"
+    assert _parse_draw_status("Alternate") == "alternate"
+    assert _parse_draw_status("Main draw") == "selected"
+    assert _parse_draw_status("Selected") == "selected"
+    assert _parse_draw_status("") is None
+    assert _parse_draw_status(None) is None
+
+
+def test_roster_correction_import_updates_existing_and_late_adds():
+    """B2b: applies status corrections to existing rows + late-adds new ones.
+
+    Real-world flow: TD first imports "Full Player Data" (B2a). Later the USTA
+    exports "Updated Status" after withdrawals + alternate promotions — the
+    Correction import surgically updates status/division/events/sign-in on
+    existing rows and inserts late-adds for any USTA # not already there."""
+    t = _tournament()
+    usta_existing = "EXS" + uuid.uuid4().hex[:8]
+    usta_lateadd = "LAT" + uuid.uuid4().hex[:8]
+
+    # First seed with B2a Initial.
+    init_csv = (
+        "First name,Last name,Gender,ID,Events,Selection,T-Shirt,Year of birth\n"
+        f"Sanha,Chegu,Female,{usta_existing},"
+        "\"Girls' Singles 14 & under, Girls' Doubles 14 & under\","
+        "SELECTED,Youth Medium,2012\n"
+    )
+    up_i = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_initial",
+        files={"file": ("init.csv", init_csv, "text/csv")},
+    ))
+    client.post(f"/api/import/batches/{up_i['batch_id']}/merge")
+
+    # B2b Correction: existing row's status → withdrawn, late-add a new row.
+    corr_csv = (
+        "First Name,Last Name,Gender,Events,Tournament sign in,Draw status,"
+        "Suspension points,USTA ID,WTN Singles\n"
+        f"Sanha,Chegu,Female,Girls' 14 & under singles,Sign in,"
+        "\"Withdrawn, Alternate\",,"
+        f"{usta_existing},31.42\n"
+        f"Aanya,Sujay,Female,Girls' 14 & under singles,Sign in,Alternate,,"
+        f"{usta_lateadd},31.72\n"
+    )
+    up = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_correction",
+        files={"file": ("corr.csv", corr_csv, "text/csv")},
+    ))
+    assert up["total"] == 2 and up["valid"] == 2
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 2 and m["failed"] == 0
+
+    roster = {e["usta_number"]: e
+              for e in client.get(f"/api/tournaments/{t['id']}/players").json()}
+
+    # Existing row updated: status + sign-in flag flipped, division/events
+    # untouched on the t-shirt + selection side.
+    existing = roster[usta_existing]
+    assert existing["selection_status"] == "withdrawn"
+    assert existing["signed_in"] is True
+    assert existing["t_shirt_size"] == "Youth Medium"   # preserved from B2a
+    assert existing["age_division"] == "G14"
+
+    # Late-add: new player, new roster row, status from parsed Draw status.
+    lateadd = roster[usta_lateadd]
+    assert lateadd["selection_status"] == "alternate"
+    assert lateadd["age_division"] == "G14"
+    assert lateadd["signed_in"] is True
+
+    # B2b promise: rows NOT in the file are untouched. Insert a third row, then
+    # re-run the same Correction file and confirm the third stays put.
+    usta_untouched = "UNT" + uuid.uuid4().hex[:8]
+    init2 = (
+        "First name,Last name,Gender,ID,Events,Selection,Year of birth\n"
+        f"Untouched,Player,Female,{usta_untouched},"
+        "\"Girls' Singles 14 & under\",SELECTED,2012\n"
+    )
+    up2 = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_initial",
+        files={"file": ("init2.csv", init2, "text/csv")},
+    ))
+    client.post(f"/api/import/batches/{up2['batch_id']}/merge")
+    # Re-run the SAME correction (which doesn't mention usta_untouched).
+    up3 = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_correction",
+        files={"file": ("corr.csv", corr_csv, "text/csv")},
+    ))
+    client.post(f"/api/import/batches/{up3['batch_id']}/merge")
+    after = {e["usta_number"]: e
+             for e in client.get(f"/api/tournaments/{t['id']}/players").json()}
+    assert after[usta_untouched]["selection_status"] == "selected"  # never withdrawn
 
 
 def test_hotel_confidential_report():
