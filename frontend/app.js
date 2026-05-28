@@ -380,6 +380,18 @@ document.addEventListener("focusin", (e) => {
   }
 });
 
+// When the player changes (or the inline-create gender select changes), the
+// inferred gender changes — refresh the division/event lists in that form so
+// boys see only boys' divisions + mixed, girls see only girls' divisions + mixed.
+document.addEventListener("change", (e) => {
+  const t = e.target;
+  if (!t || !t.form) return;
+  const name = t.getAttribute("name");
+  if (name === "player_ref" || name === "player_id" || name === "gender") {
+    refreshDivisionLists(_inferFormGender(t.form));
+  }
+});
+
 // Colored status chip for known tokens (selection status, email status, etc.).
 const BADGE = {
   selected: "ok", alternate: "warn", withdrawn: "bad",
@@ -1445,6 +1457,9 @@ function rosterSelect(e) {
   rosterEditId = e.id;
   rosterSetMode("pick");  // editing an existing entry — always pick mode
   rosterForm.player_id.value = e.player_id;
+  // Filter the division + events lists by the picked player's gender BEFORE
+  // we set the age_division value, so the existing value finds its <option>.
+  refreshDivisionLists(_inferFormGender(rosterForm));
   rosterForm.age_division.value = e.age_division || "";
   // Multi-select: `events` is stored comma-joined ("Singles, Doubles") so a
   // plain `.value =` won't match any single <option>. Split + select each.
