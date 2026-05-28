@@ -430,6 +430,191 @@ def _coerce_int(v):
         return None
 
 
+# ---- B2a Initial-Roster helpers --------------------------------------------
+# The real "Tournament Full Player Data (June 2026).xlsx" carries data the
+# existing schema and earlier importer didn't track. These helpers parse the
+# real-world formats reliably and surface coercion failures as row notes
+# rather than swallowing bad data.
+
+def _coerce_decimal(v):
+    """Best-effort numeric coercion for money/WTN cells. Strips $ and commas."""
+    if v is None:
+        return None
+    s = str(v).strip().lstrip("$").replace(",", "")
+    if not s:
+        return None
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_bool(v):
+    """Permissive truthiness for spreadsheet cells: 'Y'/'N', 'true'/'false',
+    'yes'/'no', 'sign in'. Returns None on blanks (don't pretend to know)."""
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if not s:
+        return None
+    if s in ("1", "true", "yes", "y", "sign in", "signed in", "x"):
+        return True
+    if s in ("0", "false", "no", "n", "absent"):
+        return False
+    return None
+
+
+def _year_to_date(v):
+    """Year-of-birth integer → 'YYYY-01-01' for storage. Caller sets
+    birthdate_precision='year' so the UI can distinguish from a true DOB."""
+    n = _coerce_int(v)
+    if n is None or not (1900 <= n <= 2100):
+        return None
+    return f"{n:04d}-01-01"
+
+
+# Map the verbose "Boys' Singles 14 & under" events strings the USTA sheet uses
+# into our (division, event) split. The Excel "Events" cell may hold multiple
+# comma-separated event names — all for the same division for a given player.
+_JUNIOR_EVENT_RE = re.compile(
+    r"(boys|girls)['’]?\s+(singles|doubles)\s+(\d+)\s*&\s*under",
+    re.IGNORECASE,
+)
+
+def _parse_events_and_division(raw):
+    """Split 'Boys' Singles 14 & under, Boys' Doubles 14 & under' into
+    (division_code, events_str). Returns (None, raw) on no match so the
+    bare-event format (already-canonical 'Singles, Doubles') still flows
+    through other code paths."""
+    if not raw:
+        return None, None
+    parts = [p.strip() for p in str(raw).split(",") if p.strip()]
+    division = None
+    events = []
+    for p in parts:
+        m = _JUNIOR_EVENT_RE.search(p)
+        if m:
+            sex, evt, age = m.group(1).lower(), m.group(2).title(), int(m.group(3))
+            d = ("B" if sex == "boys" else "G") + str(age)
+            division = division or d  # first one wins; all should match
+            events.append(evt)
+        else:
+            # Already-canonical event name (junior "Singles"/"Doubles" or
+            # adult "Men's Singles" etc.) — pass through.
+            events.append(p)
+    return division, ", ".join(events) if events else None
+
+
+# "Selection" cell often holds e.g. "SELECTED, PRE_SELECTED" or "ALTERNATE";
+# the importer needs ONE canonical value. Precedence: withdrawn > selected >
+# alternate > nothing (matches what a TD would file by hand).
+def _parse_selection(raw):
+    if not raw:
+        return "selected"
+    tokens = {t.strip().lower() for t in str(raw).split(",") if t.strip()}
+    if "withdrawn" in tokens:
+        return "withdrawn"
+    if {"selected", "pre_selected", "preselected", "main_draw"} & tokens:
+        return "selected"
+    if "alternate" in tokens:
+        return "alternate"
+    return "selected"
+
+
+def _ext_player_initial(cur, pid, d):
+    """B2a: after upsert_player has created/touched the row, propagate the
+    extended player-catalog fields the Excel file carries. Idempotent —
+    COALESCE-style so re-running doesn't blank a column the new file omits."""
+    cur.execute(
+        """
+        UPDATE player SET
+            emails           = COALESCE(%s, emails),
+            phones           = COALESCE(%s, phones),
+            district         = COALESCE(%s, district),
+            section          = COALESCE(%s, section),
+            city             = COALESCE(%s, city),
+            state            = COALESCE(%s, state),
+            wtn_singles      = COALESCE(%s::numeric, wtn_singles),
+            wtn_singles_conf = COALESCE(%s, wtn_singles_conf),
+            wtn_doubles      = COALESCE(%s::numeric, wtn_doubles),
+            wtn_doubles_conf = COALESCE(%s, wtn_doubles_conf),
+            birthdate        = COALESCE(%s::date, birthdate),
+            birthdate_precision = CASE
+                WHEN %s::date IS NOT NULL AND birthdate IS NULL THEN 'year'
+                ELSE birthdate_precision END
+        WHERE id = %s
+        """,
+        (
+            _s(d.get("emails")), _s(d.get("phones")),
+            _s(d.get("district")), _s(d.get("section")),
+            _s(d.get("city")), _s(d.get("state")),
+            _coerce_decimal(d.get("wtn_singles")), _s(d.get("wtn_singles_conf")),
+            _coerce_decimal(d.get("wtn_doubles")), _s(d.get("wtn_doubles_conf")),
+            _year_to_date(d.get("year_of_birth")),
+            _year_to_date(d.get("year_of_birth")),
+            pid,
+        ),
+    )
+
+
+def _merge_roster_initial(cur, tid, d):
+    """B2a Initial roster import. Upserts Setup → Players (catalog) AND the
+    per-tournament roster row, propagating WTN, payment, and contact info from
+    the USTA "Full Player Data" export. Multi-valued "Selection" and verbose
+    "Boys' Singles 14 & under" events strings are parsed into our canonical
+    division + events split."""
+    pid = upsert_player(cur, d["usta_number"], d.get("first_name"), d.get("last_name"),
+                        _norm_gender(d.get("gender")))
+    _ext_player_initial(cur, pid, d)
+    # Events cell carries the division — extract it if the canonical age_division
+    # column wasn't supplied separately.
+    parsed_div, parsed_events = _parse_events_and_division(d.get("events"))
+    division = _s(d.get("age_division")) or parsed_div
+    events = parsed_events or _s(d.get("events"))
+    status = _parse_selection(d.get("selection_status") or d.get("selection"))
+    conflict = ("already on the roster — entry overwritten"
+                if _exists(cur, "tournament_entry", tid, pid) else None)
+    cur.execute(
+        """
+        INSERT INTO tournament_entry
+            (tournament_id, player_id, age_division, events, selection_status,
+             t_shirt_size, dietary_preference,
+             payment_status, amount_paid, amount_refunded, amount_due,
+             amount_outstanding, card_stored, source)
+        -- Explicit ::numeric / ::boolean casts so psycopg can infer types
+        -- when the column is omitted from the CSV (the row passes NULL and
+        -- Postgres otherwise complains "could not determine data type").
+        VALUES (%s,%s,%s,%s,%s,%s,%s,
+                %s, %s::numeric, %s::numeric, %s::numeric, %s::numeric,
+                %s::boolean, 'usta_roster')
+        ON CONFLICT (tournament_id, player_id) DO UPDATE SET
+            age_division = COALESCE(EXCLUDED.age_division, tournament_entry.age_division),
+            events = COALESCE(EXCLUDED.events, tournament_entry.events),
+            selection_status = EXCLUDED.selection_status,
+            t_shirt_size = COALESCE(EXCLUDED.t_shirt_size, tournament_entry.t_shirt_size),
+            dietary_preference = COALESCE(EXCLUDED.dietary_preference, tournament_entry.dietary_preference),
+            payment_status = COALESCE(EXCLUDED.payment_status, tournament_entry.payment_status),
+            amount_paid = COALESCE(EXCLUDED.amount_paid, tournament_entry.amount_paid),
+            amount_refunded = COALESCE(EXCLUDED.amount_refunded, tournament_entry.amount_refunded),
+            amount_due = COALESCE(EXCLUDED.amount_due, tournament_entry.amount_due),
+            amount_outstanding = COALESCE(EXCLUDED.amount_outstanding, tournament_entry.amount_outstanding),
+            card_stored = COALESCE(EXCLUDED.card_stored, tournament_entry.card_stored)
+        """,
+        (
+            tid, pid, division, events, status,
+            _norm_shirt(_s(d.get("t_shirt_size"))),
+            _s(d.get("dietary_preference")),
+            _s(d.get("payment_status")),
+            _coerce_decimal(d.get("amount_paid")),
+            _coerce_decimal(d.get("amount_refunded")),
+            _coerce_decimal(d.get("amount_due")),
+            _coerce_decimal(d.get("amount_outstanding")),
+            _coerce_bool(d.get("card_stored")),
+        ),
+    )
+    return conflict
+
+
 # Audit F2: optional column accepted by every Part-B importer so a staged CSV
 # can preserve the originating email's id when it's known. Blank = no source.
 _SRC_EMAIL = Col("source_email_id", {"sourceemailid", "emailid", "source"})
@@ -504,6 +689,48 @@ TYPES = {
                       Col("source", {"src"}),
                   ],
                   "merge": _merge_distance},
+    # B2a: Full Player Data import — upserts BOTH the Setup → Players catalog
+    # and the per-tournament roster. Real-world aliases drawn from the USTA
+    # "Tournament Full Player Data" Excel export (see docs/roadmap.md backlog).
+    "roster_initial": {
+        "label": "Roster — Initial (Full Player Data)",
+        "desc": ("Full pre-tournament roster from the USTA \"Full Player Data\" export. "
+                 "Inserts new players and updates existing ones (name, gender, "
+                 "city/state, WTN, district/section, emails/phones, year of "
+                 "birth), then upserts the roster row with division/events, "
+                 "selection status, t-shirt, dietary, and payment snapshot. "
+                 "Re-runnable: re-importing overwrites the roster, with name "
+                 "and contact info merged into Setup → Players."),
+        "cols": [
+            Col("usta_number", {"ustanumber", "usta", "ustano", "ustaid", "id"}, required=True),
+            Col("first_name", {"firstname", "first", "givenname"}),
+            Col("last_name", {"lastname", "last", "surname"}),
+            Col("gender", {"sex"}),
+            Col("year_of_birth", {"yearofbirth", "yob", "birthyear"}),
+            Col("city"),
+            Col("state"),
+            Col("district"),
+            Col("section"),
+            Col("emails", {"email"}),
+            Col("phones", {"phonenumbers", "phone"}),
+            Col("wtn_singles", {"wtnsingles"}),
+            Col("wtn_singles_conf", {"wtnsinglesconfidence"}),
+            Col("wtn_doubles", {"wtndoubles"}),
+            Col("wtn_doubles_conf", {"wtndoublesconfidence"}),
+            Col("age_division", {"division", "div"}),
+            Col("events", {"event"}),
+            Col("selection_status", {"selection", "status"}),
+            Col("t_shirt_size", {"tshirt", "shirt", "shirtsize", "size", "preferredtshirtsize"}),
+            Col("dietary_preference", {"dietary", "diet", "dietaryrestrictions"}),
+            Col("payment_status", {"paymentstatus"}),
+            Col("amount_paid", {"amountpaid"}),
+            Col("amount_refunded", {"amountrefunded"}),
+            Col("amount_due", {"totalamountdue", "amountdue"}),
+            Col("amount_outstanding", {"amountoutstanding"}),
+            Col("card_stored", {"cardstored", "card"}),
+        ],
+        "merge": _merge_roster_initial,
+    },
     "player_hotels": {"label": "Player hotels",
                       "desc": "Each player's reported hotel and lodging plan.",
                       "cols": _PLAYER + [Col("hotel_name", {"hotel", "hotelname"}),

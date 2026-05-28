@@ -46,6 +46,16 @@ class RosterEntryOut(BaseModel):
     selection_status: SelectionStatus = "selected"
     t_shirt_size: Optional[str] = None
     dietary_preference: Optional[str] = None
+    # B2a (migration 0028) — payment snapshot from Full Player Data import.
+    payment_status: Optional[str] = None
+    amount_paid: Optional[float] = None
+    amount_refunded: Optional[float] = None
+    amount_due: Optional[float] = None
+    amount_outstanding: Optional[float] = None
+    card_stored: Optional[bool] = None
+    # B2b — populated by the Correction-status importer.
+    signed_in: Optional[bool] = None
+    suspension_points: Optional[int] = None
 
 
 # ---------- Assignment ----------

@@ -64,6 +64,11 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
 _SELECT = """
 SELECT e.id, e.tournament_id, e.player_id, e.age_division, e.events,
        e.selection_status, e.t_shirt_size, e.dietary_preference,
+       -- B2a (migration 0028) payment snapshot from Full Player Data import.
+       e.payment_status, e.amount_paid, e.amount_refunded,
+       e.amount_due, e.amount_outstanding, e.card_stored,
+       -- B2b correction-import fields (still populated by B2a if present).
+       e.signed_in, e.suspension_points,
        p.usta_number,
        COALESCE(nm.first_name, p.first_name) AS first_name,
        COALESCE(nm.last_name,  p.last_name)  AS last_name

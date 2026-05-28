@@ -103,6 +103,18 @@ class PlayerCreate(BaseModel):
     birthdate: Optional[date] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    # B2a (migration 0028) — extended catalog fields from the USTA
+    # "Full Player Data" export. All optional and NULLable so the existing
+    # /api/players POST/PUT flows keep working.
+    birthdate_precision: Optional[str] = None
+    district: Optional[str] = None
+    section: Optional[str] = None
+    emails: Optional[str] = None
+    phones: Optional[str] = None
+    wtn_singles: Optional[float] = None
+    wtn_singles_conf: Optional[str] = None
+    wtn_doubles: Optional[float] = None
+    wtn_doubles_conf: Optional[str] = None
 
 
 class PlayerOut(PlayerCreate):

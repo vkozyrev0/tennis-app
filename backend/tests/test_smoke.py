@@ -532,6 +532,98 @@ def test_player_hotel_fk_dedup():
     assert summ.get(hname) == 2
 
 
+def test_roster_initial_import_full_player_data():
+    """B2a: USTA "Full Player Data" Excel import.
+
+    Covers the real-world parsing quirks the June 2026 sample reveals:
+    - "Selection" multi-valued ("SELECTED, PRE_SELECTED") → 'selected'
+    - "Events" embeds division ("Boys' Singles 14 & under") → division='B14',
+      events='Singles, Doubles'
+    - Year-of-birth only → birthdate='YYYY-01-01' + precision='year'
+    - WTN / payment / emails / phones propagate to Setup → Players
+    - Money cells with $ / commas coerce cleanly
+    - Re-importing the same row overwrites (with conflict note)
+    """
+    t = _tournament()
+    usta = "TST" + uuid.uuid4().hex[:8]
+    csv_data = (
+        "First name,Last name,Gender,ID,WTN Singles,WTN Singles Confidence,"
+        "WTN Doubles,WTN Doubles Confidence,Events,Selection,Payment status,"
+        "Amount paid ($),Amount refunded ($),Total amount due ($),"
+        "Amount outstanding ($),Card stored,Emails,Phone numbers,"
+        "Year of birth,City,District,Section,State\n"
+        f"Aarav,Bhati,Male,{usta},31.12,High degree,34.59,High degree,"
+        "\"Boys' Singles 14 & under, Boys' Doubles 14 & under\","
+        "\"SELECTED, PRE_SELECTED\",PAID,$130.05,0,130.05,0,Y,"
+        "test@example.com,7048803784,"
+        "2012,Mooresville,North Carolina,Southern,NC\n"
+    )
+    up = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_initial",
+        files={"file": ("init.csv", csv_data, "text/csv")},
+    ))
+    assert up["total"] == 1 and up["valid"] == 1
+    m = client.post(f"/api/import/batches/{up['batch_id']}/merge").json()
+    assert m["merged"] == 1 and m["failed"] == 0
+
+    # --- Player catalog upserted with extended fields ----------------------
+    players = client.get("/api/players").json()
+    p = next(pl for pl in players if pl["usta_number"] == usta)
+    assert p["gender"] == "male"
+    assert p["city"] == "Mooresville"
+    assert p["state"] == "NC"
+    assert p["district"] == "North Carolina"
+    assert p["section"] == "Southern"
+    assert p["emails"] == "test@example.com"
+    assert p["phones"] == "7048803784"
+    assert float(p["wtn_singles"]) == 31.12
+    assert p["wtn_singles_conf"] == "High degree"
+    assert p["birthdate"] == "2012-01-01"
+    assert p["birthdate_precision"] == "year"
+
+    # --- Roster row carries division + events split + payment snapshot -----
+    roster = {e["usta_number"]: e for e in
+              client.get(f"/api/tournaments/{t['id']}/players").json()}
+    r = roster[usta]
+    assert r["age_division"] == "B14", r
+    assert r["events"] == "Singles, Doubles", r
+    assert r["selection_status"] == "selected"
+    assert r["payment_status"] == "PAID"
+    assert float(r["amount_paid"]) == 130.05
+    assert r["card_stored"] is True
+
+    # --- Re-import: overwrites, surfaces conflict --------------------------
+    up2 = _ok(client.post(
+        f"/api/import/tournaments/{t['id']}/roster_initial",
+        files={"file": ("init.csv", csv_data, "text/csv")},
+    ))
+    m2 = client.post(f"/api/import/batches/{up2['batch_id']}/merge").json()
+    assert m2["merged"] == 1 and len(m2["conflicts"]) == 1
+
+
+def test_roster_initial_selection_precedence():
+    """B2a: 'Selection' withdrawn beats selected which beats alternate."""
+    from app.importer import _parse_selection
+    assert _parse_selection("SELECTED, PRE_SELECTED") == "selected"
+    assert _parse_selection("ALTERNATE") == "alternate"
+    assert _parse_selection("WITHDRAWN, ALTERNATE") == "withdrawn"
+    assert _parse_selection("") == "selected"  # default
+    assert _parse_selection(None) == "selected"
+
+
+def test_roster_initial_event_parse():
+    """B2a: 'Boys' Singles 14 & under' → division=B14, event=Singles."""
+    from app.importer import _parse_events_and_division
+    div, evts = _parse_events_and_division(
+        "Boys' Singles 14 & under, Boys' Doubles 14 & under"
+    )
+    assert div == "B14"
+    assert evts == "Singles, Doubles"
+    # Already-canonical bare names pass through, division None.
+    div2, evts2 = _parse_events_and_division("Singles, Doubles")
+    assert div2 is None and evts2 == "Singles, Doubles"
+
+
 def test_hotel_confidential_report():
     """First page: pivot (hotel → players + officials counts). Following pages:
     each player/official as first-initial + last name. Selected only on the

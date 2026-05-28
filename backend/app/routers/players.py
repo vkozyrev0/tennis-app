@@ -6,7 +6,14 @@ from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
-_COLS = "id, usta_number, first_name, last_name, gender, birthdate, city, state, updated_at"
+_COLS = (
+    # B2a (migration 0028): expose the extended catalog fields the
+    # "Full Player Data" import populates.
+    "id, usta_number, first_name, last_name, gender, birthdate, "
+    "birthdate_precision, city, state, district, section, "
+    "emails, phones, wtn_singles, wtn_singles_conf, "
+    "wtn_doubles, wtn_doubles_conf, updated_at"
+)
 
 # Audit F6: PlayerCreate is shared between POST and PUT bodies; the PUT path
 # accepts spread `{**p, "city": "..."}` payloads that may carry id/updated_at,
