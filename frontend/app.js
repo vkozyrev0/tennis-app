@@ -275,10 +275,24 @@ function showShortcuts() {
         <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
       </div>`;
     document.body.appendChild(m);
-    const close = () => { m.hidden = true; };
+    const close = () => {
+      m.hidden = true;
+      if (m._invoker && typeof m._invoker.focus === "function") m._invoker.focus();
+    };
     m.querySelector("#shortcuts-close").addEventListener("click", close);
     m.addEventListener("click", (e) => { if (e.target === m) close(); });
+    // a11y 4th-pass #3: trap Tab inside the shortcuts dialog the same way
+    // the confirm dialog does. Only one focusable inside (Close), but Tab
+    // and Shift+Tab still need to stay there.
+    m.addEventListener("keydown", (e) => {
+      if (m.hidden) return;
+      if (e.key === "Tab") {
+        e.preventDefault();
+        m.querySelector("#shortcuts-close").focus();
+      }
+    });
   }
+  m._invoker = document.activeElement;
   m.hidden = false;
   requestAnimationFrame(() => m.querySelector("#shortcuts-close").focus());
 }
@@ -778,6 +792,21 @@ function _labelHeaderFilters(table) {
     }
   });
 }
+// a11y 4th-pass #4: reflect Tabulator's current sort direction into aria-sort
+// so SR users hear "ascending" / "descending" on the column they're inspecting.
+// Tabulator already sets `aria-sort` on sortable columns to "none" by default;
+// we update it post-sort.
+function _reflectAriaSort(table) {
+  if (!table || !table.element) return;
+  const sorters = (typeof table.getSorters === "function") ? table.getSorters() : [];
+  const active = new Map(sorters.map((s) => [s.field, s.dir]));
+  table.element.querySelectorAll(".tabulator-col[tabulator-field]").forEach((col) => {
+    const field = col.getAttribute("tabulator-field");
+    if (!field) return;
+    const dir = active.get(field);
+    col.setAttribute("aria-sort", dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none");
+  });
+}
 
 // ---- tabs ----
 // ARIA: expose the menu as a tablist and make tabs keyboard-navigable.
@@ -1230,7 +1259,7 @@ function wireEntity(cfg) {
   // editing); use the Edit button to open the form overlay.
   table.on("rowClick", (e, row) => { selectedId = row.getData().id; applySelection(); });
   table.on("dataFiltered", () => { markRows(); updateNav(); });
-  table.on("dataSorted", () => { markRows(); updateNav(); });
+  table.on("dataSorted", () => { markRows(); updateNav(); _reflectAriaSort(table); });
   // In-grid edit: PUT the whole row (the *Out record has every field the model
   // needs; Pydantic ignores extras). Refresh to pick up server normalization.
   table.on("cellEdited", async (cell) => {
@@ -1538,7 +1567,7 @@ rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { ros
 // the Edit button opens the form overlay.
 rosterGrid.on("rowClick", (e, row) => { rosterEditId = row.getData().id; applyRosterSel(); });
 rosterGrid.on("dataFiltered", applyRosterSel);
-rosterGrid.on("dataSorted", applyRosterSel);
+rosterGrid.on("dataSorted", () => { applyRosterSel(); _reflectAriaSort(rosterGrid); });
 // In-grid edit: PUT the whole entry (RosterEntryOut has every field the model
 // needs; the backend re-normalizes t_shirt_size). Refresh to reflect that.
 rosterGrid.on("cellEdited", async (cell) => {

@@ -3,6 +3,18 @@
 
 * { box-sizing: border-box; }
 
+/* a11y 4th-pass #2: honor prefers-reduced-motion. Kills the indeterminate
+   progress-bar animation, toast slide-ins, skip-link transition, etc. for
+   users who've requested less motion at the OS level (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Global `hidden` attribute enforcement.
    Components that use `display: flex/grid/etc.` at equal specificity beat
    the user-agent default `[hidden] { display: none }`, so setting el.hidden

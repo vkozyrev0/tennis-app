@@ -6,7 +6,7 @@
   <title>CourtOps Tennis</title>
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=2" />
-  <link rel="stylesheet" href="/styles.css?v=2" />
+  <link rel="stylesheet" href="/styles.css?v=3" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -64,8 +64,8 @@
   <p id="multi-hint" class="sr-only">Hold Control or Command and click to select multiple options.</p>
   <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-hidden="true"></div>
   <header>
-    <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
-      <button type="button" id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
+    <h1>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
+      <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
       <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
         <button type="button" id="logout-btn">Log out</button></span>
@@ -136,7 +136,7 @@
     </div>
   </nav>
 
-  <main id="main-app" tabindex="-1">
+  <main id="main-app" tabindex="-1" aria-label="Tournament director workspace">
     <!-- ============ SETUP ============ -->
 
     <!-- Tournaments (catalog CRUD) -->
@@ -394,7 +394,7 @@
         <h3>T-shirt sizes — cumulative (all tournaments)</h3>
         <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
-        <button type="button" id="tshirt-order-csv" class="export-btn no-print">⬇ Order CSV (size → qty)</button>
+        <button type="button" id="tshirt-order-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> Order CSV (size → qty)</button>
         <input class="filter filter--narrow" id="tshirt-filter" type="search" placeholder="Filter…" aria-label="Filter t-shirts" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
@@ -411,7 +411,7 @@
           <strong>active tournament</strong> (chosen in the bar above). For each type:
           download a blank <strong>template</strong>, fill it in, <strong>upload</strong> (rows are
           staged and validated), then <strong>Merge</strong> the valid rows into the tables.
-          (Each list's own page has its <strong>⬇ CSV export</strong>.)</p>
+          (Each list's own page has its <strong><span aria-hidden="true">⬇</span> CSV export</strong>.)</p>
         <div id="import-sections"></div>
       </div>
     </section>
@@ -440,9 +440,9 @@
             <div class="list-toolbar">
               <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" aria-label="Filter roster" />
               <button type="button" id="roster-new" class="new-btn">+ New</button>
-              <button type="button" id="roster-csv" class="export-btn no-print">⬇ CSV</button>
-              <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in</button>
-              <button type="button" id="roster-signin-template" class="export-btn no-print" title="Empty sign-in sheet template">⬇ Sign-in template</button>
+              <button type="button" id="roster-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> CSV</button>
+              <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Sign-in sheet (status, events, size, hotel, lodging)"><span aria-hidden="true">⬇</span> Sign-in</button>
+              <button type="button" id="roster-signin-template" class="export-btn no-print" title="Empty sign-in sheet template"><span aria-hidden="true">⬇</span> Sign-in template</button>
             </div>
             <div class="list-scroll"><table id="roster-table" class="list-table"><thead><tr><th>Player</th><th>Div</th><th>Status</th><th>Shirt</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table></div>
           </div>
@@ -788,7 +788,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
       <div class="t-content card">
         <h3 class="h3-flex">Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
-          <button type="button" id="photel-report-btn" class="export-btn no-print h3-action" title="Open a confidential hotel report (summary + initials-only detail) ready to print">⎙ Confidential report</button>
+          <button type="button" id="photel-report-btn" class="export-btn no-print h3-action" title="Open a confidential hotel report (summary + initials-only detail) ready to print"><span aria-hidden="true">⎙</span> Confidential report</button>
         </h3>
         <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
         <form id="photel-form" autocomplete="off" class="inline-form">
@@ -842,8 +842,8 @@
         <div class="report-toolbar no-print">
           <h3><span class="t-name"></span> — Staffing Plan</h3>
           <button type="button" id="report-print">Print</button>
-          <button type="button" id="report-csv" title="Download the current staffing plan with all officials + days filled in">⬇ CSV</button>
-          <button type="button" id="report-template" title="Download an empty staffing-plan template (headers + day columns, no data)">⬇ Template</button>
+          <button type="button" id="report-csv" title="Download the current staffing plan with all officials + days filled in"><span aria-hidden="true">⬇</span> CSV</button>
+          <button type="button" id="report-template" title="Download an empty staffing-plan template (headers + day columns, no data)"><span aria-hidden="true">⬇</span> Template</button>
         </div>
         <div id="report-meta" class="muted"></div>
         <table id="report-table" class="list-table">
@@ -864,7 +864,7 @@
     </section>
   </main>
 
-  <main id="official-app" hidden>
+  <main id="official-app" hidden aria-label="My profile and availability">
     <section class="card">
       <h2>My profile</h2>
       <form id="me-form" autocomplete="off">
@@ -916,6 +916,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=9"></script>
+  <script type="module" src="/app.js?v=10"></script>
 </body>
 </html>
