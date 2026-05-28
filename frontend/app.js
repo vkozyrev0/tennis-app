@@ -99,8 +99,17 @@ function toast(text, ok = true) {
   t.className = "toast " + (ok ? "ok" : "bad");
   t.setAttribute("role", ok ? "status" : "alert");
   t.textContent = text;
+  // a11y #10: error toasts get a close button + stay until dismissed (WCAG
+  // 2.2.1 Timing Adjustable). Success toasts still auto-fade after 2.5s.
+  if (!ok) {
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "toast-close"; x.textContent = "×";
+    x.setAttribute("aria-label", "Dismiss notification");
+    x.addEventListener("click", () => t.remove());
+    t.appendChild(x);
+  }
   box.appendChild(t);
-  setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ok ? 2500 : 5000);
+  if (ok) setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, 2500);
 }
 function setMsg(id, text, ok) {
   const el = document.getElementById(id);
@@ -685,6 +694,20 @@ function expandPlayerRef(b, field = "player_ref") {
   return b;
 }
 
+// a11y #9: walk Tabulator header-filter inputs and tag them with a
+// per-column aria-label so screen readers say "Filter Name" instead of
+// the bare "search edit text". Runs on every tableBuilt + dataFiltered.
+function _labelHeaderFilters(table) {
+  if (!table || !table.element) return;
+  table.element.querySelectorAll(".tabulator-col").forEach((col) => {
+    const title = col.querySelector(".tabulator-col-title")?.textContent?.trim();
+    const filter = col.querySelector(".tabulator-header-filter input, .tabulator-header-filter select");
+    if (title && filter && !filter.hasAttribute("aria-label")) {
+      filter.setAttribute("aria-label", `Filter ${title}`);
+    }
+  });
+}
+
 // ---- tabs ----
 // ARIA: expose the menu as a tablist and make tabs keyboard-navigable.
 const _menuEl = document.getElementById("menu");
@@ -767,6 +790,14 @@ document.querySelectorAll(".tab").forEach((t) => {
     panel.setAttribute("role", "tabpanel");
     panel.setAttribute("aria-labelledby", t.id);
     if (!panel.hasAttribute("tabindex")) panel.setAttribute("tabindex", "-1");
+    // a11y #11: give each panel a sr-only <h2> so the document outline
+    // doesn't skip from h1 → h3. Uses the tab's label as the heading text.
+    if (!panel.querySelector("h2.sr-only")) {
+      const h2 = document.createElement("h2");
+      h2.className = "sr-only";
+      h2.textContent = t.textContent.trim();
+      panel.prepend(h2);
+    }
   }
 });
 
@@ -791,6 +822,14 @@ _menuEl.addEventListener("click", (e) => {
   // Tabulator can't lay out columns while hidden — redraw the grid(s) when shown.
   _redrawPanelGrids(tab.dataset.target);
   sizeLists();
+  // a11y #8: focus the newly-active panel so screen readers re-announce the
+  // tabpanel context after a tab switch. preventScroll keeps the layout still.
+  // Only fire on real user clicks (not programmatic .click()) so the focus
+  // doesn't jump while routine setup code activates a default tab.
+  if (e.isTrusted) {
+    const panel = document.getElementById(tab.dataset.target);
+    if (panel) { try { panel.focus({ preventScroll: true }); } catch (_) {} }
+  }
 });
 
 // Bound every scrollable list to the real space left below it so it never runs
@@ -943,6 +982,7 @@ function deferredSetData(table) {
   const onBuilt = () => {
     state.built = true;
     if (state.pending !== null) { table.setData(state.pending); state.pending = null; }
+    _labelHeaderFilters(table);   // a11y #9
   };
   table.on("tableBuilt", onBuilt);
   // Cover the case where Tabulator fires tableBuilt synchronously inside its
@@ -1747,7 +1787,7 @@ async function loadAssignments() {
   // Audit P42: match the Tabulator placeholder styling so empty states across
   // the app look the same (✦ icon + centered muted text).
   if (list.length === 0) {
-    box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon">✦</span> No officials assigned yet — pick one from the form above.</div>';
+    box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — pick one from the form above.</div>';
     return;
   }
   for (const a of list) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));

@@ -56,11 +56,17 @@
     </defs>
   </svg>
 
+  <!-- a11y #5: skip-link is the first focusable element. Visually hidden
+       until focused so keyboard users can jump past the ~21 nav controls. -->
+  <a href="#main-app" class="skip-link">Skip to main content</a>
+  <!-- a11y #12: shared hint for every <select multiple>. aria-describedby
+       references it so screen readers explain the multi-selection gesture. -->
+  <p id="multi-hint" class="sr-only">Hold Control or Command and click to select multiple options.</p>
   <div id="progress" class="progress"></div>
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill">checking…</span>
       <button type="button" id="theme-toggle" title="Toggle dark mode">🌙 Dark</button>
-      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd>?</kbd></button>
+      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
@@ -130,7 +136,7 @@
     </div>
   </nav>
 
-  <main>
+  <main id="main-app" tabindex="-1">
     <!-- ============ SETUP ============ -->
 
     <!-- Tournaments (catalog CRUD) -->
@@ -470,7 +476,7 @@
               </div>
               <div class="row">
                 <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
-                <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
+                <label>Events <select name="events" data-catalog="event" multiple size="3" aria-describedby="multi-hint"></select></label>
               </div>
               <div class="row">
                 <label>T-shirt
@@ -625,7 +631,7 @@
           </div>
           <div class="row">
             <label>Age division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
-            <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
+            <label>Events <select name="events" data-catalog="event" multiple size="3" aria-describedby="multi-hint"></select></label>
           </div>
           <div class="row">
             <label>Request date <input type="date" name="request_date" /></label>
@@ -652,7 +658,7 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
+            <label>Events <select name="events" data-catalog="event" multiple size="3" aria-describedby="multi-hint"></select></label>
             <label>Reason <input name="reason" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
@@ -702,7 +708,7 @@
           </div>
           <div class="row">
             <label>Home division <select name="home_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
-            <label>Willing divisions <select name="willing_divisions" data-catalog="division" multiple size="4"></select></label>
+            <label>Willing divisions <select name="willing_divisions" data-catalog="division" multiple size="4" aria-describedby="multi-hint"></select></label>
           </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="divflex-msg"></span></div>
         </form>
@@ -907,6 +913,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=6"></script>
+  <script type="module" src="/app.js?v=7"></script>
 </body>
 </html>
