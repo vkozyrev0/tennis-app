@@ -88,7 +88,7 @@
   </section>
 
   <nav class="menu-l1" id="menu-groups" aria-label="Sections"></nav>
-  <nav class="menu" id="menu">
+  <nav class="menu" id="menu" aria-label="Subsections">
     <div class="menu-group group-active" data-group="setup">
       <span class="menu-label">Setup</span>
       <button class="tab active" data-target="panel-tournaments">Tournaments</button>
@@ -144,7 +144,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter tournaments…" />
+            <input class="filter" type="search" placeholder="Filter tournaments…" aria-label="Filter tournaments" />
             <button type="button" class="new-btn">+ New</button>
           </div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -179,7 +179,7 @@
     <section class="panel" id="panel-sites">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter sites…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter sites…" aria-label="Filter sites" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -198,7 +198,7 @@
     <section class="panel" id="panel-officials">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" aria-label="Filter officials" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -215,7 +215,7 @@
             <h4>Certifications</h4>
             <div id="cert-chips" class="days"></div>
             <div class="cert-add">
-              <select id="cert-type" data-enum="cert_type"></select>
+              <select id="cert-type" data-enum="cert_type" aria-label="Certification type"></select>
               <button type="button" id="cert-add-btn" class="btn-link">+ add</button>
               <span class="msg" id="cert-msg"></span>
             </div>
@@ -223,8 +223,8 @@
           <div id="official-account" hidden>
             <h4>Login</h4>
             <div class="cert-add">
-              <input id="acct-user" placeholder="username" />
-              <input id="acct-pass" type="password" placeholder="password" />
+              <input id="acct-user" placeholder="username" aria-label="Username" />
+              <input id="acct-pass" type="password" placeholder="password" aria-label="Password" />
               <button type="button" id="acct-save" class="btn-link">Set login</button>
               <span class="msg" id="acct-msg"></span>
             </div>
@@ -237,7 +237,7 @@
     <section class="panel" id="panel-players">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" aria-label="Filter players" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th>Gender</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -245,7 +245,7 @@
           <form id="player-form" autocomplete="off">
             <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" required /></label></div>
             <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
-            <div class="row"><label>Gender *
+            <div class="row"><label>Gender <span aria-hidden="true">*</span>
               <select name="gender" required>
                 <option value="">— pick one —</option>
                 <option value="male">Male (Boys / Men)</option>
@@ -265,7 +265,7 @@
     <section class="panel" id="panel-rates">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter rates…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter rates…" aria-label="Filter rates" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Cert</th><th>Rate/day</th><th>Effective</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -283,7 +283,7 @@
     <section class="panel" id="panel-hotels">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter hotels…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter hotels…" aria-label="Filter hotels" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -303,7 +303,7 @@
     <section class="panel" id="panel-distances">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" aria-label="Filter distances" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Official</th><th>Site</th><th>1-way mi</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -321,18 +321,18 @@
     <section class="panel" id="panel-divisions">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter divisions…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter divisions…" aria-label="Filter divisions" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Label</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="division-form" autocomplete="off">
             <div class="row">
-              <label>Code * <input name="code" required placeholder="e.g. B12 or NTRP 3.5 Men" /></label>
-              <label>Label * <input name="label" required placeholder="e.g. Boys 12 & Under" /></label>
+              <label>Code <span aria-hidden="true">*</span> <input name="code" required placeholder="e.g. B12 or NTRP 3.5 Men" /></label>
+              <label>Label <span aria-hidden="true">*</span> <input name="label" required placeholder="e.g. Boys 12 & Under" /></label>
             </div>
             <div class="row">
-              <label>Tournament type *
+              <label>Tournament type <span aria-hidden="true">*</span>
                 <select name="tournament_type" required>
                   <option value="junior">junior</option>
                   <option value="adult">adult</option>
@@ -357,15 +357,15 @@
     <section class="panel" id="panel-events">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter events…" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter events…" aria-label="Filter events" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="event-form" autocomplete="off">
             <div class="row">
-              <label>Name * <input name="name" required placeholder="e.g. Singles or Men's Doubles" /></label>
-              <label>Tournament type *
+              <label>Name <span aria-hidden="true">*</span> <input name="name" required placeholder="e.g. Singles or Men's Doubles" /></label>
+              <label>Tournament type <span aria-hidden="true">*</span>
                 <select name="tournament_type" required>
                   <option value="junior">junior</option>
                   <option value="adult">adult</option>
@@ -395,7 +395,7 @@
         <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
         <button type="button" id="tshirt-order-csv" class="export-btn no-print">⬇ Order CSV (size → qty)</button>
-        <input class="filter" id="tshirt-filter" type="search" placeholder="Filter…" class="filter--narrow" />
+        <input class="filter filter--narrow" id="tshirt-filter" type="search" placeholder="Filter…" aria-label="Filter t-shirts" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
           <tbody></tbody>
@@ -424,7 +424,7 @@
       <div class="t-content card">
         <h3>Sites used by <span class="t-name"></span></h3>
         <p class="muted">Toggle which sites this tournament uses. Filter the grid to find a site.</p>
-        <input class="filter" id="t-sites-filter" type="search" placeholder="Filter sites…" />
+        <input class="filter" id="t-sites-filter" type="search" placeholder="Filter sites…" aria-label="Filter sites" />
         <table class="list-table" id="t-sites-table"><thead><tr><th></th><th>Code</th><th>Name</th><th>City</th></tr></thead><tbody></tbody></table>
         <span class="msg" id="t-sites-msg"></span>
       </div>
@@ -438,7 +438,7 @@
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
-              <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" />
+              <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" aria-label="Filter roster" />
               <button type="button" id="roster-new" class="new-btn">+ New</button>
               <button type="button" id="roster-csv" class="export-btn no-print">⬇ CSV</button>
               <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Sign-in sheet (status, events, size, hotel, lodging)">⬇ Sign-in</button>
@@ -454,19 +454,21 @@
                    states are visible up-front (audit design-crit #4). -->
               <div class="seg-toggle" role="tablist" aria-label="Player source">
                 <button type="button" id="roster-mode-pick" class="seg-btn seg-active"
-                        role="tab" aria-selected="true">Pick existing</button>
+                        role="tab" aria-selected="true"
+                        aria-controls="roster-pick-panel" tabindex="0">Pick existing</button>
                 <button type="button" id="roster-mode-new" class="seg-btn"
-                        role="tab" aria-selected="false">+ New player</button>
+                        role="tab" aria-selected="false"
+                        aria-controls="roster-new-panel" tabindex="-1">+ New player</button>
               </div>
-              <div class="row roster-pick-row">
+              <div class="row roster-pick-row" id="roster-pick-panel" role="tabpanel" aria-labelledby="roster-mode-pick">
                 <label>Player <select name="player_id" id="roster-player" required></select></label>
                 <label>Division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
               </div>
-              <div class="row roster-new-row" hidden>
+              <div class="row roster-new-row" id="roster-new-panel" role="tabpanel" aria-labelledby="roster-mode-new" hidden>
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
                 <label>First name <input name="first_name" /></label>
                 <label>Last name <input name="last_name" /></label>
-                <label>Gender *
+                <label>Gender <span aria-hidden="true">*</span>
                   <select name="gender" required>
                     <option value="">— pick one —</option>
                     <option value="male">Male</option>
@@ -795,8 +797,9 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Hotel <input name="hotel_name" list="known-hotels" autocomplete="off" /></label>
+            <label>Hotel <input name="hotel_name" list="known-hotels" autocomplete="off" aria-describedby="known-hotels-hint" /></label>
             <datalist id="known-hotels"></datalist>
+            <span id="known-hotels-hint" class="sr-only">Suggestions available. Start typing to see known hotels, or enter a new one.</span>
             <label>Lodging plan
               <select name="lodging_plan">
                 <option value="">— none —</option>
@@ -886,7 +889,7 @@
   </main>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>
-  <div id="confirm-modal" class="modal" hidden role="dialog" aria-modal="true">
+  <div id="confirm-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-text">
     <div class="modal-box">
       <p id="confirm-text"></p>
       <div class="modal-actions">
@@ -913,6 +916,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=7"></script>
+  <script type="module" src="/app.js?v=8"></script>
 </body>
 </html>

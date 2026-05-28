@@ -1562,9 +1562,24 @@ function rosterSetMode(mode) {
   newBtn.classList.toggle("seg-active", mode === "new");
   pickBtn.setAttribute("aria-selected", mode === "pick" ? "true" : "false");
   newBtn.setAttribute("aria-selected", mode === "new" ? "true" : "false");
+  // a11y re-review #2: roving tabindex so the tablist matches the WAI-ARIA
+  // pattern — Tab enters the active tab, then arrow keys move between tabs.
+  pickBtn.tabIndex = mode === "pick" ? 0 : -1;
+  newBtn.tabIndex = mode === "new" ? 0 : -1;
 }
 document.getElementById("roster-mode-pick").addEventListener("click", () => rosterSetMode("pick"));
 document.getElementById("roster-mode-new").addEventListener("click", () => rosterSetMode("new"));
+// Arrow-key navigation between the two roster-source tabs.
+[["roster-mode-pick", "roster-mode-new"], ["roster-mode-new", "roster-mode-pick"]].forEach(([from, to]) => {
+  document.getElementById(from).addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      const target = document.getElementById(to);
+      rosterSetMode(to === "roster-mode-pick" ? "pick" : "new");
+      target.focus();
+    }
+  });
+});
 // Prev/Next record navigation (parity with the Setup master/detail forms).
 const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
 const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn"; rosterPrev.textContent = "‹ Prev";
