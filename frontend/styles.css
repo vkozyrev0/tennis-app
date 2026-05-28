@@ -120,6 +120,14 @@ header {
   padding: 0.3rem 1rem 0.28rem;
 }
 header h1 { margin: 0; font-size: 0.92rem; }
+/* Tennis-ball brand icon in front of the app title. Sized to match the
+   visual weight of the surrounding text — feels paired, not stamped on. */
+.brand-icon {
+  width: 1.4em; height: 1.4em;
+  vertical-align: -0.35em;
+  margin-right: 0.4em;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
 
 .pill {
   display: inline-flex; align-items: center; gap: 0.35em;

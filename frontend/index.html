@@ -4,9 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CourtOps Tennis</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=3" />
-  <link rel="stylesheet" href="/styles.css?v=7" />
+  <link rel="stylesheet" href="/styles.css?v=8" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -53,6 +54,13 @@
         <circle cx="15" cy="12" r="2.5" fill="var(--accent)"/>
         <circle cx="7" cy="18" r="2.5" fill="var(--accent)"/>
       </symbol>
+      <!-- tennis ball — app brand icon. Filled ball with the classic curved
+           seam (two arcs) so it reads as a tennis ball even at 18 px. -->
+      <symbol id="i-brand" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="#d6ec4a" stroke="#a9c020" stroke-width="0.8"/>
+        <path d="M3.2 8.5 A 12 12 0 0 1 14.5 21.4" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M9.5 2.6 A 12 12 0 0 1 20.8 15.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -64,7 +72,7 @@
   <p id="multi-hint" class="sr-only">Hold Control or Command and click to select multiple options.</p>
   <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-valuetext="Loading" aria-hidden="true"></div>
   <header>
-    <h1>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
+    <h1><svg class="brand-icon" aria-hidden="true" focusable="false"><use href="#i-brand"/></svg>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
       <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
       <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
