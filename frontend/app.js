@@ -1258,7 +1258,11 @@ function wireEntity(cfg) {
     return col;
   });
   columns.push({
-    title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 132 : 72,
+    // a11y 6th-pass: column widened so two 44×44 .btn-icon buttons (+ optional
+    // rowAction button) fit without clipping. The old 72 px was narrower than
+    // 2× 44 px → edit button overflowed left and got clipped by the previous
+    // cell's right edge.
+    title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 152 : 100,
     cssClass: "grid-actions-cell",
     formatter: (cell) => {
       const item = cell.getData();

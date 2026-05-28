@@ -467,7 +467,10 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   border-bottom-color: var(--muted); border-top-color: var(--muted);
 }
 .grid-actions { display: flex; gap: 0.15rem; justify-content: flex-end; align-items: center; }
-.grid-actions-cell { overflow: visible; }
+/* a11y 6th-pass: Tabulator sets overflow:hidden on .tabulator-cell; bump
+   specificity so our visible-overflow always wins and the 44×44 edit/delete
+   icons can't be cropped by the neighbouring cell's edge. */
+.tabulator .tabulator-cell.grid-actions-cell { overflow: visible; }
 /* Compact, content-sized grids for small aggregate summaries (Hotel summary,
    Lodging summary, CVB totals). Otherwise they stretch to the panel width and
    the data sits in a tiny left-island with a sea of whitespace. */
