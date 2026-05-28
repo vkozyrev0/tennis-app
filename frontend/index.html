@@ -440,6 +440,16 @@
         <input class="filter" id="t-sites-filter" type="search" placeholder="Filter sites…" aria-label="Filter sites" />
         <table class="list-table" id="t-sites-table"><thead><tr><th></th><th>Code</th><th>Name</th><th>City</th></tr></thead><tbody></tbody></table>
         <span class="msg" id="t-sites-msg"></span>
+        <!-- B1: per-tournament division → site assignment. Each division row
+             gets a Site dropdown; "Unassigned" is the default. Drives the
+             multi-site t-shirt-by-location report below. -->
+        <h4 class="section-spacer">Division → site (which division plays where)</h4>
+        <p class="muted">Assign each division to one of the sites above. The Tournament → T-shirts page reads this to print the per-site quantities.</p>
+        <table class="list-table" id="t-site-divisions-table">
+          <thead><tr><th>Division</th><th>Type</th><th>Site</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <span class="msg" id="t-site-divisions-msg"></span>
       </div>
     </section>
 
@@ -606,6 +616,21 @@
           </tr></thead>
           <tbody></tbody>
           <tfoot><tr id="tshirt-order-totals"></tr></tfoot>
+        </table>
+        <!-- B1: T-shirts by site — one row per selected roster entry with the
+             division's assigned site folded in. Assign divisions on the
+             Tournament → Sites page. Players in unassigned divisions land
+             in an "Unassigned" bucket. -->
+        <h4 class="section-spacer">T-shirts by site <span class="muted">(per division assignment on Tournament → Sites)</span></h4>
+        <div class="actions-row mb-half">
+          <label>Site filter <select id="tshirt-by-site-filter" aria-label="Filter by site"><option value="">— all sites —</option></select></label>
+          <button type="button" id="tshirt-by-site-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> CSV</button>
+          <span class="muted mb-half" id="tshirt-by-site-status"></span>
+        </div>
+        <table id="tshirt-by-site-table" class="list-table">
+          <thead><tr><th>Site</th><th>Division</th><th>Size</th><th class="num">Quantity</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr id="tshirt-by-site-totals"></tr></tfoot>
         </table>
       </div>
     </section>
@@ -929,6 +954,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=22"></script>
+  <script type="module" src="/app.js?v=23"></script>
 </body>
 </html>

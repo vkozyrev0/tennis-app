@@ -725,6 +725,101 @@ def test_roster_correction_import_updates_existing_and_late_adds():
     assert after[usta_untouched]["selection_status"] == "selected"  # never withdrawn
 
 
+def test_b1_division_site_assignment_and_tshirt_report():
+    """B1: per-tournament division→site assignment + grouped t-shirt report.
+
+    - Two sites linked to the tournament; two divisions get assigned to
+      different sites; a third division stays unassigned.
+    - The t-shirt report groups roster entries by their division's site;
+      unassigned-division players bucket under 'Unassigned'.
+    - Re-PUT-ing the same division updates (1-to-1 invariant); PUT with
+      site_id=null clears.
+    """
+    s1 = _site(name="Court A " + uuid.uuid4().hex[:4])
+    s2 = _site(name="Court B " + uuid.uuid4().hex[:4])
+    t = _tournament()
+    # Link both sites to the tournament.
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [s1["id"], s2["id"]]}),
+        code=200)
+
+    # Pick three real divisions from the seeded catalog (junior B10, B12, B14).
+    divisions = {d["code"]: d for d in client.get("/api/divisions").json()}
+    d_b10 = divisions["B10"]["id"]
+    d_b12 = divisions["B12"]["id"]
+    d_b14 = divisions["B14"]["id"]  # left unassigned on purpose
+
+    # Assign two of them.
+    r1 = client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b10}",
+                    json={"site_id": s1["id"]})
+    assert r1.status_code == 200, r1.text
+    r2 = client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b12}",
+                    json={"site_id": s2["id"]})
+    assert r2.status_code == 200
+
+    # Matrix surfaces every division — even unassigned ones — with site_id
+    # only set where there's an assignment.
+    matrix = {row["code"]: row for row in
+              client.get(f"/api/tournaments/{t['id']}/site-divisions").json()}
+    assert matrix["B10"]["site_id"] == s1["id"]
+    assert matrix["B12"]["site_id"] == s2["id"]
+    assert matrix["B14"]["site_id"] is None
+
+    # 1-to-1 invariant: re-PUT division B10 to a DIFFERENT site overwrites.
+    client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b10}",
+               json={"site_id": s2["id"]})
+    matrix = {row["code"]: row for row in
+              client.get(f"/api/tournaments/{t['id']}/site-divisions").json()}
+    assert matrix["B10"]["site_id"] == s2["id"]
+    # Park it back at s1 for the report test.
+    client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b10}",
+               json={"site_id": s1["id"]})
+
+    # Guard: assigning to a site that ISN'T linked to this tournament fails.
+    rogue = _site(name="Rogue " + uuid.uuid4().hex[:4])
+    bad = client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b14}",
+                     json={"site_id": rogue["id"]})
+    assert bad.status_code == 400
+
+    # Seed the roster — one selected player per division, each with a shirt
+    # size. Roster POST accepts inline player-creation when gender is supplied.
+    def _new_roster(division_code, shirt_size):
+        usta = "B1" + uuid.uuid4().hex[:8]
+        _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+            "usta_number": usta, "first_name": "P", "last_name": usta[-4:],
+            "gender": "male", "age_division": division_code,
+            "selection_status": "selected", "t_shirt_size": shirt_size,
+        }))
+    _new_roster("B10", "Youth Medium")
+    _new_roster("B12", "Youth Small")
+    _new_roster("B14", "Adult Large")          # unassigned division → 'Unassigned' bucket
+    _new_roster("B10", "Youth Medium")         # second B10 same size → 2× Youth Medium at s1
+
+    rows = client.get(f"/api/tournaments/{t['id']}/tshirts-by-site").json()
+    # Group by site for assertions.
+    by_site = {}
+    for r in rows:
+        by_site.setdefault(r["site_name"], []).append(r)
+    # B10 (s1) has two Youth Medium; B12 (s2) one Youth Small; B14 in 'Unassigned'.
+    assert len(by_site[s1["name"]]) == 2
+    assert all(r["t_shirt_size"] == "Youth Medium" for r in by_site[s1["name"]])
+    assert len(by_site[s2["name"]]) == 1
+    assert by_site[s2["name"]][0]["t_shirt_size"] == "Youth Small"
+    assert len(by_site["Unassigned"]) == 1
+    assert by_site["Unassigned"][0]["t_shirt_size"] == "Adult Large"
+
+    # PUT with site_id=null clears the assignment.
+    client.put(f"/api/tournaments/{t['id']}/site-divisions/{d_b10}",
+               json={"site_id": None})
+    matrix = {row["code"]: row for row in
+              client.get(f"/api/tournaments/{t['id']}/site-divisions").json()}
+    assert matrix["B10"]["site_id"] is None
+    # Now both B10 + B14 rosters land in 'Unassigned'.
+    rows2 = client.get(f"/api/tournaments/{t['id']}/tshirts-by-site").json()
+    unassigned = [r for r in rows2 if r["site_name"] == "Unassigned"]
+    assert len(unassigned) == 3  # 2 B10 + 1 B14
+
+
 def test_b3_hotel_answer_parse():
     """B3: 'No, I am local' → 'Local / family'; unmappable → raw fallback."""
     from app.importer import _parse_hotel_answer

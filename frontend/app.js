@@ -1092,12 +1092,12 @@ function updateActiveUI() {
 const _tournamentLoaders = {};
 function _populateTournamentLoaders() {
   Object.assign(_tournamentLoaders, {
-    "panel-t-sites": () => loadTSites(),
+    "panel-t-sites": () => { loadTSites(); loadTSiteDivisions(); },
     "panel-t-roster": () => loadRoster(),
     "panel-t-assignments": () => loadAssignments(),
     "panel-t-roomblocks": () => loadRoomBlocks(),
     "panel-t-availability": () => loadAvailability(),
-    "panel-t-tshirt-order": () => loadTshirtOrder(),
+    "panel-t-tshirt-order": () => { loadTshirtOrder(); loadTshirtsBySite(); },
     "panel-t-inbox": () => loadInbox(),
     "panel-t-late": () => loadLate(),
     "panel-t-withdrawals": () => loadWithdrawals(),
@@ -1524,6 +1524,54 @@ async function toggleSite(id) {
   } catch (e) { setMsg("t-sites-msg", e.message, false); loadTSites(); }
 }
 document.getElementById("t-sites-filter").addEventListener("input", () => tSitesGrid.setFilter(tSitesMatches));
+
+// ---- B1: division → site assignment (Tournament → Sites panel) -----------
+// One row per division (LEFT JOIN from the API) with a Site dropdown.
+// Persists via PUT /api/tournaments/{id}/site-divisions/{division_id} —
+// site_id=null clears the assignment.
+async function loadTSiteDivisions() {
+  if (!active) return;
+  const tbody = document.querySelector("#t-site-divisions-table tbody");
+  if (!tbody) return;
+  // Need the linked sites first — division can only be assigned to a site
+  // that's already used by this tournament.
+  const [matrix, sites] = await Promise.all([
+    api(`/tournaments/${active.id}/site-divisions`),
+    api(`/tournaments/${active.id}/sites`),
+  ]);
+  tbody.innerHTML = "";
+  if (!sites.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="muted">Add sites above first, then come back to assign divisions.</td></tr>`;
+    return;
+  }
+  // Limit divisions to the active tournament's type so a junior tournament
+  // doesn't list NTRP adult buckets and vice versa.
+  const ttype = active.type;
+  const rows = matrix.filter((d) => d.tournament_type === ttype);
+  for (const d of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(d.label || d.code)}</td><td class="muted">${esc(d.tournament_type)}</td><td></td>`;
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", `Site for ${d.label || d.code}`);
+    sel.innerHTML = `<option value="">— unassigned —</option>` +
+      sites.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+    sel.value = d.site_id ? String(d.site_id) : "";
+    sel.addEventListener("change", async () => {
+      const sid = sel.value ? Number(sel.value) : null;
+      try {
+        await api(`/tournaments/${active.id}/site-divisions/${d.division_id}`, {
+          method: "PUT", body: JSON.stringify({ site_id: sid }),
+        });
+        setMsg("t-site-divisions-msg", `${d.label || d.code} → ${sid ? sites.find((s) => s.id === sid).name : "unassigned"}`, true);
+      } catch (e) {
+        setMsg("t-site-divisions-msg", e.message, false);
+        loadTSiteDivisions();  // re-pull truth
+      }
+    });
+    tr.lastElementChild.appendChild(sel);
+    tbody.appendChild(tr);
+  }
+}
 
 // --- Roster (master/detail, like the Setup entities) ---
 const rosterForm = document.getElementById("roster-form");
@@ -3081,6 +3129,68 @@ async function cancelTshirtOrder() {
 document.getElementById("tshirt-order-save").addEventListener("click", saveTshirtInventory);
 document.getElementById("tshirt-order-place").addEventListener("click", placeTshirtOrder);
 document.getElementById("tshirt-order-cancel").addEventListener("click", cancelTshirtOrder);
+
+// ---- B1: T-shirts by site (per-tournament) -------------------------------
+// Pulls the grouped report from the API, renders one row per (site, division,
+// size) with a quantity. Site filter narrows to one site; CSV mirrors the
+// visible grid. Players in unassigned divisions show under "Unassigned".
+let _tshirtBySiteRows = [];
+async function loadTshirtsBySite() {
+  if (!active) return;
+  const tbody = document.querySelector("#tshirt-by-site-table tbody");
+  const totals = document.getElementById("tshirt-by-site-totals");
+  const status = document.getElementById("tshirt-by-site-status");
+  if (!tbody) return;
+  let rows;
+  try { rows = await api(`/tournaments/${active.id}/tshirts-by-site`); }
+  catch (e) { tbody.innerHTML = `<tr><td colspan="4" class="muted">${esc(e.message)}</td></tr>`; return; }
+  _tshirtBySiteRows = rows;
+  // Populate the site filter with the actual sites that appear (so the TD
+  // doesn't see sites with zero shirts).
+  const sel = document.getElementById("tshirt-by-site-filter");
+  const sites = [...new Set(rows.map((r) => r.site_name))].sort();
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">— all sites —</option>` +
+    sites.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  sel.value = sites.includes(prev) ? prev : "";
+  _renderTshirtsBySite();
+  status.textContent = rows.length ? `${rows.length} selected players with t-shirts` : "No selected players with a t-shirt size yet.";
+}
+function _renderTshirtsBySite() {
+  const sel = document.getElementById("tshirt-by-site-filter").value;
+  const tbody = document.querySelector("#tshirt-by-site-table tbody");
+  // Bucket: site → division → size → count
+  const counts = new Map();
+  for (const r of _tshirtBySiteRows) {
+    if (sel && r.site_name !== sel) continue;
+    const key = `${r.site_name}\t${r.age_division || ""}\t${r.t_shirt_size}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const entries = [...counts.entries()].sort();  // tab-delimited keys sort by site, then div, then size
+  tbody.innerHTML = entries.map(([k, n]) => {
+    const [site, div, size] = k.split("\t");
+    return `<tr><td>${esc(site)}</td><td>${esc(div)}</td><td>${esc(size)}</td><td class="num">${n}</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">Nothing to show for this site.</td></tr>`;
+  const tot = [...counts.values()].reduce((a, b) => a + b, 0);
+  document.getElementById("tshirt-by-site-totals").innerHTML =
+    `<th colspan="3">Total shirts (filtered)</th><th class="num">${tot}</th>`;
+}
+document.getElementById("tshirt-by-site-filter").addEventListener("change", _renderTshirtsBySite);
+document.getElementById("tshirt-by-site-csv").addEventListener("click", () => {
+  const sel = document.getElementById("tshirt-by-site-filter").value;
+  const filtered = sel ? _tshirtBySiteRows.filter((r) => r.site_name === sel) : _tshirtBySiteRows;
+  const counts = new Map();
+  for (const r of filtered) {
+    const key = `${r.site_name}\t${r.age_division || ""}\t${r.t_shirt_size}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const matrix = [["Site", "Division", "Size", "Quantity"]];
+  for (const [k, n] of [...counts.entries()].sort()) {
+    const [site, div, size] = k.split("\t");
+    matrix.push([site, div, size, n]);
+  }
+  _csvDownload(matrix, `tshirts-by-site-${active ? active.id : "t"}${sel ? "-" + sel.replace(/\W+/g, "_") : ""}`);
+});
 
 // --- Pairing avoidances (juniors; group of 2+ players) ---
 const pairingForm = document.getElementById("pairing-form");
