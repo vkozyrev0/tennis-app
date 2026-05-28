@@ -53,13 +53,66 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () =>
       applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"));
   }
+  // a11y re-review #1: every static <th> in a list-table gets scope="col" so
+  // SR users get explicit header→cell mapping. JS-built Tabulator grids set
+  // scope themselves.
+  document.querySelectorAll(".list-table thead th").forEach((th) => {
+    if (!th.hasAttribute("scope")) th.setAttribute("scope", "col");
+  });
+  // a11y re-review #5: register every inline form-status span as a polite
+  // live region at page load so screen readers pre-track them. setMsg() also
+  // re-asserts the role per-message; this is the safety net.
+  document.querySelectorAll("span.msg").forEach((el) => {
+    if (!el.hasAttribute("role")) el.setAttribute("role", "status");
+    if (!el.hasAttribute("aria-live")) el.setAttribute("aria-live", "polite");
+  });
+  // a11y re-review #7: main panel-switching tabs get role="tab" semantics +
+  // aria-selected reflecting the .active class, aria-controls pointing at the
+  // panel they reveal. Each .menu-group becomes a tablist. The existing click
+  // handlers flip .active; we mirror that into aria-selected via observer.
+  document.querySelectorAll(".menu-group").forEach((g) => g.setAttribute("role", "tablist"));
+  document.querySelectorAll(".menu .tab").forEach((b) => {
+    b.setAttribute("role", "tab");
+    const target = b.dataset.target;
+    if (target) b.setAttribute("aria-controls", target);
+    b.setAttribute("aria-selected", b.classList.contains("active") ? "true" : "false");
+  });
+  // Sync aria-selected when .active changes (handled by existing click code).
+  const tabObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.attributeName === "class" && m.target.classList.contains("tab")) {
+        m.target.setAttribute("aria-selected", m.target.classList.contains("active") ? "true" : "false");
+      }
+    }
+  });
+  document.querySelectorAll(".menu .tab").forEach((b) => tabObserver.observe(b, { attributes: true, attributeFilter: ["class"] }));
+  // a11y re-review #2: blank detail-title <h3>s are noisy for SR linear reads;
+  // hide them until populated. Setup populates textContent on selection.
+  document.querySelectorAll("h3.detail-title").forEach((h) => {
+    if (!h.textContent.trim()) h.hidden = true;
+  });
+  const titleObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      const h = m.target;
+      h.hidden = !h.textContent.trim();
+    }
+  });
+  document.querySelectorAll("h3.detail-title").forEach((h) =>
+    titleObserver.observe(h, { childList: true, characterData: true, subtree: true }));
 });
 
 let _inflight = 0;
 function _progress(delta) {
   _inflight = Math.max(0, _inflight + delta);
   const p = document.getElementById("progress");
-  if (p) p.classList.toggle("active", _inflight > 0);
+  if (p) {
+    const busy = _inflight > 0;
+    p.classList.toggle("active", busy);
+    // a11y re-review #6: surface busy state to SR users via the progressbar
+    // role declared in markup; hide it when idle so SR doesn't keep a stale
+    // "loading" landmark on the page.
+    p.setAttribute("aria-hidden", busy ? "false" : "true");
+  }
 }
 // _humanizeDetail now imported from ./app/util.js (audit A47).
 async function api(path, options) {
@@ -165,18 +218,36 @@ function confirmDialog(message, okLabel = "Delete", okKind = "danger") {
     // Audit P41: reset class state every open so a previous "danger" label
     // doesn't leak into a benign confirm (e.g. order cancellation).
     ok.className = "confirm-ok " + (okKind === "danger" ? "danger" : "primary");
+    // a11y re-review #3: remember invoker so focus returns on close, default
+    // focus to Cancel (safer than focusing the destructive button), and trap
+    // Tab within the modal's two buttons.
+    const invoker = document.activeElement;
     m.hidden = false;
-    ok.focus();
+    cancel.focus();
     const done = (v) => {
       m.hidden = true;
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
       document.removeEventListener("keydown", onKey);
+      if (invoker && typeof invoker.focus === "function") invoker.focus();
       resolve(v);
     };
     const onOk = () => done(true);
     const onCancel = () => done(false);
-    const onKey = (e) => { if (e.key === "Escape") done(false); else if (e.key === "Enter") done(true); };
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); done(false); return; }
+      if (e.key === "Enter" && document.activeElement !== cancel) { e.preventDefault(); done(true); return; }
+      if (e.key === "Tab") {
+        // Trap focus between cancel and ok.
+        const focusables = [cancel, ok];
+        const idx = focusables.indexOf(document.activeElement);
+        e.preventDefault();
+        const next = e.shiftKey
+          ? focusables[(idx <= 0 ? focusables.length - 1 : idx - 1)]
+          : focusables[(idx + 1) % focusables.length];
+        next.focus();
+      }
+    };
     ok.addEventListener("click", onOk);
     cancel.addEventListener("click", onCancel);
     document.addEventListener("keydown", onKey);
