@@ -5,7 +5,7 @@ Serves the JSON API under /api and the pure HTML/CSS frontend at /.
 """
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from .routers import (
@@ -52,6 +52,20 @@ for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           emails, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports):
     app.include_router(r.router, dependencies=_admin)
+
+# Disable browser caching of the frontend assets. POC dev loop edits HTML +
+# JS + CSS constantly; aggressive Chromium ES-module caching otherwise wins
+# even after a hard refresh. For production, replace with hashed filenames
+# (e.g. /app.js?v=<git-sha>) and let Cache-Control: immutable do its job.
+@app.middleware("http")
+async def _no_cache_frontend(request: Request, call_next):
+    response = await call_next(request)
+    if not request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 
 # Serve the pure HTML/CSS frontend (repo-root/frontend) at "/".
 _FRONTEND = Path(__file__).resolve().parents[2] / "frontend"

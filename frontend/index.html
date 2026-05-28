@@ -904,6 +904,9 @@
   <!-- Cache-bust the module URL on every dev edit. ES module URLs are cached
        by identity, so the same `/app.js` will not re-fetch even on a hard
        refresh; the query string makes it a new URL. -->
-  <script type="module" src="/app.js?v=2"></script>
+  <!-- Cache-buster: bump on every edit that touches app.js or its imports.
+       ESM URLs are key in the browser's module map, so the only reliable
+       way to invalidate is a fresh query string. -->
+  <script type="module" src="/app.js?v=3"></script>
 </body>
 </html>
