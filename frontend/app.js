@@ -1957,25 +1957,46 @@ async function gotoImport(typeKey) {
 // Expose for inline handlers + tests.
 window.gotoImport = gotoImport;
 
-// Per-panel ⬆ Import… entry points. We mark each importable panel with
-// data-import-type="<key>" in HTML; at init we inject an Import button into
-// the most-natural toolbar (preferring .list-toolbar, falling back to
-// .actions-row or the panel's heading parent). Clicking deep-links to the
-// Import section via gotoImport().
-function _wirePanelImportButtons() {
+// Per-panel ⬆ Import… entry points. data-import-type can be a single key OR
+// a comma-separated list — the Roster panel has two (`roster_initial` for
+// the bulk pre-tournament load + `roster_correction` for the post-deadline
+// status patch). Each key gets its own button.
+let _importTypeLabels = null;
+async function _ensureImportLabels() {
+  if (_importTypeLabels) return _importTypeLabels;
+  try {
+    const types = await api("/import/types");
+    _importTypeLabels = Object.fromEntries(types.map((t) => [t.key, t.label]));
+  } catch (_) { _importTypeLabels = {}; }
+  return _importTypeLabels;
+}
+async function _wirePanelImportButtons() {
+  const labels = await _ensureImportLabels();
   document.querySelectorAll(".panel[data-import-type]").forEach((panel) => {
-    const key = panel.dataset.importType;
-    if (!key || panel.querySelector(".panel-import-btn")) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "export-btn no-print panel-import-btn";
-    btn.title = "Open the Import page and jump to this type";
-    btn.innerHTML = '<span aria-hidden="true">⬆</span> Import…';
-    btn.addEventListener("click", () => gotoImport(key));
+    if (panel.querySelector(".panel-import-btn")) return;
+    const keys = panel.dataset.importType.split(",").map((k) => k.trim()).filter(Boolean);
+    if (!keys.length) return;
     const target = panel.querySelector(".list-toolbar")
       || panel.querySelector(".actions-row")
       || panel.querySelector(".t-content > h3, .card > h3");
-    if (target) target.appendChild(btn);
+    if (!target) return;
+    for (const key of keys) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "export-btn no-print panel-import-btn";
+      // Use the registry label so two buttons read distinctly
+      // ("⬆ Import Roster — Initial…" vs "⬆ Import Roster — Correction…")
+      // instead of two identical buttons.
+      const label = labels[key] || "Import";
+      btn.title = `Open the Import page and jump to "${label}"`;
+      // For panels with one button we keep the compact "⬆ Import…" wording;
+      // for multi-button panels we suffix the type-specific tail so the user
+      // can tell them apart at a glance.
+      const tail = keys.length > 1 ? ` ${label.replace(/^[^—]*—\s*/, "")}` : "";
+      btn.innerHTML = `<span aria-hidden="true">⬆</span> Import${tail}…`;
+      btn.addEventListener("click", () => gotoImport(key));
+      target.appendChild(btn);
+    }
   });
 }
 if (document.readyState === "loading") {

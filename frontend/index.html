@@ -444,7 +444,7 @@
     </section>
 
     <!-- T: Roster -->
-    <section class="panel tpanel" id="panel-t-roster" data-import-type="roster">
+    <section class="panel tpanel" id="panel-t-roster" data-import-type="roster_initial,roster_correction">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
         <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
@@ -581,7 +581,7 @@
     </section>
 
     <!-- T: T-shirt order tracking -->
-    <section class="panel tpanel" id="panel-t-tshirt-order">
+    <section class="panel tpanel" id="panel-t-tshirt-order" data-import-type="tshirt_hotel_dietary">
       <div class="needs-active-note">Select a tournament in the bar above to manage its t-shirt order.</div>
       <div class="t-content card">
         <h3>T-shirts — <span class="t-name"></span>
@@ -929,6 +929,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=21"></script>
+  <script type="module" src="/app.js?v=22"></script>
 </body>
 </html>
