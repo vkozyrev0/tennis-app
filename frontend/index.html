@@ -62,7 +62,7 @@
   <!-- a11y #12: shared hint for every <select multiple>. aria-describedby
        references it so screen readers explain the multi-selection gesture. -->
   <p id="multi-hint" class="sr-only">Hold Control or Command and click to select multiple options.</p>
-  <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-hidden="true"></div>
+  <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-valuetext="Loading" aria-hidden="true"></div>
   <header>
     <h1>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
       <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
@@ -916,6 +916,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=10"></script>
+  <script type="module" src="/app.js?v=11"></script>
 </body>
 </html>

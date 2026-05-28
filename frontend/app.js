@@ -99,6 +99,48 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.querySelectorAll("h3.detail-title").forEach((h) =>
     titleObserver.observe(h, { childList: true, characterData: true, subtree: true }));
+  // a11y 5th-pass #3: label the per-panel "×" close buttons.
+  document.querySelectorAll("button.detail-close").forEach((b) => {
+    if (!b.hasAttribute("aria-label")) b.setAttribute("aria-label", "Close details");
+  });
+  // a11y 5th-pass #1: sr-only <caption> per static table to give SR users a
+  // purpose label when jumping by tables.
+  document.querySelectorAll("table.list-table").forEach((t) => {
+    if (t.querySelector("caption")) return;
+    const panel = t.closest(".panel, section, .card");
+    const h = panel?.querySelector("h3, h2, h4");
+    const label = h?.textContent.trim().replace(/\s+/g, " ") || "Data table";
+    const cap = document.createElement("caption");
+    cap.className = "sr-only";
+    cap.textContent = label;
+    t.insertBefore(cap, t.firstChild);
+  });
+  // a11y 5th-pass #2: WAI-ARIA roving tabindex on main panel tabs. Only the
+  // active tab in each group is reachable by Tab; arrow keys move focus
+  // within the group (and activate the new tab so the panel switches).
+  document.querySelectorAll(".menu-group").forEach((group) => {
+    const tabs = [...group.querySelectorAll(".tab")];
+    const sync = () => {
+      tabs.forEach((t) => { t.tabIndex = t.classList.contains("active") ? 0 : -1; });
+    };
+    sync();
+    // Re-sync on class changes (MutationObserver in DOMContentLoaded already
+    // covers aria-selected; piggyback by observing here too).
+    new MutationObserver(sync).observe(group, { attributes: true, attributeFilter: ["class"], subtree: true });
+    group.addEventListener("keydown", (e) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+      const cur = tabs.indexOf(document.activeElement);
+      if (cur < 0) return;
+      e.preventDefault();
+      let next;
+      if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = tabs.length - 1;
+      else if (e.key === "ArrowLeft") next = (cur - 1 + tabs.length) % tabs.length;
+      else next = (cur + 1) % tabs.length;
+      tabs[next].focus();
+      tabs[next].click();  // activate panel to match WAI-ARIA "automatic activation" tabs pattern
+    });
+  });
 });
 
 let _inflight = 0;
@@ -222,10 +264,16 @@ function confirmDialog(message, okLabel = "Delete", okKind = "danger") {
     // focus to Cancel (safer than focusing the destructive button), and trap
     // Tab within the modal's two buttons.
     const invoker = document.activeElement;
+    // a11y 5th-pass #4: mark non-modal landmarks `inert` so assistive-tech
+    // virtual cursors can't reach background controls while the dialog is up.
+    const inertTargets = ["header", "nav.menu-l1", "nav.menu", "main#main-app", "main#official-app"]
+      .map((sel) => document.querySelector(sel)).filter(Boolean);
+    inertTargets.forEach((el) => el.setAttribute("inert", ""));
     m.hidden = false;
     cancel.focus();
     const done = (v) => {
       m.hidden = true;
+      inertTargets.forEach((el) => el.removeAttribute("inert"));
       ok.removeEventListener("click", onOk);
       cancel.removeEventListener("click", onCancel);
       document.removeEventListener("keydown", onKey);
