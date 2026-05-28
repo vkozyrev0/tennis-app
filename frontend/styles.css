@@ -171,7 +171,9 @@ header h1 { margin: 0; font-size: 0.92rem; }
 }
 #user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
 #logout-btn {
-  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  /* a11y 8th-pass #2: translucent-black overlay so white text clears AA on
+     the green header (the old white .2 overlay rendered ~2.9:1). */
+  background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; border-radius: 5px;
   padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.3rem;
   min-height: 2.5rem;   /* a11y #7 */
 }
@@ -188,12 +190,14 @@ header h1 { margin: 0; font-size: 0.92rem; }
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  background: rgba(255, 255, 255, 0.12);
+  /* a11y 8th-pass #2: black tint so white text inside the context bar clears
+     AA against the green header. */
+  background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 5px;
   padding: 0.18rem 0.45rem;
 }
-#context-bar.has-active { background: rgba(255, 255, 255, 0.22); border-color: #fff; }
+#context-bar.has-active { background: rgba(0, 0, 0, 0.25); border-color: #fff; }
 .ctx-label { font-size: 0.68rem; opacity: 0.9; }
 #active-tournament { padding: 0.16rem 0.35rem; border-radius: 4px; border: 0; font: inherit; min-width: 180px; font-size: 0.74rem; }
 #context-bar .combo { width: auto; }
@@ -482,8 +486,12 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
    (or partially hidden by) the vertical scrollbar when it appears. */
 .tabulator .tabulator-tableholder { scrollbar-gutter: stable; }
 .tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
-.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents {
-  color: var(--muted); padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
+.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents,
+.tabulator .tabulator-tableholder .tabulator-placeholder .tabulator-placeholder-contents {
+  /* a11y 8th-pass #3: Tabulator's built-in #ccc placeholder text fails 3:1
+     on white (1.61). Higher-specificity selector forces --muted (~6:1). */
+  color: var(--muted) !important;
+  padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
 }
 .tabulator .tabulator-placeholder-contents::before {
   content: "✦"; display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
@@ -532,7 +540,9 @@ kbd {
    which made every list row 56 px tall; we'd over-shot the AA target.) */
 .btn-icon {
   appearance: none; border: 0; background: transparent; cursor: pointer;
-  color: var(--accent); font-size: 0.95rem; line-height: 1;
+  /* a11y 8th-pass #1: --link instead of --accent so the dark-mode edit
+     glyph clears 4.5:1 on the card (accent #198754 was 3.62:1). */
+  color: var(--link); font-size: 0.95rem; line-height: 1;
   min-width: 2rem; min-height: 2rem; border-radius: 4px; padding: 0.25rem;
   display: inline-flex; align-items: center; justify-content: center;
   transition: background 0.12s;
@@ -732,7 +742,8 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   margin: 0.5rem 0 0.25rem;
   padding: 0.2rem 0.6rem;
   background: transparent;
-  color: var(--accent);
+  /* a11y 8th-pass #1: --link clears AA on dark card; --accent did not. */
+  color: var(--link);
   border: 1px solid var(--border);
   border-radius: 6px;
   font: inherit;
@@ -812,7 +823,7 @@ a.export-btn { text-decoration: none; }
 /* Collapsible workspace add-forms (list stays primary) */
 details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: var(--elev); }
 details.addbox > summary {
-  cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--accent);
+  cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--link);
   list-style: none; user-select: none;
 }
 details.addbox > summary::-webkit-details-marker { display: none; }
@@ -828,7 +839,7 @@ details.addbox > form { padding: 0.7rem 0.8rem; }
   border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
 }
 .import-row button.ghost {
-  background: transparent; color: var(--accent); border: 1px solid var(--border);
+  background: transparent; color: var(--link); border: 1px solid var(--border);
 }
 .import-row button.ghost:hover { background: var(--bg); border-color: var(--accent); }
 .t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
@@ -879,7 +890,7 @@ td.toggle { white-space: nowrap; }
   border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
 }
 #report-template {
-  padding: 0.3rem 0.7rem; background: transparent; color: var(--accent);
+  padding: 0.3rem 0.7rem; background: transparent; color: var(--link);
   border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
 }
 #report-template:hover { background: var(--bg); border-color: var(--accent); }
