@@ -272,6 +272,81 @@ function refreshDivisionLists(gender) {
   const type = (active && active.type) || "junior";
   _populateDatalist("divisions-list", _divisionsFor(type, gender || null));
   _populateDatalist("events-list", _eventsFor(type, gender || null));
+  // Also (re)populate any `<select data-catalog="division|event">` controls
+  // that have replaced the legacy free-text inputs.
+  _populateCatalogSelects(type, gender || null);
+}
+
+// Tabulator `editor: "list"` parameter factories — same data source as the
+// <select data-catalog> form controls. Returned object plugs into the
+// column's `editorParams` (function form, so the active tournament + gender
+// are evaluated lazily when the editor opens).
+function _divisionListParams(opts) {
+  const o = opts || {};
+  const type = (active && active.type) || "junior";
+  const items = _divisionsFor(type, o.gender || null);
+  return {
+    values: items.map((d) => ({ label: d.code, value: d.code })),
+    autocomplete: true, listOnEmpty: true, clearable: true,
+    multiselect: !!o.multiple,
+  };
+}
+function _eventListParams(opts) {
+  const o = opts || {};
+  const type = (active && active.type) || "junior";
+  const items = _eventsFor(type, o.gender || null);
+  return {
+    values: items.map((n) => ({ label: n, value: n })),
+    autocomplete: true, listOnEmpty: true, clearable: true,
+    multiselect: !!o.multiple,
+  };
+}
+
+// Fill every <select data-catalog="division|event"> in the page from the
+// catalog arrays, filtered by tournament type + (optional) player gender.
+// Preserves the current selection where the value still exists.
+function _populateCatalogSelects(type, gender) {
+  const divs = _divisionsFor(type, gender);
+  const evs = _eventsFor(type, gender);
+  for (const sel of document.querySelectorAll('select[data-catalog]')) {
+    const kind = sel.getAttribute("data-catalog");
+    const items = kind === "event" ? evs.map((n) => ({ code: n, label: n }))
+                                   : divs;  // [{code, label}, ...]
+    // Snapshot current selection so we can re-apply it after rebuilding.
+    const isMulti = sel.multiple;
+    const prevSelected = isMulti
+      ? new Set([...sel.selectedOptions].map((o) => o.value))
+      : sel.value;
+    // Rebuild options. Single-select keeps the existing "— pick … —"
+    // placeholder (it's the first <option value="">); multi-select doesn't
+    // need a placeholder.
+    const placeholder = !isMulti && sel.querySelector('option[value=""]');
+    sel.innerHTML = "";
+    if (placeholder) sel.appendChild(placeholder);
+    for (const it of items) {
+      const o = document.createElement("option");
+      o.value = it.code;
+      o.textContent = it.label === it.code ? it.code : `${it.code} — ${it.label}`;
+      sel.appendChild(o);
+    }
+    // Re-apply selection.
+    if (isMulti) {
+      [...sel.options].forEach((o) => { if (prevSelected.has(o.value)) o.selected = true; });
+    } else if (prevSelected) {
+      // If the prior value is no longer in the filtered set, append it as a
+      // legacy option so the form doesn't silently drop it (e.g. an inbox
+      // filed entry with a value the TD has since removed from the catalog).
+      if (![...sel.options].some((o) => o.value === prevSelected)) {
+        const o = document.createElement("option");
+        o.value = prevSelected; o.textContent = prevSelected + " (legacy)";
+        sel.appendChild(o);
+      }
+      sel.value = prevSelected;
+    }
+    // The type-in combo wrapper (enhanceSelect) keeps its own display state
+    // that needs to be re-synced from the native <select>'s options + value.
+    if (sel.dataset.combo === "1") scheduleComboSync();
+  }
 }
 // When a division/events input gains focus, infer the player gender from the
 // containing form (player_ref combobox, roster's player_id picker, or the
@@ -290,10 +365,19 @@ function _inferFormGender(form) {
 }
 document.addEventListener("focusin", (e) => {
   const t = e.target;
-  if (!t || t.tagName !== "INPUT") return;
-  const list = t.getAttribute("list");
-  if (list !== "divisions-list" && list !== "events-list") return;
-  refreshDivisionLists(_inferFormGender(t.closest("form")));
+  if (!t) return;
+  // Legacy input+datalist control (still used by a couple of free-text fields)
+  if (t.tagName === "INPUT") {
+    const list = t.getAttribute("list");
+    if (list === "divisions-list" || list === "events-list") {
+      refreshDivisionLists(_inferFormGender(t.closest("form")));
+    }
+    return;
+  }
+  // Modern dropdown control — `<select data-catalog="division|event">`.
+  if (t.tagName === "SELECT" && t.hasAttribute("data-catalog")) {
+    refreshDivisionLists(_inferFormGender(t.closest("form")));
+  }
 });
 
 // Colored status chip for known tokens (selection status, email status, etc.).
@@ -332,7 +416,18 @@ function scheduleComboSync() {
 // esc() now imported from ./app/util.js (audit A47).
 function formObj(form) {
   const o = {};
-  for (const el of form.elements) if (el.name) o[el.name] = el.value === "" ? null : el.value;
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    // Multi-select serializes as a comma-joined string (matches the existing
+    // backend contract for `events` + `willing_divisions` — both stored as
+    // free-text comma-separated strings in TournamentEntry / DivisionFlex).
+    if (el.tagName === "SELECT" && el.multiple) {
+      const vals = [...el.selectedOptions].map((o) => o.value).filter(Boolean);
+      o[el.name] = vals.length ? vals.join(", ") : null;
+    } else {
+      o[el.name] = el.value === "" ? null : el.value;
+    }
+  }
   return o;
 }
 // Register a submit handler that preventDefaults and disables the submit button
@@ -385,6 +480,10 @@ function fillSelect(el, items, labelFn, none = true) {
 // (value/required/submit/listeners all unchanged) — we just overlay a text input.
 function enhanceSelect(sel) {
   if (!sel || sel.dataset.combo) return;
+  // Multi-selects (events, willing_divisions) stay as the native
+  // `<select multiple size="N">` control — the type-in combo wrapper is a
+  // single-value picker that wouldn't handle multi-selection.
+  if (sel.multiple) return;
   sel.dataset.combo = "1";
   sel.tabIndex = -1;
   sel.classList.add("combo-native");
@@ -1066,6 +1165,12 @@ function wireEntity(cfg) {
     for (const el of form.elements) {
       if (!el.name) continue;
       const v = item ? item[el.name] : null;
+      // Multi-select: split the stored comma-string back into selected options.
+      if (el.tagName === "SELECT" && el.multiple) {
+        const wanted = new Set(String(v ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+        [...el.options].forEach((o) => { o.selected = wanted.has(o.value); });
+        continue;
+      }
       el.value = v === null || v === undefined ? "" : v;
     }
     scheduleComboSync();  // refresh type-in dropdown displays
@@ -1245,7 +1350,8 @@ const rosterGrid = new Tabulator(rosterMount, {
     { title: "Player", field: "last_name",
       formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; },
       headerFilter: "input", headerFilterFunc: (term, _v, e) => (rosterName(e) + " " + (e.usta_number || "")).toLowerCase().includes(String(term).toLowerCase()) },
-    { title: "Div", field: "age_division", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
+    { title: "Div", field: "age_division", editor: "list", cssClass: "editable-cell",
+      editorParams: (cell) => _divisionListParams({ gender: (cell.getData() || {}).gender }), headerFilter: "input" },
     { title: "Status", field: "selection_status", cssClass: "editable-cell",
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
       headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
@@ -2143,8 +2249,10 @@ const lateGrid = makeListGrid("late-table", [
   { title: "Time", field: "request_time", editor: "input", cssClass: "editable-cell" },
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
-  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
-  { title: "Events", field: "events", editor: "input", cssClass: "editable-cell" },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell",
+    editorParams: () => _divisionListParams() },
+  { title: "Events", field: "events", editor: "list", cssClass: "editable-cell",
+    editorParams: () => _eventListParams({ multiple: true }) },
 ], "late-entries", "No late entries yet.",
   async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } },
   undefined,
@@ -2191,7 +2299,8 @@ const wdGrid = makeListGrid("withdrawal-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
   { title: "Division", field: "age_division" },
-  { title: "Events", field: "events", editor: "input", cssClass: "editable-cell" },
+  { title: "Events", field: "events", editor: "list", cssClass: "editable-cell",
+    editorParams: () => _eventListParams({ multiple: true }) },
   { title: "Alt?", field: "was_alternate", formatter: (c) => (c.getData().was_alternate ? "yes" : "") },
   { title: "Reason", field: "reason", editor: "input", cssClass: "editable-cell" },
   { title: "Notes", field: "notes", editor: "input", cssClass: "editable-cell" },
@@ -2648,7 +2757,7 @@ function pairingMemberRow() {
 function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
 document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
 const pairingGrid = makeListGrid("pairing-table", [
-  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
   { title: "Relationship", field: "relationship", editor: "list", cssClass: "editable-cell",
     editorParams: { values: ["same_club", "siblings"] } },
   { title: "Players", field: "_players",
@@ -2713,7 +2822,7 @@ function doublesReset() { doublesForm.reset(); doublesForm.source_email_id.value
 const doublesReqGrid = makeListGrid("doubles-req-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
-  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
   { title: "Type", field: "_type", formatter: (c) => chip(c.getData().wants_random ? "random" : "mutual") },
   { title: "Partner status", field: "_info",
     formatter: (c) => {
@@ -2746,7 +2855,7 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
     { header: "source_email_id", key: "source_email_id" },
   ]);
 const doublesPairGrid = makeListGrid("doubles-pair-table", [
-  { title: "Division", field: "age_division", editor: "input", cssClass: "editable-cell" },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
   { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
   { title: "Player 1", field: "player1" },
   { title: "Player 2", field: "player2" },

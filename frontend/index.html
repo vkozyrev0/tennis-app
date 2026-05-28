@@ -454,7 +454,7 @@
               </div>
               <div class="row roster-pick-row">
                 <label>Player <select name="player_id" id="roster-player" required></select></label>
-                <label>Division <input name="age_division" list="divisions-list" /></label>
+                <label>Division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
               </div>
               <div class="row roster-new-row" hidden>
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890" /></label>
@@ -470,7 +470,7 @@
               </div>
               <div class="row">
                 <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
-                <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
+                <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
               </div>
               <div class="row">
                 <label>T-shirt
@@ -624,8 +624,8 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Age division <input name="age_division" list="divisions-list" /></label>
-            <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
+            <label>Age division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
+            <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
           </div>
           <div class="row">
             <label>Request date <input type="date" name="request_date" /></label>
@@ -652,7 +652,7 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Events <input name="events" list="events-list" placeholder="e.g. Singles, Doubles" /></label>
+            <label>Events <select name="events" data-catalog="event" multiple size="3"></select></label>
             <label>Reason <input name="reason" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
@@ -701,8 +701,8 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Home division <input name="home_division" list="divisions-list" /></label>
-            <label>Willing divisions <input name="willing_divisions" list="divisions-list" placeholder="comma-separated" /></label>
+            <label>Home division <select name="home_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
+            <label>Willing divisions <select name="willing_divisions" data-catalog="division" multiple size="4"></select></label>
           </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="divflex-msg"></span></div>
         </form>
@@ -722,7 +722,7 @@
         <form id="pairing-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
-            <label>Age division <input name="age_division" list="divisions-list" /></label>
+            <label>Age division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
             <label>Relationship
               <select name="relationship"><option value="same_club">same club</option><option value="siblings">siblings</option></select>
             </label>
@@ -754,7 +754,7 @@
             <label>Player <select name="player_ref" class="player-ref" required></select></label>
           </div>
           <div class="row">
-            <label>Age division <input name="age_division" list="divisions-list" /></label>
+            <label>Age division <select name="age_division" data-catalog="division"><option value="">— pick a division —</option></select></label>
             <label>Random pairing <input type="checkbox" id="doubles-random" name="wants_random" /></label>
             <label id="doubles-partner-wrap">Partner <select name="partner_ref" class="player-ref"></select></label>
           </div>
