@@ -20,4 +20,8 @@ unpacked_raw/
 
 # Sample/source data workbooks (contain PII — keep local only)
 *.xlsx
+# Real tournament CSV exports kept at the repo root for local testing
+# carry real player names + USTA #s. The "Tournament *" prefix matches
+# the file names the USTA dashboard exports.
+Tournament *.csv
 .archive/
