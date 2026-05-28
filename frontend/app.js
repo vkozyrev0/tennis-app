@@ -1446,7 +1446,9 @@ function rosterSelect(e) {
   rosterSetMode("pick");  // editing an existing entry — always pick mode
   rosterForm.player_id.value = e.player_id;
   rosterForm.age_division.value = e.age_division || "";
-  rosterForm.events.value = e.events || "";
+  // Multi-select: `events` is stored comma-joined ("Singles, Doubles") so a
+  // plain `.value =` won't match any single <option>. Split + select each.
+  _setMultiSelect(rosterForm.events, e.events);
   rosterForm.selection_status.value = e.selection_status;
   rosterForm.t_shirt_size.value = e.t_shirt_size || "";
   rosterForm.dietary_preference.value = e.dietary_preference || "";
@@ -1454,6 +1456,14 @@ function rosterSelect(e) {
   rosterSubmit.textContent = "Save";  // audit P40: one verb across all forms
   if (typeof syncCombos === "function") syncCombos();
   applyRosterSel();
+}
+
+// Set the selected options on a <select multiple> from a comma-joined string
+// (the format the backend stores for events + willing_divisions).
+function _setMultiSelect(sel, csv) {
+  if (!sel || !sel.multiple) return;
+  const wanted = new Set(String(csv ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  [...sel.options].forEach((o) => { o.selected = wanted.has(o.value); });
 }
 function rosterShowNew() {
   rosterEditId = null; rosterForm.reset();
