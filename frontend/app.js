@@ -291,6 +291,17 @@ function _divisionListParams(opts) {
     multiselect: !!o.multiple,
   };
 }
+// Helper for in-grid editors on rows that include a player reference but
+// not the player's gender column — looks it up via playersById.
+function _rowGender(row) {
+  if (!row || typeof playersById !== "object") return null;
+  if (row.player_id && playersById[row.player_id]) return playersById[row.player_id].gender || null;
+  if (row.usta_number) {
+    const p = Object.values(playersById).find((x) => x.usta_number === row.usta_number);
+    return p ? (p.gender || null) : null;
+  }
+  return null;
+}
 function _eventListParams(opts) {
   const o = opts || {};
   const type = (active && active.type) || "junior";
@@ -1363,7 +1374,8 @@ const rosterGrid = new Tabulator(rosterMount, {
       formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; },
       headerFilter: "input", headerFilterFunc: (term, _v, e) => (rosterName(e) + " " + (e.usta_number || "")).toLowerCase().includes(String(term).toLowerCase()) },
     { title: "Div", field: "age_division", editor: "list", cssClass: "editable-cell",
-      editorParams: (cell) => _divisionListParams({ gender: (cell.getData() || {}).gender }), headerFilter: "input" },
+      editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }),
+      headerFilter: "input" },
     { title: "Status", field: "selection_status", cssClass: "editable-cell",
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
       headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
@@ -2275,9 +2287,9 @@ const lateGrid = makeListGrid("late-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
   { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell",
-    editorParams: () => _divisionListParams() },
+    editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }) },
   { title: "Events", field: "events", editor: "list", cssClass: "editable-cell",
-    editorParams: () => _eventListParams({ multiple: true }) },
+    editorParams: (cell) => _eventListParams({ multiple: true, gender: _rowGender(cell.getData()) }) },
 ], "late-entries", "No late entries yet.",
   async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } },
   undefined,
@@ -2325,7 +2337,7 @@ const wdGrid = makeListGrid("withdrawal-table", [
   { title: "USTA #", field: "usta_number" },
   { title: "Division", field: "age_division" },
   { title: "Events", field: "events", editor: "list", cssClass: "editable-cell",
-    editorParams: () => _eventListParams({ multiple: true }) },
+    editorParams: (cell) => _eventListParams({ multiple: true, gender: _rowGender(cell.getData()) }) },
   { title: "Alt?", field: "was_alternate", formatter: (c) => (c.getData().was_alternate ? "yes" : "") },
   { title: "Reason", field: "reason", editor: "input", cssClass: "editable-cell" },
   { title: "Notes", field: "notes", editor: "input", cssClass: "editable-cell" },
@@ -2782,7 +2794,7 @@ function pairingMemberRow() {
 function pairingReset() { pairingForm.reset(); pairingForm.source_email_id.value = ""; pairingMembersBox.innerHTML = ""; pairingMemberRow(); pairingMemberRow(); }
 document.getElementById("pairing-add-member").addEventListener("click", pairingMemberRow);
 const pairingGrid = makeListGrid("pairing-table", [
-  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }) },
   { title: "Relationship", field: "relationship", editor: "list", cssClass: "editable-cell",
     editorParams: { values: ["same_club", "siblings"] } },
   { title: "Players", field: "_players",
@@ -2847,7 +2859,7 @@ function doublesReset() { doublesForm.reset(); doublesForm.source_email_id.value
 const doublesReqGrid = makeListGrid("doubles-req-table", [
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
-  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }) },
   { title: "Type", field: "_type", formatter: (c) => chip(c.getData().wants_random ? "random" : "mutual") },
   { title: "Partner status", field: "_info",
     formatter: (c) => {
@@ -2880,7 +2892,7 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
     { header: "source_email_id", key: "source_email_id" },
   ]);
 const doublesPairGrid = makeListGrid("doubles-pair-table", [
-  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: () => _divisionListParams() },
+  { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }) },
   { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
   { title: "Player 1", field: "player1" },
   { title: "Player 2", field: "player2" },
