@@ -118,7 +118,17 @@ header {
   background: var(--accent);
   color: var(--accent-ink);
   padding: 0.3rem 1rem 0.28rem;
+  /* Sticky top region so the title + menus stay in view while users scroll
+     long panels (e.g. the Import page after a deep-link). z-index keeps it
+     above Tabulator grids and modals' backdrop. */
+  position: sticky; top: 0; z-index: 50;
 }
+/* Stack of sticky bars. The pixel offsets are conservative — header is the
+   tallest, then nav L1, then nav L2; if any bar grows taller (multi-line on
+   narrow viewports) the bar below it will tuck under it for a frame until
+   the user scrolls past — acceptable trade-off vs measuring at runtime. */
+.menu-l1 { position: sticky; top: 86px; z-index: 49; }
+.menu    { position: sticky; top: 120px; z-index: 48; }
 header h1 { margin: 0; font-size: 0.92rem; }
 /* Tennis-ball brand icon in front of the app title. Sized to match the
    visual weight of the surrounding text — feels paired, not stamped on. */
@@ -839,6 +849,10 @@ details.addbox > form { padding: 0.7rem 0.8rem; }
   padding-bottom: 0.35rem;
   color: var(--ink);
 }
+/* When deep-linking via ⬆ Import…, leave room under the sticky header+nav
+   stack so the section's heading isn't tucked underneath. ~150 px matches
+   header + nav-l1 + nav-l2 stack. */
+.export-section { scroll-margin-top: 155px; }
 .import-group-heading:first-of-type { margin-top: 0.4rem; }
 /* When a per-panel ⬆ Import… button deep-links into a section, briefly tint
    the target so users see what landed. Subtle accent — not a spotlight. */
