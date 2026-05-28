@@ -19,6 +19,8 @@
   --muted: #556070;      /* ~6:1 on white — small helper/label text clears AA */
   --accent: #2e6f40;
   --accent-ink: #ffffff;
+  --link: #2e6f40;            /* link/anchor text on cards. Same as accent in
+                                 light mode (passes 6.2:1 on white). */
   --border: #d9e0e6;
   --ok: #2e7d32;
   --bad: #c62828;
@@ -41,6 +43,10 @@
      text on accent buttons and 1.4.11 for the accent button shape itself. */
   --accent: #198754;
   --accent-ink: #ffffff;
+  /* a11y 7th-pass: distinct --link for dark mode. The accent #198754 on the
+     dark card carries only 3.62:1 — fails AA for normal text. #2bb673 hits
+     6.47:1 against the dark card while still feeling on-brand green. */
+  --link: #2bb673;
   --border: #2d363f;
   --ok: #198754;            /* same — pill.ok white text was failing at 2.31:1 against the old #5bbf6a */
   --bad: #e26d6d;

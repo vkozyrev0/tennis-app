@@ -212,8 +212,11 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .gbtn {
   appearance: none;
   border: 0;
-  background: rgba(255, 255, 255, 0.10);
-  color: rgba(255, 255, 255, 0.9);
+  /* a11y 7th-pass: translucent-black overlay (vs the old translucent-white)
+     so white text clears 6.3:1 against the resulting darker green — the old
+     mix was 3.83:1 (fails AA normal text). */
+  background: rgba(0, 0, 0, 0.18);
+  color: #ffffff;
   font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
@@ -226,8 +229,18 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .gbtn.active { background: #245733; color: #fff; }
 /* Level-1 nav group icon. 16 px stroke icons; each group gets a distinct
    warm/cool hue (set as `color` so currentColor stroke follows). On hover and
-   when the group is active we bump saturation/brightness slightly. */
-.gicon { width: 16px; height: 16px; flex-shrink: 0; color: #ffffff; }
+   when the group is active we bump saturation/brightness slightly.
+   a11y 7th-pass: a small dark disc behind the icon lifts every colored
+   stroke past 3:1 (1.4.11) — without it, pink/cyan/lavender sit at ~2:1
+   against the green nav bar, which matters when the text label is hidden
+   on narrow viewports (icon-only mode). */
+.gicon {
+  width: 16px; height: 16px; flex-shrink: 0; color: #ffffff;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 50%;
+  padding: 2px;
+  box-sizing: content-box;  /* keep stroke crisp at 16×16 inside the disc */
+}
 .gbtn[data-group="setup"]       .gicon { color: #f9c74f; }  /* gold — Setup (gear) */
 .gbtn[data-group="tournament"]  .gicon { color: #ffb74d; }  /* amber — Tournament (trophy) */
 .gbtn[data-group="staffing"]    .gicon { color: #4cc9f0; }  /* cyan — Staffing (clipboard) */
@@ -687,7 +700,9 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   padding: 0.1rem 0.35rem;
   background: transparent;
   border: 0;
-  color: var(--accent);
+  /* a11y 7th-pass: use --link (brighter than --accent in dark mode) so
+     "Work on →" etc. clear 4.5:1 on the dark card. */
+  color: var(--link);
   font: inherit;
   font-size: 0.82rem;
   cursor: pointer;
