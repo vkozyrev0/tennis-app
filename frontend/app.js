@@ -1890,7 +1890,10 @@ async function buildImportPage() {
     const sec = document.createElement("section");
     sec.className = "export-section";
     sec.id = "import-" + t.key;     // deep-link target for per-panel ⬆ Import buttons
-    sec.innerHTML = `<h4>${esc(t.label)}</h4><p class="muted">${esc(t.desc)} ` +
+    // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable
+    // so gotoImport() can land focus here. Sighted users see no change; SR /
+    // keyboard users get correct focus order after the deep-link.
+    sec.innerHTML = `<h4 tabindex="-1">${esc(t.label)}</h4><p class="muted">${esc(t.desc)} ` +
       `<span class="muted">Columns: ${esc(t.columns.join(", "))}${t.required.length ? ` (required: ${esc(t.required.join(", "))})` : ""}.</span></p>`;
     const row = document.createElement("div"); row.className = "export-grid";
     for (const fmt of ["csv", "xlsx"]) {
@@ -1938,9 +1941,17 @@ async function gotoImport(typeKey) {
   const target = document.getElementById("import-" + typeKey);
   if (target) {
     target.scrollIntoView({ behavior: "smooth", block: "start" });
-    // Brief highlight so users see what landed.
     target.classList.add("import-section-flash");
     setTimeout(() => target.classList.remove("import-section-flash"), 1400);
+    // a11y 9th-pass: programmatically focus the section's heading so keyboard
+    // users land at the right place in tab order. The activation cascade
+    // (group click → first-tab click → import-tab click → buildImportPage
+    // → redraws) keeps resetting focus during the ~200 ms it takes to settle,
+    // so we re-apply focus a few times. Cheap, and idempotent.
+    const h = target.querySelector("h4");
+    const reapply = () => { if (h && document.activeElement !== h) h.focus({ preventScroll: true }); };
+    reapply();
+    [40, 120, 250, 450].forEach((ms) => setTimeout(reapply, ms));
   }
 }
 // Expose for inline handlers + tests.
