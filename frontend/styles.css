@@ -829,6 +829,27 @@ details.addbox > summary {
 details.addbox > summary::-webkit-details-marker { display: none; }
 details.addbox[open] > summary { border-bottom: 1px solid var(--border); }
 details.addbox > form { padding: 0.7rem 0.8rem; }
+/* Import page group headings — Tournament data vs Setup catalogs. The
+   level-4 heading sits above each <section> group, with a subtle rule under
+   so the eye doesn't blur across the two groups. */
+.import-group-heading {
+  margin: 1.1rem 0 0.55rem;
+  font-size: 0.92rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.35rem;
+  color: var(--ink);
+}
+.import-group-heading:first-of-type { margin-top: 0.4rem; }
+/* When a per-panel ⬆ Import… button deep-links into a section, briefly tint
+   the target so users see what landed. Subtle accent — not a spotlight. */
+.import-section-flash {
+  animation: import-flash 1.3s ease-out 1;
+  border-radius: 6px;
+}
+@keyframes import-flash {
+  0% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background: transparent; }
+}
 .import-row {
   display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
   margin-bottom: 0.7rem; padding-bottom: 0.7rem; border-bottom: 1px dashed var(--border);

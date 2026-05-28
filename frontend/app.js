@@ -1866,14 +1866,30 @@ function _renderBatch(el, body) {
   const actions = document.createElement("div"); actions.className = "export-grid";
   actions.append(merge, disc); el.appendChild(actions);
 }
+// Which import types are Setup catalogs (no active tournament needed) vs
+// tournament-scoped. Used to split the Import page into two groups and to
+// gate the active-tournament needs-note.
+const _IMPORT_SETUP_KEYS = new Set(["distances", "divisions", "events", "players", "officials"]);
+
 async function buildImportPage() {
-  const root = document.getElementById("import-sections");
-  if (!root || root.dataset.built) return;
+  const tRoot = document.getElementById("import-sections-tournament");
+  const sRoot = document.getElementById("import-sections-setup");
+  const note = document.getElementById("import-needs-active");
+  if (!tRoot || !sRoot) return;
+  // Toggle the needs-active hint based on current selection.
+  if (note) note.hidden = !!active;
+  if (tRoot.dataset.built) return;
+  // Set the guard BEFORE the await so a second concurrent call (e.g. the tab
+  // click handler + gotoImport both firing) doesn't race past this check and
+  // append a duplicate set of sections.
+  tRoot.dataset.built = "1";
   let types;
-  try { types = await api("/import/types"); } catch (e) { root.textContent = e.message; return; }
-  root.dataset.built = "1";
+  try { types = await api("/import/types"); }
+  catch (e) { tRoot.textContent = e.message; tRoot.dataset.built = ""; return; }
   for (const t of types) {
-    const sec = document.createElement("section"); sec.className = "export-section";
+    const sec = document.createElement("section");
+    sec.className = "export-section";
+    sec.id = "import-" + t.key;     // deep-link target for per-panel ⬆ Import buttons
     sec.innerHTML = `<h4>${esc(t.label)}</h4><p class="muted">${esc(t.desc)} ` +
       `<span class="muted">Columns: ${esc(t.columns.join(", "))}${t.required.length ? ` (required: ${esc(t.required.join(", "))})` : ""}.</span></p>`;
     const row = document.createElement("div"); row.className = "export-grid";
@@ -1903,8 +1919,58 @@ async function buildImportPage() {
       } catch (e) { msg.textContent = e.message; msg.className = "msg bad"; }
       finally { up.disabled = false; }
     });
-    root.appendChild(sec);
+    (_IMPORT_SETUP_KEYS.has(t.key) ? sRoot : tRoot).appendChild(sec);
   }
+}
+
+// Deep-link helper: activates the Setup → Import tab, builds the page if
+// it hasn't been opened yet, and scrolls to the target section. Used by the
+// per-panel ⬆ Import… buttons so users get contextual entry without the
+// page having to duplicate every importer's UI.
+async function gotoImport(typeKey) {
+  // 1. Switch to the Setup group + Import tab.
+  const setupGroupBtn = document.querySelector('.gbtn[data-group="setup"]');
+  if (setupGroupBtn) setupGroupBtn.click();
+  const importTab = document.querySelector('.tab[data-target="panel-import"]');
+  if (importTab) importTab.click();
+  // 2. Build the page if it hasn't been built yet, then scroll.
+  await buildImportPage();
+  const target = document.getElementById("import-" + typeKey);
+  if (target) {
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Brief highlight so users see what landed.
+    target.classList.add("import-section-flash");
+    setTimeout(() => target.classList.remove("import-section-flash"), 1400);
+  }
+}
+// Expose for inline handlers + tests.
+window.gotoImport = gotoImport;
+
+// Per-panel ⬆ Import… entry points. We mark each importable panel with
+// data-import-type="<key>" in HTML; at init we inject an Import button into
+// the most-natural toolbar (preferring .list-toolbar, falling back to
+// .actions-row or the panel's heading parent). Clicking deep-links to the
+// Import section via gotoImport().
+function _wirePanelImportButtons() {
+  document.querySelectorAll(".panel[data-import-type]").forEach((panel) => {
+    const key = panel.dataset.importType;
+    if (!key || panel.querySelector(".panel-import-btn")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "export-btn no-print panel-import-btn";
+    btn.title = "Open the Import page and jump to this type";
+    btn.innerHTML = '<span aria-hidden="true">⬆</span> Import…';
+    btn.addEventListener("click", () => gotoImport(key));
+    const target = panel.querySelector(".list-toolbar")
+      || panel.querySelector(".actions-row")
+      || panel.querySelector(".t-content > h3, .card > h3");
+    if (target) target.appendChild(btn);
+  });
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _wirePanelImportButtons);
+} else {
+  _wirePanelImportButtons();
 }
 
 // --- Assignments ---

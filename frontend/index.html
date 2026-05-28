@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=12" />
+  <link rel="stylesheet" href="/styles.css?v=13" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -308,7 +308,7 @@
     </section>
 
     <!-- Distances -->
-    <section class="panel" id="panel-distances">
+    <section class="panel" id="panel-distances" data-import-type="distances">
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" aria-label="Filter distances" /><button type="button" class="new-btn">+ New</button></div>
@@ -419,8 +419,13 @@
           <strong>active tournament</strong> (chosen in the bar above). For each type:
           download a blank <strong>template</strong>, fill it in, <strong>upload</strong> (rows are
           staged and validated), then <strong>Merge</strong> the valid rows into the tables.
-          (Each list's own page has its <strong><span aria-hidden="true">⬇</span> CSV export</strong>.)</p>
-        <div id="import-sections"></div>
+          (Each list's own page has its <strong><span aria-hidden="true">⬇</span> CSV export</strong> and an
+          <strong><span aria-hidden="true">⬆</span> Import…</strong> button that jumps straight to its section here.)</p>
+        <div id="import-needs-active" class="needs-active-note" hidden>Select a tournament in the bar above to import its data. Setup-catalog imports (e.g. Distances) below don't need a tournament.</div>
+        <h4 class="import-group-heading">Tournament data</h4>
+        <div id="import-sections-tournament"></div>
+        <h4 class="import-group-heading">Setup catalogs <span class="muted">(no active tournament needed)</span></h4>
+        <div id="import-sections-setup"></div>
       </div>
     </section>
 
@@ -439,7 +444,7 @@
     </section>
 
     <!-- T: Roster -->
-    <section class="panel tpanel" id="panel-t-roster">
+    <section class="panel tpanel" id="panel-t-roster" data-import-type="roster">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
         <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
@@ -630,7 +635,7 @@
     </section>
 
     <!-- T: Late entries -->
-    <section class="panel tpanel" id="panel-t-late">
+    <section class="panel tpanel" id="panel-t-late" data-import-type="late_entries">
       <div class="needs-active-note">Select a tournament in the bar above to manage late entries.</div>
       <div class="t-content card">
         <h3>Late entries — <span class="t-name"></span></h3>
@@ -657,7 +662,7 @@
     </section>
 
     <!-- T: Withdrawals -->
-    <section class="panel tpanel" id="panel-t-withdrawals">
+    <section class="panel tpanel" id="panel-t-withdrawals" data-import-type="withdrawals">
       <div class="needs-active-note">Select a tournament in the bar above to manage withdrawals.</div>
       <div class="t-content card">
         <h3>Withdrawals — <span class="t-name"></span></h3>
@@ -682,7 +687,7 @@
     </section>
 
     <!-- T: Scheduling avoidances (adults) -->
-    <section class="panel tpanel" id="panel-t-sched">
+    <section class="panel tpanel" id="panel-t-sched" data-import-type="scheduling_avoidances">
       <div class="needs-active-note">Select a tournament in the bar above to manage scheduling avoidances.</div>
       <div class="t-content card">
         <h3>Scheduling avoidances — <span class="t-name"></span></h3>
@@ -706,7 +711,7 @@
     </section>
 
     <!-- T: Division flexibility (adults) -->
-    <section class="panel tpanel" id="panel-t-divflex">
+    <section class="panel tpanel" id="panel-t-divflex" data-import-type="division_flexibility">
       <div class="needs-active-note">Select a tournament in the bar above to manage division flexibility.</div>
       <div class="t-content card">
         <h3>Division flexibility — <span class="t-name"></span></h3>
@@ -730,7 +735,7 @@
     </section>
 
     <!-- T: Pairing avoidances (juniors) -->
-    <section class="panel tpanel" id="panel-t-pairing">
+    <section class="panel tpanel" id="panel-t-pairing" data-import-type="pairing_avoidances">
       <div class="needs-active-note">Select a tournament in the bar above to manage pairing avoidances.</div>
       <div class="t-content card">
         <h3>Pairing avoidances — <span class="t-name"></span></h3>
@@ -759,7 +764,7 @@
     </section>
 
     <!-- T: Doubles pairing -->
-    <section class="panel tpanel" id="panel-t-doubles">
+    <section class="panel tpanel" id="panel-t-doubles" data-import-type="doubles_requests">
       <div class="needs-active-note">Select a tournament in the bar above to manage doubles pairing.</div>
       <div class="t-content card">
         <h3>Doubles pairing — <span class="t-name"></span></h3>
@@ -924,6 +929,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=14"></script>
+  <script type="module" src="/app.js?v=16"></script>
 </body>
 </html>
