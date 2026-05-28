@@ -1578,7 +1578,7 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: () => ({ values: ["", ...SHIRT_LABELS] }),
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 132, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
