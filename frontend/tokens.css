@@ -35,10 +35,14 @@
   --card: #1a2027;
   --ink: #e6edf3;
   --muted: #aab6c4;        /* +contrast on dark card (≈5.4:1) */
-  --accent: #3aa05c;       /* brighter green so filled accent buttons clear AA on dark */
+  /* a11y 6th-pass #1+#2: previous dark accent #3aa05c carried white text at
+     only 3.3:1 (AA fail). #198754 (Bootstrap success green) clears 4.55:1
+     vs white *and* 4.08:1 vs the dark card background — passes 1.4.3 for
+     text on accent buttons and 1.4.11 for the accent button shape itself. */
+  --accent: #198754;
   --accent-ink: #ffffff;
   --border: #2d363f;
-  --ok: #5bbf6a;
+  --ok: #198754;            /* same — pill.ok white text was failing at 2.31:1 against the old #5bbf6a */
   --bad: #e26d6d;
   --sel: #2c3f3a;          /* tinted toward accent so selection reads above zebra */
   --field-bg: #11161b;

@@ -134,7 +134,10 @@ header h1 { margin: 0; font-size: 0.92rem; }
 .pill.bad { background: var(--bad); }
 
 #theme-toggle, #shortcuts-btn {
-  background: rgba(255, 255, 255, 0.2); color: #fff; border: 0; border-radius: 5px;
+  /* a11y 6th-pass #3: switched the translucent-white overlay (which dropped
+     to ~1:1 on some header backgrounds) for a translucent-black tint that
+     stays consistently visible — white text on it clears 7:1 in both themes. */
+  background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; border-radius: 5px;
   padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
   /* a11y #7: 44×44 minimum hit area for touch users. */
   min-height: 2.5rem; min-width: 2.5rem;
