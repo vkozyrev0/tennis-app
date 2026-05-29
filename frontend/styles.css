@@ -565,7 +565,7 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 .tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
   border-bottom-color: var(--muted); border-top-color: var(--muted);
 }
-.grid-actions { display: flex; gap: 0.15rem; justify-content: flex-end; align-items: center; }
+.grid-actions { display: flex; gap: 0.15rem; justify-content: flex-start; align-items: center; }
 /* a11y 6th-pass: Tabulator sets overflow:hidden on .tabulator-cell; bump
    specificity so our visible-overflow always wins and the 44×44 edit/delete
    icons can't be cropped by the neighbouring cell's edge. */
