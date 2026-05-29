@@ -515,3 +515,58 @@ Part B (all ✅): EmailMessage review inbox ──┬─ DoublesRequest → Doub
                                             └─ PlayerHotelStay → CVB analytics
 All player rows ───* Player (key: usta_number); per-tournament attrs on TournamentEntry
 ```
+
+---
+
+## Backlog B1/B2/B3 schema additions (migrations 0028 + 0029)
+
+### Player catalog extensions (migration 0028)
+The USTA "Full Player Data" Excel export carries more than the original
+schema tracked. These columns are all NULLable so existing data + flows stay
+valid; the **`roster_initial`** importer populates them via upsert.
+
+| Column | Type | What |
+|--------|------|------|
+| `emails` | TEXT | comma-separated list (USTA exports multiple) |
+| `phones` | TEXT | comma-separated list |
+| `district` | TEXT | e.g. "North Carolina" |
+| `section` | TEXT | e.g. "Southern" |
+| `wtn_singles` | NUMERIC(5,2) | World Tennis Number — singles |
+| `wtn_singles_conf` | TEXT | "High degree" / "Medium" / etc. |
+| `wtn_doubles` | NUMERIC(5,2) | WTN — doubles |
+| `wtn_doubles_conf` | TEXT | confidence label |
+| `birthdate_precision` | TEXT NOT NULL DEFAULT 'day' CHECK IN ('day','year') | Initial import only carries year-of-birth → store as `YYYY-01-01` with precision='year' |
+
+### Roster (tournament_entry) extensions (migration 0028)
+
+| Column | Type | From |
+|--------|------|------|
+| `payment_status` | TEXT | B2a — "PAID" / "NOT_REQUIRED" / etc. |
+| `amount_paid` / `amount_refunded` / `amount_due` / `amount_outstanding` | NUMERIC(8,2) | B2a |
+| `card_stored` | BOOL | B2a — "Card stored" Y/N |
+| `signed_in` | BOOL NOT NULL DEFAULT false | B2b — "Tournament sign in" cell |
+| `suspension_points` | INT | B2b — per-tournament (see migration 0028 comment for placement rationale) |
+| `lodging_plan` | TEXT | B3 — parsed canonical ("Hotel" / "Local / family" / "Commuter" variants) |
+| `lodging_plan_raw` | TEXT | B3 — raw fallback for unmappable hotel answers |
+
+### B1 — Division ↔ site assignment (migration 0029)
+`tournament_site_division (tournament_id, site_id, division_id)` with
+**UNIQUE (tournament_id, division_id)** — one division can only sit at one
+site per tournament (questionnaire 1.1). Drives the per-site t-shirt report.
+
+API endpoints (existing tournaments router):
+- `GET /api/tournaments/{id}/site-divisions` — full matrix
+- `PUT /api/tournaments/{id}/site-divisions/{division_id}` body `{site_id|null}`
+- `GET /api/tournaments/{id}/tshirts-by-site` — grouped roster ("Unassigned" bucket)
+
+### Importer registry (after B2 + B3)
+
+| Key | Purpose | Status |
+|-----|---------|--------|
+| `roster` | Simple ad-hoc roster (4-5 cols, hand-typed). | Legacy — kept for backward compat |
+| `roster_initial` | **B2a** USTA "Full Player Data" Excel. Catalog + roster + payment snapshot. | Production |
+| `roster_correction` | **B2b** USTA "Updated Status" CSV. Surgical status/division/events/sign-in patches; late-adds. | Production |
+| `tshirt_hotel_dietary` | **B3** Combined T-shirt + Hotel-question + Dietary, one row per player. | Production |
+| `player_hotels` | Specific hotel-name + lodging (FK to `hotel`); drives CVB analytics. | Distinct from B3 — coexists |
+| `late_entries` / `withdrawals` / `scheduling_avoidances` / `division_flexibility` / `pairing_avoidances` / `doubles_requests` | Per-list inbox flows | Unchanged |
+| `distances` | Setup catalog (global, not per-tournament). | Unchanged |

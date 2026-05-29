@@ -36,8 +36,15 @@ ALTER TABLE tournament_entry
   ADD COLUMN IF NOT EXISTS amount_outstanding NUMERIC(8,2),
   ADD COLUMN IF NOT EXISTS card_stored BOOL;
 
--- B2b Correction: tournament sign-in + suspension points (per-tournament,
--- not player-wide — the TD confirmed in the 2026-05-28 questionnaire).
+-- B2b Correction: tournament sign-in + suspension points.
+-- Placement decision (2026-05-28 questionnaire, Q2.2.1 → "Status + division
+-- + events"): suspension_points lives per-tournament on tournament_entry,
+-- NOT on player. The reasoning: USTA's "Suspension points" column is
+-- snapshot-at-tournament-time data — moving it to player would either need
+-- a separate history table (overkill for the POC) or would silently
+-- overwrite prior values on re-import. If suspensions later need to be
+-- player-wide and historical, introduce a `player_suspension_event` table
+-- rather than mutating this column.
 ALTER TABLE tournament_entry
   ADD COLUMN IF NOT EXISTS signed_in BOOL NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS suspension_points INT;

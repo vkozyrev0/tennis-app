@@ -788,8 +788,13 @@ _SRC_EMAIL = Col("source_email_id", {"sourceemailid", "emailid", "source"})
 
 # ---- registry ---------------------------------------------------------------
 TYPES = {
-    "roster": {"label": "Roster",
-               "desc": "Players entered for the tournament (division, status, t-shirt, dietary).",
+    # Legacy simple roster importer — predates B2. Still useful for quick
+    # ad-hoc spreadsheets the TD types up by hand (4-5 columns). The Initial
+    # USTA-dashboard flow (`roster_initial`) is the production path.
+    "roster": {"label": "Roster (simple — legacy)",
+               "desc": ("Players entered for the tournament (division, status, "
+                        "t-shirt, dietary). For the full USTA Excel export, use "
+                        "\"Roster — Initial (Full Player Data)\" instead."),
                "cols": _PLAYER + [Col("age_division", {"division", "div", "age"}),
                                   Col("events", {"event"}),
                                   Col("selection_status", {"status", "selection"}),
@@ -959,7 +964,11 @@ TYPES = {
         ],
         "merge": _merge_tshirt_hotel_dietary,
     },
-    "player_hotels": {"label": "Player hotels",
+    # Distinct from B3 (`tshirt_hotel_dietary`): this captures the SPECIFIC
+    # hotel name (with FK upsert into the `hotel` table) for CVB analytics.
+    # B3's combined import only handles the yes/no/local lodging question —
+    # the two coexist by design.
+    "player_hotels": {"label": "Player hotels (hotel-name + lodging)",
                       "desc": "Each player's reported hotel and lodging plan.",
                       "cols": _PLAYER + [Col("hotel_name", {"hotel", "hotelname"}),
                                          Col("lodging_plan", {"lodging", "lodgingplan", "plan"}),

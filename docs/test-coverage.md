@@ -199,3 +199,31 @@ Patterns in this suite:
    `test_td_e2e.py` is the only multi-concept test by design.
 5. **Tag the audit reference** in the docstring when a test exists
    specifically to lock in a bug fix (audit C1, F1, sixth-pass, etc.).
+
+---
+
+## Backlog B1/B2/B3 tests (added 2026-05-28)
+
+Eight new tests in `test_smoke.py` cover the schema additions in migrations
+0028 + 0029 and the three new importers.
+
+| Test | What it locks in | Type |
+|------|------------------|------|
+| `test_b1_division_site_assignment_and_tshirt_report` | End-to-end: link sites → assign 3 divisions → roster players → `/tshirts-by-site` buckets by site_name; "Unassigned" pile; 1-to-1 invariant on re-PUT; 400 when assigning to a site not linked to the tournament; `site_id=null` clears | E2E API |
+| `test_roster_initial_import_full_player_data` | B2a: CSV stage → merge → player catalog WTN/section/district populated; year-of-birth → 2012-01-01 with precision=year; roster carries division/events split + payment snapshot; re-import overwrites with conflict note | E2E |
+| `test_roster_initial_selection_precedence` | "SELECTED, PRE_SELECTED" → 'selected'; "WITHDRAWN, ALTERNATE" → 'withdrawn'; defaults | Unit |
+| `test_roster_initial_event_parse` | Both word orders: "Boys' Singles 14 & under" AND "Girls' 14 & under singles" parse to (B14, Singles) etc.; bare canonical names pass through | Unit |
+| `test_roster_correction_draw_status_precedence` | "Withdrawn, Alternate" → withdrawn; "Main draw" → selected; blanks → None | Unit |
+| `test_roster_correction_import_updates_existing_and_late_adds` | Existing row: status flipped + sign-in flag, t-shirt preserved; new USTA → late-add with parsed status; rows NOT in the file stay untouched across re-runs | E2E |
+| `test_b3_hotel_answer_parse` | "No, I am local" → "Local / family"; "Yes, I plan to reserve…" → "Hotel"; Commuter variants; unmappable → raw fallback; blanks | Unit |
+| `test_b3_combined_tshirt_hotel_dietary_import` | Late-add new player to roster (full row); existing player with only the hotel column → t-shirt + dietary preserved (blanks don't overwrite); hotel mapping lands | E2E |
+| `test_b3_unmappable_hotel_answer_stored_raw` | Free-text answer that doesn't match the mapping table → preserved verbatim in `lodging_plan_raw` | E2E |
+
+**Live verification with real USTA exports** (one-shot, not part of the
+suite): the three production files from June 2026 merged cleanly —
+B2a 184 rows / 0 failures; B2b 199 rows / 0 failures (50 conflicts =
+players already in roster from Initial); B3 184 rows / 0 failures.
+Distribution after all three: 147 Hotel / 27 Local / 25 None lodging;
+127 selected / 54 alternate / 18 withdrawn statuses.
+
+Total suite count: **63 tests, all passing**.
