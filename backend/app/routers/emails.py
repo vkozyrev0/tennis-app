@@ -71,11 +71,15 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
             UPDATE email_message SET
                 tournament_id = %(tournament_id)s, classification = %(classification)s,
                 status = %(status)s,
-                detected_player_id = %(detected_player_id)s,
-                -- A hand-set player is tagged "manual" (clears any prior auto
-                -- match_kind); clearing the player clears the kind too.
                 detected_match_kind = CASE
-                    WHEN %(detected_player_id)s IS NULL THEN NULL ELSE 'manual' END
+                    -- player cleared → no match kind
+                    WHEN %(detected_player_id)s::int IS NULL THEN NULL
+                    -- player changed to a new value → it was hand-picked
+                    WHEN %(detected_player_id)s::int IS DISTINCT FROM detected_player_id THEN 'manual'
+                    -- same player (e.g. a classification-only edit) → keep the
+                    -- existing kind so an auto "usta" hit isn't relabelled
+                    ELSE detected_match_kind END,
+                detected_player_id = %(detected_player_id)s
             WHERE id = %(id)s RETURNING id
             """,
             {**body.model_dump(), "id": email_id},

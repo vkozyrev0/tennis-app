@@ -2683,7 +2683,13 @@ const FILE_TARGETS = {
 // Inbox grid. Classification is an inline list-editor (double-click); the per-row
 // File-target picker + File / Suggest / Delete buttons live in the actions column.
 async function _inboxPutClass(m, classification) {
-  await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification, status: m.status }) });
+  // Preserve the detected player on a classification-only change — the PUT
+  // overwrites detected_player_id with whatever we send, so omitting it would
+  // silently unlink the player (and clear its match_kind).
+  await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({
+    tournament_id: active.id, classification, status: m.status,
+    detected_player_id: m.detected_player_id ?? null,
+  }) });
 }
 const inboxGrid = makeReadGrid("inbox-table", [
   // Mass-select column: master checkbox in header + per-row toggle. Drives
