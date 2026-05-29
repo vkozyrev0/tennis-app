@@ -1086,6 +1086,15 @@ td.toggle { white-space: nowrap; }
 .menu-btn-item.danger { color: var(--bad); }
 .menu-btn-item.danger:hover, .menu-btn-item.danger:focus-visible { background: var(--bad); color: #fff; }
 
+/* Roster summary strip + section counts + collapsible inline help. */
+.roster-counts { margin: 0.1rem 0 0.6rem; font-size: 0.82rem; }
+.section-count { font-size: 0.8rem; font-weight: 400; color: var(--muted); margin-left: 0.4rem; }
+.inline-help { display: inline; margin-left: 0.3rem; }
+.inline-help > summary { cursor: pointer; color: var(--link); display: inline; list-style: none; }
+.inline-help > summary::-webkit-details-marker { display: none; }
+.inline-help[open] { display: block; margin-top: 0.3rem; }
+.inline-detect { font-size: 0.82em; }
+
 /* Toast inline action ("View …") — link-style button beside the toast text. */
 .toast-action {
   margin-left: 0.6rem; background: rgba(255,255,255,0.18); border: 0;

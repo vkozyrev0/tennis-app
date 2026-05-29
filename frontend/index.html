@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=24" />
+  <link rel="stylesheet" href="/styles.css?v=25" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -453,7 +453,7 @@
         <!-- B1: per-tournament division → site assignment. Each division row
              gets a Site dropdown; "Unassigned" is the default. Drives the
              multi-site t-shirt-by-location report below. -->
-        <h4 class="section-spacer">Division → site (which division plays where)</h4>
+        <h4 class="section-spacer">Division → site (which division plays where) <span id="t-site-div-count" class="section-count"></span></h4>
         <p class="muted">Assign each division to one of the sites above. The Tournament → T-shirts page reads this to print the per-site quantities.</p>
         <table class="list-table" id="t-site-divisions-table">
           <thead><tr><th>Division</th><th>Type</th><th>Site</th></tr></thead>
@@ -468,6 +468,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
         <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
+        <p id="roster-counts" class="muted roster-counts" aria-live="polite"></p>
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
@@ -654,8 +655,10 @@
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
-        <p class="muted">Parent/player email is human-reviewed (no auto-parsing). Add a message, classify it, then file it into a list.</p>
-        <p class="muted"><strong>Forwarding address:</strong> not live in this POC — a dedicated inbox + auto-ingest is on the roadmap (deferred, needs mail infrastructure). For now, <strong>paste each forwarded email below</strong> (From / Subject / Body).</p>
+        <p class="muted">Human-reviewed email — classify, detect the player, then file into a list.
+          <details class="inline-help"><summary>How forwarding works</summary>
+          <strong>Forwarding address:</strong> not live in this POC — a dedicated inbox + auto-ingest is on the roadmap (deferred, needs mail infrastructure). For now, <strong>paste each forwarded email below</strong> (From / Subject / Body), or use <strong>⬆ Import ▾ → PDF email thread</strong>.</details>
+        </p>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>From <input name="from_address" /></label>
@@ -1036,6 +1039,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=43"></script>
+  <script type="module" src="/app.js?v=44"></script>
 </body>
 </html>

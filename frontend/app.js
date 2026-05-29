@@ -1801,6 +1801,12 @@ async function loadTSiteDivisions() {
     tr.lastElementChild.appendChild(sel);
     tbody.appendChild(tr);
   }
+  // T-1: section count — "N sites · M/total divisions assigned".
+  const cnt = document.getElementById("t-site-div-count");
+  if (cnt) {
+    const assigned = rows.filter((d) => d.site_id).length;
+    cnt.textContent = `${sites.length} site${sites.length === 1 ? "" : "s"} · ${assigned}/${rows.length} divisions assigned`;
+  }
 }
 
 // --- Roster (master/detail, like the Setup entities) ---
@@ -1825,6 +1831,17 @@ async function loadRoster() {
   rosterRows = await api(`/tournaments/${active.id}/players`);  // kept for the sign-in export
   if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
   applyRosterSel();
+  _updateRosterCounts();
+}
+// R-4: a one-line summary strip above the roster grid.
+function _updateRosterCounts() {
+  const el = document.getElementById("roster-counts");
+  if (!el) return;
+  const rows = rosterRows || [];
+  const n = (s) => rows.filter((r) => r.selection_status === s).length;
+  if (!rows.length) { el.textContent = ""; return; }
+  el.textContent =
+    `${rows.length} on roster · ${n("selected")} selected · ${n("alternate")} alternate · ${n("withdrawn")} withdrawn`;
 }
 const rosterName = (e) => [e.last_name, e.first_name].filter(Boolean).join(", ") || e.usta_number;
 
@@ -1857,8 +1874,11 @@ const rosterGrid = new Tabulator(rosterMount, {
       // Audit M28: source from the canonical list defined alongside _SHIRT_LABEL
       // so the roster grid editor and the t-shirt order page can't drift.
       editor: "list", editorParams: () => ({ values: ["", ...SHIRT_LABELS] }),
+      formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">—</span>`,
       headerFilter: "input" },
-    { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
+    { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell",
+      formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">—</span>`,
+      headerFilter: "input" },
     // B3 lodging — canonical plan from the combined import. Falls back to
     // the raw free-text answer (rendered in muted italic) when the mapper
     // couldn't categorize it. Click-to-edit lets the TD upgrade a raw answer
@@ -2779,8 +2799,30 @@ const inboxGrid = makeReadGrid("inbox-table", [
   // in the detail pane's player picker.
   { title: "Player", field: "detected_player_name", width: 160,
     formatter: (cell) => {
-      const m = cell.getData();
-      if (!m.detected_player_name) return `<span class="muted">—</span>`;
+      const m = cell.getData(); const row = cell.getRow();
+      // I-4: empty cell offers an inline "Detect" link instead of a dead "—".
+      if (!m.detected_player_name) {
+        const wrap = document.createElement("span");
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "btn-link inline-detect"; btn.textContent = "Detect";
+        btn.title = "Detect the player this email is about";
+        btn.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          try {
+            const det = await api(`/emails/${m.id}/detect-player`, { method: "POST" });
+            row.update({
+              detected_player_id: det.detected_player_id,
+              detected_usta: det.detected_usta,
+              detected_player_name: det.detected_player_name,
+              detected_match_kind: det.match_kind,
+            });
+            row.reformat();
+            toast(det.detected_player_name ? `Detected: ${det.detected_player_name}` : "No player match", !!det.detected_player_name);
+          } catch (e) { toast(e.message, false); }
+        });
+        wrap.appendChild(btn);
+        return wrap;
+      }
       const usta = m.detected_usta ? ` <span class="muted">(${esc(m.detected_usta)})</span>` : "";
       return esc(m.detected_player_name) + usta + matchHint(m.detected_match_kind);
     },
