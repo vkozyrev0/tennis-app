@@ -6,4 +6,5 @@ python-dotenv
 pytest
 httpx
 openpyxl
+pdfplumber
 python-multipart

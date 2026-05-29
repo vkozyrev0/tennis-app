@@ -63,10 +63,72 @@ def _alias_map(cols):
     return m
 
 
+def _parse_pdf_emails(raw: bytes) -> list[dict]:
+    """Extract one email per PDF page using the same heuristics as the
+    one-shot script (deglyph quadrupled-character labels, capture the FIRST
+    Subject/Date/From/To block per page — that's the thread top; nested
+    quoted replies inside the body get ignored). Returns rows shaped for the
+    emails_pdf staging schema."""
+    # Lazy import — pdfplumber is optional and only needed for this importer.
+    import pdfplumber  # noqa: WPS433
+    with pdfplumber.open(io.BytesIO(raw)) as pdf:
+        pages = [_deglyph_pdf(p.extract_text() or "") for p in pdf.pages]
+    pattern = re.compile(
+        r"Subject:\s*([^\n]+)\s*\n"
+        r"\s*Date:\s*([^\n]+)\s*\n"
+        r"\s*From:\s*([^\n]+)\s*\n"
+        r"\s*To:\s*([^\n]+)\s*\n",
+    )
+    out = []
+    seen = set()
+    for page_idx, page_text in enumerate(pages):
+        m = pattern.search(page_text)
+        if not m:
+            continue
+        subj = m.group(1).strip()
+        date_text = m.group(2).strip()
+        from_text = m.group(3).strip()
+        to_text = m.group(4).strip()
+        addr_match = re.search(r"<([^>]+@[^>]+)>", from_text)
+        from_addr = addr_match.group(1) if addr_match else from_text
+        body = page_text[m.end():].strip()
+        # Strip the spam-filter footer USTA's mail gateway tacks on.
+        body = re.split(r"This email has been scanned for spam", body, maxsplit=1)[0].strip()
+        # Dedup by (subject, from_address) — the PDF often re-displays a
+        # thread on multiple pages; the first page is the canonical top.
+        key = (subj.lower(), from_addr.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "row_num": page_idx + 1,
+            "data": {
+                "subject": subj[:200],
+                "from_address": from_addr[:200],
+                "body": (f"[Date: {date_text}]\n[To: {to_text}]\n\n{body}")[:5000],
+                "date_text": date_text,
+            },
+        })
+    return out
+
+
+# PDF labels in the "Tournament Emails for CourtOps" export use quadrupled
+# glyphs ("SSSSuuuubbbb..." for "Sub"). Collapse runs of 3+ identical chars
+# down to one. Module-level so the helper is import-safe across calls.
+def _deglyph_pdf(s: str) -> str:
+    return re.sub(r"(.)\1{2,}", r"\1", s)
+
+
 def parse_file(filename: str, raw: bytes, cols) -> list[dict]:
     """Return [{row_num, data:{canon:val}}] for non-empty rows, mapping headers."""
     amap = {_norm(k): v for k, v in _alias_map(cols).items()}
     name = (filename or "").lower()
+    if name.endswith(".pdf"):
+        # Email-thread PDFs are document-shaped, not row-shaped. The parser
+        # below returns already-canonical {subject, from_address, body, date_text}
+        # rows so the rest of the staging pipeline (validate + merge) works
+        # without column-aliasing.
+        return _parse_pdf_emails(raw)
     if name.endswith((".xlsx", ".xlsm")):
         ws = load_workbook(io.BytesIO(raw), data_only=True, read_only=True).active
         it = ws.iter_rows(values_only=True)
@@ -593,15 +655,32 @@ def _parse_draw_status(raw):
 # answers to our lodging_plan enum strings; whatever doesn't match the table
 # falls back to lodging_plan_raw (column added by migration 0028) for the TD
 # to triage on the player-hotels grid.
-_LODGING_MAP = [
-    # (substring -> canonical), checked in order (first match wins). All
-    # comparisons are case-insensitive.
-    ("local", "Local / family"),
-    ("commuter 2", "Commuter 2+ hrs"),
-    ("commuter 1", "Commuter 1-2 hrs"),
-    ("commuter", "Commuter"),
-    ("yes",   "Hotel"),  # "Yes, I plan to reserve..."
-    ("hotel", "Hotel"),
+# Two kinds of mapping rules:
+#  - PREFIX: must be at the start of the answer ("Yes, I plan to reserve…" /
+#    "No, I am local"). Catches the real USTA phrasing but avoids matching
+#    a stray "yes" mid-sentence (e.g. "yes please" or "yes maybe").
+#  - SUBSTR: contains anywhere (good for "local" / "commuter" / "hotel"
+#    which always indicate intent regardless of position).
+_LODGING_PREFIX = [
+    ("yes",  "Hotel"),         # "Yes, I plan to reserve..."
+    ("no, i am local", "Local / family"),
+]
+_LODGING_SUBSTR = [
+    ("local",      "Local / family"),
+    # Real USTA verbiage uses the verb "commute" (not the noun "commuter").
+    # Order: longest/most-specific first so "commute 1-2" wins over "commute".
+    # The numeric ordering ("1-2 hours" vs "up to 1 hour" vs "2+ hours") all
+    # map into our existing 3 buckets.
+    ("commute between 2", "Commuter 2+ hrs"),
+    ("commute 2",         "Commuter 2+ hrs"),
+    ("commute between 1", "Commuter 1-2 hrs"),
+    ("commute 1-2",       "Commuter 1-2 hrs"),
+    ("commute up to 1",   "Commuter 1-2 hrs"),   # treat <1 hr as the smallest bucket we have
+    ("commuter 2",        "Commuter 2+ hrs"),
+    ("commuter 1",        "Commuter 1-2 hrs"),
+    ("commute",           "Commuter"),           # generic catch-all
+    ("commuter",          "Commuter"),
+    ("hotel",             "Hotel"),
 ]
 
 def _parse_hotel_answer(raw):
@@ -610,7 +689,10 @@ def _parse_hotel_answer(raw):
         return None, None
     s = " ".join(str(raw).split())
     low = s.lower()
-    for needle, canon in _LODGING_MAP:
+    for needle, canon in _LODGING_PREFIX:
+        if low.startswith(needle):
+            return canon, None
+    for needle, canon in _LODGING_SUBSTR:
         if needle in low:
             return canon, None
     # Unmappable — store the raw answer for TD review.
@@ -672,6 +754,33 @@ def _merge_tshirt_hotel_dietary(cur, tid, d):
             (canon_lodging, raw_lodging, tid, pid),
         )
     return conflict
+
+
+def _merge_email_pdf(cur, tid, d):
+    """B3-equivalent for the emails inbox: insert one row into email_message
+    per parsed PDF email, then immediately run the local heuristic triage
+    so the TD opens the inbox to pre-classified rows (withdrawal / doubles /
+    etc.)."""
+    from .triage import classify  # local — avoids circular import at module load
+    subj = _s(d.get("subject")) or ""
+    from_addr = _s(d.get("from_address")) or ""
+    body = _s(d.get("body")) or ""
+    # Sixth-pass observation: dedup against (tournament, from_address, subject)
+    # so re-importing the same PDF doesn't double-stage every thread.
+    cur.execute(
+        "SELECT 1 FROM email_message WHERE tournament_id = %s "
+        "AND from_address = %s AND subject = %s",
+        (tid, from_addr, subj),
+    )
+    if cur.fetchone() is not None:
+        return "already in inbox — skipped"
+    cls = classify(subj, body)
+    cur.execute(
+        "INSERT INTO email_message (tournament_id, from_address, subject, body, classification) "
+        "VALUES (%s, %s, %s, %s, %s)",
+        (tid, from_addr, subj, body, cls),
+    )
+    return None
 
 
 def _merge_roster_correction(cur, tid, d):
@@ -901,6 +1010,27 @@ TYPES = {
             Col("card_stored", {"cardstored", "card"}),
         ],
         "merge": _merge_roster_initial,
+    },
+    # PDF email-thread import. Drops every page-top thread into the review
+    # inbox (email_message). Classifies on insert via the local triage so the
+    # TD opens the inbox to pre-categorized rows. Dedups against existing
+    # (tournament, from, subject) — re-importing the same PDF is idempotent.
+    "emails_pdf": {
+        "label": "Emails (PDF print)",
+        "desc": ("Upload a printed PDF of an email thread (from any mail "
+                 "client's 'Print to PDF'). Each page's top Subject/Date/"
+                 "From/To block is captured as one inbox row; quoted "
+                 "replies inside the body are kept verbatim but not "
+                 "double-staged. Auto-classified into withdrawal / "
+                 "doubles / etc. on import. Re-uploading the same PDF "
+                 "is a no-op (dedup by tournament + from + subject)."),
+        "cols": [
+            Col("subject", required=True),
+            Col("from_address", required=True),
+            Col("body"),
+            Col("date_text"),
+        ],
+        "merge": _merge_email_pdf,
     },
     # B2b: Correction import — "Updated Status" CSV from the USTA dashboard
     # after withdrawals + alternate promotions are processed. Surgical updates

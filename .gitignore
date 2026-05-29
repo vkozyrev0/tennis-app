@@ -24,4 +24,5 @@ unpacked_raw/
 # carry real player names + USTA #s. The "Tournament *" prefix matches
 # the file names the USTA dashboard exports.
 Tournament *.csv
+Tournament *.pdf
 .archive/

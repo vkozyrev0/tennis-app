@@ -23,6 +23,9 @@ class RosterEntryCreate(BaseModel):
     selection_status: SelectionStatus = "selected"
     t_shirt_size: Optional[str] = None
     dietary_preference: Optional[str] = None
+    # B3 — lodging plan editable from the roster grid so a TD can upgrade a
+    # raw free-text answer into a canonical bucket without re-importing.
+    lodging_plan: Optional[str] = None
 
     @model_validator(mode="after")
     def _id_or_usta(self):
@@ -56,6 +59,12 @@ class RosterEntryOut(BaseModel):
     # B2b — populated by the Correction-status importer.
     signed_in: Optional[bool] = None
     suspension_points: Optional[int] = None
+    # B3 combined-import lodging fields. lodging_plan is the canonical value
+    # (one of "Hotel" / "Local / family" / "Commuter" variants); lodging_plan_raw
+    # holds the original free-text answer when it didn't match the mapping
+    # table — surfaced so the TD can triage on the player-hotels grid.
+    lodging_plan: Optional[str] = None
+    lodging_plan_raw: Optional[str] = None
 
 
 # ---------- Assignment ----------

@@ -129,9 +129,27 @@ header {
    the user scrolls past — acceptable trade-off vs measuring at runtime. */
 .menu-l1 { position: sticky; top: 86px; z-index: 49; }
 .menu    { position: sticky; top: 120px; z-index: 48; }
-header h1 { margin: 0; font-size: 0.92rem; }
+header h1 {
+  margin: 0; font-size: 0.92rem;
+  /* Title + brand icon left; health pill + theme/shortcuts/user-box right.
+     A flex container with `margin-left: auto` on the first chip pushes the
+     trailing cluster against the right edge of the header. */
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+}
+header h1 > #health { margin-left: auto; }
 /* Tennis-ball brand icon in front of the app title. Sized to match the
    visual weight of the surrounding text — feels paired, not stamped on. */
+/* Inbox detail pane — opens below the grid on row click. The body textarea
+   is monospaced + larger so threaded quote markers ("From: …") read cleanly. */
+.inbox-detail-subject { margin: 0 0 0.4rem 0; }
+.inbox-detail-meta { font-size: 0.85rem; margin-bottom: 0.6rem; }
+#inbox-detail-body {
+  width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem; resize: vertical; min-height: 14rem;
+  background: var(--field-bg); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 5px; padding: 0.5rem;
+}
+.inbox-detail-body-label { display: block; }
 .brand-icon {
   width: 1.4em; height: 1.4em;
   vertical-align: -0.35em;

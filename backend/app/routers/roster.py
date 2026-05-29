@@ -69,6 +69,8 @@ SELECT e.id, e.tournament_id, e.player_id, e.age_division, e.events,
        e.amount_due, e.amount_outstanding, e.card_stored,
        -- B2b correction-import fields (still populated by B2a if present).
        e.signed_in, e.suspension_points,
+       -- B3 combined-import lodging fields (canonical + raw fallback).
+       e.lodging_plan, e.lodging_plan_raw,
        p.usta_number,
        COALESCE(nm.first_name, p.first_name) AS first_name,
        COALESCE(nm.last_name,  p.last_name)  AS last_name
@@ -141,7 +143,11 @@ def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_
                 UPDATE tournament_entry SET
                     player_id = %(player_id)s, age_division = %(age_division)s,
                     events = %(events)s, selection_status = %(selection_status)s,
-                    t_shirt_size = %(t_shirt_size)s, dietary_preference = %(dietary_preference)s
+                    t_shirt_size = %(t_shirt_size)s, dietary_preference = %(dietary_preference)s,
+                    -- B3: TD can upgrade an unmapped raw answer to canonical
+                    -- by editing the Lodging cell in the roster grid. PUT
+                    -- only touches lodging_plan; lodging_plan_raw is preserved.
+                    lodging_plan = %(lodging_plan)s
                 WHERE id = %(id)s
                 RETURNING id
                 """,

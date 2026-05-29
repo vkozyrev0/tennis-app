@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=14" />
+  <link rel="stylesheet" href="/styles.css?v=16" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -636,7 +636,7 @@
     </section>
 
     <!-- T: Review inbox -->
-    <section class="panel tpanel" id="panel-t-inbox">
+    <section class="panel tpanel" id="panel-t-inbox" data-import-type="emails_pdf">
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
@@ -656,6 +656,37 @@
           <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+        <!-- Click a row above to open it here. Read the full body, change
+             the classification or status, save. -->
+        <section id="inbox-detail" class="card section-spacer" hidden aria-live="polite">
+          <h4 id="inbox-detail-subject" class="inbox-detail-subject">Email detail</h4>
+          <div class="inbox-detail-meta">
+            <span class="muted">From:</span> <strong id="inbox-detail-from"></strong>
+            <span class="muted" style="margin-left:1rem">Received:</span> <strong id="inbox-detail-received"></strong>
+          </div>
+          <label class="label--full inbox-detail-body-label">
+            <span class="muted">Body</span>
+            <textarea id="inbox-detail-body" rows="14" readonly></textarea>
+          </label>
+          <div class="row">
+            <label>Classification
+              <select id="inbox-detail-classification"></select>
+            </label>
+            <label>Status
+              <select id="inbox-detail-status">
+                <option value="new">new</option>
+                <option value="filed">filed</option>
+                <option value="needs_followup">needs_followup</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions-row">
+            <button type="button" id="inbox-detail-save">Save</button>
+            <button type="button" id="inbox-detail-suggest" class="btn-link">Re-suggest</button>
+            <button type="button" id="inbox-detail-close" class="cancel">Close</button>
+            <span class="msg" id="inbox-detail-msg"></span>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -954,6 +985,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=23"></script>
+  <script type="module" src="/app.js?v=27"></script>
 </body>
 </html>

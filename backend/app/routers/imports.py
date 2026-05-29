@@ -43,7 +43,16 @@ async def upload(tournament_id: int, import_type: str,
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
-        rows = importer.parse_file(file.filename, await file.read(), cfg["cols"])
+        # Parse failures (corrupt xlsx, binary garbage, etc.) used to surface
+        # as raw 500s. Catch them at the boundary and return a friendly 400 so
+        # the user sees "this file couldn't be parsed" instead of a stack trace.
+        try:
+            rows = importer.parse_file(file.filename, await file.read(), cfg["cols"])
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"couldn't parse {file.filename!r} — is it a valid CSV/XLSX? ({type(e).__name__})",
+            )
         cur.execute(
             "INSERT INTO import_batch (tournament_id, import_type, filename) "
             "VALUES (%s,%s,%s) RETURNING id",

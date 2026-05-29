@@ -1626,6 +1626,20 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: () => ({ values: ["", ...SHIRT_LABELS] }),
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell", headerFilter: "input" },
+    // B3 lodging — canonical plan from the combined import. Falls back to
+    // the raw free-text answer (rendered in muted italic) when the mapper
+    // couldn't categorize it. Click-to-edit lets the TD upgrade a raw answer
+    // into a canonical bucket without leaving the grid.
+    { title: "Lodging", field: "lodging_plan", cssClass: "editable-cell",
+      editor: "list", editorParams: { values: ["", "Hotel", "Local / family", "Commuter", "Commuter 1-2 hrs", "Commuter 2+ hrs"] },
+      formatter: (cell) => {
+        const e = cell.getData();
+        if (e.lodging_plan) return esc(e.lodging_plan);
+        if (e.lodging_plan_raw) return `<span class="muted" style="font-style:italic" title="Unmapped — click to set a canonical plan">${esc(e.lodging_plan_raw)}</span>`;
+        return "";
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) => ((e.lodging_plan || e.lodging_plan_raw || "").toLowerCase().includes(String(term).toLowerCase())) },
     { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
@@ -1662,7 +1676,7 @@ const rosterGrid = new Tabulator(rosterMount, {
   ],
 });
 (GRIDS["panel-t-roster"] ||= []).push(rosterGrid);
-rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
+rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); _labelHeaderFilters(rosterGrid); });
 // Single click only highlights (keeps double-click free for in-grid editing);
 // the Edit button opens the form overlay.
 rosterGrid.on("rowClick", (e, row) => { rosterEditId = row.getData().id; applyRosterSel(); });
@@ -1678,6 +1692,7 @@ rosterGrid.on("cellEdited", async (cell) => {
       player_id: e.player_id, age_division: e.age_division || null, events: e.events || null,
       selection_status: e.selection_status, t_shirt_size: e.t_shirt_size || null,
       dietary_preference: e.dietary_preference || null,
+      lodging_plan: e.lodging_plan || null,
     };
     await api(`/roster/${e.id}`, { method: "PUT", body: JSON.stringify(body) });
     setMsg("roster-msg", "saved", true);
@@ -1950,7 +1965,9 @@ async function buildImportPage() {
       a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
       row.appendChild(a);
     }
-    const file = document.createElement("input"); file.type = "file"; file.accept = ".csv,.xlsx,.xlsm";
+    // CSV/XLSX for the row-shaped importers; PDF for the emails_pdf type.
+    const file = document.createElement("input"); file.type = "file";
+    file.accept = t.key === "emails_pdf" ? ".pdf" : ".csv,.xlsx,.xlsm";
     const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";
     const msg = document.createElement("span"); msg.className = "msg";
     row.append(file, up, msg);
@@ -2496,6 +2513,58 @@ inboxGrid.grid.on("cellEdited", async (cell) => {
   if (cell.getField() !== "classification" || cell.getValue() === cell.getOldValue()) return;
   try { await _inboxPutClass(cell.getData(), cell.getValue()); cell.getRow().reformat(); }
   catch (e) { setMsg("email-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} }
+});
+
+// Detail pane: clicking a row opens it below the grid. Lets the TD read the
+// full email body and override the classification or status.
+let _inboxDetailId = null;
+function _populateInboxClassSelect() {
+  const sel = document.getElementById("inbox-detail-classification");
+  if (!sel || sel.options.length) return;
+  for (const v of EMAIL_CLASSES) {
+    const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o);
+  }
+}
+function _openInboxDetail(m) {
+  _populateInboxClassSelect();
+  _inboxDetailId = m.id;
+  const box = document.getElementById("inbox-detail");
+  box.hidden = false;
+  document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
+  document.getElementById("inbox-detail-from").textContent = m.from_address || "(no sender)";
+  document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
+  document.getElementById("inbox-detail-body").value = m.body || "";
+  document.getElementById("inbox-detail-classification").value = m.classification || "";
+  document.getElementById("inbox-detail-status").value = m.status || "new";
+  setMsg("inbox-detail-msg", "", true);
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+function _closeInboxDetail() {
+  _inboxDetailId = null;
+  document.getElementById("inbox-detail").hidden = true;
+}
+inboxGrid.grid.on("rowClick", (_e, row) => _openInboxDetail(row.getData()));
+document.getElementById("inbox-detail-close").addEventListener("click", _closeInboxDetail);
+document.getElementById("inbox-detail-save").addEventListener("click", async () => {
+  if (_inboxDetailId == null) return;
+  const cls = document.getElementById("inbox-detail-classification").value;
+  const status = document.getElementById("inbox-detail-status").value;
+  try {
+    await api(`/emails/${_inboxDetailId}`, {
+      method: "PUT",
+      body: JSON.stringify({ tournament_id: active.id, classification: cls, status }),
+    });
+    setMsg("inbox-detail-msg", "saved", true);
+    await loadInbox();
+  } catch (e) { setMsg("inbox-detail-msg", e.message, false); }
+});
+document.getElementById("inbox-detail-suggest").addEventListener("click", async () => {
+  if (_inboxDetailId == null) return;
+  try {
+    const res = await api(`/emails/${_inboxDetailId}/suggest`, { method: "POST" });
+    document.getElementById("inbox-detail-classification").value = res.classification;
+    setMsg("inbox-detail-msg", `suggested: ${res.classification}`, true);
+  } catch (e) { setMsg("inbox-detail-msg", e.message, false); }
 });
 let _inboxFilterInit = false;
 async function loadInbox() {
