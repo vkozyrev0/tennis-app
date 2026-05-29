@@ -42,6 +42,9 @@ class EmailOut(BaseModel):
     # routers/emails.py so the TD sees the player name inline.
     detected_usta: Optional[str] = None
     detected_player_name: Optional[str] = None
+    # Why the player was matched (usta / fullname_subject / withdraw_template /
+    # … / manual) — drives the confidence hint in the inbox Player column.
+    detected_match_kind: Optional[str] = None
 
 
 class EmailBulkReassign(BaseModel):

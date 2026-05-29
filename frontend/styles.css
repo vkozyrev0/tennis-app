@@ -1019,6 +1019,13 @@ td.toggle { white-space: nowrap; }
    Inbox "Populate lists" breakdown) render as separate lines, not one blob. */
 #confirm-text { white-space: pre-line; }
 
+/* ---- Inbox player-detection confidence hint (dot after the name) ---- */
+.match-hint { font-size: 0.8em; cursor: help; vertical-align: 0.05em; }
+.match-ok   { color: var(--ok); }
+.match-warn { color: #b8860b; }   /* amber — surname-only guesses to verify */
+:root[data-theme="dark"] .match-warn { color: #f3d27d; }
+.match-info { color: var(--link); }
+
 /* ---- Dropdown menu button (toolbar action grouping: Download ▾ / Import ▾) ---- */
 .menu-btn-wrap { position: relative; display: inline-block; }
 .menu-caret { font-size: 0.7em; opacity: 0.8; margin-left: 0.15rem; }

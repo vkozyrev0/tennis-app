@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 _COLS = (
     "e.id, e.tournament_id, e.message_id, e.received_at, e.from_address, "
     "e.subject, e.body, e.classification, e.status, e.detected_player_id, "
+    "e.detected_match_kind, "
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name"
@@ -70,7 +71,11 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
             UPDATE email_message SET
                 tournament_id = %(tournament_id)s, classification = %(classification)s,
                 status = %(status)s,
-                detected_player_id = %(detected_player_id)s
+                detected_player_id = %(detected_player_id)s,
+                -- A hand-set player is tagged "manual" (clears any prior auto
+                -- match_kind); clearing the player clears the kind too.
+                detected_match_kind = CASE
+                    WHEN %(detected_player_id)s IS NULL THEN NULL ELSE 'manual' END
             WHERE id = %(id)s RETURNING id
             """,
             {**body.model_dump(), "id": email_id},
@@ -249,8 +254,8 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
         d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
         cur.execute(
-            "UPDATE email_message SET detected_player_id = %s WHERE id = %s",
-            (d["detected_player_id"], email_id),
+            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
+            (d["detected_player_id"], d["match_kind"], email_id),
         )
         return {"email_id": email_id, **d}
 
@@ -273,8 +278,8 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                 continue
             d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
             cur.execute(
-                "UPDATE email_message SET detected_player_id = %s WHERE id = %s",
-                (d["detected_player_id"], em["id"]),
+                "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
+                (d["detected_player_id"], d["match_kind"], em["id"]),
             )
             out.append({"email_id": em["id"], **d})
     return out

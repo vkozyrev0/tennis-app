@@ -2645,6 +2645,24 @@ function classChip(v) {
   if (!meta) return v ? `<span class="badge badge-muted">${esc(v)}</span>` : "";
   return `<span class="badge badge-${meta.color}">${esc(meta.label)}</span>`;
 }
+// Confidence hint for an auto-detected player: a small dot after the name whose
+// color + tooltip explain HOW the player was matched, so the TD trusts a USTA #
+// hit more than a bare-surname guess (and can spot ones worth double-checking).
+const MATCH_KIND_META = {
+  usta:              { dot: "●", cls: "ok",   label: "Matched by USTA # in the email — high confidence" },
+  withdraw_template: { dot: "●", cls: "ok",   label: "Matched by USTA withdrawal template — high confidence" },
+  usta_subject:      { dot: "●", cls: "ok",   label: "Matched by USTA subject (first name + division) — high confidence" },
+  fullname_subject:  { dot: "●", cls: "ok",   label: "Full name in the subject — high confidence" },
+  fullname_body:     { dot: "◐", cls: "warn", label: "Full name in the body — medium confidence" },
+  lastname_subject:  { dot: "○", cls: "warn", label: "Surname only (subject) — please verify" },
+  lastname:          { dot: "○", cls: "warn", label: "Surname only — please verify" },
+  manual:            { dot: "✎", cls: "info", label: "Set manually" },
+};
+function matchHint(kind) {
+  const m = MATCH_KIND_META[kind];
+  if (!m) return "";
+  return ` <span class="match-hint match-${m.cls}" title="${esc(m.label)}" aria-label="${esc(m.label)}">${m.dot}</span>`;
+}
 const lateForm = document.getElementById("late-form");
 const wdForm = document.getElementById("withdrawal-form");
 // Audit A49: FILE_TARGETS is keyed by *classification* (so the Inbox knows
@@ -2696,7 +2714,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const m = cell.getData();
       if (!m.detected_player_name) return `<span class="muted">—</span>`;
       const usta = m.detected_usta ? ` <span class="muted">(${esc(m.detected_usta)})</span>` : "";
-      return esc(m.detected_player_name) + usta;
+      return esc(m.detected_player_name) + usta + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
