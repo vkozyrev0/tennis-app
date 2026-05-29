@@ -22,6 +22,9 @@ class EmailUpdate(BaseModel):
     tournament_id: Optional[int] = None
     classification: str = "unclassified"
     status: EmailStatus = "new"
+    # NULL clears the link to a player; a real id assigns it. Set by the
+    # auto-detection endpoint or the manual override picker in the detail pane.
+    detected_player_id: Optional[int] = None
 
 
 class EmailOut(BaseModel):
@@ -34,6 +37,35 @@ class EmailOut(BaseModel):
     body: Optional[str] = None
     classification: str
     status: EmailStatus
+    detected_player_id: Optional[int] = None
+    # Joined fields for the inbox grid — populated by the LEFT JOIN in
+    # routers/emails.py so the TD sees the player name inline.
+    detected_usta: Optional[str] = None
+    detected_player_name: Optional[str] = None
+
+
+class EmailBulkReassign(BaseModel):
+    email_ids: list[int]
+    tournament_id: int
+
+
+class EmailBulkDetect(BaseModel):
+    email_ids: list[int]
+
+
+class EmailBulkPopulate(BaseModel):
+    """Take selected (classification, detected_player) emails and create the
+    matching row in the per-classification table (withdrawal / late_entry /
+    doubles_request / etc.) — see FILE_TARGETS in routers/emails.py."""
+    email_ids: list[int]
+
+
+class EmailDetectResult(BaseModel):
+    email_id: int
+    detected_player_id: Optional[int] = None
+    detected_usta: Optional[str] = None
+    detected_player_name: Optional[str] = None
+    match_kind: Optional[str] = None  # 'usta' / 'fullname' / 'lastname' / None
 
 
 # ---------- Late entry ----------

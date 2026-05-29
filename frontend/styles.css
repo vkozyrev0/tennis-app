@@ -139,16 +139,38 @@ header h1 {
 header h1 > #health { margin-left: auto; }
 /* Tennis-ball brand icon in front of the app title. Sized to match the
    visual weight of the surrounding text — feels paired, not stamped on. */
+/* Wide modal variant for the inbox-detail dialog. Lets the email body
+   breathe so threaded quote chains stay readable without scrolling the
+   whole list below. Capped so really tall threads still scroll inside. */
+.modal-box--wide {
+  max-width: min(960px, calc(100vw - 2rem));
+  width: 100%;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+}
 /* Inbox detail pane — opens below the grid on row click. The body textarea
    is monospaced + larger so threaded quote markers ("From: …") read cleanly. */
 .inbox-detail-subject { margin: 0 0 0.4rem 0; }
 .inbox-detail-meta { font-size: 0.85rem; margin-bottom: 0.6rem; }
 #inbox-detail-body {
-  width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem; resize: vertical; min-height: 14rem;
+  width: 100%; margin: 0.25rem 0 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem; line-height: 1.5;
+  white-space: pre-wrap; word-wrap: break-word;
+  min-height: 14rem; max-height: 32rem; overflow: auto;
   background: var(--field-bg); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 5px; padding: 0.5rem;
+  border: 1px solid var(--border); border-radius: 5px; padding: 0.6rem 0.7rem;
 }
+#inbox-detail-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Header-line highlight: "From:" / "To:" / "Subject:" / "Sent:" / "Date:".
+   Key in accent (the strong color we already use for links etc.); value in
+   normal ink. Quoted-thread boundary ("On <date>, X wrote:") muted italic
+   so the eye can find each new reply quickly. */
+#inbox-detail-body .email-hdr-key { color: var(--link); font-weight: 600; }
+#inbox-detail-body .email-hdr-val { color: var(--ink); }
+#inbox-detail-body .email-quote-marker { color: var(--muted); font-style: italic; }
+#inbox-detail-body .email-meta { color: var(--muted); font-style: italic; }
+#inbox-detail-body .email-meta .email-hdr-key { color: var(--link); font-style: normal; }
 .inbox-detail-body-label { display: block; }
 .brand-icon {
   width: 1.4em; height: 1.4em;

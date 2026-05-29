@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=16" />
+  <link rel="stylesheet" href="/styles.css?v=18" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -652,22 +652,50 @@
           </div>
           <div class="actions-row"><button type="submit">Save</button><span class="msg" id="email-msg"></span></div>
         </form>
+        <!-- Dedicated Import PDF button — outside the email-form so it stays
+             visible even when the form is collapsed. JS at init moves this
+             button (and the inbox grid's CSV button) into the same row as the
+             auto-created "+ Add email" trigger so all three sit inline. -->
+        <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
+        <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
+        <span class="msg" id="inbox-import-pdf-msg"></span>
+        <!-- Bulk-action toolbar: appears once a row is selected via the
+             checkbox column. Detect populates detected_player_id per email,
+             Reassign moves selection to a different tournament, Populate
+             creates the matching withdrawal/late_entry/etc. rows. -->
+        <div id="inbox-bulk-toolbar" class="actions-row mb-half" hidden>
+          <span id="inbox-bulk-count" class="muted"></span>
+          <button type="button" id="inbox-bulk-detect">Detect players</button>
+          <label>Reassign to
+            <select id="inbox-bulk-tournament" aria-label="Tournament to reassign selected emails to">
+              <option value="">— pick tournament —</option>
+            </select>
+          </label>
+          <button type="button" id="inbox-bulk-reassign">Move</button>
+          <button type="button" id="inbox-bulk-populate" title="Create rows in the matching lists (withdrawals / late entries / scheduling / div-flex / hotel) using each email's classification + detected player">Populate lists →</button>
+          <button type="button" id="inbox-bulk-clear" class="btn-link">Clear selection</button>
+          <span class="msg" id="inbox-bulk-msg"></span>
+        </div>
         <table id="inbox-table" class="list-table">
-          <thead><tr><th>Received</th><th>From</th><th>Subject</th><th>Classification</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Received</th><th>From</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
-        <!-- Click a row above to open it here. Read the full body, change
-             the classification or status, save. -->
-        <section id="inbox-detail" class="card section-spacer" hidden aria-live="polite">
+        <!-- Click "Review" on a row to open it. Modal overlay so the list
+             below stays in place; Esc closes. -->
+        <div id="inbox-detail" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="inbox-detail-subject" aria-live="polite">
+          <div class="modal-box modal-box--wide">
           <h4 id="inbox-detail-subject" class="inbox-detail-subject">Email detail</h4>
           <div class="inbox-detail-meta">
             <span class="muted">From:</span> <strong id="inbox-detail-from"></strong>
             <span class="muted" style="margin-left:1rem">Received:</span> <strong id="inbox-detail-received"></strong>
           </div>
-          <label class="label--full inbox-detail-body-label">
+          <div class="inbox-detail-body-label">
             <span class="muted">Body</span>
-            <textarea id="inbox-detail-body" rows="14" readonly></textarea>
-          </label>
+            <!-- Styled pre with header-aware highlighting. Body text is
+                 inserted as innerHTML by _formatEmailBody() — escaped first,
+                 then the email-header lines get colored spans. -->
+            <pre id="inbox-detail-body" tabindex="0" aria-label="Email body"></pre>
+          </div>
           <div class="row">
             <label>Classification
               <select id="inbox-detail-classification"></select>
@@ -679,6 +707,11 @@
                 <option value="needs_followup">needs_followup</option>
               </select>
             </label>
+            <label>Player (detected)
+              <select id="inbox-detail-player" aria-label="Player this email is about">
+                <option value="">— none —</option>
+              </select>
+            </label>
           </div>
           <div class="actions-row">
             <button type="button" id="inbox-detail-save">Save</button>
@@ -686,7 +719,8 @@
             <button type="button" id="inbox-detail-close" class="cancel">Close</button>
             <span class="msg" id="inbox-detail-msg"></span>
           </div>
-        </section>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -985,6 +1019,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=27"></script>
+  <script type="module" src="/app.js?v=32"></script>
 </body>
 </html>

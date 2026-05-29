@@ -2462,15 +2462,45 @@ async function _inboxPutClass(m, classification) {
   await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({ tournament_id: active.id, classification, status: m.status }) });
 }
 const inboxGrid = makeReadGrid("inbox-table", [
+  // Mass-select column: master checkbox in header + per-row toggle. Drives
+  // the bulk-action toolbar shown above the grid.
+  { title: "", field: "_sel", headerSort: false, width: 40, hozAlign: "center",
+    titleFormatter: () => {
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.setAttribute("aria-label", "Select all visible");
+      cb.addEventListener("change", (e) => _inboxBulkToggleAll(e.target.checked));
+      return cb;
+    },
+    formatter: (cell) => {
+      const m = cell.getData();
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = _inboxSelected.has(m.id);
+      cb.setAttribute("aria-label", `Select email ${m.subject || m.id}`);
+      cb.addEventListener("click", (ev) => ev.stopPropagation());
+      cb.addEventListener("change", (e) => _inboxBulkToggle(m.id, e.target.checked));
+      return cb;
+    } },
   { title: "Received", field: "received_at", width: 110, formatter: (c) => esc((c.getData().received_at || "").slice(0, 10)) },
   { title: "From", field: "from_address" },
   { title: "Subject", field: "subject" },
+  // Detected player — name + USTA from the LEFT JOIN. Click-to-edit lands
+  // in the detail pane's player picker.
+  { title: "Player", field: "detected_player_name", width: 160,
+    formatter: (cell) => {
+      const m = cell.getData();
+      if (!m.detected_player_name) return `<span class="muted">—</span>`;
+      const usta = m.detected_usta ? ` <span class="muted">(${esc(m.detected_usta)})</span>` : "";
+      return esc(m.detected_player_name) + usta;
+    },
+    headerFilter: "input",
+    headerFilterFunc: (term, _v, e) =>
+      ((e.detected_player_name || "") + " " + (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
   { title: "Classification", field: "classification", cssClass: "editable-cell",
     editor: "list", editorParams: { values: EMAIL_CLASSES },
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
     headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
-  { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
+  { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 240, cssClass: "grid-actions-cell",
     formatter: (cell) => {
       // The target is the row's classification (now inline-editable in its own
       // column) — no redundant per-row picker. File is disabled until the
@@ -2502,10 +2532,17 @@ const inboxGrid = makeReadGrid("inbox-table", [
         const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
         if (focusEl) focusEl.focus();
       });
+      // Review opens the modal detail pane (full subject + body + edit form);
+      // replaces the previous click-anywhere-on-row pattern so the inbox
+      // grid stays free of accidental opens while the TD is selecting rows.
+      const rvBtn = document.createElement("button"); rvBtn.type = "button";
+      rvBtn.className = "btn-link"; rvBtn.textContent = "Review";
+      rvBtn.title = "Open the full email in a modal";
+      rvBtn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
       const del = document.createElement("button"); del.type = "button"; del.className = "btn-icon danger"; del.textContent = "✕";
       del.title = "Delete email"; del.setAttribute("aria-label", del.title);
       del.addEventListener("click", async (ev) => { ev.stopPropagation(); if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
-      wrap.append(sgBtn, fileBtn, del); return wrap;
+      wrap.append(rvBtn, sgBtn, fileBtn, del); return wrap;
     } },
 ], "inbox", "Inbox empty — add a forwarded email above.", { index: "id" });
 // Persist an inline classification edit (double-click the cell).
@@ -2525,6 +2562,51 @@ function _populateInboxClassSelect() {
     const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o);
   }
 }
+// Format the email body for syntax-highlighted display. Escapes the raw
+// text first (XSS-safe), then wraps known email-header markers in spans
+// the CSS colors. Recognizes both forwarding styles:
+//   Outlook: From: / Sent: / To: / Cc: / Bcc: / Subject: / Date:
+//   Apple Mail: "On <date>, <name> wrote:"
+//   Wrapper-injected: [Date: ...] / [To: ...] (added by emails_pdf importer)
+function _formatEmailBody(raw) {
+  if (!raw) return "";
+  return raw.split("\n").map((line) => {
+    const e = esc(line);
+    // Wrapper-injected metadata at the very top: [Date: …] or [To: …]
+    const meta = e.match(/^\[(Date|To|From|Subject):\s*(.+)\]$/);
+    if (meta) {
+      return `<span class="email-meta">[<span class="email-hdr-key">${meta[1]}:</span> ${meta[2]}]</span>`;
+    }
+    // Standard email-thread header line: From: / Sent: / To: / etc.
+    const hdr = e.match(/^(\s*)(From|To|Cc|Bcc|Subject|Sent|Date|Reply-To):\s*(.*)$/i);
+    if (hdr) {
+      return `${hdr[1]}<span class="email-hdr-key">${hdr[2]}:</span> <span class="email-hdr-val">${hdr[3]}</span>`;
+    }
+    // Quote boundary marker ("On <date>, X wrote:")
+    if (/^On .+ wrote:\s*$/.test(line)) {
+      return `<span class="email-quote-marker">${e}</span>`;
+    }
+    return e;
+  }).join("\n");
+}
+
+async function _populateInboxPlayerSelect(activeId) {
+  const sel = document.getElementById("inbox-detail-player");
+  if (!sel) return;
+  // Populate once per open: roster of the active tournament.
+  sel.innerHTML = '<option value="">— none —</option>';
+  if (!activeId) return;
+  try {
+    const roster = await api(`/tournaments/${activeId}/players`);
+    for (const r of roster) {
+      const o = document.createElement("option"); o.value = r.player_id;
+      const usta = r.usta_number ? ` (${r.usta_number})` : "";
+      o.textContent = `${r.last_name || ""}, ${r.first_name || ""}${usta}`.trim();
+      sel.appendChild(o);
+    }
+  } catch (_) { /* leave just the "none" option */ }
+}
+
 function _openInboxDetail(m) {
   _populateInboxClassSelect();
   _inboxDetailId = m.id;
@@ -2533,9 +2615,14 @@ function _openInboxDetail(m) {
   document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
   document.getElementById("inbox-detail-from").textContent = m.from_address || "(no sender)";
   document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
-  document.getElementById("inbox-detail-body").value = m.body || "";
+  document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
   document.getElementById("inbox-detail-classification").value = m.classification || "";
   document.getElementById("inbox-detail-status").value = m.status || "new";
+  // Player picker reflects the detected_player_id (or "none").
+  _populateInboxPlayerSelect(m.tournament_id || (active && active.id))
+    .then(() => {
+      document.getElementById("inbox-detail-player").value = m.detected_player_id || "";
+    });
   setMsg("inbox-detail-msg", "", true);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -2543,16 +2630,61 @@ function _closeInboxDetail() {
   _inboxDetailId = null;
   document.getElementById("inbox-detail").hidden = true;
 }
-inboxGrid.grid.on("rowClick", (_e, row) => _openInboxDetail(row.getData()));
+// Esc closes the modal when it's open and the user isn't typing in a field
+// inside it (where Esc means "cancel edit", handled by the input itself).
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const box = document.getElementById("inbox-detail");
+  if (!box || box.hidden) return;
+  // Don't fight with the input — only swallow Esc if focus isn't inside the
+  // body pre (which is tabindex=0 + focusable but has no edit mode).
+  _closeInboxDetail();
+});
+// Click on the backdrop (outside the modal-box) also closes.
+document.getElementById("inbox-detail").addEventListener("click", (e) => {
+  if (e.target.id === "inbox-detail") _closeInboxDetail();
+});
+// Import PDF — opens the hidden file picker, posts to the emails_pdf type,
+// auto-merges, reloads the inbox. No need to walk through Setup → Import.
+document.getElementById("inbox-import-pdf-btn").addEventListener("click", () => {
+  document.getElementById("inbox-import-pdf-input").click();
+});
+document.getElementById("inbox-import-pdf-input").addEventListener("change", async (e) => {
+  if (!active) return;
+  const f = e.target.files[0];
+  if (!f) return;
+  setMsg("inbox-import-pdf-msg", `uploading ${f.name}…`, true);
+  try {
+    const fd = new FormData(); fd.append("file", f);
+    const up = await api(`/import/tournaments/${active.id}/emails_pdf`, { method: "POST", body: fd });
+    setMsg("inbox-import-pdf-msg", `staged ${up.valid} of ${up.total} — merging…`, true);
+    const m = await api(`/import/batches/${up.batch_id}/merge`, { method: "POST" });
+    setMsg("inbox-import-pdf-msg",
+      `imported ${m.merged} email${m.merged === 1 ? "" : "s"}` +
+        (m.conflicts.length ? ` (+${m.conflicts.length} dupes skipped)` : ""), true);
+    await loadInbox();
+  } catch (err) {
+    setMsg("inbox-import-pdf-msg", err.message, false);
+  } finally {
+    e.target.value = "";
+  }
+});
+// Note: rowClick used to open the detail pane; replaced by the per-row
+// Review button so a stray click while bulk-selecting doesn't pop the modal.
 document.getElementById("inbox-detail-close").addEventListener("click", _closeInboxDetail);
 document.getElementById("inbox-detail-save").addEventListener("click", async () => {
   if (_inboxDetailId == null) return;
   const cls = document.getElementById("inbox-detail-classification").value;
   const status = document.getElementById("inbox-detail-status").value;
+  const pickerVal = document.getElementById("inbox-detail-player").value;
+  const detected_player_id = pickerVal ? Number(pickerVal) : null;
   try {
     await api(`/emails/${_inboxDetailId}`, {
       method: "PUT",
-      body: JSON.stringify({ tournament_id: active.id, classification: cls, status }),
+      body: JSON.stringify({
+        tournament_id: active.id, classification: cls, status,
+        detected_player_id,
+      }),
     });
     setMsg("inbox-detail-msg", "saved", true);
     await loadInbox();
@@ -2566,6 +2698,89 @@ document.getElementById("inbox-detail-suggest").addEventListener("click", async 
     setMsg("inbox-detail-msg", `suggested: ${res.classification}`, true);
   } catch (e) { setMsg("inbox-detail-msg", e.message, false); }
 });
+
+// ---- Bulk inbox selection state + toolbar wiring ------------------------
+const _inboxSelected = new Set();
+function _inboxBulkToggle(id, on) {
+  if (on) _inboxSelected.add(id); else _inboxSelected.delete(id);
+  _inboxBulkRefreshUi();
+}
+function _inboxBulkToggleAll(on) {
+  for (const row of inboxGrid.grid.getRows("active")) {
+    const id = row.getData().id;
+    if (on) _inboxSelected.add(id); else _inboxSelected.delete(id);
+  }
+  inboxGrid.grid.redraw();
+  _inboxBulkRefreshUi();
+}
+function _inboxBulkRefreshUi() {
+  const bar = document.getElementById("inbox-bulk-toolbar");
+  bar.hidden = _inboxSelected.size === 0;
+  document.getElementById("inbox-bulk-count").textContent =
+    _inboxSelected.size === 0 ? "" : `${_inboxSelected.size} selected · `;
+}
+async function _inboxPopulateTournamentDropdown() {
+  const sel = document.getElementById("inbox-bulk-tournament");
+  if (sel.dataset.loaded === "1") return;
+  try {
+    const ts = await api("/tournaments");
+    for (const t of ts) {
+      const o = document.createElement("option"); o.value = t.id;
+      o.textContent = `${t.name} (#${t.id})`;
+      sel.appendChild(o);
+    }
+    sel.dataset.loaded = "1";
+  } catch (_) { /* leave empty */ }
+}
+document.getElementById("inbox-bulk-clear").addEventListener("click", () => {
+  _inboxSelected.clear();
+  inboxGrid.grid.redraw();
+  _inboxBulkRefreshUi();
+});
+document.getElementById("inbox-bulk-detect").addEventListener("click", async () => {
+  if (!_inboxSelected.size) return;
+  try {
+    const res = await api("/emails/bulk/detect-players", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    const hits = res.filter((r) => r.detected_player_id).length;
+    setMsg("inbox-bulk-msg", `detected ${hits} of ${res.length}`, true);
+    await loadInbox();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+});
+document.getElementById("inbox-bulk-reassign").addEventListener("click", async () => {
+  if (!_inboxSelected.size) return;
+  const sel = document.getElementById("inbox-bulk-tournament");
+  if (!sel.value) { setMsg("inbox-bulk-msg", "pick a tournament", false); return; }
+  try {
+    const res = await api("/emails/bulk/reassign", {
+      method: "POST",
+      body: JSON.stringify({ email_ids: [..._inboxSelected], tournament_id: Number(sel.value) }),
+    });
+    setMsg("inbox-bulk-msg", `moved ${res.updated} emails`, true);
+    _inboxSelected.clear();
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+});
+document.getElementById("inbox-bulk-populate").addEventListener("click", async () => {
+  if (!_inboxSelected.size) return;
+  if (!(await confirmDialog(`Populate target lists from ${_inboxSelected.size} selected emails? Each row creates a withdrawal / late entry / hotel / etc. for its detected player.`, "Populate"))) return;
+  try {
+    const res = await api("/emails/bulk/populate", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    const skippedMsg = res.skipped.length
+      ? ` · ${res.skipped.length} skipped (${res.skipped.slice(0, 3).map((s) => s.reason).join("; ")}${res.skipped.length > 3 ? "…" : ""})`
+      : "";
+    setMsg("inbox-bulk-msg", `filed ${res.filed}${skippedMsg}`, res.skipped.length === 0);
+    _inboxSelected.clear();
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+});
+// Populate the tournament dropdown lazily — once when the panel opens.
+_inboxPopulateTournamentDropdown();
 let _inboxFilterInit = false;
 async function loadInbox() {
   if (!active) return;
@@ -4111,9 +4326,32 @@ function markRequiredFields() {
   });
 }
 
+// Consolidate the Inbox panel's top toolbar so "+ Add email", "⬆ Import PDF"
+// and "⬇ CSV" sit inline on the same row. The trigger and the CSV button
+// are both injected by other init code; this runs after both so it can wrap
+// all three into a shared flex container.
+function _consolidateInboxToolbar() {
+  const trigger = document.querySelector('#panel-t-inbox .add-trigger');
+  const importBtn = document.getElementById("inbox-import-pdf-btn");
+  const importInput = document.getElementById("inbox-import-pdf-input");
+  const importMsg = document.getElementById("inbox-import-pdf-msg");
+  const csv = [...document.querySelectorAll('#panel-t-inbox .export-btn')]
+    .find((b) => /CSV/.test(b.textContent) && b.id !== "inbox-import-pdf-btn");
+  if (!trigger || !importBtn) return;
+  if (document.getElementById("inbox-toolbar-row")) return;  // idempotent
+  const row = document.createElement("div");
+  row.id = "inbox-toolbar-row"; row.className = "actions-row mb-half";
+  trigger.parentNode.insertBefore(row, trigger);
+  row.append(trigger, importBtn);
+  if (importInput) row.append(importInput);
+  if (importMsg) row.append(importMsg);
+  if (csv) row.append(csv);
+}
+
 (async function init() {
   enhanceAllSelects();  // turn every <select> into a type-in dropdown
   markRequiredFields();
+  _consolidateInboxToolbar();
   await refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
