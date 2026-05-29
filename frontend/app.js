@@ -2793,6 +2793,12 @@ const inboxGrid = makeReadGrid("inbox-table", [
       return cb;
     } },
   { title: "Received", field: "received_at", width: 110, formatter: (c) => esc((c.getData().received_at || "").slice(0, 10)) },
+  // Which tournament this email is filed under. The inbox shows every
+  // tournament's mail; this column (+ its header filter) is how the TD scopes
+  // or reassigns. Header-filtered to the active tournament by default.
+  { title: "Tournament", field: "tournament_name", width: 150,
+    formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">— unassigned —</span>`,
+    headerFilter: "input" },
   { title: "From", field: "from_address" },
   { title: "Subject", field: "subject" },
   // Detected player — name + USTA from the LEFT JOIN. Click-to-edit lands
@@ -3189,14 +3195,20 @@ _inboxPopulateTournamentDropdown();
 let _inboxFilterInit = false;
 async function loadInbox() {
   if (!active) return;
-  inboxGrid.setData(await api(`/emails?tournament_id=${active.id}`));
-  // Default to "new" only so filed mail doesn't pile up visually; the user
-  // can still pick "filed" or clear the filter. One-time so we respect the
-  // user's manual choice on subsequent loads in the same session.
+  // Fetch ALL emails (not just the active tournament's) so the inbox is a true
+  // triage surface — the TD can see which tournament each email belongs to and
+  // reassign across tournaments. The Tournament column header-filter is set to
+  // the active tournament by default so the familiar single-tournament view is
+  // what shows first; clearing it reveals every tournament's mail + unassigned.
+  inboxGrid.setData(await api(`/emails`));
+  // Default filters: status "new" + the active tournament. One-time for status
+  // (respect manual choice); the tournament filter re-applies each load so it
+  // tracks the active tournament as the TD switches between them.
   if (!_inboxFilterInit) {
     _inboxFilterInit = true;
     try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
   }
+  try { inboxGrid.grid.setHeaderFilterValue("tournament_name", active.name || ""); } catch (_) {}
 }
 onSubmit(document.getElementById("email-form"), async (e) => {
   if (!active) return;

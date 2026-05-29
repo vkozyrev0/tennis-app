@@ -26,9 +26,12 @@ _COLS = (
     "e.detected_match_kind, "
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
-    "  AS detected_player_name"
+    "  AS detected_player_name, "
+    "tn.name AS tournament_name"
 )
-_FROM = "FROM email_message e LEFT JOIN player p ON p.id = e.detected_player_id"
+_FROM = ("FROM email_message e "
+         "LEFT JOIN player p ON p.id = e.detected_player_id "
+         "LEFT JOIN tournament tn ON tn.id = e.tournament_id")
 
 
 @router.get("", response_model=list[EmailOut])
