@@ -187,15 +187,24 @@ async function api(path, options) {
     _progress(-1);
   }
 }
-function toast(text, ok = true) {
+function toast(text, ok = true, action = null) {
   const box = document.getElementById("toasts");
   if (!box || !text) return;
   const t = document.createElement("div");
   t.className = "toast " + (ok ? "ok" : "bad");
   t.setAttribute("role", ok ? "status" : "alert");
-  t.textContent = text;
+  // text in its own span so the optional action button/close sit beside it
+  const span = document.createElement("span"); span.textContent = text; t.appendChild(span);
+  // Optional inline action (e.g. "View") — dismisses the toast then runs.
+  if (action && action.label && typeof action.onClick === "function") {
+    const a = document.createElement("button");
+    a.type = "button"; a.className = "toast-action"; a.textContent = action.label;
+    a.addEventListener("click", () => { t.remove(); action.onClick(); });
+    t.appendChild(a);
+  }
   // a11y #10: error toasts get a close button + stay until dismissed (WCAG
-  // 2.2.1 Timing Adjustable). Success toasts still auto-fade after 2.5s.
+  // 2.2.1 Timing Adjustable). Success toasts still auto-fade. A success toast
+  // WITH an action lingers longer so there's time to click it.
   if (!ok) {
     const x = document.createElement("button");
     x.type = "button"; x.className = "toast-close"; x.textContent = "×";
@@ -204,7 +213,10 @@ function toast(text, ok = true) {
     t.appendChild(x);
   }
   box.appendChild(t);
-  if (ok) setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, 2500);
+  if (ok) {
+    const ttl = action ? 7000 : 2500;
+    setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ttl);
+  }
 }
 function setMsg(id, text, ok) {
   const el = document.getElementById(id);
@@ -582,7 +594,9 @@ function makeMenuButton(triggerHtml, items, opts = {}) {
   btn.setAttribute("aria-haspopup", "menu");
   btn.setAttribute("aria-expanded", "false");
   if (opts.title) btn.title = opts.title;
-  btn.innerHTML = `${triggerHtml} <span class="menu-caret" aria-hidden="true">▾</span>`;
+  btn.innerHTML = opts.noCaret
+    ? triggerHtml
+    : `${triggerHtml} <span class="menu-caret" aria-hidden="true">▾</span>`;
   const pop = document.createElement("div");
   pop.className = "menu-btn-pop";
   pop.setAttribute("role", "menu");
@@ -592,23 +606,48 @@ function makeMenuButton(triggerHtml, items, opts = {}) {
       const hr = document.createElement("div"); hr.className = "menu-btn-sep"; pop.appendChild(hr); continue;
     }
     const mi = document.createElement("button");
-    mi.type = "button"; mi.className = "menu-btn-item"; mi.setAttribute("role", "menuitem");
+    mi.type = "button";
+    mi.className = "menu-btn-item" + (it.danger ? " danger" : "");
+    mi.setAttribute("role", "menuitem");
     mi.textContent = it.label;
     if (it.title) mi.title = it.title;
     mi.addEventListener("click", () => { close(); it.onClick(); });
     pop.appendChild(mi);
   }
+  // opts.anchor: render the popup fixed-positioned on <body> instead of
+  // absolutely inside the wrapper. Needed inside Tabulator cells, which clip
+  // overflow and would otherwise hide the menu. Right-aligned under the button.
+  const anchored = !!opts.anchor;
+  function position() {
+    const r = btn.getBoundingClientRect();
+    pop.style.position = "fixed";
+    pop.style.top = `${Math.round(r.bottom + 4)}px`;
+    // right-align the popup to the trigger so it never runs off-screen on the
+    // right edge where action cells live.
+    pop.style.left = "auto";
+    pop.style.right = `${Math.round(window.innerWidth - r.right)}px`;
+  }
   function open() {
+    if (anchored) { document.body.appendChild(pop); position(); }
     pop.hidden = false; btn.setAttribute("aria-expanded", "true");
     document.addEventListener("click", onDoc, true);
     document.addEventListener("keydown", onKey);
+    if (anchored) {
+      window.addEventListener("scroll", close, true);
+      window.addEventListener("resize", close);
+    }
   }
   function close() {
     pop.hidden = true; btn.setAttribute("aria-expanded", "false");
     document.removeEventListener("click", onDoc, true);
     document.removeEventListener("keydown", onKey);
+    if (anchored) {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      if (pop.parentNode === document.body) wrap.appendChild(pop);
+    }
   }
-  function onDoc(e) { if (!wrap.contains(e.target)) close(); }
+  function onDoc(e) { if (!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
   function onKey(e) { if (e.key === "Escape") { close(); btn.focus(); } }
   btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
   wrap.append(btn, pop);
@@ -1089,7 +1128,23 @@ function _renderCrumbs() {
   if (_navHistory.length === 0) { _crumbsBar.hidden = true; return; }
   _crumbsBar.hidden = false;
   _crumbList.innerHTML = "";
-  _navHistory.forEach((entry, idx) => {
+  // G-2: cap the visible chain to the last CRUMB_VISIBLE entries so the strip
+  // never wraps. When older crumbs are hidden, show a leading "…" that jumps
+  // back to the oldest retained step.
+  const CRUMB_VISIBLE = 4;
+  const overflow = _navHistory.length > CRUMB_VISIBLE;
+  const startIdx = overflow ? _navHistory.length - CRUMB_VISIBLE : 0;
+  if (overflow) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "crumb-link"; btn.textContent = "…";
+    btn.title = `${startIdx} earlier step(s) — jump to the oldest`;
+    btn.addEventListener("click", () => _jumpToCrumb(0));
+    li.appendChild(btn);
+    _crumbList.appendChild(li);
+  }
+  _navHistory.slice(startIdx).forEach((entry, i) => {
+    const idx = startIdx + i;
     const isCurrent = idx === _navHistory.length - 1;
     const { groupLabel, tabLabel } = _crumbLabelFor(entry.group, entry.panel);
     const li = document.createElement("li");
@@ -1786,7 +1841,10 @@ const rosterGrid = new Tabulator(rosterMount, {
   renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
   columns: [
     { title: "Player", field: "last_name",
-      formatter: (cell) => { const e = cell.getData(); return `${esc(rosterName(e))} <span class="muted">(${esc(e.usta_number)})</span>`; },
+      // design-crit R-1: show just the name (the USTA # was truncating the cell
+      // mid-paren); the number is still searchable and shown on hover.
+      formatter: (cell) => { const e = cell.getData(); const u = e.usta_number ? ` (USTA ${esc(e.usta_number)})` : "";
+        return `<span title="${esc(rosterName(e))}${u}">${esc(rosterName(e))}</span>`; },
       headerFilter: "input", headerFilterFunc: (term, _v, e) => (rosterName(e) + " " + (e.usta_number || "")).toLowerCase().includes(String(term).toLowerCase()) },
     { title: "Div", field: "age_division", editor: "list", cssClass: "editable-cell",
       editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }),
@@ -1815,17 +1873,19 @@ const rosterGrid = new Tabulator(rosterMount, {
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) => ((e.lodging_plan || e.lodging_plan_raw || "").toLowerCase().includes(String(term).toLowerCase())) },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 168, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 110, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
-        // Per-row Withdraw shortcut: opens the withdrawal form on the right
-        // tab with the player pre-filled. Disabled when already withdrawn.
-        const wd = document.createElement("button"); wd.type = "button"; wd.className = "btn-link"; wd.textContent = "Withdraw…";
-        wd.disabled = e.selection_status === "withdrawn";
-        wd.title = wd.disabled ? "Player is already withdrawn" : "File a withdrawal for this player";
-        wd.addEventListener("click", (ev) => {
-          ev.stopPropagation(); if (wd.disabled) return;
+        // Edit is the primary action; Withdraw + Remove fold into a ⋯ overflow
+        // menu (design-crit R-2) so the destructive verbs don't sit on every row.
+        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
+        ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
+        ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
+
+        const withdrawn = e.selection_status === "withdrawn";
+        const doWithdraw = () => {
+          if (withdrawn) return;
           // Switch tab first — the tab handler refreshes some selects, which
           // would otherwise wipe our preset value. Set the player after, then
           // open the modal so syncCombos shows the chosen name in the combobox.
@@ -1834,19 +1894,21 @@ const rosterGrid = new Tabulator(rosterMount, {
           wdForm.player_ref.value = e.player_id;
           openForm(wdForm);
           scheduleComboSync();
-        });
-        const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
-        ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
-        ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
-        const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-icon danger"; dl.textContent = "✕";
-        dl.title = "Remove from roster"; dl.setAttribute("aria-label", dl.title);
-        dl.addEventListener("click", async (ev) => {
-          ev.stopPropagation();
+        };
+        const doDelete = async () => {
           if (!(await confirmDialog("Remove player from roster?"))) return;
           try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) { rosterShowNew(); rosterCloseModal(); } await loadRoster(); }
-          catch (err) { setMsg("roster-msg", err.message, false); }
-        });
-        wrap.append(wd, ed, dl); return wrap;
+          catch (err) { toast(err.message, false); }
+        };
+        const items = [
+          { label: withdrawn ? "Already withdrawn" : "Withdraw…",
+            title: withdrawn ? "Player is already withdrawn" : "File a withdrawal for this player",
+            onClick: doWithdraw },
+          { separator: true },
+          { label: "Remove from roster", danger: true, onClick: doDelete },
+        ];
+        const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
+        wrap.append(ed, menu); return wrap;
       } },
   ],
 });
@@ -2731,18 +2793,20 @@ const inboxGrid = makeReadGrid("inbox-table", [
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
     headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
-  { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 240, cssClass: "grid-actions-cell",
+  { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 150, cssClass: "grid-actions-cell",
     formatter: (cell) => {
-      // The target is the row's classification (now inline-editable in its own
-      // column) — no redundant per-row picker. File is disabled until the
-      // classification is a fileable target.
+      // Review is the primary per-row action; Suggest / File / Delete fold into
+      // a ⋯ overflow menu (design-crit I-2) to keep the row uncluttered. The
+      // menu is body-anchored so it isn't clipped by the grid cell.
       const m = cell.getData(); const row = cell.getRow();
       const fileable = !!FILE_TARGETS[m.classification];
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
-      const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
-      sgBtn.title = "Suggest a classification and detect the player";
-      sgBtn.addEventListener("click", async (ev) => {
-        ev.stopPropagation();
+      const rvBtn = document.createElement("button"); rvBtn.type = "button";
+      rvBtn.className = "btn-link"; rvBtn.textContent = "Review";
+      rvBtn.title = "Open the full email in a modal";
+      rvBtn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
+
+      const doSuggest = async () => {
         try {
           // 1) classification suggestion (preserves any existing player link)
           const res = await api(`/emails/${m.id}/suggest`, { method: "POST" });
@@ -2758,20 +2822,12 @@ const inboxGrid = makeReadGrid("inbox-table", [
             detected_match_kind: det.match_kind,
           });
           row.reformat();
-          // Use a floating toast, not setMsg("email-msg", …): that span lives
-          // inside the collapsed "+ Add email" form so it's invisible here.
           const clsLabel = (EMAIL_CLASS_META[res.classification] || {}).label || res.classification;
-          const who = det.detected_player_name
-            ? ` · player: ${det.detected_player_name}`
-            : " · no player match";
+          const who = det.detected_player_name ? ` · player: ${det.detected_player_name}` : " · no player match";
           toast(`Suggested: ${clsLabel}${who}`, true);
         } catch (e) { toast(e.message, false); }
-      });
-      const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
-      fileBtn.disabled = !fileable;
-      fileBtn.title = fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "Set a fileable classification first";
-      fileBtn.addEventListener("click", (ev) => {
-        ev.stopPropagation();
+      };
+      const doFile = () => {
         const t = FILE_TARGETS[m.classification]; if (!t) return;
         t.form.source_email_id.value = m.id;
         document.querySelector(`.tab[data-target="${t.tab}"]`).click();
@@ -2779,18 +2835,21 @@ const inboxGrid = makeReadGrid("inbox-table", [
         setMsg(t.msg, `filing from email #${m.id}`, true);
         const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
         if (focusEl) focusEl.focus();
-      });
-      // Review opens the modal detail pane (full subject + body + edit form);
-      // replaces the previous click-anywhere-on-row pattern so the inbox
-      // grid stays free of accidental opens while the TD is selecting rows.
-      const rvBtn = document.createElement("button"); rvBtn.type = "button";
-      rvBtn.className = "btn-link"; rvBtn.textContent = "Review";
-      rvBtn.title = "Open the full email in a modal";
-      rvBtn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
-      const del = document.createElement("button"); del.type = "button"; del.className = "btn-icon danger"; del.textContent = "✕";
-      del.title = "Delete email"; del.setAttribute("aria-label", del.title);
-      del.addEventListener("click", async (ev) => { ev.stopPropagation(); if (!(await confirmDialog("Delete email?"))) return; try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); } catch (e) { setMsg("email-msg", e.message, false); } });
-      wrap.append(rvBtn, sgBtn, fileBtn, del); return wrap;
+      };
+      const doDelete = async () => {
+        if (!(await confirmDialog("Delete email?"))) return;
+        try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); }
+        catch (e) { toast(e.message, false); }
+      };
+      const items = [
+        { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
+        { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
+          title: fileable ? "" : "Pick a fileable classification first", onClick: () => { if (fileable) doFile(); } },
+        { separator: true },
+        { label: "Delete email", danger: true, onClick: doDelete },
+      ];
+      const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
+      wrap.append(rvBtn, menu); return wrap;
     } },
 ], "inbox", "Inbox empty — add a forwarded email above.", { index: "id" });
 // Persist an inline classification edit (double-click the cell).
@@ -2974,6 +3033,7 @@ function _inboxBulkRefreshUi() {
 // classification off each selected row's grid data and maps via FILE_TARGETS.
 function _inboxPopulatePreview() {
   const byLabel = new Map();
+  const tabByLabel = new Map();
   let unfileable = 0;
   const rows = inboxGrid.grid.getData();
   const sel = new Set(_inboxSelected);
@@ -2982,9 +3042,17 @@ function _inboxPopulatePreview() {
     const t = FILE_TARGETS[m.classification];
     if (!t) { unfileable += 1; continue; }
     byLabel.set(t.label, (byLabel.get(t.label) || 0) + 1);
+    tabByLabel.set(t.label, t.tab);
   }
-  const parts = [...byLabel.entries()].map(([label, c]) => `${c} ${label}`);
-  return { parts, unfileable, fileable: parts.length > 0 };
+  // Most-populated target first — drives the toast "View" deep-link.
+  const ranked = [...byLabel.entries()].sort((a, b) => b[1] - a[1]);
+  const parts = ranked.map(([label, c]) => `${c} ${label}`);
+  const top = ranked[0];
+  return {
+    parts, unfileable, fileable: parts.length > 0,
+    topLabel: top ? top[0] : null,
+    topTab: top ? tabByLabel.get(top[0]) : null,
+  };
 }
 async function _inboxPopulateTournamentDropdown() {
   const sel = document.getElementById("inbox-bulk-tournament");
@@ -3035,7 +3103,7 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
   const btn = ev.currentTarget;
   // I-3: show exactly what will be created, broken down by destination list,
   // plus a count of selections that can't be filed (no fileable classification).
-  const { parts, unfileable, fileable } = _inboxPopulatePreview();
+  const { parts, unfileable, fileable, topLabel, topTab } = _inboxPopulatePreview();
   if (!fileable) {
     setMsg("inbox-bulk-msg", "None of the selected emails have a fileable classification yet.", false);
     return;
@@ -3057,11 +3125,19 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
       ? ` · ${res.skipped.length} skipped (${res.skipped.slice(0, 3).map((s) => s.reason).join("; ")}${res.skipped.length > 3 ? "…" : ""})`
       : "";
     setMsg("inbox-bulk-msg", `filed ${res.filed}${skippedMsg}`, res.skipped.length === 0);
+    // I-1: close the loop with a visible toast summarizing where rows landed,
+    // plus a "View" deep-link to the most-populated target list.
+    const summary = `Filed ${res.filed}: ${parts.join(", ")}${skippedMsg}`;
+    const action = topTab
+      ? { label: `View ${topLabel}`, onClick: () => { const t = document.querySelector(`.tab[data-target="${topTab}"]`); if (t) t.click(); } }
+      : null;
+    toast(summary, res.skipped.length === 0, action);
     _inboxSelected.clear();
     await loadInbox();
     _inboxBulkRefreshUi();
   } catch (e) {
     setMsg("inbox-bulk-msg", e.message, false);
+    toast(e.message, false);
   } finally {
     btn.disabled = false;
   }
@@ -4053,10 +4129,10 @@ const tournamentsCrud = wireEntity({
   },
   onSelect: (t) => { lastSelectedTournamentId = t.id; },
   onNew: () => { lastSelectedTournamentId = null; },
-  // "Work on →" right on the row: jump straight into the workspace for that tournament.
+  // "Open ▸" right on the row: jump straight into the workspace for that tournament.
   rowAction: (t) => {
     const b = document.createElement("button");
-    b.type = "button"; b.className = "btn-link"; b.textContent = "Work on →";
+    b.type = "button"; b.className = "btn-link"; b.textContent = "Open ▸";
     b.title = "Make this the active tournament and open its workspace";
     b.addEventListener("click", (ev) => {
       ev.stopPropagation();

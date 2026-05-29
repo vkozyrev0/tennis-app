@@ -1079,6 +1079,21 @@ td.toggle { white-space: nowrap; }
 }
 .bulk-clear:hover { color: var(--ink); }
 
+/* Per-row ⋯ overflow trigger: plain icon button, no menu-trigger chrome. */
+.row-more { font-size: 1.1rem; line-height: 1; padding: 0 0.3rem; }
+.row-more .menu-caret { display: none; }
+/* Danger menu item (Delete / Remove) reads red. */
+.menu-btn-item.danger { color: var(--bad); }
+.menu-btn-item.danger:hover, .menu-btn-item.danger:focus-visible { background: var(--bad); color: #fff; }
+
+/* Toast inline action ("View …") — link-style button beside the toast text. */
+.toast-action {
+  margin-left: 0.6rem; background: rgba(255,255,255,0.18); border: 0;
+  color: #fff; font: inherit; font-size: 0.85em; font-weight: 600;
+  padding: 0.1rem 0.5rem; border-radius: 4px; cursor: pointer; white-space: nowrap;
+}
+.toast-action:hover { background: rgba(255,255,255,0.32); }
+
 /* ---- responsive ---- */
 @media (max-width: 720px) {
   /* Both nav rows scroll horizontally instead of wrapping into many rows. */
