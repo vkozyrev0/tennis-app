@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=25" />
+  <link rel="stylesheet" href="/styles.css?v=26" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -38,11 +38,19 @@
         <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
         <path d="m9 14 2 2 4-4"/>
       </symbol>
-      <!-- envelope — Player requests (inbox) -->
-      <symbol id="i-requests" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      <!-- envelope — Inbox (cross-tournament triage) -->
+      <symbol id="i-inbox" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="2" y="4" width="20" height="16" rx="2"/>
         <path d="m22 7-10 6L2 7"/>
+      </symbol>
+      <!-- document with lines — Player requests (late entries + withdrawals) -->
+      <symbol id="i-requests" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2"/>
+        <line x1="8" y1="8" x2="16" y2="8"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+        <line x1="8" y1="16" x2="13" y2="16"/>
       </symbol>
       <!-- sliders — Player preferences -->
       <symbol id="i-preferences" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -128,9 +136,14 @@
       <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
       <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
     </div>
+    <!-- Inbox promoted to its own top-level group: it's the cross-tournament
+         triage front door that feeds the per-tournament request lists below. -->
+    <div class="menu-group tgroup" data-group="inbox">
+      <span class="menu-label">Inbox</span>
+      <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
+    </div>
     <div class="menu-group tgroup" data-group="requests">
       <span class="menu-label">Player requests</span>
-      <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
       <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
       <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
     </div>
@@ -1039,6 +1052,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=45"></script>
+  <script type="module" src="/app.js?v=46"></script>
 </body>
 </html>

@@ -298,7 +298,8 @@ header h1 > #health { margin-left: auto; }
 .gbtn[data-group="setup"]       .gicon { color: #f9c74f; }  /* gold — Setup (gear) */
 .gbtn[data-group="tournament"]  .gicon { color: #ffb74d; }  /* amber — Tournament (trophy) */
 .gbtn[data-group="staffing"]    .gicon { color: #4cc9f0; }  /* cyan — Staffing (clipboard) */
-.gbtn[data-group="requests"]    .gicon { color: #f78fb3; }  /* pink — Player requests (envelope) */
+.gbtn[data-group="inbox"]       .gicon { color: #f78fb3; }  /* pink — Inbox (envelope) */
+.gbtn[data-group="requests"]    .gicon { color: #ff8c42; }  /* orange — Player requests (list) */
 .gbtn[data-group="preferences"] .gicon { color: #c8a8ff; }  /* lavender — Preferences (sliders) */
 .gbtn:hover .gicon, .gbtn.active .gicon { filter: brightness(1.15) saturate(1.2); }
 @media (max-width: 480px) {
