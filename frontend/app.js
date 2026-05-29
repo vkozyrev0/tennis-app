@@ -2758,11 +2758,14 @@ const inboxGrid = makeReadGrid("inbox-table", [
             detected_match_kind: det.match_kind,
           });
           row.reformat();
+          // Use a floating toast, not setMsg("email-msg", …): that span lives
+          // inside the collapsed "+ Add email" form so it's invisible here.
+          const clsLabel = (EMAIL_CLASS_META[res.classification] || {}).label || res.classification;
           const who = det.detected_player_name
             ? ` · player: ${det.detected_player_name}`
             : " · no player match";
-          setMsg("email-msg", `suggested: ${res.classification}${who}`, true);
-        } catch (e) { setMsg("email-msg", e.message, false); }
+          toast(`Suggested: ${clsLabel}${who}`, true);
+        } catch (e) { toast(e.message, false); }
       });
       const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
       fileBtn.disabled = !fileable;
