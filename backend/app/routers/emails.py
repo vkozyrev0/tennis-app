@@ -125,51 +125,110 @@ def bulk_reassign(body: EmailBulkReassign, conn=Depends(db_dep)):
 # tournament roster, (3) last-name unique match. Returns the most confident
 # hit + a `match_kind` for the UI to display.
 _USTA_RE = re.compile(r"\b(\d{9,11})\b")
-_NAME_TOKEN_RE = re.compile(r"[A-Z][a-z]+(?:[-'][A-Z][a-z]+)?")  # capitalized words
+# USTA portal withdrawal body line: "<Full Name> has requested to be withdrawn"
+_WITHDRAW_BODY_RE = re.compile(
+    r"([A-Z][\w'.\-]+(?:\s+[A-Z][\w'.\-]+)+)\s+has\s+requested\s+to\s+be\s+withdrawn", re.I)
+# USTA portal withdrawal subject: "WITHDRAWAL REQUEST: <First>, Boys'/Girls' <N> & under …"
+_USTA_SUBJECT_RE = re.compile(
+    r"withdrawal\s+request\s*[:\-]\s*([A-Za-z][\w'\-]+)\s*,\s*(boys|girls)\b[^\d]*?(\d+)", re.I)
 
 
-def _detect_player_for(cur, tournament_id: int, subject: str, body: str) -> dict:
-    text = f"{subject or ''}\n{body or ''}"
-    # 1) Match a USTA # in the body against the tournament's roster.
-    for m in _USTA_RE.finditer(text):
-        usta = m.group(1)
-        cur.execute(
-            "SELECT p.id, p.usta_number, "
-            "       TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) AS name "
-            "FROM player p JOIN tournament_entry e ON e.player_id = p.id "
-            "WHERE e.tournament_id = %s AND p.usta_number = %s LIMIT 1",
-            (tournament_id, usta),
-        )
-        hit = cur.fetchone()
-        if hit:
-            return {"detected_player_id": hit["id"], "detected_usta": hit["usta_number"],
-                    "detected_player_name": hit["name"], "match_kind": "usta"}
-    # 2) Full-name match. Iterate roster + look for "<First> <Last>" in text.
+def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
+                       from_address: str = "") -> dict:
+    """Best-effort "which player is this email about" detector.
+
+    Layered from most to least reliable; the FIRST layer that yields an
+    unambiguous roster hit wins, so high-precision signals (an explicit USTA #,
+    a full name in the subject, the USTA portal withdrawal template) always beat
+    weaker ones (a bare surname). Each layer is deliberately conservative — when
+    a signal is ambiguous (e.g. two roster players share a surname) it is
+    skipped rather than guessed, so a wrong tag is rarer than no tag.
+
+    `match_kind` is returned for the UI so the TD can see *why* a player was
+    picked (and trust a "usta" hit more than a "lastname" guess).
+    """
+    subject = subject or ""
+    body = body or ""
+    from_address = from_address or ""
+    subj_low = subject.lower()
+    text = f"{subject}\n{body}\n{from_address}"
+    text_low = text.lower()
+
     cur.execute(
-        "SELECT p.id, p.usta_number, p.first_name, p.last_name, "
+        "SELECT p.id, p.usta_number, p.first_name, p.last_name, p.gender, "
+        "       e.age_division, "
         "       TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) AS name "
         "FROM player p JOIN tournament_entry e ON e.player_id = p.id "
         "WHERE e.tournament_id = %s",
         (tournament_id,),
     )
     roster = cur.fetchall()
-    text_low = text.lower()
-    # 2a) FullName "First Last" or "Last, First" anywhere in the text.
-    for r in roster:
-        f, l = (r["first_name"] or "").strip().lower(), (r["last_name"] or "").strip().lower()
-        if not f or not l:
-            continue
-        if f"{f} {l}" in text_low or f"{l}, {f}" in text_low:
-            return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
-                    "detected_player_name": r["name"], "match_kind": "fullname"}
-    # 3) Last-name unique match. Avoids false positives by requiring exactly one
-    # roster row whose last name appears in the text.
-    last_hits = [r for r in roster
-                 if r["last_name"] and re.search(rf"\b{re.escape(r['last_name'])}\b", text, re.IGNORECASE)]
-    if len(last_hits) == 1:
-        r = last_hits[0]
+
+    def ret(r, kind):
         return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
-                "detected_player_name": r["name"], "match_kind": "lastname"}
+                "detected_player_name": r["name"], "match_kind": kind}
+
+    def fullname_in(hay_low, r):
+        f = (r["first_name"] or "").strip().lower()
+        l = (r["last_name"] or "").strip().lower()
+        if not f or not l:
+            return False
+        return f"{f} {l}" in hay_low or f"{l}, {f}" in hay_low
+
+    # L1 — explicit USTA # anywhere in the email matched to a roster player.
+    ustas = set(_USTA_RE.findall(text))
+    if ustas:
+        for r in roster:
+            if r["usta_number"] and r["usta_number"] in ustas:
+                return ret(r, "usta")
+
+    # L2 — full name in the SUBJECT (subjects are deliberate → high precision).
+    for r in roster:
+        if fullname_in(subj_low, r):
+            return ret(r, "fullname_subject")
+
+    # L3 — USTA portal body template "<Full Name> has requested to be withdrawn".
+    m = _WITHDRAW_BODY_RE.search(body)
+    if m:
+        cand = " ".join(m.group(1).split()).lower()
+        for r in roster:
+            if r["name"].lower() == cand:
+                return ret(r, "withdraw_template")
+
+    # L4 — full name anywhere in the body.
+    for r in roster:
+        if fullname_in(text_low, r):
+            return ret(r, "fullname_body")
+
+    # L5 — USTA portal subject template (first name + gender + age division).
+    # Catches "WITHDRAWAL REQUEST: Siddhanth, Boys' 14 & under singles" where the
+    # body lacks the surname: match first name within the right gender+division,
+    # and only commit if exactly one roster player fits.
+    sm = _USTA_SUBJECT_RE.search(subject)
+    if sm:
+        fn, gender_word, age = sm.group(1).lower(), sm.group(2).lower(), sm.group(3)
+        want_gender = "male" if gender_word == "boys" else "female"
+        cands = [r for r in roster
+                 if (r["first_name"] or "").strip().lower() == fn
+                 and (r["gender"] or "").lower() == want_gender
+                 and age in (r["age_division"] or "")]
+        if len(cands) == 1:
+            return ret(cands[0], "usta_subject")
+
+    # L6 — unique surname in the SUBJECT.
+    subj_last = [r for r in roster if r["last_name"]
+                 and re.search(rf"\b{re.escape(r['last_name'])}\b", subject, re.IGNORECASE)]
+    if len(subj_last) == 1:
+        return ret(subj_last[0], "lastname_subject")
+
+    # L7 — unique surname anywhere (subject + body + sender). Last resort; only
+    # fires when exactly one roster surname appears, so club/parent senders that
+    # share a player's surname resolve to that lone player.
+    text_last = [r for r in roster if r["last_name"]
+                 and re.search(rf"\b{re.escape(r['last_name'])}\b", text, re.IGNORECASE)]
+    if len(text_last) == 1:
+        return ret(text_last[0], "lastname")
+
     return {"detected_player_id": None, "detected_usta": None,
             "detected_player_name": None, "match_kind": None}
 
@@ -180,7 +239,7 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
     persist the result (overwrites any previous detected_player_id)."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, subject, body FROM email_message WHERE id = %s",
+            "SELECT id, tournament_id, subject, body, from_address FROM email_message WHERE id = %s",
             (email_id,),
         )
         em = cur.fetchone()
@@ -188,7 +247,7 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="email not found")
         if em["tournament_id"] is None:
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
-        d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"])
+        d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
         cur.execute(
             "UPDATE email_message SET detected_player_id = %s WHERE id = %s",
             (d["detected_player_id"], email_id),
@@ -203,7 +262,7 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
         return out
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, subject, body FROM email_message WHERE id = ANY(%s)",
+            "SELECT id, tournament_id, subject, body, from_address FROM email_message WHERE id = ANY(%s)",
             (body.email_ids,),
         )
         for em in cur.fetchall():
@@ -212,7 +271,7 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                             "detected_usta": None, "detected_player_name": None,
                             "match_kind": None})
                 continue
-            d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"])
+            d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
             cur.execute(
                 "UPDATE email_message SET detected_player_id = %s WHERE id = %s",
                 (d["detected_player_id"], em["id"]),

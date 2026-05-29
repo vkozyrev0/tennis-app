@@ -1147,7 +1147,23 @@ function sizeLists() {
   const max = Math.max(140, window.innerHeight - top - 16);
   document.documentElement.style.setProperty("--list-max", max + "px");
 }
-window.addEventListener("resize", sizeLists);
+// Tabulator computes fitColumns widths and resolves vh-based maxHeight at
+// layout time; it does not always re-run on a viewport resize when the table
+// lives inside a flex/tab container, so grids could keep a stale width/height
+// after the window changed. Debounce a redraw of the *active* panel's grids
+// (plus any visible master-detail grids) on resize so both axes track the
+// viewport. 120 ms keeps drag-resize smooth without thrashing layout.
+let _resizeTimer = null;
+function _redrawVisibleGrids() {
+  const activePanel = document.querySelector(".panel.active");
+  if (activePanel && activePanel.id) _redrawPanelGrids(activePanel.id);
+}
+function onViewportResize() {
+  sizeLists();
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(_redrawVisibleGrids, 120);
+}
+window.addEventListener("resize", onViewportResize);
 window.addEventListener("load", sizeLists);
 requestAnimationFrame(sizeLists);
 
