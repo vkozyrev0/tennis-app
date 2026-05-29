@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=18" />
+  <link rel="stylesheet" href="/styles.css?v=22" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -142,6 +142,16 @@
       <button class="tab needs-active" data-target="panel-t-doubles">Doubles</button>
       <button class="tab needs-active" data-target="panel-t-photels">Player hotels</button>
     </div>
+  </nav>
+
+  <!-- Breadcrumb / navigation-history strip. Tracks the most recent visited
+       (group → panel) locations and lets the TD jump back through the chain
+       without hunting for the right tab. The list is populated by JS at
+       init() time and updated on every nav click. -->
+  <nav id="breadcrumbs" class="crumbs" aria-label="Navigation history" hidden>
+    <button type="button" id="crumb-back" class="crumb-back" title="Go back one step (Alt+Left)" aria-label="Back">←</button>
+    <ol id="crumb-list" class="crumb-list"></ol>
+    <button type="button" id="crumb-clear" class="crumb-clear" title="Clear history" aria-label="Clear breadcrumbs">Clear</button>
   </nav>
 
   <main id="main-app" tabindex="-1" aria-label="Tournament director workspace">
@@ -636,7 +646,11 @@
     </section>
 
     <!-- T: Review inbox -->
-    <section class="panel tpanel" id="panel-t-inbox" data-import-type="emails_pdf">
+    <!-- Import is surfaced via a single "⬆ Import ▾" menu built in
+         _consolidateInboxToolbar (PDF thread + staged import), so this panel
+         intentionally has NO data-import-type (which would auto-inject a
+         second, redundant "⬆ Import…" button — design-crit I-8). -->
+    <section class="panel tpanel" id="panel-t-inbox">
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
@@ -663,18 +677,21 @@
              checkbox column. Detect populates detected_player_id per email,
              Reassign moves selection to a different tournament, Populate
              creates the matching withdrawal/late_entry/etc. rows. -->
-        <div id="inbox-bulk-toolbar" class="actions-row mb-half" hidden>
-          <span id="inbox-bulk-count" class="muted"></span>
+        <div id="inbox-bulk-toolbar" class="bulk-bar" hidden role="region" aria-label="Bulk actions for selected emails">
+          <span id="inbox-bulk-count" class="bulk-count"></span>
           <button type="button" id="inbox-bulk-detect">Detect players</button>
-          <label>Reassign to
+          <!-- Reassign group: label + dropdown + Apply button visually bound
+               together so it reads as one action, not three loose controls. -->
+          <span class="bulk-group">
+            <label for="inbox-bulk-tournament">Reassign to</label>
             <select id="inbox-bulk-tournament" aria-label="Tournament to reassign selected emails to">
               <option value="">— pick tournament —</option>
             </select>
-          </label>
-          <button type="button" id="inbox-bulk-reassign">Move</button>
+            <button type="button" id="inbox-bulk-reassign">Reassign</button>
+          </span>
           <button type="button" id="inbox-bulk-populate" title="Create rows in the matching lists (withdrawals / late entries / scheduling / div-flex / hotel) using each email's classification + detected player">Populate lists →</button>
-          <button type="button" id="inbox-bulk-clear" class="btn-link">Clear selection</button>
           <span class="msg" id="inbox-bulk-msg"></span>
+          <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
         <table id="inbox-table" class="list-table">
           <thead><tr><th></th><th>Received</th><th>From</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
@@ -1019,6 +1036,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=32"></script>
+  <script type="module" src="/app.js?v=37"></script>
 </body>
 </html>

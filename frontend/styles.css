@@ -972,6 +972,106 @@ td.toggle { white-space: nowrap; }
 #report-table tfoot th { border-top: 2px solid var(--ink); font-weight: 700; text-align: left; }
 #report-meta { margin-bottom: 0.6rem; }
 
+/* ---- breadcrumb history strip ----
+   Sits directly under the L2 menu; same green tone as the nav bars, full
+   viewport width, smaller font so it reads as a secondary trail (not a
+   third toolbar competing for attention). Sticks to the top right under
+   the L2 menu (top: 120 + ~28 → 148). */
+.crumbs {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.2rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  position: sticky; top: 148px; z-index: 47;
+}
+.crumbs[hidden] { display: none; }
+.crumb-back, .crumb-clear {
+  background: rgba(0, 0, 0, 0.18); border: 0;
+  color: #fff; padding: 0.1rem 0.4rem;
+  border-radius: 4px; cursor: pointer; font-size: 0.7rem; line-height: 1.2;
+  font-weight: 600;
+}
+.crumb-back:hover, .crumb-clear:hover { background: rgba(255, 255, 255, 0.2); }
+.crumb-back:disabled { opacity: 0.4; cursor: not-allowed; }
+.crumb-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem;
+  flex: 1 1 auto; min-width: 0;
+}
+.crumb-list li { display: inline-flex; align-items: center; gap: 0.1rem; }
+.crumb-list li + li::before {
+  content: "›"; color: rgba(255, 255, 255, 0.7); padding: 0 0.2rem; font-weight: 600;
+}
+.crumb-link {
+  background: transparent; border: 0; padding: 0.1rem 0.35rem;
+  color: #fff; cursor: pointer; font-size: 0.7rem; line-height: 1.2;
+  border-radius: 3px; opacity: 0.85;
+}
+.crumb-link:hover { background: rgba(255, 255, 255, 0.2); opacity: 1; text-decoration: underline; }
+.crumb-current {
+  font-weight: 700; color: #fff; padding: 0.1rem 0.35rem;
+  background: #245733; border-radius: 3px;
+}
+
+/* Confirm-dialog body: honor newlines so multi-line confirmations (e.g. the
+   Inbox "Populate lists" breakdown) render as separate lines, not one blob. */
+#confirm-text { white-space: pre-line; }
+
+/* ---- Dropdown menu button (toolbar action grouping: Download ▾ / Import ▾) ---- */
+.menu-btn-wrap { position: relative; display: inline-block; }
+.menu-caret { font-size: 0.7em; opacity: 0.8; margin-left: 0.15rem; }
+.menu-btn-pop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+  min-width: 200px; padding: 0.25rem;
+  background: var(--elev); border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  display: flex; flex-direction: column; gap: 0.1rem;
+}
+.menu-btn-pop[hidden] { display: none; }
+.menu-btn-item {
+  text-align: left; width: 100%; border: 0; background: transparent;
+  padding: 0.4rem 0.55rem; border-radius: 4px; cursor: pointer;
+  color: var(--ink); font: inherit; font-size: 0.85rem; white-space: nowrap;
+}
+.menu-btn-item:hover, .menu-btn-item:focus-visible { background: var(--sel); }
+.menu-btn-sep { height: 1px; background: var(--border); margin: 0.2rem 0; }
+
+/* ---- Inbox bulk-action bar (appears only when ≥1 email is selected) ---- */
+.bulk-bar {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+  padding: 0.45rem 0.7rem;
+  /* Accent-tinted "selection mode" surface (reuses the table-selection token)
+     so the bar reads as a distinct contextual state, not the normal toolbar. */
+  background: var(--sel);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}
+.bulk-bar[hidden] { display: none; }
+.bulk-count {
+  font-weight: 700; color: var(--ink); white-space: nowrap;
+}
+/* The reassign trio (label + select + button) hugged into one unit. */
+.bulk-group {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.bulk-group label { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.bulk-group select { margin: 0; }
+/* Clear pushed to the far right, styled as a quiet link rather than a button. */
+.bulk-clear {
+  margin-left: auto;
+  background: transparent; border: 0; padding: 0.15rem 0.3rem;
+  color: var(--muted); font-size: 0.85rem; cursor: pointer;
+  text-decoration: underline;
+}
+.bulk-clear:hover { color: var(--ink); }
+
 /* ---- responsive ---- */
 @media (max-width: 720px) {
   /* Both nav rows scroll horizontally instead of wrapping into many rows. */
@@ -990,7 +1090,7 @@ td.toggle { white-space: nowrap; }
     --ink: #000; --muted: #333; --border: #bbb;
   }
   body { background: #fff; color: #000; }
-  header, .menu-l1, .menu, #context-bar, .no-print { display: none !important; }
+  header, .menu-l1, .menu, .crumbs, #context-bar, .no-print { display: none !important; }
   .panel:not(.active) { display: none !important; }
   .tpanel .needs-active-note { display: none !important; }
   main { padding: 0; max-width: none; }

@@ -569,6 +569,52 @@ function openForm(form) {
   }
   scheduleComboSync();
 }
+// Lightweight dropdown-menu button — collapses a cluster of related toolbar
+// actions into one trigger (design-crit R-1/I-8). `items` is an array of
+// { label, onClick, title } objects (or { separator: true }). Returns the
+// wrapper element ready to drop into a toolbar.
+function makeMenuButton(triggerHtml, items, opts = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "menu-btn-wrap";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = (opts.className || "export-btn no-print") + " menu-btn-trigger";
+  btn.setAttribute("aria-haspopup", "menu");
+  btn.setAttribute("aria-expanded", "false");
+  if (opts.title) btn.title = opts.title;
+  btn.innerHTML = `${triggerHtml} <span class="menu-caret" aria-hidden="true">▾</span>`;
+  const pop = document.createElement("div");
+  pop.className = "menu-btn-pop";
+  pop.setAttribute("role", "menu");
+  pop.hidden = true;
+  for (const it of items) {
+    if (it.separator) {
+      const hr = document.createElement("div"); hr.className = "menu-btn-sep"; pop.appendChild(hr); continue;
+    }
+    const mi = document.createElement("button");
+    mi.type = "button"; mi.className = "menu-btn-item"; mi.setAttribute("role", "menuitem");
+    mi.textContent = it.label;
+    if (it.title) mi.title = it.title;
+    mi.addEventListener("click", () => { close(); it.onClick(); });
+    pop.appendChild(mi);
+  }
+  function open() {
+    pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", onDoc, true);
+    document.addEventListener("keydown", onKey);
+  }
+  function close() {
+    pop.hidden = true; btn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onDoc, true);
+    document.removeEventListener("keydown", onKey);
+  }
+  function onDoc(e) { if (!wrap.contains(e.target)) close(); }
+  function onKey(e) { if (e.key === "Escape") { close(); btn.focus(); } }
+  btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
+  wrap.append(btn, pop);
+  return wrap;
+}
+
 // Audit M27: many sites called scheduleComboSync() ad-hoc; this
 // coalesces concurrent requests into a single rAF so combo-display refresh
 // runs at most once per frame regardless of how many fillSelect calls fired.
@@ -978,7 +1024,120 @@ _menuEl.addEventListener("click", (e) => {
     const panel = document.getElementById(tab.dataset.target);
     if (panel) { try { panel.focus({ preventScroll: true }); } catch (_) {} }
   }
+  // Track navigation in the breadcrumb history so the TD can step back
+  // through their visited tab chain. Only record real user clicks — programmatic
+  // .click() during init shouldn't pollute the trail.
+  if (e.isTrusted) {
+    const grpEl2 = tab.closest(".menu-group");
+    _pushCrumb(grpEl2 ? grpEl2.dataset.group : null, tab.dataset.target);
+  }
 });
+
+// =================== Breadcrumb / navigation history ===================
+// Tracks the last N (group, panel) locations the user visited. Renders a
+// strip of clickable chips below the nav. Clicking a chip jumps back to
+// that location and truncates the trail to that point (classic browser-back
+// semantics, but explicit). Alt+Left also pops one step.
+const CRUMB_MAX = 8;
+const _crumbsBar = document.getElementById("breadcrumbs");
+const _crumbList = document.getElementById("crumb-list");
+const _crumbBack = document.getElementById("crumb-back");
+const _crumbClear = document.getElementById("crumb-clear");
+let _navHistory = [];
+let _crumbJumping = false;  // suppress re-recording while we programmatically jump
+
+function _crumbLabelFor(group, panel) {
+  const groupEl = document.querySelector(`.menu-group[data-group="${group}"]`);
+  const rawGroup = groupEl ? groupEl.querySelector(".menu-label").textContent.trim() : group;
+  // Title-case the group key fallback so "setup" → "Setup" if the .menu-label
+  // node isn't reachable for any reason.
+  const groupLabel = rawGroup ? rawGroup.charAt(0).toUpperCase() + rawGroup.slice(1) : group;
+  const tabEl = document.querySelector(`.tab[data-target="${panel}"]`);
+  const tabLabel = tabEl ? tabEl.textContent.trim() : panel;
+  return { groupLabel, tabLabel };
+}
+function _pushCrumb(group, panel) {
+  if (_crumbJumping) return;
+  if (!group || !panel) return;
+  // Collapse consecutive duplicates.
+  const last = _navHistory[_navHistory.length - 1];
+  if (last && last.group === group && last.panel === panel) return;
+  _navHistory.push({ group, panel });
+  if (_navHistory.length > CRUMB_MAX) _navHistory = _navHistory.slice(-CRUMB_MAX);
+  _renderCrumbs();
+}
+function _jumpToCrumb(idx) {
+  const target = _navHistory[idx];
+  if (!target) return;
+  // Truncate trail to and including the clicked entry — the user is "back" there.
+  _navHistory = _navHistory.slice(0, idx + 1);
+  _crumbJumping = true;
+  try {
+    // Activate the group, then click the tab. activateGroup will auto-click the
+    // first tab of the group if none is active; clicking explicitly afterward
+    // ensures the right panel ends up active.
+    activateGroup(target.group);
+    const tabEl = document.querySelector(`.tab[data-target="${target.panel}"]`);
+    if (tabEl) tabEl.click();
+  } finally {
+    _crumbJumping = false;
+  }
+  _renderCrumbs();
+}
+function _renderCrumbs() {
+  if (!_crumbsBar) return;
+  if (_navHistory.length === 0) { _crumbsBar.hidden = true; return; }
+  _crumbsBar.hidden = false;
+  _crumbList.innerHTML = "";
+  _navHistory.forEach((entry, idx) => {
+    const isCurrent = idx === _navHistory.length - 1;
+    const { groupLabel, tabLabel } = _crumbLabelFor(entry.group, entry.panel);
+    const li = document.createElement("li");
+    if (isCurrent) {
+      const span = document.createElement("span");
+      span.className = "crumb-current";
+      span.textContent = `${groupLabel} › ${tabLabel}`;
+      span.setAttribute("aria-current", "page");
+      li.appendChild(span);
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "crumb-link";
+      btn.textContent = `${groupLabel} › ${tabLabel}`;
+      btn.title = `Jump back to ${groupLabel} › ${tabLabel}`;
+      btn.addEventListener("click", () => _jumpToCrumb(idx));
+      li.appendChild(btn);
+    }
+    _crumbList.appendChild(li);
+  });
+  _crumbBack.disabled = _navHistory.length < 2;
+}
+if (_crumbBack) {
+  _crumbBack.addEventListener("click", () => {
+    if (_navHistory.length < 2) return;
+    _jumpToCrumb(_navHistory.length - 2);
+  });
+}
+if (_crumbClear) {
+  _crumbClear.addEventListener("click", () => {
+    // Keep the current location as the only crumb so we don't disappear
+    // mid-task. If nothing recorded yet, just hide.
+    const cur = _navHistory[_navHistory.length - 1];
+    _navHistory = cur ? [cur] : [];
+    _renderCrumbs();
+  });
+}
+// Alt+Left as a keyboard accelerator for "back one step".
+document.addEventListener("keydown", (e) => {
+  if (e.altKey && e.key === "ArrowLeft" && _navHistory.length >= 2) {
+    e.preventDefault();
+    _jumpToCrumb(_navHistory.length - 2);
+  }
+});
+// Initial seed is done by applyAuth() when the user becomes admin — that
+// avoids a race where the boot-time applyAuth(null) clears anything we'd seed
+// here. See the !isAdmin branch in applyAuth above.
+
 
 // Bound every scrollable list to the real space left below it so it never runs
 // off the bottom of the screen, whatever the toolbar height happens to be.
@@ -2045,23 +2204,31 @@ async function _wirePanelImportButtons() {
       || panel.querySelector(".actions-row")
       || panel.querySelector(".t-content > h3, .card > h3");
     if (!target) return;
-    for (const key of keys) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "export-btn no-print panel-import-btn";
-      // Use the registry label so two buttons read distinctly
-      // ("⬆ Import Roster — Initial…" vs "⬆ Import Roster — Correction…")
-      // instead of two identical buttons.
-      const label = labels[key] || "Import";
-      btn.title = `Open the Import page and jump to "${label}"`;
-      // For panels with one button we keep the compact "⬆ Import…" wording;
-      // for multi-button panels we suffix the type-specific tail so the user
-      // can tell them apart at a glance.
-      const tail = keys.length > 1 ? ` ${label.replace(/^[^—]*—\s*/, "")}` : "";
-      btn.innerHTML = `<span aria-hidden="true">⬆</span> Import${tail}…`;
-      btn.addEventListener("click", () => gotoImport(key));
-      target.appendChild(btn);
+    // design-crit R-1: panels with more than one import type collapse into a
+    // single "⬆ Import ▾" menu (one item per type) instead of N side-by-side
+    // buttons that truncate the toolbar. Single-type panels keep the compact
+    // "⬆ Import…" button.
+    if (keys.length > 1) {
+      const items = keys.map((key) => {
+        const label = labels[key] || "Import";
+        // Strip the shared "Roster — " prefix so menu items read "Initial…",
+        // "Correction…" rather than repeating the noun on every line.
+        const tail = label.replace(/^[^—]*—\s*/, "");
+        return { label: `${tail}…`, title: `Open the Import page and jump to "${label}"`, onClick: () => gotoImport(key) };
+      });
+      const menu = makeMenuButton(`<span aria-hidden="true">⬆</span> Import`, items, { className: "export-btn no-print panel-import-btn" });
+      target.appendChild(menu);
+      return;
     }
+    const key = keys[0];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "export-btn no-print panel-import-btn";
+    const label = labels[key] || "Import";
+    btn.title = `Open the Import page and jump to "${label}"`;
+    btn.innerHTML = `<span aria-hidden="true">⬆</span> Import…`;
+    btn.addEventListener("click", () => gotoImport(key));
+    target.appendChild(btn);
   });
 }
 if (document.readyState === "loading") {
@@ -2117,7 +2284,7 @@ async function loadAssignments() {
   // Audit P42: match the Tabulator placeholder styling so empty states across
   // the app look the same (✦ icon + centered muted text).
   if (list.length === 0) {
-    box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — pick one from the form above.</div>';
+    box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — click <strong>+ Assign official</strong> above to start.</div>';
     return;
   }
   for (const a of list) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
@@ -2439,6 +2606,29 @@ document.getElementById("avail-save").addEventListener("click", async () => {
 // --- Part B: review inbox + late entries ---
 const EMAIL_CLASSES = ["unclassified", "late_entry", "withdrawal", "doubles",
   "pairing_avoidance", "scheduling_avoidance", "division_flex", "hotel", "other"];
+// design-crit I-7: title-case labels + badge color per classification so the
+// Inbox column reads as colored chips (matching the Status column) instead of
+// raw lowercase enum text. `color` keys map to the .badge-* CSS variants.
+const EMAIL_CLASS_META = {
+  unclassified:         { label: "Unclassified",  color: "muted" },
+  late_entry:           { label: "Late entry",     color: "info" },
+  withdrawal:           { label: "Withdrawal",     color: "bad" },
+  doubles:              { label: "Doubles",        color: "info" },
+  pairing_avoidance:    { label: "Pairing avoid.", color: "warn" },
+  scheduling_avoidance: { label: "Scheduling",     color: "warn" },
+  division_flex:        { label: "Division flex",  color: "info" },
+  hotel:                { label: "Hotel",          color: "ok" },
+  other:                { label: "Other",          color: "muted" },
+};
+// Object map {value: label} for Tabulator list editor + header-filter so those
+// dropdowns also show the friendly labels.
+const EMAIL_CLASS_VALUES = Object.fromEntries(
+  EMAIL_CLASSES.map((v) => [v, (EMAIL_CLASS_META[v] || {}).label || v]));
+function classChip(v) {
+  const meta = EMAIL_CLASS_META[v];
+  if (!meta) return v ? `<span class="badge badge-muted">${esc(v)}</span>` : "";
+  return `<span class="badge badge-${meta.color}">${esc(meta.label)}</span>`;
+}
 const lateForm = document.getElementById("late-form");
 const wdForm = document.getElementById("withdrawal-form");
 // Audit A49: FILE_TARGETS is keyed by *classification* (so the Inbox knows
@@ -2495,9 +2685,10 @@ const inboxGrid = makeReadGrid("inbox-table", [
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
       ((e.detected_player_name || "") + " " + (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
-  { title: "Classification", field: "classification", cssClass: "editable-cell",
-    editor: "list", editorParams: { values: EMAIL_CLASSES },
-    headerFilter: "list", headerFilterParams: { values: EMAIL_CLASSES, clearable: true } },
+  { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
+    formatter: (c) => classChip(c.getValue()),
+    editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
+    headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
     headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
   { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 240, cssClass: "grid-actions-cell",
@@ -2559,7 +2750,8 @@ function _populateInboxClassSelect() {
   const sel = document.getElementById("inbox-detail-classification");
   if (!sel || sel.options.length) return;
   for (const v of EMAIL_CLASSES) {
-    const o = document.createElement("option"); o.value = v; o.textContent = v; sel.appendChild(o);
+    const o = document.createElement("option"); o.value = v;
+    o.textContent = (EMAIL_CLASS_META[v] || {}).label || v; sel.appendChild(o);
   }
 }
 // Format the email body for syntax-highlighted display. Escapes the raw
@@ -2716,8 +2908,26 @@ function _inboxBulkToggleAll(on) {
 function _inboxBulkRefreshUi() {
   const bar = document.getElementById("inbox-bulk-toolbar");
   bar.hidden = _inboxSelected.size === 0;
+  const n = _inboxSelected.size;
   document.getElementById("inbox-bulk-count").textContent =
-    _inboxSelected.size === 0 ? "" : `${_inboxSelected.size} selected · `;
+    n === 0 ? "" : `${n} selected`;
+}
+// I-3: build a per-target-list breakdown of what Populate would create, so the
+// TD sees "5 Withdrawals, 3 Doubles, 2 unfileable" before committing. Reads the
+// classification off each selected row's grid data and maps via FILE_TARGETS.
+function _inboxPopulatePreview() {
+  const byLabel = new Map();
+  let unfileable = 0;
+  const rows = inboxGrid.grid.getData();
+  const sel = new Set(_inboxSelected);
+  for (const m of rows) {
+    if (!sel.has(m.id)) continue;
+    const t = FILE_TARGETS[m.classification];
+    if (!t) { unfileable += 1; continue; }
+    byLabel.set(t.label, (byLabel.get(t.label) || 0) + 1);
+  }
+  const parts = [...byLabel.entries()].map(([label, c]) => `${c} ${label}`);
+  return { parts, unfileable, fileable: parts.length > 0 };
 }
 async function _inboxPopulateTournamentDropdown() {
   const sel = document.getElementById("inbox-bulk-tournament");
@@ -2763,9 +2973,25 @@ document.getElementById("inbox-bulk-reassign").addEventListener("click", async (
     _inboxBulkRefreshUi();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
-document.getElementById("inbox-bulk-populate").addEventListener("click", async () => {
+document.getElementById("inbox-bulk-populate").addEventListener("click", async (ev) => {
   if (!_inboxSelected.size) return;
-  if (!(await confirmDialog(`Populate target lists from ${_inboxSelected.size} selected emails? Each row creates a withdrawal / late entry / hotel / etc. for its detected player.`, "Populate"))) return;
+  const btn = ev.currentTarget;
+  // I-3: show exactly what will be created, broken down by destination list,
+  // plus a count of selections that can't be filed (no fileable classification).
+  const { parts, unfileable, fileable } = _inboxPopulatePreview();
+  if (!fileable) {
+    setMsg("inbox-bulk-msg", "None of the selected emails have a fileable classification yet.", false);
+    return;
+  }
+  const lines = [
+    `This will create rows in their target lists from ${_inboxSelected.size} selected emails:`,
+    "",
+    ...parts.map((p) => `  • ${p}`),
+  ];
+  if (unfileable) lines.push("", `${unfileable} selected email(s) have no fileable classification and will be skipped.`);
+  if (!(await confirmDialog(lines.join("\n"), "Populate lists"))) return;
+  // Guard against accidental double-insert: disable until the request resolves.
+  btn.disabled = true;
   try {
     const res = await api("/emails/bulk/populate", {
       method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
@@ -2777,7 +3003,11 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
     _inboxSelected.clear();
     await loadInbox();
     _inboxBulkRefreshUi();
-  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+  } catch (e) {
+    setMsg("inbox-bulk-msg", e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
 });
 // Populate the tournament dropdown lazily — once when the panel opens.
 _inboxPopulateTournamentDropdown();
@@ -4256,6 +4486,20 @@ function applyAuth(who) {
   document.getElementById("menu-groups").hidden = !isAdmin;
   document.querySelector("main:not(#official-app)").hidden = !isAdmin;
   document.getElementById("context-bar").hidden = !isAdmin;
+  // Hide the breadcrumb strip when not signed in as admin; clear stale crumbs
+  // on sign-out so a fresh session starts with a clean trail. When the user
+  // becomes admin (first login OR session restore), seed the trail with the
+  // currently active tab so the strip isn't empty until they click something.
+  if (!isAdmin) {
+    _navHistory = [];
+  } else if (_navHistory.length === 0) {
+    const activeTab = document.querySelector(".tab.active");
+    const grp = activeTab ? activeTab.closest(".menu-group") : null;
+    if (activeTab && grp) {
+      _navHistory = [{ group: grp.dataset.group, panel: activeTab.dataset.target }];
+    }
+  }
+  if (typeof _renderCrumbs === "function") _renderCrumbs();
   document.getElementById("official-app").hidden = !isOfficial;
   if (isAdmin) adminInit();
   if (isOfficial) officialInit();
@@ -4336,22 +4580,53 @@ function _consolidateInboxToolbar() {
   const importInput = document.getElementById("inbox-import-pdf-input");
   const importMsg = document.getElementById("inbox-import-pdf-msg");
   const csv = [...document.querySelectorAll('#panel-t-inbox .export-btn')]
-    .find((b) => /CSV/.test(b.textContent) && b.id !== "inbox-import-pdf-btn");
+    .find((b) => /CSV/.test(b.textContent) && b.id !== "inbox-import-pdf-btn"
+      && !b.classList.contains("menu-btn-trigger"));
   if (!trigger || !importBtn) return;
   if (document.getElementById("inbox-toolbar-row")) return;  // idempotent
   const row = document.createElement("div");
   row.id = "inbox-toolbar-row"; row.className = "actions-row mb-half";
   trigger.parentNode.insertBefore(row, trigger);
-  row.append(trigger, importBtn);
+  // design-crit I-8: a single "⬆ Import ▾" menu replaces the separate
+  // "Import PDF" + auto-injected "Import…" buttons. The original PDF button is
+  // hidden but kept wired (its hidden file input does the upload); the menu's
+  // first item just delegates to that input.
+  importBtn.hidden = true;
+  const importMenu = makeMenuButton(`<span aria-hidden="true">⬆</span> Import`, [
+    { label: "PDF email thread", title: "Upload a printed email-thread PDF directly into this inbox", onClick: () => importInput.click() },
+    { label: "Staged import…", title: "Open the Import page to preview + merge", onClick: () => gotoImport("emails_pdf") },
+  ], { className: "export-btn no-print" });
+  row.append(trigger, importMenu, importBtn);
   if (importInput) row.append(importInput);
   if (importMsg) row.append(importMsg);
   if (csv) row.append(csv);
+}
+
+// design-crit R-1: collapse the Roster's three download buttons (CSV /
+// Sign-in / Sign-in template) into a single "⬇ Download ▾" menu so the
+// toolbar stops truncating with "…". The originals stay in the DOM (hidden)
+// so their existing by-id click handlers keep working; the menu delegates.
+function _consolidateRosterToolbar() {
+  const toolbar = document.querySelector("#panel-t-roster .list-toolbar");
+  if (!toolbar || toolbar.querySelector(".roster-download-menu")) return;
+  const csv = document.getElementById("roster-csv");
+  const signin = document.getElementById("roster-signin-csv");
+  const template = document.getElementById("roster-signin-template");
+  if (!csv || !signin || !template) return;
+  const menu = makeMenuButton(`<span aria-hidden="true">⬇</span> Download`, [
+    { label: "Roster CSV", title: "Full roster as CSV", onClick: () => csv.click() },
+    { label: "Sign-in sheet", title: "Sign-in sheet (status, events, size, hotel, lodging)", onClick: () => signin.click() },
+    { label: "Sign-in template (blank)", title: "Empty sign-in sheet template", onClick: () => template.click() },
+  ], { className: "export-btn no-print roster-download-menu" });
+  csv.parentNode.insertBefore(menu, csv);
+  [csv, signin, template].forEach((b) => { b.hidden = true; });
 }
 
 (async function init() {
   enhanceAllSelects();  // turn every <select> into a type-in dropdown
   markRequiredFields();
   _consolidateInboxToolbar();
+  _consolidateRosterToolbar();
   await refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
