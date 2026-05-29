@@ -48,6 +48,10 @@ class EmailOut(BaseModel):
     # Name of the tournament this email is filed under (LEFT JOIN; null when
     # the email hasn't been assigned to a tournament yet).
     tournament_name: Optional[str] = None
+    # Withdrawal reason parsed from the body (only for withdrawal-classified
+    # emails); null when none could be extracted. Surfaced in the inbox so the
+    # TD sees it before filing, and auto-filled into the withdrawal row.
+    detected_reason: Optional[str] = None
 
 
 class EmailBulkReassign(BaseModel):

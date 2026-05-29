@@ -44,7 +44,15 @@ def list_emails(tournament_id: int | None = None, status: str | None = None, con
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_COLS} {_FROM}{where} ORDER BY e.received_at DESC", params)
-        return cur.fetchall()
+        rows = cur.fetchall()
+    # Attach a parsed withdrawal reason for withdrawal-classified emails (cheap
+    # regex over the body; skipped for everything else).
+    for r in rows:
+        r["detected_reason"] = (
+            extract_withdrawal_reason(r.get("subject"), r.get("body"))
+            if r.get("classification") == "withdrawal" else None
+        )
+    return rows
 
 
 @router.post("", response_model=EmailOut, status_code=201)
@@ -245,6 +253,44 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             "detected_player_name": None, "match_kind": None}
 
 
+# Withdrawal-reason extraction, ranked most→least reliable based on the real
+# email corpus:
+#   1. explicit "Reason: <X>" field (forwarded forms: "Player Name… Reason: Injury
+#      Round/Event:…") — but NOT the USTA portal's "for the following reason:"
+#      boilerplate, which is followed by canned "Please go to…" text (no reason).
+#   2. "due to <X>" free text ("…due to leg injury.").
+#   3. keyword fallback → a normalized category (Injury / Illness).
+# Returns a short string or None (None ⇒ TD fills it in by hand).
+_REASON_FIELD_RE = re.compile(r"(?<!following )reason\s*[:\-]\s*(.+)", re.I)
+_REASON_STOP_RE = re.compile(r"\b(?:round/event|event|round|player name|withdrawing)\s*[:\-]?", re.I)
+_DUE_TO_RE = re.compile(r"\bdue to\s+(.+?)(?:[.;\n]|\bplease\b|\bthanks?\b|$)", re.I)
+
+
+def extract_withdrawal_reason(subject: str, body: str):
+    text = f"{subject or ''}\n{body or ''}"
+    # 1) explicit "Reason: X" on a line (skip the portal boilerplate).
+    for line in text.splitlines():
+        m = _REASON_FIELD_RE.search(line)
+        if not m:
+            continue
+        val = _REASON_STOP_RE.split(m.group(1).strip(), maxsplit=1)[0].strip(" .,;-")
+        if val and not val.lower().startswith(("please", "the player")):
+            return val[:80]
+    # 2) "due to <reason>"
+    m = _DUE_TO_RE.search(text)
+    if m:
+        val = m.group(1).strip(" .,;-")
+        if val:
+            return val[:80]
+    # 3) keyword fallback → normalized category
+    low = text.lower()
+    if re.search(r"\b(injur(?:y|ed|ies)|hurt|broke|broken|sprain(?:ed)?|fracture)\b", low):
+        return "Injury"
+    if re.search(r"\b(sick|illness|ill|unwell|fever|covid|flu)\b", low):
+        return "Illness"
+    return None
+
+
 @router.post("/{email_id}/detect-player", response_model=EmailDetectResult)
 def detect_one_player(email_id: int, conn=Depends(db_dep)):
     """Run the player-name detector against this email's subject+body and
@@ -299,8 +345,9 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
 # are skipped (the response reports them).
 _POPULATE_TARGETS = {
     "withdrawal": {
-        "sql": ("INSERT INTO withdrawal (tournament_id, player_id, source_email_id) "
-                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING RETURNING id"),
+        # reason is auto-extracted from the email body (see extract_withdrawal_reason).
+        "sql": ("INSERT INTO withdrawal (tournament_id, player_id, source_email_id, reason) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING id"),
         "label": "withdrawal",
     },
     "late_entry": {
@@ -343,7 +390,7 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
     filed_count = 0
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, classification, detected_player_id "
+            "SELECT id, tournament_id, classification, detected_player_id, subject, body "
             "FROM email_message WHERE id = ANY(%s)",
             (body.email_ids,),
         )
@@ -361,7 +408,12 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
                 skipped.append({"id": em["id"], "reason": "no tournament"})
                 continue
             try:
-                cur.execute(target["sql"], (tid, pid, em["id"]))
+                if cls == "withdrawal":
+                    # auto-fill the withdrawal reason parsed from the email
+                    reason = extract_withdrawal_reason(em["subject"], em["body"])
+                    cur.execute(target["sql"], (tid, pid, em["id"], reason))
+                else:
+                    cur.execute(target["sql"], (tid, pid, em["id"]))
                 if cur.rowcount > 0:
                     filed_count += 1
                     cur.execute("UPDATE email_message SET status='filed' WHERE id=%s", (em["id"],))

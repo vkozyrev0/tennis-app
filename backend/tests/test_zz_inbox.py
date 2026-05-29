@@ -260,6 +260,58 @@ def test_bulk_detect_and_reassign():
                for m in client.get(f"/api/emails?tournament_id={t2['id']}").json())
 
 
+def test_extract_withdrawal_reason_patterns():
+    from app.routers.emails import extract_withdrawal_reason as ex
+    # explicit "Reason: X" field (stops at the next labelled field)
+    assert ex("Withdrawal Request: David Benedict",
+              "Player Name: David Benedict Reason: Injury Round/Event: B14s") == "Injury"
+    # "due to <reason>" free text
+    assert ex("Withdraw", "…need to withdraw my daughter due to leg injury. Please confirm.") == "leg injury"
+    # USTA portal boilerplate ("for the following reason: Please go to…") → none
+    assert ex("WITHDRAWAL REQUEST: Anvith",
+              "…for the following reason: Please go to the tournament details to withdraw the player.") is None
+    # keyword fallback → normalized category
+    assert ex("Withdraw", "pulling out, injury") == "Injury"
+    assert ex("Withdraw", "she is sick with the flu") == "Illness"
+    # nothing extractable
+    assert ex("Re: Doubles", "Thanks, see you there") is None
+
+
+def test_bulk_populate_autofills_withdrawal_reason():
+    t = _tournament()
+    usta = _rostered(t["id"], "Hurt", "Player", "male", "B14")
+    e = _email(t["id"], subject="Withdrawal Request: Hurt Player",
+               body=f"Player {usta} must withdraw due to a shoulder injury. Please confirm.")
+    pid = _detect(e["id"])["detected_player_id"]
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": pid,
+    })
+    _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    wd = next(w for w in client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+              if w.get("usta_number") == usta)
+    assert wd["reason"] == "a shoulder injury"
+
+
+def test_list_emails_exposes_detected_reason_for_withdrawals():
+    t = _tournament()
+    usta = _rostered(t["id"], "Reason", "Shown", "female", "G14")
+    e = _email(t["id"], subject="Reason Shown withdrawal",
+               body=f"{usta} — Reason: Family emergency. Round/Event: G14")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal", "status": "new",
+        "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["detected_reason"] == "Family emergency"
+    # a non-withdrawal email carries no reason
+    e2 = _email(t["id"], subject="General question", body="due to rain we wonder about parking")
+    row2 = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+                if m["id"] == e2["id"])
+    assert row2["detected_reason"] is None
+
+
 def test_bulk_populate_creates_withdrawal():
     t = _tournament()
     usta = _rostered(t["id"], "Will", "Withdraw", "male", "B14")

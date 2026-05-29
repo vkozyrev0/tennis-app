@@ -2878,6 +2878,11 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const doFile = () => {
         const t = FILE_TARGETS[m.classification]; if (!t) return;
         t.form.source_email_id.value = m.id;
+        // Carry the auto-detected withdrawal reason into the form so the TD
+        // doesn't retype it (still editable before saving).
+        if (m.classification === "withdrawal" && t.form.reason && m.detected_reason) {
+          t.form.reason.value = m.detected_reason;
+        }
         document.querySelector(`.tab[data-target="${t.tab}"]`).click();
         openForm(t.form);
         setMsg(t.msg, `filing from email #${m.id}`, true);
@@ -2974,6 +2979,10 @@ function _openInboxDetail(m) {
   document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
   document.getElementById("inbox-detail-classification").value = m.classification || "";
   document.getElementById("inbox-detail-status").value = m.status || "new";
+  // Withdrawal reason row: show only for withdrawals, pre-filled with the
+  // detected reason (a sibling helper keeps it in sync when the classification
+  // is changed to/from withdrawal in the modal).
+  _syncInboxReasonRow(m.classification, m.detected_reason);
   // Player picker reflects the detected_player_id (or "none").
   _populateInboxPlayerSelect(m.tournament_id || (active && active.id))
     .then(() => {
@@ -2982,6 +2991,21 @@ function _openInboxDetail(m) {
   setMsg("inbox-detail-msg", "", true);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
+// Show/hide + fill the withdrawal-reason row based on the current
+// classification. `reason` is only applied when provided (initial open);
+// toggling the dropdown just shows/hides the field without clobbering text.
+function _syncInboxReasonRow(classification, reason) {
+  const row = document.getElementById("inbox-detail-reason-row");
+  const input = document.getElementById("inbox-detail-reason");
+  if (!row || !input) return;
+  const isWd = classification === "withdrawal";
+  row.hidden = !isWd;
+  if (isWd && reason !== undefined && reason !== null) input.value = reason;
+  if (!isWd) input.value = "";
+}
+// Toggle the reason row when the classification is changed in the modal.
+document.getElementById("inbox-detail-classification")
+  ?.addEventListener("change", (e) => _syncInboxReasonRow(e.target.value));
 function _closeInboxDetail() {
   _inboxDetailId = null;
   document.getElementById("inbox-detail").hidden = true;

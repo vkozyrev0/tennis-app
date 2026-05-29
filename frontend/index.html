@@ -746,6 +746,16 @@
               </select>
             </label>
           </div>
+          <!-- Withdrawal reason — auto-parsed from the email; only shown when
+               the email is classified as a withdrawal. Editable so the TD can
+               correct it before filing. -->
+          <div class="row" id="inbox-detail-reason-row" hidden>
+            <label class="label--full">Reason (auto-detected)
+              <input id="inbox-detail-reason" type="text" readonly
+                     title="Parsed from the email; auto-filled into the withdrawal form when you File or Populate"
+                     placeholder="— none detected —" />
+            </label>
+          </div>
           <div class="actions-row">
             <button type="button" id="inbox-detail-save">Save</button>
             <button type="button" id="inbox-detail-suggest" class="btn-link">Re-suggest</button>
@@ -1052,6 +1062,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=46"></script>
+  <script type="module" src="/app.js?v=47"></script>
 </body>
 </html>
