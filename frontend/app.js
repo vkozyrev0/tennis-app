@@ -2740,14 +2740,28 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const fileable = !!FILE_TARGETS[m.classification];
       const wrap = document.createElement("div"); wrap.className = "grid-actions";
       const sgBtn = document.createElement("button"); sgBtn.type = "button"; sgBtn.className = "btn-link"; sgBtn.textContent = "Suggest";
-      sgBtn.title = "Suggest a classification";
+      sgBtn.title = "Suggest a classification and detect the player";
       sgBtn.addEventListener("click", async (ev) => {
         ev.stopPropagation();
         try {
+          // 1) classification suggestion (preserves any existing player link)
           const res = await api(`/emails/${m.id}/suggest`, { method: "POST" });
           await _inboxPutClass(m, res.classification);
-          row.update({ classification: res.classification }); row.reformat();
-          setMsg("email-msg", `suggested: ${res.classification}`, true);
+          m.classification = res.classification;
+          // 2) player detection — resolve who the email is about and persist it
+          const det = await api(`/emails/${m.id}/detect-player`, { method: "POST" });
+          row.update({
+            classification: res.classification,
+            detected_player_id: det.detected_player_id,
+            detected_usta: det.detected_usta,
+            detected_player_name: det.detected_player_name,
+            detected_match_kind: det.match_kind,
+          });
+          row.reformat();
+          const who = det.detected_player_name
+            ? ` · player: ${det.detected_player_name}`
+            : " · no player match";
+          setMsg("email-msg", `suggested: ${res.classification}${who}`, true);
         } catch (e) { setMsg("email-msg", e.message, false); }
       });
       const fileBtn = document.createElement("button"); fileBtn.type = "button"; fileBtn.className = "btn-link"; fileBtn.textContent = "File →";
