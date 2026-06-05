@@ -88,3 +88,16 @@ def test_role_coverage_spans_every_window_day():
 def test_role_coverage_empty_when_no_assignments():
     t = _tournament()
     assert _report(t["id"])["role_coverage"] == []
+
+
+def test_official_days_total_sums_all_worked_days():
+    t = _tournament()
+    o1 = _official("roving_official")
+    o2 = _official("roving_official")
+    _assign(t["id"], o1["id"], "roving_official", "2026-06-01", "2026-06-02", "2026-06-03")
+    _assign(t["id"], o2["id"], "roving_official", "2026-06-02")
+    rep = _report(t["id"])
+    assert rep["totals"]["official_days_total"] == 4   # 3 + 1
+    # per-official day counts are on the official objects (the Days column source)
+    by = {o["official_name"]: len(o["days"]) for o in rep["officials"]}
+    assert sorted(by.values()) == [1, 3]

@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 193 tests, all passing (migrations through 0039).
+**Status:** 194 tests, all passing (migrations through 0039).
 
 ## How the suite is wired
 

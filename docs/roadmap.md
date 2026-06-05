@@ -154,6 +154,10 @@ pay snapshots).
       each day, same zero/thin highlighting), so the TD spots a day thin on a
       needed role (e.g. chairs Mon–Wed but none Thu), not just headcount. Rows are
       the roles used in assignments. Screen + PDF + CSV. (`role_coverage`.)
+- [x] **Assignment day-count column** — the officials report gained a **Days**
+      column (each official's total assigned days) + a grand total in the footer
+      (`official_days_total`), so the TD sees per-official load at a glance.
+      Screen + PDF + CSV.
 - [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
       per day" row + a per-site row, aligned under the same day columns, so the
       TD can track/share coverage gaps in a spreadsheet.

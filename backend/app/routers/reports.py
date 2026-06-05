@@ -154,6 +154,9 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
+        # Total official-days worked across the tournament (per-official load is
+        # shown in the roster's Days column; this is the grand total).
+        "official_days_total": sum(len(o["days"]) for o in officials),
         "pay": round(sum(o["pay"] for o in officials), 2),
         "mileage": round(sum((o["mileage"] or 0.0) for o in officials), 2),
         "missing_distance_count": sum(1 for o in officials if o["missing_distance"]),

@@ -4698,7 +4698,7 @@ function _renderCoverage() {
     return `<th class="daycol${cls ? " " + cls : ""}">${n}</th>`;
   }).join("");
   document.getElementById("report-coverage").innerHTML =
-    `<th colspan="6">Officials per day</th>${covCells}<th></th><th></th>`;
+    `<th colspan="6">Officials per day</th>${covCells}<th></th><th></th><th></th>`;
   // Note: zero-coverage days (hard gap) + below-minimum days (thin), separately.
   const covNote = document.getElementById("report-coverage-note");
   const uncovered = reportData.uncovered_days || [];
@@ -4756,7 +4756,7 @@ async function loadReports() {
     "<tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th>" +
     "<th>Check-in</th><th>Check-out</th>" +
     cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") +
-    '<th class="num">Pay</th><th class="num">Mileage</th></tr>';
+    '<th class="num">Days</th><th class="num">Pay</th><th class="num">Mileage</th></tr>';
   const tbody = document.querySelector("#report-table tbody");
   tbody.innerHTML = "";
   for (const o of reportData.officials) {
@@ -4779,12 +4779,13 @@ async function loadReports() {
       `<td>${esc(o.dietary_restrictions)}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
       `<td>${esc(_fmtMDY(o.check_in))}</td><td>${esc(_fmtMDY(o.check_out))}</td>` +
       dayCells +
+      `<td class="num">${o.days.length}</td>` +
       `<td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td>`;
     tbody.appendChild(tr);
   }
-  const lead = 6 + cols.length;  // columns before Pay
+  const lead = 6 + cols.length;  // columns before the Days/Pay/Mileage trio
   if (reportData.officials.length === 0)
-    tbody.innerHTML = `<tr><td class="empty" colspan="${lead + 2}">No officials assigned yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td class="empty" colspan="${lead + 3}">No officials assigned yet.</td></tr>`;
   const note = (totals.conflict_count ? ` · ${totals.conflict_count} double-booked` : "") +
     (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
@@ -4794,8 +4795,9 @@ async function loadReports() {
     (totals.declined_count ? ` · ${totals.declined_count} declined` : "") +
     (totals.pending_count ? ` · ${totals.pending_count} pending` : "");
   document.getElementById("report-totals").innerHTML =
-    `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
-    `<th class="num">${money(totals.mileage)}</th>`;
+    `<th colspan="${lead}">Totals${note}</th>` +
+    `<th class="num">${totals.official_days_total}</th>` +
+    `<th class="num">${money(totals.pay)}</th><th class="num">${money(totals.mileage)}</th>`;
 
   _renderCoverage();
 
@@ -4867,7 +4869,7 @@ function _reportColumns(t) {
 function _reportMatrix(includeData) {
   const cols = _reportColumns(reportData.tournament);
   const header = ["Name", "Position", "Dietary", "Hotel?", "Check-in", "Check-out",
-    ...cols.map((c) => c.head), "Pay", "Mileage"];
+    ...cols.map((c) => c.head), "Days", "Pay", "Mileage"];
   const rows = [header];
   if (includeData) {
     for (const o of reportData.officials) {
@@ -4877,29 +4879,30 @@ function _reportMatrix(includeData) {
         o.official_name, roles, o.dietary_restrictions || "", o.hotel_name ? "Yes" : "No",
         _fmtMDY(o.check_in), _fmtMDY(o.check_out),
         ...cols.map((c) => (worked.has(c.date) ? "X" : "")),
-        o.pay, o.mileage == null ? "" : o.mileage,
+        o.days.length, o.pay, o.mileage == null ? "" : o.mileage,
       ]);
     }
     const tt = reportData.totals;
-    rows.push(["Totals", "", "", "", "", "", ...cols.map(() => ""), tt.pay, tt.mileage]);
+    rows.push(["Totals", "", "", "", "", "", ...cols.map(() => ""),
+      tt.official_days_total, tt.pay, tt.mileage]);
     // Coverage section — per-day officials count + per-site grid, aligned under
     // the same day columns so the TD can track gaps in a spreadsheet.
     const covByDate = {};
     for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
     rows.push([]);  // blank separator
     rows.push(["Officials per day", "", "", "", "", "",
-      ...cols.map((c) => covByDate[c.date] ?? 0), "", ""]);
+      ...cols.map((c) => covByDate[c.date] ?? 0), "", "", ""]);
     for (const s of (reportData.site_coverage || [])) {
       const byDate = {};
       for (const b of s.by_date) byDate[b.date] = b.officials;
       rows.push([s.site_label, "", "", "", "", "",
-        ...cols.map((c) => byDate[c.date] ?? 0), "", ""]);
+        ...cols.map((c) => byDate[c.date] ?? 0), "", "", ""]);
     }
     for (const r of (reportData.role_coverage || [])) {
       const byDate = {};
       for (const b of r.by_date) byDate[b.date] = b.officials;
       rows.push([certLabel(r.role), "", "", "", "", "",
-        ...cols.map((c) => byDate[c.date] ?? 0), "", ""]);
+        ...cols.map((c) => byDate[c.date] ?? 0), "", "", ""]);
     }
   }
   return rows;
@@ -4925,8 +4928,9 @@ function exportReportPdf() {
     return `<tr><td>${e(o.official_name)}${flags ? ` <span class="flag">⚠ ${e(flags)}</span>` : ""}</td>` +
       `<td>${e(roles)}</td><td>${e(o.dietary_restrictions || "")}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
       `<td>${e(_fmtMDY(o.check_in))}</td><td>${e(_fmtMDY(o.check_out))}</td>${dayCells}` +
+      `<td class="num">${o.days.length}</td>` +
       `<td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td></tr>`;
-  }).join("") : `<tr><td class="empty" colspan="${cols.length + 8}">No officials assigned.</td></tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${cols.length + 9}">No officials assigned.</td></tr>`;
   const staff = reportData.staff || [];
   const staffRows = staff.length ? staff.map((s) => {
     const worked = new Set(s.days || []);
@@ -4959,7 +4963,7 @@ function exportReportPdf() {
     const n = covByDate[c.date] ?? 0;
     return `<td class="day"${_covStyle(n)}>${n}</td>`;
   }).join("");
-  const coverageRow = `<tr class="totals"><td colspan="6">Officials per day</td>${covCells}<td></td><td></td></tr>`;
+  const coverageRow = `<tr class="totals"><td colspan="6">Officials per day</td>${covCells}<td></td><td></td><td></td></tr>`;
   const siteCov = reportData.site_coverage || [];
   const siteCovRows = siteCov.length ? siteCov.map((s) => {
     const cells = s.by_date.map((b) => `<td class="day"${_covStyle(b.officials)}>${b.officials}</td>`).join("");
@@ -4991,9 +4995,9 @@ function exportReportPdf() {
     </style></head><body>
     <h1>Officials staffing plan</h1>
     <div class="meta">${e(t.name)} · ${e(t.play_start_date)} → ${e(t.play_end_date)}${totals.rule_version ? ` · pay rule ${e(reportData.officials.find((o) => o.rule_version)?.rule_version || "")}` : ""}</div>
-    <table><thead><tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th><th>Check-in</th><th>Check-out</th>${dayHead}<th class="num">Pay</th><th class="num">Mileage</th></tr></thead>
+    <table><thead><tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th><th>Check-in</th><th>Check-out</th>${dayHead}<th class="num">Days</th><th class="num">Pay</th><th class="num">Mileage</th></tr></thead>
       <tbody>${offRows}
-        <tr class="totals"><td colspan="${cols.length + 6}">Totals — ${totals.official_count} official(s)</td><td class="num">${money(totals.pay)}</td><td class="num">${money(totals.mileage)}</td></tr>
+        <tr class="totals"><td colspan="${cols.length + 6}">Totals — ${totals.official_count} official(s)</td><td class="num">${totals.official_days_total}</td><td class="num">${money(totals.pay)}</td><td class="num">${money(totals.mileage)}</td></tr>
         ${coverageRow}
       </tbody></table>
     ${totals.uncovered_days_count ? `<p style="color:#c62828">⚠ ${totals.uncovered_days_count} day(s) with no official assigned: ${reportData.uncovered_days.map((d) => e(fmtDOW(d))).join(", ")}</p>` : ""}
