@@ -2388,6 +2388,32 @@ async function loadAssignments() {
   // behind a now-empty, disabled-but-on chip. Persists across same-tournament
   // reloads (e.g. after an accept/decline) so an in-progress filter survives.
   if (_asgFilterTid !== active.id) { _asgRespFilter = "all"; _asgFilterTid = active.id; }
+  // Unassigned-availability nudge: officials who declared availability but have
+  // no assigned working day yet — surfaced HERE (where staffing happens) with a
+  // jump to the Availability tab. Mirrors the Availability tab's gap callout.
+  const assignedWithDays = new Set(list.filter((a) => a.days && a.days.length).map((a) => a.official_id));
+  const availableUnassigned = Object.keys(availByOfficial)
+    .map(Number)
+    .filter((oid) => !assignedWithDays.has(oid));
+  const nudge = document.getElementById("asg-avail-nudge");
+  if (availableUnassigned.length) {
+    const names = availableUnassigned
+      .map((oid) => (officialsById[oid] ? officialLabel(officialsById[oid]) : `#${oid}`))
+      .sort();
+    nudge.hidden = false;
+    nudge.innerHTML = `⚠ ${availableUnassigned.length} available official(s) not yet assigned: ` +
+      `<strong>${names.map(esc).join("; ")}</strong>. ` +
+      `<a href="#" id="asg-nudge-link">Open Availability →</a>`;
+    const link = document.getElementById("asg-nudge-link");
+    if (link) link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const t = document.querySelector('[data-group="tournament"]');
+      if (t) t.click();
+      const tab = document.querySelector('[data-target="panel-t-availability"]');
+      if (tab) tab.click();
+    });
+  } else { nudge.hidden = true; nudge.textContent = ""; }
+
   const box = document.getElementById("asg-list");
   box.innerHTML = "";
   // Audit P42: match the Tabulator placeholder styling so empty states across

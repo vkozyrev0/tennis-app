@@ -138,6 +138,9 @@ pay snapshots).
       offered dates but have no assigned day, so the TD staffs everyone who
       volunteered. Frontend-only (joins the tournament's availability +
       assignments client-side); verified live (gap callout correct).
+- [x] **Unassigned-availability nudge** — the same gap surfaced on the
+      Assignments panel (where staffing happens): a callout naming available
+      officials with no assigned day + an "Open Availability →" jump link.
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.
