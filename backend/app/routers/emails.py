@@ -156,6 +156,41 @@ def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
         return cur.fetchone()
 
 
+@router.post("/{email_id}/apply-correction")
+def apply_correction(email_id: int, conn=Depends(db_dep)):
+    """Apply a correction email to the filed row of the email it amends: re-point
+    that row to this email and re-apply the locally-parsed fields, instead of
+    creating a duplicate. Requires the email to be linked (`amends_email_id`) and
+    a classification whose list supports it; 404 if the amended email has no filed
+    row yet (file it normally first)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, tournament_id, classification, detected_player_id, subject, "
+            "body, amends_email_id FROM email_message WHERE id = %s",
+            (email_id,),
+        )
+        em = cur.fetchone()
+        if em is None:
+            raise HTTPException(status_code=404, detail="email not found")
+        if em["amends_email_id"] is None:
+            raise HTTPException(status_code=400,
+                                detail="not a correction — link the email it amends first")
+        target = POPULATE_TARGETS.get(em["classification"])
+        if target is None or not target.get("amend_sql"):
+            raise HTTPException(status_code=400,
+                                detail=f"'{em['classification']}' rows can't be auto-corrected")
+        extras = [_EXTRACTORS[name](em) for name in target.get("extract", [])]
+        cur.execute(target["amend_sql"], (em["id"], *extras, em["amends_email_id"]))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail="the amended email has no filed row yet — file it normally first",
+            )
+        cur.execute("UPDATE email_message SET status = 'filed' WHERE id = %s", (em["id"],))
+        return {"updated_row_id": row["id"], "list": em["classification"]}
+
+
 @router.post("/{email_id}/suggest")
 def suggest_classification(email_id: int, conn=Depends(db_dep)):
     """Local rule-based triage suggestion (no LLM, no data leaves the building)."""

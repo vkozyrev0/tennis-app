@@ -37,6 +37,13 @@ EMAIL_TARGETS = [
             "(tournament_id, player_id, source_email_id, age_division, events) "
             "VALUES (%s, %s, %s, %s, %s) RETURNING id"
         ),
+        # Correction auto-rewrite: re-point an existing row (matched by the amended
+        # email's source_email_id) + re-apply the parsed fields. Params:
+        # (new_source_email_id, *extract values, old_source_email_id).
+        "amend_sql": (
+            "UPDATE late_entry SET source_email_id = %s, age_division = %s, events = %s "
+            "WHERE source_email_id = %s RETURNING id"
+        ),
         "extract": ["division", "events"],
     },
     {
@@ -48,6 +55,10 @@ EMAIL_TARGETS = [
             "(tournament_id, player_id, source_email_id, reason, events) "
             "VALUES (%s, %s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING id"
         ),
+        "amend_sql": (
+            "UPDATE withdrawal SET source_email_id = %s, reason = %s, events = %s "
+            "WHERE source_email_id = %s RETURNING id"
+        ),
         "extract": ["reason", "events"],
     },
     {
@@ -58,6 +69,10 @@ EMAIL_TARGETS = [
             "(tournament_id, player_id, source_email_id, avoid_day, avoid_time_range) "
             "VALUES (%s, %s, %s, %s, %s) RETURNING id"
         ),
+        "amend_sql": (
+            "UPDATE scheduling_avoidance SET source_email_id = %s, avoid_day = %s, "
+            "avoid_time_range = %s WHERE source_email_id = %s RETURNING id"
+        ),
         "extract": ["avoid_day", "avoid_time"],
     },
     {
@@ -67,6 +82,10 @@ EMAIL_TARGETS = [
             "INSERT INTO division_flexibility (tournament_id, player_id, source_email_id) "
             "VALUES (%s, %s, %s) RETURNING id"
         ),
+        "amend_sql": (
+            "UPDATE division_flexibility SET source_email_id = %s "
+            "WHERE source_email_id = %s RETURNING id"
+        ),
         "extract": [],
     },
     {
@@ -75,6 +94,10 @@ EMAIL_TARGETS = [
         "bulk_sql": (
             "INSERT INTO player_hotel_stay (tournament_id, player_id, source_email_id) "
             "VALUES (%s, %s, %s) RETURNING id"
+        ),
+        "amend_sql": (
+            "UPDATE player_hotel_stay SET source_email_id = %s "
+            "WHERE source_email_id = %s RETURNING id"
         ),
         "extract": [],
     },
@@ -89,7 +112,8 @@ FILEABLE_KEYS = [t["key"] for t in EMAIL_TARGETS]
 # Bulk-populate map keyed by classification — only entries with a bulk_sql.
 # Same shape the inline _POPULATE_TARGETS used to have: {key: {"sql", "label"}}.
 POPULATE_TARGETS = {
-    t["key"]: {"sql": t["bulk_sql"], "label": t["label"], "extract": t.get("extract", [])}
+    t["key"]: {"sql": t["bulk_sql"], "label": t["label"],
+               "extract": t.get("extract", []), "amend_sql": t.get("amend_sql")}
     for t in EMAIL_TARGETS
     if t["bulk_sql"] is not None
 }

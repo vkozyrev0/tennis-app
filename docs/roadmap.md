@@ -197,8 +197,12 @@ Remaining: the optional auto-triage agent.
       as amending an earlier one (`email_message.amends_email_id`,
       `POST /api/emails/{id}/amends`). The inbox shows **↻ correction** /
       **⤺ superseded** badges and a "Corrects earlier email" picker in the
-      Review modal, so the original's filed row gets revisited. *(Auto-rewriting
-      the target row from the correction remains a v2.)*
+      Review modal. **Auto-rewrite** (`POST /api/emails/{id}/apply-correction` +
+      an "Apply correction" inbox action): filing a correction **updates the
+      amended email's filed row in place** (re-points `source_email_id` +
+      re-applies the parsed fields) instead of creating a duplicate, for the
+      bulk-fileable lists (late entry / withdrawal / scheduling / div-flex /
+      hotel).
 
 ---
 

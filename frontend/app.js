@@ -3079,10 +3079,21 @@ const inboxGrid = makeReadGrid("inbox-table", [
         try { await api(`/emails/${m.id}`, { method: "DELETE" }); loadInbox(); }
         catch (e) { toast(e.message, false); }
       };
+      // Correction auto-rewrite: when this email amends an earlier one, update
+      // that earlier email's filed row in place instead of filing a duplicate.
+      const doApplyCorrection = async () => {
+        try {
+          const res = await api(`/emails/${m.id}/apply-correction`, { method: "POST" });
+          toast(`Correction applied to the ${esc(res.list)} row`, true);
+          loadInbox();
+        } catch (e) { toast(e.message, false); }
+      };
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
         { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
           title: fileable ? "" : "Pick a fileable classification first", onClick: () => { if (fileable) doFile(); } },
+        ...(m.amends_email_id ? [{ label: "Apply correction → update filed row",
+          title: "Re-point the amended email's filed row to this one and re-apply the parsed fields", onClick: doApplyCorrection }] : []),
         { separator: true },
         { label: "Delete email", danger: true, onClick: doDelete },
       ];
