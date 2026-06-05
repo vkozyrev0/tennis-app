@@ -24,6 +24,7 @@ from ._models_common import (  # noqa: F401
 from ._models_setup import (  # noqa: F401
     CertificationRateCreate,
     CertificationRateOut,
+    DistanceAuto,
     DistanceCreate,
     DistanceOut,
     DivisionCreate,

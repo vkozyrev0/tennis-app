@@ -4371,6 +4371,22 @@ const distancesCrud = wireEntity({
   ],
   transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
 });
+// Auto-distance: estimate one-way miles from the official's + site's coordinates
+// (great-circle × road factor — a key-free fallback, source='geocoded'). It
+// upserts the row immediately, so we refresh the list and reset the form; the
+// estimate is editable and clearly flagged geocoded for the TD to review.
+document.getElementById("dist-estimate").addEventListener("click", async () => {
+  const f = document.getElementById("distance-form");
+  const oid = f.official_id.value, sid = f.site_id.value;
+  if (!oid || !sid) { setMsg("distance-msg", "pick an official and a site first", false); return; }
+  try {
+    const res = await api("/distances/auto", { method: "POST",
+      body: JSON.stringify({ official_id: Number(oid), site_id: Number(sid) }) });
+    distancesCrud.refresh();
+    f.reset(); if (typeof syncCombos === "function") syncCombos();
+    toast(`Estimated ${res.one_way_miles} mi (great-circle — review before it drives pay)`, true);
+  } catch (e) { setMsg("distance-msg", e.message, false); }
+});
 
 // Setup → Divisions catalog (rows back the form datalists; gender = null means
 // the row applies to both genders, e.g. Combo doubles).

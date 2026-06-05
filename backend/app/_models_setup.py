@@ -193,3 +193,9 @@ class DistanceCreate(BaseModel):
 
 class DistanceOut(DistanceCreate):
     id: int
+
+
+class DistanceAuto(BaseModel):
+    """Request to estimate a distance from stored coordinates (auto-mileage)."""
+    official_id: int
+    site_id: int

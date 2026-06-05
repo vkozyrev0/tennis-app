@@ -219,6 +219,7 @@
             <div class="row"><label>Code <input name="code" /></label><label>Name <input name="name" required /></label></div>
             <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
             <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+            <div class="row"><label>Latitude <input name="lat" type="number" step="any" min="-90" max="90" placeholder="e.g. 33.7490" /></label><label>Longitude <input name="lng" type="number" step="any" min="-180" max="180" placeholder="e.g. -84.3880" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="site-msg"></span></div>
           </form>
         </div>
@@ -240,6 +241,7 @@
             <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
             <div class="row"><label>Phone <input name="phone" /></label><label>Email <input name="email" type="email" /></label></div>
             <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
+            <div class="row"><label>Latitude <input name="lat" type="number" step="any" min="-90" max="90" placeholder="home, e.g. 33.7490" /></label><label>Longitude <input name="lng" type="number" step="any" min="-180" max="180" placeholder="home, e.g. -84.3880" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="official-msg"></span></div>
           </form>
           <div id="official-certs" hidden>
@@ -342,6 +344,7 @@
           <form id="distance-form" autocomplete="off">
             <div class="row"><label>Official <select name="official_id" id="dist-official" required></select></label><label>Site <select name="site_id" id="dist-site" required></select></label></div>
             <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" max="1000" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
+            <div class="row"><button type="button" id="dist-estimate" class="btn-link" title="Estimate one-way miles from the official's + site's coordinates (great-circle × road factor — review before saving)">⤓ Estimate from coordinates</button></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="distance-msg"></span></div>
           </form>
         </div>
@@ -1062,6 +1065,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=47"></script>
+  <script type="module" src="/app.js?v=48"></script>
 </body>
 </html>
