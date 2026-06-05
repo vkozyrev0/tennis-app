@@ -142,26 +142,6 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
                         for c in coverage],
         })
 
-    # Per-role coverage: officials working each ROLE (cert type) per day, so the
-    # TD spots a day thin on a needed role (e.g. chairs Mon–Wed but none Thu) —
-    # not just total headcount. An official works one role per date
-    # (UNIQUE(assignment_id, work_date)), so a per-date row-count = officials.
-    # Rows are the roles actually used in this tournament's assignments.
-    role_counts: dict = {}
-    for o in officials:
-        for d in o["days"]:
-            if d["work_date"] in window:
-                role = d["working_as"]
-                role_counts.setdefault(role, {})[d["work_date"]] = (
-                    role_counts.get(role, {}).get(d["work_date"], 0) + 1
-                )
-    role_coverage = [
-        {"role": role,
-         "by_date": [{"date": c["date"], "officials": counts.get(c["date"], 0)}
-                     for c in coverage]}
-        for role, counts in sorted(role_counts.items())
-    ]
-
     # Certification pool: officials × the certs they hold + a count per cert.
     cert_pool_officials = [
         {"official_name": f'{r["last_name"]}, {r["first_name"]}', "certs": list(r["certs"])}
@@ -172,6 +152,30 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         for ct in r["certs"]:
             cert_counts[ct] = cert_counts.get(ct, 0) + 1
     cert_pool = {"officials": cert_pool_officials, "counts": cert_counts}
+
+    # Per-role coverage: officials working each ROLE (cert type) per day, so the
+    # TD spots a day thin on a needed role (e.g. chairs Mon–Wed but none Thu) —
+    # not just total headcount. An official works one role per date
+    # (UNIQUE(assignment_id, work_date)), so a per-date row-count = officials.
+    role_counts: dict = {}
+    for o in officials:
+        for d in o["days"]:
+            if d["work_date"] in window:
+                role = d["working_as"]
+                role_counts.setdefault(role, {})[d["work_date"]] = (
+                    role_counts.get(role, {}).get(d["work_date"], 0) + 1
+                )
+    # Rows = roles ASSIGNED in this tournament ∪ roles with CERTIFIED holders, so
+    # a role you could staff but didn't (zero row) is visible. `holders` (the
+    # certified pool for that role) lets the UI flag a day where staffed < holders
+    # — "you have the chairs, you just didn't staff them".
+    role_coverage = [
+        {"role": role,
+         "holders": cert_counts.get(role, 0),
+         "by_date": [{"date": c["date"], "officials": role_counts.get(role, {}).get(c["date"], 0)}
+                     for c in coverage]}
+        for role in sorted(set(role_counts) | set(cert_counts))
+    ]
 
     totals = {
         "staff_count": len(staff),

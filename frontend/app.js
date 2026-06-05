@@ -4733,11 +4733,19 @@ function _renderCoverage() {
   const rcBody = document.querySelector("#role-coverage-table tbody");
   rcBody.innerHTML = roleCov.length
     ? roleCov.map((r) => {
+        const holders = r.holders || 0;
         const cells = r.by_date.map((b) => {
-          const cls = _covClass(b.officials);
-          return `<td class="daycol${cls ? " " + cls : ""}">${b.officials}</td>`;
+          const n = b.officials;
+          const cls = _covClass(n);
+          // Cert-pool gap: a day undercovered for this role while MORE certified
+          // officials are available is a *fixable* gap — flag it with a ⚑.
+          const below = n === 0 || n < _coverageMin;
+          const fixable = below && holders > n;
+          const flag = fixable
+            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — you can staff more`)}">⚑</span>` : "";
+          return `<td class="daycol${cls ? " " + cls : ""}" title="${esc(`${n} staffed · ${holders} certified`)}">${n}${flag}</td>`;
         }).join("");
-        return `<tr><td>${esc(certLabel(r.role))}</td>${cells}</tr>`;
+        return `<tr><td>${esc(certLabel(r.role))} <span class="muted">(${holders} certified)</span></td>${cells}</tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
 }
@@ -5005,8 +5013,12 @@ function exportReportPdf() {
   }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked.</td></tr>`;
   const roleCov = reportData.role_coverage || [];
   const roleCovRows = roleCov.length ? roleCov.map((r) => {
-    const cells = r.by_date.map((b) => `<td class="day"${_covStyle(b.officials)}>${b.officials}</td>`).join("");
-    return `<tr><td>${e(certLabel(r.role))}</td>${cells}</tr>`;
+    const holders = r.holders || 0;
+    const cells = r.by_date.map((b) => {
+      const fixable = (b.officials === 0 || b.officials < _coverageMin) && holders > b.officials;
+      return `<td class="day"${_covStyle(b.officials)}>${b.officials}${fixable ? " ⚑" : ""}</td>`;
+    }).join("");
+    return `<tr><td>${e(certLabel(r.role))} (${holders} certified)</td>${cells}</tr>`;
   }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned.</td></tr>`;
   const win = window.open("", "_blank");
   if (!win) { toast("Allow pop-ups to export the PDF", false); return; }

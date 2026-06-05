@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **197** green, migrations
+A large round of fixes + features (full backend suite: **199** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -130,6 +130,11 @@ live in the running app, not just by tests.
   **certification pool** matrix (`cert_pool` — every official × the certs they
   hold + holder counts, zeros flagged) so the TD plans role coverage against the
   available pool. Coverage grids on screen + PDF (+ CSV for the day-aligned ones).
+- **Cert-pool gap flag** — the role-coverage grid now ties to the pool: each role
+  row shows "(N certified)" and rows include roles with holders even if unstaffed
+  (an all-zero row surfaces "you have chairs but staffed none"). A day undercovered
+  for a role while more certified officials are available is flagged with a ⚑
+  ("you can staff more"). (`role_coverage[].holders`.)
 
 ---
 

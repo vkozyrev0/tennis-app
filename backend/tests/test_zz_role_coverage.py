@@ -73,8 +73,9 @@ def test_role_coverage_counts_per_role_per_day():
     rov = {b["date"]: b["officials"] for b in _role(rep, "roving_official")["by_date"]}
     assert chair["2026-06-01"] == 2 and chair["2026-06-02"] == 1 and chair["2026-06-03"] == 0
     assert rov["2026-06-01"] == 0 and rov["2026-06-02"] == 1
-    # only the two used roles appear
-    assert {r["role"] for r in rep["role_coverage"]} == {"chair_umpire", "roving_official"}
+    # the two used roles appear (other roles may show if they have global cert
+    # holders — rows are roles-assigned ∪ roles-with-holders).
+    assert {"chair_umpire", "roving_official"} <= {r["role"] for r in rep["role_coverage"]}
 
 
 def test_role_coverage_spans_every_window_day():
@@ -85,9 +86,35 @@ def test_role_coverage_spans_every_window_day():
     assert dates == ["2026-06-01", "2026-06-02", "2026-06-03"]   # all window days, in order
 
 
-def test_role_coverage_empty_when_no_assignments():
+def test_role_coverage_empty_when_no_assignments_and_no_holders():
     t = _tournament()
-    assert _report(t["id"])["role_coverage"] == []
+    # NOTE: this asserts the *tournament* has no role rows — but cert holders are
+    # global, so a clean DB is required. Other tests in this session create
+    # certified officials; assert instead that any rows present are all-zero.
+    rc = _report(t["id"])["role_coverage"]
+    for r in rc:
+        assert all(b["officials"] == 0 for b in r["by_date"])  # nobody assigned here
+
+
+def test_role_row_appears_for_certified_role_even_with_zero_assignments():
+    # A role with certified HOLDERS but no assignments in this tournament still
+    # shows as an all-zero row, carrying the holder count — the "you have chairs
+    # but staffed none" signal.
+    t = _tournament()
+    _official("chair_umpire")  # holder, not assigned to this tournament
+    rc = _report(t["id"])["role_coverage"]
+    chair = next(r for r in rc if r["role"] == "chair_umpire")
+    assert chair["holders"] >= 1
+    assert all(b["officials"] == 0 for b in chair["by_date"])
+
+
+def test_role_holders_reflect_cert_pool():
+    t = _tournament()
+    o = _official("roving_official")
+    _assign(t["id"], o["id"], "roving_official", "2026-06-01")
+    rov = next(r for r in _report(t["id"])["role_coverage"] if r["role"] == "roving_official")
+    assert rov["holders"] >= 1
+    assert rov["by_date"][0]["officials"] == 1   # staffed on 06-01
 
 
 def test_official_days_total_sums_all_worked_days():
