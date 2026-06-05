@@ -793,6 +793,18 @@
                      placeholder="— none detected —" />
             </label>
           </div>
+          <!-- Correction/amendment: mark this email as a follow-up that corrects
+               an earlier one (e.g. a changed withdrawal reason). The earlier
+               email is then flagged superseded so its filed row gets revisited. -->
+          <div class="row">
+            <label class="label--full">Corrects earlier email (amendment)
+              <select id="inbox-detail-amends" aria-label="Earlier email this one corrects">
+                <option value="">— not a correction —</option>
+              </select>
+            </label>
+            <span id="inbox-detail-superseded" class="badge badge-warn" hidden
+                  title="A later email corrects this one — revisit its filed row">⤺ superseded</span>
+          </div>
           <div class="actions-row">
             <button type="button" id="inbox-detail-save">Save</button>
             <button type="button" id="inbox-detail-suggest" class="btn-link">Re-suggest</button>
@@ -1105,6 +1117,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=61"></script>
+  <script type="module" src="/app.js?v=62"></script>
 </body>
 </html>

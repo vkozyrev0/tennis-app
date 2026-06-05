@@ -62,6 +62,17 @@ class EmailOut(BaseModel):
     # emails only); pre-fills the scheduling form's free-text fields. Null else.
     detected_avoid_day: Optional[str] = None
     detected_avoid_time: Optional[str] = None
+    # Correction/amendment lineage: the earlier email this one amends (+ its
+    # subject for display), and whether a later email supersedes THIS one (so the
+    # TD knows the filed row may need updating).
+    amends_email_id: Optional[int] = None
+    amends_subject: Optional[str] = None
+    superseded: bool = False
+
+
+class EmailAmend(BaseModel):
+    """Mark an email as amending an earlier one (null clears the link)."""
+    amends_email_id: Optional[int] = None
 
 
 class EmailBulkReassign(BaseModel):

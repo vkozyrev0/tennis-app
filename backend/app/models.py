@@ -64,6 +64,7 @@ from ._models_workspace import (  # noqa: F401
     TShirtRow,
 )
 from ._models_inbox import (  # noqa: F401
+    EmailAmend,
     DivFlexCreate,
     DivFlexOut,
     DivFlexUpdate,

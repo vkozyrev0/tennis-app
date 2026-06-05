@@ -2926,7 +2926,12 @@ const inboxGrid = makeReadGrid("inbox-table", [
     formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">— unassigned —</span>`,
     headerFilter: "input" },
   { title: "From", field: "from_address" },
-  { title: "Subject", field: "subject" },
+  { title: "Subject", field: "subject", formatter: (c) => {
+      const m = c.getData();
+      const corr = m.amends_email_id ? ' <span class="badge badge-info" title="corrects an earlier email">↻ correction</span>' : "";
+      const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
+      return esc(m.subject || "") + corr + sup;
+    } },
   // Detected player — name + USTA from the LEFT JOIN. Click-to-edit lands
   // in the detail pane's player picker.
   { title: "Player", field: "detected_player_name", width: 160,
@@ -3165,6 +3170,8 @@ function _openInboxDetail(m) {
     .then(() => {
       document.getElementById("inbox-detail-player").value = m.detected_player_id || "";
     });
+  // Amendment picker: the earlier email this one corrects + the superseded flag.
+  _populateInboxAmendsSelect(m);
   setMsg("inbox-detail-msg", "", true);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
@@ -3183,6 +3190,35 @@ function _syncInboxReasonRow(classification, reason) {
 // Toggle the reason row when the classification is changed in the modal.
 document.getElementById("inbox-detail-classification")
   ?.addEventListener("change", (e) => _syncInboxReasonRow(e.target.value));
+// Fill the "corrects earlier email" picker with the other emails in this
+// email's tournament, select the current link, and show the superseded flag.
+async function _populateInboxAmendsSelect(m) {
+  const sel = document.getElementById("inbox-detail-amends");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— not a correction —</option>';
+  if (m.tournament_id) {
+    let emails = [];
+    try { emails = await api(`/emails?tournament_id=${m.tournament_id}`); } catch (_) {}
+    for (const e of emails) {
+      if (e.id === m.id) continue;
+      const o = document.createElement("option");
+      o.value = e.id;
+      o.textContent = `#${e.id} ${(e.subject || "(no subject)").slice(0, 60)}`;
+      sel.appendChild(o);
+    }
+  }
+  sel.value = m.amends_email_id || "";
+  document.getElementById("inbox-detail-superseded").hidden = !m.superseded;
+}
+document.getElementById("inbox-detail-amends")?.addEventListener("change", async (e) => {
+  if (_inboxDetailId == null) return;
+  try {
+    await api(`/emails/${_inboxDetailId}/amends`, { method: "POST",
+      body: JSON.stringify({ amends_email_id: e.target.value ? Number(e.target.value) : null }) });
+    setMsg("inbox-detail-msg", e.target.value ? "marked as a correction" : "correction link cleared", true);
+    await loadInbox();
+  } catch (err) { setMsg("inbox-detail-msg", err.message, false); }
+});
 function _closeInboxDetail() {
   _inboxDetailId = null;
   document.getElementById("inbox-detail").hidden = true;

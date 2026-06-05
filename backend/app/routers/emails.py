@@ -11,6 +11,7 @@ from ..email_targets import (
     public_targets,
 )
 from ..models import (
+    EmailAmend,
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,
@@ -32,11 +33,16 @@ _COLS = (
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
-    "tn.name AS tournament_name"
+    "tn.name AS tournament_name, "
+    # Amendment lineage: what this email corrects (am.subject) and whether a
+    # later email corrects THIS one (superseded → the filed row may be stale).
+    "e.amends_email_id, am.subject AS amends_subject, "
+    "EXISTS (SELECT 1 FROM email_message s WHERE s.amends_email_id = e.id) AS superseded"
 )
 _FROM = ("FROM email_message e "
          "LEFT JOIN player p ON p.id = e.detected_player_id "
-         "LEFT JOIN tournament tn ON tn.id = e.tournament_id")
+         "LEFT JOIN tournament tn ON tn.id = e.tournament_id "
+         "LEFT JOIN email_message am ON am.id = e.amends_email_id")
 
 
 @router.get("", response_model=list[EmailOut])
@@ -115,6 +121,37 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="email not found")
+        cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
+        return cur.fetchone()
+
+
+@router.post("/{email_id}/amends", response_model=EmailOut)
+def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
+    """Mark this email as a correction of an earlier one (null clears the link).
+    Both must be in the same tournament and an email can't amend itself. The
+    earlier email is then reported as `superseded` so the TD revisits its row."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT tournament_id FROM email_message WHERE id = %s", (email_id,))
+        me = cur.fetchone()
+        if me is None:
+            raise HTTPException(status_code=404, detail="email not found")
+        target = body.amends_email_id
+        if target is not None:
+            if target == email_id:
+                raise HTTPException(status_code=400, detail="an email cannot amend itself")
+            cur.execute("SELECT tournament_id FROM email_message WHERE id = %s", (target,))
+            orig = cur.fetchone()
+            if orig is None:
+                raise HTTPException(status_code=404, detail="the amended email was not found")
+            if orig["tournament_id"] != me["tournament_id"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="the amended email is in a different tournament",
+                )
+        cur.execute(
+            "UPDATE email_message SET amends_email_id = %s WHERE id = %s",
+            (target, email_id),
+        )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
         return cur.fetchone()
 

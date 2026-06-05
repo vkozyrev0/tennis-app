@@ -193,7 +193,12 @@ Remaining: the optional auto-triage agent.
 - [x] **CSV export on every list** — a generic "⬇ CSV" button on the roster,
       t-shirts, inbox, and all Part B list tables (skips the actions column), plus
       the officials report's existing Print + CSV. (PDF still optional.)
-- [ ] Correction handling: follow-up emails that amend an earlier row.
+- [x] **Correction handling** (migration 0034): a follow-up email can be marked
+      as amending an earlier one (`email_message.amends_email_id`,
+      `POST /api/emails/{id}/amends`). The inbox shows **↻ correction** /
+      **⤺ superseded** badges and a "Corrects earlier email" picker in the
+      Review modal, so the original's filed row gets revisited. *(Auto-rewriting
+      the target row from the correction remains a v2.)*
 
 ---
 
