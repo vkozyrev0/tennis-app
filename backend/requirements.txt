@@ -8,3 +8,4 @@ httpx
 openpyxl
 pdfplumber
 python-multipart
+cryptography

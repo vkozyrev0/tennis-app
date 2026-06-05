@@ -43,7 +43,15 @@ def test_prod_rejects_non_tls():
                   sslmode="disable").validate()
 
 
-def test_prod_passes_with_secure_config():
+def test_prod_rejects_dev_encryption_key(monkeypatch):
+    # secure DB but the POC dev Fernet key → still refused (PII H2)
+    monkeypatch.delenv("PII_ENCRYPTION_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="PII_ENCRYPTION_KEY"):
+        _settings(env="prod", user="app", password="s3cret", sslmode="require").validate()
+
+
+def test_prod_passes_with_secure_config(monkeypatch):
+    monkeypatch.setenv("PII_ENCRYPTION_KEY", "a-real-non-default-key-set-from-the-environment")
     for mode in ("require", "verify-ca", "verify-full"):
         _settings(env="prod", user="courtops_app", password="a-real-secret",
                   sslmode=mode).validate()

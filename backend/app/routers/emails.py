@@ -4,6 +4,8 @@ import re
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..crypto import decrypt as _dec_body
+from ..crypto import encrypt as _enc_body
 from ..db import db_dep
 from ..email_targets import (
     POPULATE_TARGETS,
@@ -59,6 +61,7 @@ def list_emails(tournament_id: int | None = None, status: str | None = None, con
     # Attach a parsed withdrawal reason for withdrawal-classified emails (cheap
     # regex over the body; skipped for everything else).
     for r in rows:
+        r["body"] = _dec_body(r.get("body"))  # PII H2: encrypted at rest
         r["detected_reason"] = (
             extract_withdrawal_reason(r.get("subject"), r.get("body"))
             if r.get("classification") == "withdrawal" else None
@@ -82,17 +85,21 @@ def list_emails(tournament_id: int | None = None, status: str | None = None, con
 def create_email(body: EmailCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
+            # PII H2: encrypt the body at rest (decrypt-on-read everywhere else).
+            params = {**body.model_dump(), "body": _enc_body(body.body)}
             cur.execute(
                 """
                 INSERT INTO email_message (tournament_id, message_id, from_address, subject, body)
                 VALUES (%(tournament_id)s, %(message_id)s, %(from_address)s, %(subject)s, %(body)s)
                 RETURNING id
                 """,
-                body.model_dump(),
+                params,
             )
             new_id = cur.fetchone()["id"]
             cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (new_id,))
-            return cur.fetchone()
+            row = cur.fetchone()
+            row["body"] = _dec_body(row.get("body"))
+            return row
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="an email with this message_id already exists")
 
@@ -122,7 +129,9 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
         if row is None:
             raise HTTPException(status_code=404, detail="email not found")
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        return cur.fetchone()
+        out = cur.fetchone()
+        out["body"] = _dec_body(out.get("body"))
+        return out
 
 
 @router.post("/{email_id}/amends", response_model=EmailOut)
@@ -153,7 +162,9 @@ def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
             (target, email_id),
         )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        return cur.fetchone()
+        out = cur.fetchone()
+        out["body"] = _dec_body(out.get("body"))
+        return out
 
 
 @router.post("/{email_id}/apply-correction")
@@ -172,6 +183,7 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
         em = cur.fetchone()
         if em is None:
             raise HTTPException(status_code=404, detail="email not found")
+        em["body"] = _dec_body(em.get("body"))  # PII H2: decrypt for the extractors
         if em["amends_email_id"] is None:
             raise HTTPException(status_code=400,
                                 detail="not a correction — link the email it amends first")
@@ -197,6 +209,8 @@ def suggest_classification(email_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute("SELECT subject, body FROM email_message WHERE id = %s", (email_id,))
         row = cur.fetchone()
+        if row is not None:
+            row["body"] = _dec_body(row.get("body"))
     if row is None:
         raise HTTPException(status_code=404, detail="email not found")
     return {"classification": classify(row["subject"], row["body"])}
@@ -510,7 +524,8 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="email not found")
         if em["tournament_id"] is None:
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
-        d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
+        d = _detect_player_for(cur, em["tournament_id"], em["subject"],
+                               _dec_body(em["body"]), em["from_address"])
         cur.execute(
             "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
             (d["detected_player_id"], d["match_kind"], email_id),
@@ -534,7 +549,8 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                             "detected_usta": None, "detected_player_name": None,
                             "match_kind": None})
                 continue
-            d = _detect_player_for(cur, em["tournament_id"], em["subject"], em["body"], em["from_address"])
+            d = _detect_player_for(cur, em["tournament_id"], em["subject"],
+                                   _dec_body(em["body"]), em["from_address"])
             cur.execute(
                 "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
                 (d["detected_player_id"], d["match_kind"], em["id"]),
@@ -580,6 +596,7 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
         )
         rows = cur.fetchall()
         for em in rows:
+            em["body"] = _dec_body(em.get("body"))  # PII H2: for the extractors
             tid, cls, pid = em["tournament_id"], em["classification"], em["detected_player_id"]
             target = POPULATE_TARGETS.get(cls)
             if target is None:

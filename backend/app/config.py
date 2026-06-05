@@ -69,6 +69,12 @@ class Settings:
                 f"PGSSLMODE={self.sslmode!r} does not enforce TLS — set "
                 "require / verify-ca / verify-full"
             )
+        from . import crypto  # local import: crypto pulls in `cryptography`
+        if crypto.using_dev_key():
+            problems.append(
+                "PII_ENCRYPTION_KEY is the POC dev default — set a real Fernet key "
+                "(python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+            )
         if problems:
             raise RuntimeError(
                 f"Refusing to start with ENV={self.env!r}: "

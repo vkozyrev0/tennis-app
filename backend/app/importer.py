@@ -774,11 +774,12 @@ def _merge_email_pdf(cur, tid, d):
     )
     if cur.fetchone() is not None:
         return "already in inbox — skipped"
-    cls = classify(subj, body)
+    cls = classify(subj, body)  # classify on plaintext, before encrypting at rest
+    from .crypto import encrypt as _enc_body  # PII H2
     cur.execute(
         "INSERT INTO email_message (tournament_id, from_address, subject, body, classification) "
         "VALUES (%s, %s, %s, %s, %s)",
-        (tid, from_addr, subj, body, cls),
+        (tid, from_addr, subj, _enc_body(body), cls),
     )
     return None
 
