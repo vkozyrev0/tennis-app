@@ -15,6 +15,7 @@ router = APIRouter(tags=["staff"])
 # carries them (mirrors the officials roster's per-day shape).
 _SELECT = (
     "SELECT s.id, s.tournament_id, s.name, s.role, s.phone, s.email, s.notes, "
+    "       s.daily_rate, "
     "       COALESCE(array_agg(d.work_date ORDER BY d.work_date) "
     "                FILTER (WHERE d.work_date IS NOT NULL), '{}') AS days "
     "FROM tournament_staff s LEFT JOIN staff_day d ON d.staff_id = s.id "
@@ -61,8 +62,10 @@ def create_staff(tournament_id: int, body: StaffCreate, conn=Depends(db_dep)):
         _tournament_or_404(cur, tournament_id)
         cur.execute(
             """
-            INSERT INTO tournament_staff (tournament_id, name, role, phone, email, notes)
-            VALUES (%(tournament_id)s, %(name)s, %(role)s, %(phone)s, %(email)s, %(notes)s)
+            INSERT INTO tournament_staff
+                (tournament_id, name, role, phone, email, notes, daily_rate)
+            VALUES (%(tournament_id)s, %(name)s, %(role)s, %(phone)s, %(email)s,
+                    %(notes)s, %(daily_rate)s)
             RETURNING id
             """,
             {**body.model_dump(exclude={"days"}), "tournament_id": tournament_id},
@@ -79,7 +82,7 @@ def update_staff(staff_id: int, body: StaffCreate, conn=Depends(db_dep)):
             """
             UPDATE tournament_staff SET
                 name = %(name)s, role = %(role)s, phone = %(phone)s,
-                email = %(email)s, notes = %(notes)s
+                email = %(email)s, notes = %(notes)s, daily_rate = %(daily_rate)s
             WHERE id = %(id)s RETURNING id
             """,
             {**body.model_dump(exclude={"days"}), "id": staff_id},

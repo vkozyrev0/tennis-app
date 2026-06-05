@@ -40,7 +40,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         # Non-official support staff round out the TD's staffing plan — listed
         # separately (no pay/mileage/days), grouped by role in the report.
         cur.execute(
-            "SELECT s.id, s.name, s.role, s.phone, s.email, s.notes, "
+            "SELECT s.id, s.name, s.role, s.phone, s.email, s.notes, s.daily_rate, "
             "       COALESCE(array_agg(d.work_date ORDER BY d.work_date) "
             "                FILTER (WHERE d.work_date IS NOT NULL), '{}') AS days "
             "FROM tournament_staff s LEFT JOIN staff_day d ON d.staff_id = s.id "
@@ -50,6 +50,10 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         staff = cur.fetchall()
         for s in staff:
             s["days"] = [d.isoformat() for d in s["days"]]
+            # Flat daily rate × scheduled days (audit-trivial; no snapshot needed).
+            rate = float(s["daily_rate"]) if s["daily_rate"] is not None else None
+            s["daily_rate"] = rate
+            s["pay"] = round(rate * len(s["days"]), 2) if rate else 0.0
 
     totals = {
         "staff_count": len(staff),
@@ -60,6 +64,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "hotel_mismatch_count": sum(1 for o in officials if o["hotel_date_mismatch"]),
         "out_of_window_count": sum(1 for o in officials if o["work_date_out_of_window"]),
         "conflict_count": sum(1 for o in officials if o["has_conflict"]),
+        "staff_pay": round(sum(s["pay"] for s in staff), 2),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "staff": staff, "totals": totals}

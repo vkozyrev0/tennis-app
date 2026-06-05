@@ -2633,6 +2633,8 @@ const staffGrid = makeListGrid("staff-table", [
     editor: "list", editorParams: { values: STAFF_ROLES } },
   { title: "Days", field: "days", headerSort: false,
     formatter: (c) => esc((c.getValue() || []).map(fmtDOW).join(", ")) },
+  { title: "Rate/day", field: "daily_rate", hozAlign: "right", width: 90,
+    formatter: (c) => (c.getValue() != null ? money(c.getValue()) : "") },
   { title: "Phone", field: "phone" },
   { title: "Email", field: "email" },
   { title: "Notes", field: "notes" },
@@ -2644,6 +2646,7 @@ const staffGrid = makeListGrid("staff-table", [
     staffForm.role.value = s.role;
     staffForm.phone.value = s.phone || "";
     staffForm.email.value = s.email || "";
+    staffForm.daily_rate.value = s.daily_rate != null ? s.daily_rate : "";
     staffForm.notes.value = s.notes || "";
     _fillStaffDays(new Set(s.days || []));  // pre-select this member's days
     staffForm.querySelector('button[type="submit"]').textContent = "Update staff";
@@ -2684,6 +2687,7 @@ onSubmit(staffForm, async (e) => {
   const b = formObj(staffForm);
   // formObj joins a multi-select into "a, b"; the API wants a list of dates.
   b.days = b.days ? b.days.split(", ") : [];
+  b.daily_rate = b.daily_rate ? Number(b.daily_rate) : null;
   try {
     if (staffEditId) await api(`/staff/${staffEditId}`, { method: "PUT", body: JSON.stringify(b) });
     else await api(`/tournaments/${active.id}/staff`, { method: "POST", body: JSON.stringify(b) });
@@ -4369,16 +4373,20 @@ async function loadReports() {
   document.querySelector("#report-staff-table thead").innerHTML =
     "<tr><th>Name</th><th>Role</th>" +
     scols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") +
-    "<th>Phone</th><th>Notes</th></tr>";
+    '<th class="num">Pay</th><th>Phone</th></tr>';
   const staffBody = document.querySelector("#report-staff-table tbody");
   staffBody.innerHTML = staff.length
     ? staff.map((s) => {
         const worked = new Set(s.days || []);
         const dayCells = scols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
         return `<tr><td>${esc(s.name)}</td><td>${esc(STAFF_ROLES[s.role] || s.role)}</td>${dayCells}` +
-          `<td>${esc(s.phone || "")}</td><td>${esc(s.notes || "")}</td></tr>`;
+          `<td class="num">${s.pay ? money(s.pay) : ""}</td><td>${esc(s.phone || "")}</td></tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${scols.length + 4}">No non-official staff added for this tournament.</td></tr>`;
+  if (staff.length && (totals.staff_pay || 0) > 0) {
+    staffBody.innerHTML += `<tr><th colspan="${scols.length + 2}">Staff pay total</th>` +
+      `<th class="num">${money(totals.staff_pay)}</th><th></th></tr>`;
+  }
 }
 // Weekday columns for the tournament's play window (TD staffing-plan format).
 function _reportColumns(t) {

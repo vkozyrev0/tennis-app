@@ -105,6 +105,24 @@ def test_staff_days_cascade_on_staff_delete():
     assert s2["days"] == []
 
 
+def test_staff_daily_rate_pay_in_report():
+    t = _tournament()
+    # $150/day × 3 days = $450
+    s = _ok(client.post(f"/api/tournaments/{t['id']}/staff", json={
+        "name": "Paid Stringer", "role": "stringer", "daily_rate": 150,
+        "days": ["2026-06-01", "2026-06-02", "2026-06-03"]}))
+    assert s["daily_rate"] == 150
+    rep = client.get(f"/api/tournaments/{t['id']}/reports/officials").json()
+    me = next(x for x in rep["staff"] if x["id"] == s["id"])
+    assert me["pay"] == 450.0
+    assert rep["totals"]["staff_pay"] == 450.0
+    # no rate → zero pay (not counted)
+    _ok(client.post(f"/api/tournaments/{t['id']}/staff", json={
+        "name": "Volunteer", "role": "other", "days": ["2026-06-01"]}))
+    rep2 = client.get(f"/api/tournaments/{t['id']}/reports/officials").json()
+    assert rep2["totals"]["staff_pay"] == 450.0  # unchanged
+
+
 def test_staff_cascades_on_tournament_delete():
     t = _tournament()
     s = _ok(client.post(f"/api/tournaments/{t['id']}/staff",

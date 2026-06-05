@@ -213,6 +213,8 @@ class StaffCreate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     notes: Optional[str] = None
+    # Flat daily pay rate; report pay = daily_rate × number of scheduled days.
+    daily_rate: Optional[float] = Field(default=None, ge=0, le=10000)
     # Optional per-day schedule (the days this person works). When provided on
     # create/update it REPLACES the staff member's existing days.
     days: Optional[list[date]] = None
