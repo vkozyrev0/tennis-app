@@ -127,20 +127,22 @@ provisioning steps.
 still works against decrypted-in-memory values; keys live outside the DB.
 
 ### Phase H3 — Retention & deletion *(§312.10)*
-- **H3.1 Retention schedule.** ⏳ *Partial.* A redact endpoint exists
-  (`POST /api/emails/purge?older_than_days=N`); the per-table **written
-  schedule** (and a tournament-level sweep after the event) still needs to be
-  defined + documented (the amended Rule likely **mandates a written policy** —
-  confirm).
+- **H3.1 Retention schedule.** ✅ **Done (email bodies).** The written schedule
+  is machine-readable at `GET /api/retention/policy` (`app/retention.py`):
+  filed-email free text is redacted once its tournament **concluded**
+  (`play_end_date`) more than `EMAIL_RETENTION_DAYS` (default 90) ago. *(Extend
+  the schedule to Part B free-text notes + a player-PII rule as those stores are
+  covered.)*
 - **H3.2 Cascade-correct deletion.** ✅ **Done for players.** `DELETE
   /api/players/{id}` now erases PII from the FK-less `player_history` audit
   table (rows kept, PII columns nulled — the delete trigger's final snapshot is
   redacted too); roster + Part B rows already cascade, email links SET NULL.
   *(Verify other entities — e.g. officials' PII — similarly.)*
-- **H3.3 Automated purge job** (scheduled) — ⏳ *Pending.* The
-  `/api/emails/purge` endpoint is the building block (redacts filed-email
-  body/subject/from_address older than N days, keeps provenance); wire it to a
-  scheduler with a dry-run + a count-only log.
+- **H3.3 Automated purge job** — ✅ **Done (the job); scheduling is deploy-time.**
+  `POST /api/retention/sweep` runs the policy with a **`dry_run`** mode (counts
+  only; default) and **count-only** results — never logs the data. Wire it to a
+  cron / systemd timer in production. `/api/emails/purge` remains as a manual
+  received-at-based override.
 
 **Done when:** an aged-out tournament's minors' PII is provably gone (row +
 history + email bodies), on a schedule, with a written policy.

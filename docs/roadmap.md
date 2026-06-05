@@ -383,8 +383,10 @@ A round of fixes + features, merged to `main` (full backend suite: 109 green).
 - **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM
   that reads minors' email content requires the **cloud-vs-local privacy
   call first**.
-- **PII H2 (encryption at rest) + H3 schedule/job** + **least-priv DB role** —
-  tied to the post-POC deployment switch (see `docs/pii-hardening-plan.md`).
+- **PII H2 (encryption at rest)** + **least-priv DB role** + **scheduler wiring**
+  for the retention sweep — tied to the post-POC deployment switch (see
+  `docs/pii-hardening-plan.md`). *(H3 retention **policy + sweep job** with
+  dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
 - **Multi-user TD access** (D8) — single-admin POC for now.
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
   refactor); structured assignment-card layout. *(Inline "add distance" on the

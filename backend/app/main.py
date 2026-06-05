@@ -29,6 +29,7 @@ from .routers import (
     players,
     rates,
     reports,
+    retention,
     room_blocks,
     roster,
     sites,
@@ -57,7 +58,7 @@ _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, divisions, roster, assignments, reports, certifications, availability,
           emails, late_entries, withdrawals, adult_lists, player_hotels,
-          pairing_avoidances, doubles, imports, staff):
+          pairing_avoidances, doubles, imports, staff, retention):
     app.include_router(r.router, dependencies=_admin)
 
 # Disable browser caching of the frontend assets. POC dev loop edits HTML +
