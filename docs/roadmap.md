@@ -125,6 +125,11 @@ pay snapshots).
 - [x] TD sees availability when making assignments — the Assignments official
       picker shows each official's available-day count for the tournament, and the
       day picker offers their available dates.
+- [x] **Availability mismatch check** — a worked day the official did **not**
+      declare available is flagged (never blocked): a per-day ⚠, a "not available"
+      chip on the assignment card, and an availability count in the report totals.
+      Suppressed when the official declared nothing. (`days_outside_availability`
+      / `has_availability_data` in the assignment summary.)
 - [x] **Officials accept/decline** (migration 0038, benchmark gap): the official
       accepts/declines the assignment the TD made from their self-service "My
       assignments" view (`GET/POST /api/me/assignments...`); the

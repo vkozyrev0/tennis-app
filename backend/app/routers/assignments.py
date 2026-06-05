@@ -134,6 +134,29 @@ def _summary(cur, a: dict) -> dict:
     for d in days:
         d["conflict"] = d["work_date"] in conflict_dates
 
+    # Availability check (audit §Availability): the TD collects each official's
+    # available dates per tournament, but assignment did not enforce them. We
+    # surface — never block — any worked day the official did NOT declare
+    # available, but ONLY when they declared SOMETHING (absence of data is not a
+    # decline). Mirrors the work_date_out_of_window / hotel-date policy.
+    cur.execute(
+        "SELECT available_date FROM availability "
+        "WHERE official_id = %s AND tournament_id = %s",
+        (a["official_id"], a["tournament_id"]),
+    )
+    avail_rows = cur.fetchall()
+    has_availability = bool(avail_rows)
+    avail_dates = {r["available_date"].isoformat() for r in avail_rows}
+    days_outside_availability: list[str] = []
+    if has_availability:
+        days_outside_availability = [
+            d["work_date"] for d in days if d["work_date"] not in avail_dates
+        ]
+    for d in days:
+        d["outside_availability"] = (
+            has_availability and d["work_date"] not in avail_dates
+        )
+
     return {
         "id": a["id"],
         "tournament_id": a["tournament_id"],
@@ -153,6 +176,14 @@ def _summary(cur, a: dict) -> dict:
         "missing_distance": missing_distance,
         "hotel_date_mismatch": hotel_date_mismatch,
         "work_date_out_of_window": work_date_out_of_window,
+        # Availability mismatch (audit §Availability — a warning, not a block).
+        # has_availability_data=False means the official never declared dates, so
+        # days_outside_availability is empty and no warning is shown.
+        "has_availability_data": has_availability,
+        "days_outside_availability": days_outside_availability,
+        # Declared available dates — feeds the add-day pre-check (warn before
+        # booking a date the official did not mark available).
+        "available_dates": sorted(avail_dates),
         # Cross-tournament double-booking (audit §3.4 — a warning, not a block).
         "has_conflict": bool(conflicts),
         "has_hard_conflict": any(c["different_site"] for c in conflicts),

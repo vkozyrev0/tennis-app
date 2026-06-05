@@ -2412,6 +2412,8 @@ function renderAssignment(a, availDates) {
     a.has_conflict ? `<span class="badge badge-${a.has_hard_conflict ? "bad" : "warn"}" title="${esc(conflictTitle)}">⚠ double-booked</span>` : "",
     a.hotel_date_mismatch ? '<span class="badge badge-warn">⚠ hotel dates</span>' : "",
     a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
+    (a.days_outside_availability && a.days_outside_availability.length)
+      ? `<span class="badge badge-warn" title="${esc("Worked on day(s) the official did not declare available: " + a.days_outside_availability.join(", "))}">⚠ not available</span>` : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
   ].filter(Boolean).join(" ");
   // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
@@ -2486,6 +2488,7 @@ function renderAssignment(a, availDates) {
     const oow = _outOfWindow(d.work_date);
     chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
       `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
+      `${d.outside_availability ? '<span class="warn" title="official did not declare this day available">⚠ </span>' : ""}` +
       `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
     x.setAttribute("aria-label", `Remove ${fmtDOW(d.work_date)}`);
@@ -4374,6 +4377,7 @@ async function loadReports() {
       o.missing_distance ? "no distance" : "",
       o.hotel_date_mismatch ? "hotel dates" : "",
       o.work_date_out_of_window ? "off-window day" : "",
+      (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : "",
     ].filter(Boolean);
     const warn = flags.length ? ` <span class="warn" title="${esc(flags.join(", "))}">⚠</span>` : "";
     const dayCells = cols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
@@ -4392,7 +4396,8 @@ async function loadReports() {
   const note = (totals.conflict_count ? ` · ${totals.conflict_count} double-booked` : "") +
     (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
-    (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "");
+    (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "") +
+    (totals.availability_count ? ` · ${totals.availability_count} availability alert(s)` : "");
   document.getElementById("report-totals").innerHTML =
     `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
     `<th class="num">${money(totals.mileage)}</th>`;
@@ -4472,7 +4477,8 @@ function exportReportPdf() {
     const roles = [...new Set(o.days.map((d) => d.working_as))].map(certLabel).join(", ");
     const dayCells = cols.map((c) => `<td class="day">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
     const flags = [o.has_conflict ? "double-booked" : "", o.missing_distance ? "no distance" : "",
-      o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window" : ""].filter(Boolean).join("; ");
+      o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window" : "",
+      (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : ""].filter(Boolean).join("; ");
     return `<tr><td>${e(o.official_name)}${flags ? ` <span class="flag">⚠ ${e(flags)}</span>` : ""}</td>` +
       `<td>${e(roles)}</td><td>${e(o.dietary_restrictions || "")}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
       `<td>${e(_fmtMDY(o.check_in))}</td><td>${e(_fmtMDY(o.check_out))}</td>${dayCells}` +

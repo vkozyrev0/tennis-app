@@ -64,6 +64,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "hotel_mismatch_count": sum(1 for o in officials if o["hotel_date_mismatch"]),
         "out_of_window_count": sum(1 for o in officials if o["work_date_out_of_window"]),
         "conflict_count": sum(1 for o in officials if o["has_conflict"]),
+        "availability_count": sum(1 for o in officials if o.get("days_outside_availability")),
         "staff_pay": round(sum(s["pay"] for s in staff), 2),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)

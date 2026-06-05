@@ -33,7 +33,7 @@ new `migrations/*.sql` (tracked in `schema_migrations`).
 
 ## Test
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q   # 147 end-to-end tests; skips if Postgres is down
+.\.venv\Scripts\python.exe -m pytest -q   # 151 end-to-end tests; skips if Postgres is down
 ```
 Tests run against a **separate `courtops_test` database** (created/migrated/seeded
 automatically by `tests/conftest.py`), so they never pollute the working DB.
@@ -93,7 +93,7 @@ backend/
   reset_demo.py        wipe + re-seed the working DB
   backfill_distances.py  import officials + distances from the mileage workbook
   tests/conftest.py    points the suite at courtops_test (isolation)
-  tests/                end-to-end suite (147; admin-authenticated). test_smoke +
+  tests/                end-to-end suite (151; admin-authenticated). test_smoke +
                         test_td_e2e + per-feature test_zz_*.py (inbox, conflicts,
                         retention, staff, crypto/H2, admin users, accept/decline, …)
 frontend/              index.html, styles.css, app.js (vanilla fetch, no framework)
