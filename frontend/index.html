@@ -1107,6 +1107,14 @@
           <tbody></tbody>
         </table>
 
+        <h4>Room-block pickup (officials)</h4>
+        <p id="pickup-note" class="muted" hidden></p>
+        <table id="pickup-table" class="list-table">
+          <thead><tr><th>Hotel</th><th>Confirmation</th><th>Dates</th><th class="num">Reserved</th><th class="num">Assigned</th><th class="num">Unused</th></tr></thead>
+          <tbody></tbody>
+          <tfoot><tr id="pickup-totals"></tr></tfoot>
+        </table>
+
         <h4>Other staff</h4>
         <table id="report-staff-table" class="list-table">
           <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th></tr></thead>
@@ -1193,6 +1201,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=76"></script>
+  <script type="module" src="/app.js?v=77"></script>
 </body>
 </html>

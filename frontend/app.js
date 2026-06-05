@@ -4561,6 +4561,31 @@ async function loadReports() {
       }).join("")
     : '<tr><td class="empty" colspan="3">No officials have a hotel assignment yet.</td></tr>';
 
+  // Room-block pickup: reserved vs assigned per official comp block, so the TD
+  // can release unused rooms before the hotel cutoff. Unused rooms are flagged.
+  const blocks = reportData.room_blocks || [];
+  const pickupBody = document.querySelector("#pickup-table tbody");
+  pickupBody.innerHTML = blocks.length
+    ? blocks.map((b) => {
+        const span = (b.check_in && b.check_out)
+          ? `${esc(_fmtMDY(b.check_in))} – ${esc(_fmtMDY(b.check_out))}` : "—";
+        const unusedCls = b.remaining > 0 ? ' class="warn"' : "";
+        return `<tr><td>${esc(b.hotel_name)}</td><td>${esc(b.confirmation_number || "")}</td>` +
+          `<td>${span}</td><td class="num">${b.room_count}</td>` +
+          `<td class="num">${b.assigned}</td><td class="num"${unusedCls}>${b.remaining}</td></tr>`;
+      }).join("")
+    : '<tr><td class="empty" colspan="6">No official room blocks for this tournament.</td></tr>';
+  document.getElementById("pickup-totals").innerHTML = blocks.length
+    ? `<th colspan="3">Totals</th><th class="num">${totals.rooms_reserved}</th>` +
+      `<th class="num">${totals.rooms_assigned}</th>` +
+      `<th class="num${totals.rooms_remaining > 0 ? " warn" : ""}">${totals.rooms_remaining}</th>`
+    : "";
+  const pnote = document.getElementById("pickup-note");
+  if (totals.rooms_remaining > 0) {
+    pnote.hidden = false;
+    pnote.innerHTML = `<span class="warn">⚠ ${totals.rooms_remaining} reserved room(s) not yet assigned</span> — release before the hotel cutoff to avoid attrition charges.`;
+  } else { pnote.hidden = true; pnote.textContent = ""; }
+
   // Non-official support staff (Site Director, Trainer, …), grouped by role,
   // with the same weekday day-grid the officials roster uses.
   const staff = reportData.staff || [];
@@ -4645,6 +4670,15 @@ function exportReportPdf() {
     const span = ds.length ? `${fmtDOW(ds[0])} – ${fmtDOW(ds[ds.length - 1])}` : "—";
     return `<tr><td>${e(o.official_name)}</td><td>${e(o.hotel_name)}</td><td>${e(span)}</td></tr>`;
   }).join("") : `<tr><td class="empty" colspan="3">No officials with a hotel assignment.</td></tr>`;
+  const blocks = reportData.room_blocks || [];
+  const pickupRows = blocks.length ? blocks.map((b) => {
+    const span = (b.check_in && b.check_out) ? `${e(_fmtMDY(b.check_in))} – ${e(_fmtMDY(b.check_out))}` : "—";
+    const flag = b.remaining > 0 ? ' class="flag"' : "";
+    return `<tr><td>${e(b.hotel_name)}</td><td>${e(b.confirmation_number || "")}</td><td>${span}</td>` +
+      `<td class="num">${b.room_count}</td><td class="num">${b.assigned}</td><td class="num"${flag}>${b.remaining}</td></tr>`;
+  }).join("") + `<tr class="totals"><td colspan="3">Totals</td><td class="num">${totals.rooms_reserved}</td>` +
+      `<td class="num">${totals.rooms_assigned}</td><td class="num">${totals.rooms_remaining}</td></tr>`
+    : `<tr><td class="empty" colspan="6">No official room blocks.</td></tr>`;
   const win = window.open("", "_blank");
   if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
@@ -4672,6 +4706,8 @@ function exportReportPdf() {
       </tbody></table>
     <h2>Officials needing accommodation</h2>
     <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
+    <h2>Room-block pickup (officials)</h2>
+    <table><thead><tr><th>Hotel</th><th>Confirmation</th><th>Dates</th><th class="num">Reserved</th><th class="num">Assigned</th><th class="num">Unused</th></tr></thead><tbody>${pickupRows}</tbody></table>
     <h2>Other staff${totals.staff_pay ? ` — pay ${money(totals.staff_pay)}` : ""}</h2>
     <table><thead><tr><th>Name</th><th>Role</th>${dayHead}<th class="num">Pay</th></tr></thead><tbody>${staffRows}</tbody></table>
     <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>

@@ -55,6 +55,26 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
             s["daily_rate"] = rate
             s["pay"] = round(rate * len(s["days"]), 2) if rate else 0.0
 
+        # Room-block pickup: per OFFICIAL comp block, rooms reserved vs assigned
+        # (pickup), so the TD can release unused rooms before the hotel cutoff.
+        # `assigned` counts assignments pointing at the block (matches the
+        # rooms_remaining formula used elsewhere).
+        cur.execute(
+            "SELECT rb.id, h.name AS hotel_name, rb.confirmation_number, "
+            "       rb.check_in, rb.check_out, rb.room_count, "
+            "       (SELECT count(*) FROM assignment a WHERE a.room_block_id = rb.id) AS assigned "
+            "FROM room_block rb JOIN hotel h ON h.id = rb.hotel_id "
+            "WHERE rb.tournament_id = %s AND rb.kind = 'official' "
+            "ORDER BY h.name, rb.id",
+            (tournament_id,),
+        )
+        room_blocks = cur.fetchall()
+        for b in room_blocks:
+            b["check_in"] = b["check_in"].isoformat() if b["check_in"] else None
+            b["check_out"] = b["check_out"].isoformat() if b["check_out"] else None
+            b["assigned"] = int(b["assigned"])
+            b["remaining"] = b["room_count"] - b["assigned"]
+
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
@@ -68,6 +88,11 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "declined_count": sum(1 for o in officials if o.get("response_status") == "declined"),
         "pending_count": sum(1 for o in officials if o.get("response_status") == "pending"),
         "staff_pay": round(sum(s["pay"] for s in staff), 2),
+        # Official room-block pickup roll-up (right-sizing before hotel cutoff).
+        "rooms_reserved": sum(b["room_count"] for b in room_blocks),
+        "rooms_assigned": sum(b["assigned"] for b in room_blocks),
+        "rooms_remaining": sum(b["remaining"] for b in room_blocks),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
-    return {"tournament": t, "officials": officials, "staff": staff, "totals": totals}
+    return {"tournament": t, "officials": officials, "staff": staff,
+            "room_blocks": room_blocks, "totals": totals}

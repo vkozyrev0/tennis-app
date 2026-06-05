@@ -311,6 +311,10 @@ Critical review of the running POC UI. Ordered by impact.
   See [data-model.md](data-model.md) §PlayerHistory.
 - **✅ DONE — Room-count enforced**: assigning an official to a full block returns
   **409**; `rooms_remaining` is shown in the room-block list + assignment dropdown.
+- **✅ DONE — Room-block pickup report**: the officials report shows, per official
+  comp block, rooms **reserved vs assigned (pickup)** and **unused**, with a
+  tournament roll-up + a warning when rooms are unassigned — so the TD releases
+  surplus before the hotel cutoff (attrition). On screen + in the PDF.
 - **Pay/mileage not snapshotted** (audit §5.3): only `AssignmentDay.rate_applied`
   is stored; mileage, total, and `rule_version` are recomputed on read. Store a
   snapshot at confirm time for reproducible money. **✅ DONE** — snapshots
