@@ -3,10 +3,20 @@ from datetime import datetime
 import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
+from ..crypto import decrypt as _dec_pii
 from ..db import db_dep
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
+
+
+def _decrypt_contact(row: dict) -> dict:
+    """Decrypt the at-rest-encrypted contact fields (PII H2). Passes through
+    legacy plaintext (see app/crypto.py)."""
+    if row is not None:
+        row["emails"] = _dec_pii(row.get("emails"))
+        row["phones"] = _dec_pii(row.get("phones"))
+    return row
 
 
 def _updated_at_matches(stored: datetime | None, seen_iso: str) -> bool:
@@ -50,7 +60,7 @@ _COLS = (
 def list_players(conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_COLS} FROM player ORDER BY last_name, first_name")
-        return cur.fetchall()
+        return [_decrypt_contact(r) for r in cur.fetchall()]
 
 
 @router.get("/{player_id}", response_model=PlayerOut)
@@ -60,7 +70,7 @@ def get_player(player_id: int, conn=Depends(db_dep)):
         row = cur.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="player not found")
-    return row
+    return _decrypt_contact(row)
 
 
 @router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])

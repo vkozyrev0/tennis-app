@@ -10,6 +10,8 @@ import re
 
 from openpyxl import Workbook, load_workbook
 
+from .crypto import encrypt as _enc_pii  # PII H2: player contact fields
+
 from .playerops import upsert_hotel, upsert_player
 
 _VALID_STATUS = {"selected", "alternate", "withdrawn"}
@@ -620,7 +622,10 @@ def _ext_player_initial(cur, pid, d):
         WHERE id = %s
         """,
         (
-            _s(d.get("emails")), _s(d.get("phones")),
+            # PII H2: encrypt parent/player contact info at rest (decrypt-on-read
+            # in routers/players.py). COALESCE keeps the existing (encrypted)
+            # value when the new file omits the column.
+            _enc_pii(_s(d.get("emails"))), _enc_pii(_s(d.get("phones"))),
             _s(d.get("district")), _s(d.get("section")),
             _s(d.get("city")), _s(d.get("state")),
             _coerce_decimal(d.get("wtn_singles")), _s(d.get("wtn_singles_conf")),
