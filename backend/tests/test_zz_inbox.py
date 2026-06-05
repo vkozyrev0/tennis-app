@@ -327,3 +327,164 @@ def test_bulk_populate_creates_withdrawal():
     # a withdrawal row now exists for that player
     wds = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
     assert any(w.get("usta_number") == usta for w in wds), wds
+
+
+def test_bulk_populate_creates_scheduling_avoidance():
+    """Regression: the populate map keyed scheduling as 'scheduling' while the
+    stored classification is 'scheduling_avoidance', so every such email was
+    silently skipped. The shared registry keeps the keys aligned."""
+    t = _tournament()
+    usta = _rostered(t["id"], "Sam", "Schedule", "male", "B16")
+    e = _email(t["id"], subject="Sam Schedule", body=f"cannot play before 9 {usta}")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "scheduling_avoidance",
+        "status": "new", "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    res = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    assert res["filed"] == 1, res          # was 0 (skipped) before the registry fix
+    rows = client.get(f"/api/tournaments/{t['id']}/scheduling-avoidances").json()
+    assert any(r.get("usta_number") == usta for r in rows), rows
+
+
+def test_bulk_populate_reports_single_file_only_classifications():
+    """doubles / pairing can't be bulk-filed (need fields a single email can't
+    supply); the action should report them with a clear reason, not crash or
+    pretend success."""
+    t = _tournament()
+    usta = _rostered(t["id"], "Dana", "Doubles", "female", "G14")
+    e = _email(t["id"], subject="Dana Doubles", body=f"partner request {usta}")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles",
+        "status": "new", "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    res = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    assert res["filed"] == 0
+    assert res["skipped"] and "individually" in res["skipped"][0]["reason"], res
+
+
+def test_target_registry_is_internally_consistent():
+    """Guard against key-drift across layers: every classification triage can
+    emit (except 'other') must be a known fileable target, every bulk key must
+    be a fileable key, and the public /targets endpoint must match the registry.
+    This test fails fast if anyone re-introduces a mismatched key."""
+    from app.email_targets import FILEABLE_KEYS, POPULATE_TARGETS, public_targets
+    from app.triage import _RULES
+
+    triage_keys = {label for label, _ in _RULES}
+    assert triage_keys <= set(FILEABLE_KEYS), (triage_keys - set(FILEABLE_KEYS))
+    assert set(POPULATE_TARGETS) <= set(FILEABLE_KEYS)
+    # the HTTP contract the frontend consumes mirrors the registry exactly
+    api_keys = [t["key"] for t in client.get("/api/emails/targets").json()]
+    assert api_keys == FILEABLE_KEYS
+    bulk_api = {t["key"] for t in client.get("/api/emails/targets").json() if t["bulk"]}
+    assert bulk_api == set(POPULATE_TARGETS)
+
+
+# --------------------------------------------------------------------------
+# Local field extraction (no LLM): age division + events.
+# --------------------------------------------------------------------------
+def test_extract_age_division_variants():
+    from app.routers.emails import extract_age_division as ad
+    assert ad("WITHDRAWAL REQUEST: Sid, Boys' 14 & under singles", "") == "B14"
+    assert ad("Girls 16 doubles question", "") == "G16"
+    assert ad("", "please enter him in B12") == "B12"
+    assert ad("re: G 18 draw", "") == "G18"
+    # no junior division present → None (adult NTRP not guessed)
+    assert ad("NTRP 4.0 Men singles", "") is None
+    assert ad("general parking question", "") is None
+    # not a junior age → not matched
+    assert ad("B11 typo", "") is None
+
+
+def test_extract_events_variants():
+    from app.routers.emails import extract_events as ev
+    assert ev("Singles entry", "") == "Singles"
+    assert ev("doubles partner", "") == "Doubles"
+    assert ev("wants singles and doubles", "") == "Singles, Doubles"
+    assert ev("Mixed doubles request", "") == "Mixed Doubles"
+    # 'mixed doubles' alone must not also count as plain 'Doubles'
+    assert ev("mixed doubles only", "") == "Mixed Doubles"
+    assert ev("no event mentioned here", "") is None
+
+
+def test_inbox_list_surfaces_detected_division_and_events():
+    t = _tournament()
+    usta = _rostered(t["id"], "Field", "Extract", "male", "B14")
+    e = _email(t["id"], subject=f"Boys' 14 singles and doubles — {usta}",
+               body="please add him")
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["detected_division"] == "B14"
+    assert row["detected_events"] == "Singles, Doubles"
+
+
+def test_bulk_populate_carries_division_and_events_into_late_entry():
+    """Bulk 'Populate lists' now fills the same parsed fields single-file does."""
+    t = _tournament()
+    usta = _rostered(t["id"], "Bulk", "Fields", "female", "G16")
+    e = _email(t["id"], subject=f"Girls 16 singles late entry — {usta}",
+               body="please add her")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "late_entry",
+        "status": "new", "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    res = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    assert res["filed"] == 1, res
+    le = next(r for r in client.get(f"/api/tournaments/{t['id']}/late-entries").json()
+              if r.get("usta_number") == usta)
+    assert le["age_division"] == "G16"
+    assert le["events"] == "Singles"
+
+
+def test_extract_avoid_day_and_time():
+    from app.routers.emails import extract_avoid_day as day, extract_avoid_time as tm
+    assert day("can't play Saturday", "") == "Sat"
+    assert day("avoid Sat and Sun please", "") == "Sat, Sun"
+    assert day("no day mentioned", "") is None
+    assert tm("please schedule before 10am", "") == "before 10 am"
+    assert tm("after 5 PM only", "") == "after 5 pm"
+    assert tm("mornings are hard", "") == "mornings"
+    assert tm("no time constraint", "") is None
+
+
+def test_inbox_surfaces_avoid_fields_only_for_scheduling():
+    t = _tournament()
+    usta = _rostered(t["id"], "Sked", "Time", "male", "B14")
+    e = _email(t["id"], subject=f"{usta} can't play Saturday before 10am", body="thanks")
+    # before classification it's 'unclassified' → avoid fields stay null
+    pre = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert pre["detected_avoid_day"] is None and pre["detected_avoid_time"] is None
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "scheduling_avoidance",
+        "status": "new", "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["detected_avoid_day"] == "Sat"
+    assert row["detected_avoid_time"] == "before 10 am"
+
+
+def test_bulk_populate_carries_avoid_day_and_time():
+    t = _tournament()
+    usta = _rostered(t["id"], "Sked", "Bulk", "female", "G14")
+    e = _email(t["id"], subject=f"{usta} avoid Sunday after 6pm", body="please")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "scheduling_avoidance",
+        "status": "new", "detected_player_id": _detect(e["id"])["detected_player_id"],
+    })
+    res = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    assert res["filed"] == 1, res
+    row = next(r for r in client.get(f"/api/tournaments/{t['id']}/scheduling-avoidances").json()
+               if r.get("usta_number") == usta)
+    assert row["avoid_day"] == "Sun"
+    assert row["avoid_time_range"] == "after 6 pm"
+
+
+def test_populate_extract_names_have_extractors():
+    """Every `extract` field declared in the registry must have a matching
+    extractor function, or bulk_populate would KeyError at runtime."""
+    from app.email_targets import POPULATE_TARGETS
+    from app.routers.emails import _EXTRACTORS
+    declared = {name for t in POPULATE_TARGETS.values() for name in t.get("extract", [])}
+    assert declared <= set(_EXTRACTORS), (declared - set(_EXTRACTORS))

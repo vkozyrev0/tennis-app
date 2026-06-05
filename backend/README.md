@@ -142,5 +142,12 @@ the Official detail; officials then sign in to a self-service profile + availabi
 view. Sessions are HttpOnly cookies — harden before any shared deployment.
 
 > **Security (POC only):** localhost Postgres on default admin creds is for local
-> development. Before any shared deployment, switch to a least-privilege DB user
-> with a secret from the environment, plus TLS (`docs/roadmap.md` §Stack).
+> development (`ENV=dev`). Before any shared deployment, switch to a
+> least-privilege DB user with a secret from the environment, plus TLS. This is
+> now **enforced**: with `ENV=prod`, the app **refuses to start** on the default
+> `postgres`/`postgres` creds or a non-TLS `PGSSLMODE` (see `app/config.py`
+> `Settings.validate()`). Full plan: `docs/pii-hardening-plan.md` §H1.
+>
+> Relevant env vars (see `.env.example`): `ENV` (`dev` vs `prod`),
+> `PGSSLMODE` (`prefer` for dev; `require`/`verify-full` for prod), plus the
+> usual `PGUSER`/`PGPASSWORD`/`PGHOST`/`PGPORT`/`PGDATABASE`.

@@ -5,6 +5,11 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..email_targets import (
+    POPULATE_TARGETS,
+    SINGLE_FILE_ONLY_KEYS,
+    public_targets,
+)
 from ..models import (
     EmailBulkDetect,
     EmailBulkPopulate,
@@ -52,6 +57,18 @@ def list_emails(tournament_id: int | None = None, status: str | None = None, con
             extract_withdrawal_reason(r.get("subject"), r.get("body"))
             if r.get("classification") == "withdrawal" else None
         )
+        # Structured fields the late-entry / withdrawal forms ask for — parsed
+        # locally (no LLM) so single-file filing pre-fills them. Cheap regex;
+        # null when nothing recognizable is present.
+        r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
+        r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
+        # Day/time only make sense for scheduling-avoidance emails (a weekday in
+        # a withdrawal email isn't an "avoid day"), so scope them to that class.
+        is_sched = r.get("classification") == "scheduling_avoidance"
+        r["detected_avoid_day"] = (
+            extract_avoid_day(r.get("subject"), r.get("body")) if is_sched else None)
+        r["detected_avoid_time"] = (
+            extract_avoid_time(r.get("subject"), r.get("body")) if is_sched else None)
     return rows
 
 
@@ -120,6 +137,34 @@ def delete_email(email_id: int, conn=Depends(db_dep)):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="email not found")
     return Response(status_code=204)
+
+
+# ---------- Retention (PII hardening H3) -----------------------------------
+
+@router.post("/purge")
+def purge_filed_bodies(older_than_days: int = 30, conn=Depends(db_dep)):
+    """Redact the free-text PII of FILED emails older than `older_than_days`:
+    null body / subject / from_address while keeping the provenance row
+    (message_id, classification, detected-player link, status) so the audit
+    trail survives. Only `filed` emails are touched — unprocessed ('new') mail
+    is never auto-purged. Returns how many were redacted.
+
+    Inbound email is the highest-risk minors'-PII store (unstructured), so a
+    retention sweep here is the §312.10 deletion step (docs/pii-hardening-plan
+    §H3). Wire to a schedule for automatic enforcement."""
+    if older_than_days < 0:
+        raise HTTPException(status_code=400, detail="older_than_days must be >= 0")
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE email_message "
+            "SET body = NULL, subject = NULL, from_address = NULL "
+            "WHERE status = 'filed' "
+            "  AND (body IS NOT NULL OR subject IS NOT NULL OR from_address IS NOT NULL) "
+            "  AND received_at < now() - make_interval(days => %s) "
+            "RETURNING id",
+            (older_than_days,),
+        )
+        return {"purged": len(cur.fetchall())}
 
 
 # ---------- Bulk inbox actions (mass-select on the inbox grid) -------------
@@ -291,6 +336,94 @@ def extract_withdrawal_reason(subject: str, body: str):
     return None
 
 
+# Junior age-division extraction → a canonical roster code (B/G + age), so the
+# inbox can pre-fill the late-entry "Age division" picker. Two signals:
+#   1. an explicit code already in the text ("B14", "G 16")
+#   2. the USTA wording "Boys'/Girls' <age> [& under]"
+# Only the junior ladder (10/12/14/16/18) is recognized — adult NTRP/Combo
+# divisions aren't named in these parent emails, so we don't guess them.
+_JUNIOR_AGES = {"10", "12", "14", "16", "18"}
+_DIV_WORD_RE = re.compile(r"\b(boys|girls)['‘’ʼ]?\s*(10|12|14|16|18)\b", re.I)
+_DIV_CODE_RE = re.compile(r"\b([BG])\s?-?\s?(10|12|14|16|18)\b")
+
+
+def extract_age_division(subject: str, body: str):
+    """Best-effort junior division code (e.g. 'B14') from the email, or None."""
+    text = f"{subject or ''}\n{body or ''}"
+    m = _DIV_WORD_RE.search(text)
+    if m:
+        return ("B" if m.group(1).lower() == "boys" else "G") + m.group(2)
+    m = _DIV_CODE_RE.search(text)
+    if m and m.group(2) in _JUNIOR_AGES:
+        return m.group(1).upper() + m.group(2)
+    return None
+
+
+def extract_events(subject: str, body: str):
+    """Comma-joined junior event names mentioned ('Singles, Doubles'), or None.
+    Values match the event-catalog option values the late/withdrawal forms use,
+    so the inbox can pre-select them. 'mixed [doubles]' → 'Mixed Doubles', and
+    that phrase is stripped before the plain-doubles check so it isn't counted
+    twice."""
+    t = f"{subject or ''} {body or ''}".lower()
+    out = []
+    if re.search(r"\bsingles\b", t):
+        out.append("Singles")
+    if re.search(r"\bmixed\b", t):
+        out.append("Mixed Doubles")
+    if re.search(r"\bdoubles\b", re.sub(r"\bmixed\s+doubles\b", "", t)):
+        out.append("Doubles")
+    return ", ".join(out) or None
+
+
+# Scheduling-avoidance day + time-range extraction → the two free-text fields the
+# scheduling form asks for. Conservative: surface what's clearly stated, leave the
+# rest for the TD.
+_DAYS = [("monday", "Mon"), ("tuesday", "Tue"), ("wednesday", "Wed"),
+         ("thursday", "Thu"), ("friday", "Fri"), ("saturday", "Sat"), ("sunday", "Sun")]
+_TIME_RE = re.compile(
+    r"\b(before|after|by|until|till)\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?",
+    re.I)
+_DAYPART_RE = re.compile(r"\b(mornings?|afternoons?|evenings?|nights?|noon|midday)\b", re.I)
+
+
+def extract_avoid_day(subject: str, body: str):
+    """Weekday(s) mentioned, as abbreviations ('Sat' / 'Sat, Sun'), or None."""
+    t = f"{subject or ''} {body or ''}".lower()
+    found = [abbr for full, abbr in _DAYS
+             if re.search(rf"\b({full}|{abbr.lower()})\b", t)]
+    return ", ".join(found) or None
+
+
+def extract_avoid_time(subject: str, body: str):
+    """A short time-constraint string ('before 10 am', 'after 5 pm', 'mornings')
+    or None. A before/after/until clause wins over a vaguer day-part word."""
+    text = f"{subject or ''} {body or ''}"
+    m = _TIME_RE.search(text)
+    if m:
+        prep, hour = m.group(1).lower(), m.group(2)
+        mins = f":{m.group(3)}" if m.group(3) else ""
+        mer = (m.group(4) or "").lower().replace(".", "")
+        return f"{prep} {hour}{mins}{(' ' + mer) if mer else ''}"[:40]
+    m = _DAYPART_RE.search(text)
+    if m:
+        return m.group(1).lower()
+    return None
+
+
+# Maps the `extract` field names declared on POPULATE_TARGETS (email_targets.py)
+# to the function that derives that value from an email row. bulk_populate uses
+# this so its extra INSERT params match each target's bulk_sql column order. The
+# registry-consistency test asserts every declared name has an entry here.
+_EXTRACTORS = {
+    "reason": lambda em: extract_withdrawal_reason(em["subject"], em["body"]),
+    "division": lambda em: extract_age_division(em["subject"], em["body"]),
+    "events": lambda em: extract_events(em["subject"], em["body"]),
+    "avoid_day": lambda em: extract_avoid_day(em["subject"], em["body"]),
+    "avoid_time": lambda em: extract_avoid_time(em["subject"], em["body"]),
+}
+
+
 @router.post("/{email_id}/detect-player", response_model=EmailDetectResult)
 def detect_one_player(email_id: int, conn=Depends(db_dep)):
     """Run the player-name detector against this email's subject+body and
@@ -338,42 +471,21 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
     return out
 
 
-# Map classification → (target_table, insert_template). Each template uses
-# named params: tid, pid, sid. Same idea as the FILE_TARGETS map on the
-# frontend, but server-side so the bulk "populate" action can run without
-# the user clicking through each form. Players without a detected_player_id
-# are skipped (the response reports them).
-_POPULATE_TARGETS = {
-    "withdrawal": {
-        # reason is auto-extracted from the email body (see extract_withdrawal_reason).
-        "sql": ("INSERT INTO withdrawal (tournament_id, player_id, source_email_id, reason) "
-                "VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING RETURNING id"),
-        "label": "withdrawal",
-    },
-    "late_entry": {
-        "sql": ("INSERT INTO late_entry (tournament_id, player_id, source_email_id) "
-                "VALUES (%s, %s, %s) RETURNING id"),
-        "label": "late entry",
-    },
-    "scheduling": {
-        "sql": ("INSERT INTO scheduling_avoidance (tournament_id, player_id, source_email_id) "
-                "VALUES (%s, %s, %s) RETURNING id"),
-        "label": "scheduling avoidance",
-    },
-    "division_flex": {
-        "sql": ("INSERT INTO division_flexibility (tournament_id, player_id, source_email_id) "
-                "VALUES (%s, %s, %s) RETURNING id"),
-        "label": "division flexibility",
-    },
-    "hotel": {
-        "sql": ("INSERT INTO player_hotel_stay (tournament_id, player_id, source_email_id) "
-                "VALUES (%s, %s, %s) RETURNING id"),
-        "label": "player hotel",
-    },
-    # doubles_request requires a `wants_random` or `partner_usta` — without
-    # one of those the row violates the CHECK, so we skip and report it. The
-    # TD opens the email's detail pane + clicks File → instead.
-}
+@router.get("/targets")
+def list_targets():
+    """The canonical classification→list registry the frontend builds its
+    "File as …" menu + labels from (single source of truth — see
+    ``app/email_targets.py``)."""
+    return public_targets()
+
+
+# The bulk-populate INSERT map (classification → {sql, label}) is derived from
+# the shared registry in app/email_targets.py — NOT redefined here — so its keys
+# can never drift from triage's outputs / the frontend's FILE_TARGETS again
+# (the "scheduling" vs "scheduling_avoidance" silent-skip bug). doubles +
+# pairing_avoidance are deliberately absent (SINGLE_FILE_ONLY_KEYS): their rows
+# need fields a single email + detected player can't supply, so the TD files
+# them through the form; the bulk action reports them with a clear reason.
 
 
 @router.post("/bulk/populate")
@@ -397,9 +509,15 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
         rows = cur.fetchall()
         for em in rows:
             tid, cls, pid = em["tournament_id"], em["classification"], em["detected_player_id"]
-            target = _POPULATE_TARGETS.get(cls)
+            target = POPULATE_TARGETS.get(cls)
             if target is None:
-                skipped.append({"id": em["id"], "reason": f"no target for '{cls}'"})
+                # Distinguish "fileable but only one-at-a-time" (doubles/pairing)
+                # from a genuinely unhandled classification, so the TD knows to
+                # file it from the form rather than thinking it failed.
+                reason = (f"'{cls}' must be filed individually from its form"
+                          if cls in SINGLE_FILE_ONLY_KEYS
+                          else f"no target for '{cls}'")
+                skipped.append({"id": em["id"], "reason": reason})
                 continue
             if pid is None:
                 skipped.append({"id": em["id"], "reason": "no detected player"})
@@ -408,12 +526,11 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
                 skipped.append({"id": em["id"], "reason": "no tournament"})
                 continue
             try:
-                if cls == "withdrawal":
-                    # auto-fill the withdrawal reason parsed from the email
-                    reason = extract_withdrawal_reason(em["subject"], em["body"])
-                    cur.execute(target["sql"], (tid, pid, em["id"], reason))
-                else:
-                    cur.execute(target["sql"], (tid, pid, em["id"]))
+                # Append each target's locally-parsed extras (reason / division /
+                # events) after the core params, in the registry's declared order,
+                # so bulk fills the same fields single-file does (no LLM).
+                extras = [_EXTRACTORS[name](em) for name in target.get("extract", [])]
+                cur.execute(target["sql"], (tid, pid, em["id"], *extras))
                 if cur.rowcount > 0:
                     filed_count += 1
                     cur.execute("UPDATE email_message SET status='filed' WHERE id=%s", (em["id"],))

@@ -44,6 +44,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "missing_distance_count": sum(1 for o in officials if o["missing_distance"]),
         "hotel_mismatch_count": sum(1 for o in officials if o["hotel_date_mismatch"]),
         "out_of_window_count": sum(1 for o in officials if o["work_date_out_of_window"]),
+        "conflict_count": sum(1 for o in officials if o["has_conflict"]),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "totals": totals}

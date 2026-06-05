@@ -16,6 +16,9 @@ except Exception:
 
 
 class Settings:
+    # Deployment environment. Anything outside the dev set is treated as a
+    # shared/hosted deployment and triggers the security guard below.
+    env: str = os.getenv("ENV", "dev")
     host: str = os.getenv("PGHOST", "localhost")
     port: str = os.getenv("PGPORT", "5432")
     user: str = os.getenv("PGUSER", "postgres")
@@ -23,20 +26,55 @@ class Settings:
     dbname: str = os.getenv("PGDATABASE", "courtops")
     # DB to connect to when creating the target database (must already exist).
     admin_dbname: str = os.getenv("PGADMIN_DB", "postgres")
+    # libpq TLS mode. Default "prefer" = use TLS if the server offers it, else
+    # fall back (safe for a local Postgres without SSL). Production must set
+    # require / verify-ca / verify-full — enforced in validate().
+    sslmode: str = os.getenv("PGSSLMODE", "prefer")
+
+    _DEV_ENVS = {"dev", "development", "local", "test", "ci"}
+    _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}
+
+    def is_prod(self) -> bool:
+        return self.env.strip().lower() not in self._DEV_ENVS
 
     @property
     def dsn(self) -> str:
         return (
             f"host={self.host} port={self.port} dbname={self.dbname} "
-            f"user={self.user} password={self.password}"
+            f"user={self.user} password={self.password} sslmode={self.sslmode}"
         )
 
     @property
     def admin_dsn(self) -> str:
         return (
             f"host={self.host} port={self.port} dbname={self.admin_dbname} "
-            f"user={self.user} password={self.password}"
+            f"user={self.user} password={self.password} sslmode={self.sslmode}"
         )
+
+    def validate(self) -> None:
+        """Fail fast on insecure POC defaults outside dev (PII hardening H1 —
+        see docs/pii-hardening-plan.md). No-op in dev/test so the local loop and
+        the suite are unaffected; refuses to boot a shared/hosted deployment that
+        still carries the default superuser creds or a non-TLS DB connection."""
+        if not self.is_prod():
+            return
+        problems = []
+        if self.user == "postgres" or self.password == "postgres":
+            problems.append(
+                "default Postgres superuser/password — set PGUSER/PGPASSWORD to a "
+                "dedicated least-privilege role with a secret from the environment"
+            )
+        if self.sslmode.strip().lower() not in self._SECURE_SSLMODES:
+            problems.append(
+                f"PGSSLMODE={self.sslmode!r} does not enforce TLS — set "
+                "require / verify-ca / verify-full"
+            )
+        if problems:
+            raise RuntimeError(
+                f"Refusing to start with ENV={self.env!r}: "
+                + "; ".join(problems)
+                + ". See docs/pii-hardening-plan.md §H1. (Set ENV=dev for local POC.)"
+            )
 
 
 settings = Settings()

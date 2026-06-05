@@ -87,6 +87,49 @@ def _summary(cur, a: dict) -> dict:
         ps, pe = a["play_start_date"].isoformat(), a["play_end_date"].isoformat()
         work_date_out_of_window = any(d["work_date"] < ps or d["work_date"] > pe for d in days)
 
+    # Double-booking: the same official worked on a date in ANOTHER assignment.
+    # (Within one tournament an official has a single assignment with one role
+    # per date — UNIQUE(assignment_id, work_date) — so a same-day clash can only
+    # be cross-tournament.) Surfaced as a flag, not a block (audit §3.4): the TD
+    # may legitimately double-book one venue, but two sites on one day is
+    # impossible, so we also note whether the other booking is a different site.
+    # Every date this official works in ANOTHER assignment — used both for the
+    # conflict flags (dates that overlap THIS assignment's days) and the add-day
+    # pre-check (warn before booking a date they already work elsewhere).
+    cur.execute(
+        "SELECT ad.work_date, a2.tournament_id AS other_tournament_id, "
+        "       t2.name AS other_tournament, COALESCE(s2.code, s2.name) AS other_site, "
+        "       a2.site_id AS other_site_id "
+        "FROM assignment_day ad "
+        "JOIN assignment a2 ON a2.id = ad.assignment_id "
+        "JOIN tournament t2 ON t2.id = a2.tournament_id "
+        "LEFT JOIN site s2 ON s2.id = a2.site_id "
+        "WHERE a2.official_id = %s AND a2.id <> %s "
+        "ORDER BY ad.work_date",
+        (a["official_id"], a["id"]),
+    )
+    this_dates = {d["work_date"] for d in days}
+    official_other_dates: list[dict] = []
+    conflicts: list[dict] = []
+    for r in cur.fetchall():
+        wd = r["work_date"].isoformat()
+        info = {
+            "work_date": wd,
+            "other_tournament_id": r["other_tournament_id"],
+            "other_tournament": r["other_tournament"],
+            "other_site": r["other_site"],
+            # a different site on the same day is physically impossible (hard
+            # conflict); same/no site may be a legitimate shared venue (soft).
+            "different_site": r["other_site_id"] is not None
+            and r["other_site_id"] != a["site_id"],
+        }
+        official_other_dates.append(info)
+        if wd in this_dates:
+            conflicts.append(info)
+    conflict_dates = {c["work_date"] for c in conflicts}
+    for d in days:
+        d["conflict"] = d["work_date"] in conflict_dates
+
     return {
         "id": a["id"],
         "tournament_id": a["tournament_id"],
@@ -105,6 +148,12 @@ def _summary(cur, a: dict) -> dict:
         "missing_distance": missing_distance,
         "hotel_date_mismatch": hotel_date_mismatch,
         "work_date_out_of_window": work_date_out_of_window,
+        # Cross-tournament double-booking (audit §3.4 — a warning, not a block).
+        "has_conflict": bool(conflicts),
+        "has_hard_conflict": any(c["different_site"] for c in conflicts),
+        "conflicts": conflicts,
+        # All dates this official works elsewhere — feeds the add-day pre-check.
+        "official_other_dates": official_other_dates,
         "total": round(pay + (mileage or 0.0), 2),
         "rule_version": a.get("rule_version"),
         "snapshot_at": a["snapshot_at"].isoformat() if a.get("snapshot_at") else None,

@@ -52,6 +52,16 @@ class EmailOut(BaseModel):
     # emails); null when none could be extracted. Surfaced in the inbox so the
     # TD sees it before filing, and auto-filled into the withdrawal row.
     detected_reason: Optional[str] = None
+    # Structured fields parsed locally from subject/body (no LLM) so single-file
+    # filing can pre-fill the late-entry / withdrawal forms. `detected_division`
+    # is a junior roster code (e.g. 'B14'); `detected_events` is a comma-joined
+    # list of event-catalog names ('Singles, Doubles'). Null when not found.
+    detected_division: Optional[str] = None
+    detected_events: Optional[str] = None
+    # Scheduling-avoidance day/time parsed from the email (scheduling-classified
+    # emails only); pre-fills the scheduling form's free-text fields. Null else.
+    detected_avoid_day: Optional[str] = None
+    detected_avoid_time: Optional[str] = None
 
 
 class EmailBulkReassign(BaseModel):

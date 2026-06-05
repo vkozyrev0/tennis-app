@@ -2394,7 +2394,14 @@ function renderAssignment(a, availDates) {
   // pay/mileage/total badges and any flags as colored chips (no run-on line).
   const mileage = a.missing_distance ? '<span class="warn">no distance</span>'
     : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
+  // Cross-tournament double-booking (a warning, not a block — audit §3.4). A
+  // different-site clash is impossible (badge-bad); same/no site is a soft
+  // heads-up (badge-warn). Tooltip lists where else the official is booked.
+  const conflictTitle = "Also booked the same day — " + (a.conflicts || []).map(
+    (c) => `${c.work_date}${c.other_site ? ` @ ${c.other_site}` : ""} (${c.other_tournament})`
+  ).join("; ");
   const flagChips = [
+    a.has_conflict ? `<span class="badge badge-${a.has_hard_conflict ? "bad" : "warn"}" title="${esc(conflictTitle)}">⚠ double-booked</span>` : "",
     a.hotel_date_mismatch ? '<span class="badge badge-warn">⚠ hotel dates</span>' : "",
     a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
@@ -2461,6 +2468,7 @@ function renderAssignment(a, availDates) {
     const chip = document.createElement("span"); chip.className = "chip";
     const oow = _outOfWindow(d.work_date);
     chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
+      `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
       `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
     x.addEventListener("click", async () => { try { await api(`/assignment-days/${d.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); } });
@@ -2512,6 +2520,14 @@ function renderAssignment(a, availDates) {
     if (oow.length && !(await confirmDialog(
       `${oow.length} day(s) fall outside the play window (${active.play_start_date} → ${active.play_end_date}). Add anyway?`,
       "Add anyway"))) return;
+    // Double-booking pre-check: warn before adding a date this official already
+    // works in another tournament (a warning, not a block — audit §3.4).
+    const elsewhere = new Map((a.official_other_dates || []).map((c) => [c.work_date, c]));
+    const clash = dates.filter((d) => elsewhere.has(d));
+    if (clash.length && !(await confirmDialog(
+      `${clash.length} day(s) double-book ${a.official_name} — already assigned elsewhere: ` +
+      clash.map((d) => { const c = elsewhere.get(d); return `${d}${c.other_site ? ` @ ${c.other_site}` : ""} (${c.other_tournament})`; }).join("; ") +
+      `. Add anyway?`, "Add anyway"))) return;
     try {
       for (const d of dates) {
         await api(`/assignments/${a.id}/days`, { method: "POST", body: JSON.stringify({ work_date: d, working_as: certSel.value }) });
@@ -2761,6 +2777,31 @@ const FILE_TARGETS = {
   pairing_avoidance: { label: "Pairing avoid.", tab: "panel-t-pairing", form: document.getElementById("pairing-form"), msg: "pairing-msg" },
   doubles: { label: "Doubles", tab: "panel-t-doubles", form: document.getElementById("doubles-form"), msg: "doubles-msg" },
 };
+// FILE_TARGETS holds the *DOM wiring* (tab/form/msg), which can only live in the
+// frontend. The set of classification keys + their labels + which are
+// bulk-populatable is owned by the backend registry (app/email_targets.py),
+// exposed at GET /api/emails/targets. verifyEmailTargets() reconciles the two at
+// boot so the keys/labels can't silently drift (the bug class that left bulk
+// "scheduling" filing into nothing): the server label becomes authoritative and
+// any key the server knows but the UI can't file — or vice versa — is logged
+// loudly. The literal above is the fallback when the fetch hasn't run / fails,
+// so single-file filing keeps working regardless.
+async function verifyEmailTargets() {
+  let targets;
+  try { targets = await api("/emails/targets"); }
+  catch (e) { console.warn("[email-targets] could not load registry:", e.message); return; }
+  const serverKeys = new Set(targets.map((t) => t.key));
+  for (const t of targets) {
+    const dom = FILE_TARGETS[t.key];
+    if (!dom) { console.warn(`[email-targets] DRIFT: server target '${t.key}' has no FILE_TARGETS DOM wiring — emails of this class can't be filed in the UI.`); continue; }
+    dom.label = t.label;                                   // server is authoritative for the label
+    if (EMAIL_CLASS_META[t.key]) EMAIL_CLASS_META[t.key].label = t.label;
+    dom.bulk = t.bulk;                                     // expose bulk-ness to the UI if needed
+  }
+  for (const key of Object.keys(FILE_TARGETS)) {
+    if (!serverKeys.has(key)) console.warn(`[email-targets] DRIFT: FILE_TARGETS offers '${key}' but the backend registry doesn't know it — bulk populate will skip these.`);
+  }
+}
 
 // Inbox grid. Classification is an inline list-editor (double-click); the per-row
 // File-target picker + File / Suggest / Delete buttons live in the actions column.
@@ -2769,7 +2810,12 @@ async function _inboxPutClass(m, classification) {
   // overwrites detected_player_id with whatever we send, so omitting it would
   // silently unlink the player (and clear its match_kind).
   await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({
-    tournament_id: active.id, classification, status: m.status,
+    // Preserve the email's OWN tournament — the inbox is cross-tournament, so
+    // forcing active.id here silently re-homed an email belonging to another
+    // tournament whenever its classification was changed/suggested. Only fall
+    // back to the active workspace for an as-yet-unassigned email.
+    tournament_id: m.tournament_id ?? (active && active.id) ?? null,
+    classification, status: m.status,
     detected_player_id: m.detected_player_id ?? null,
   }) });
 }
@@ -2877,14 +2923,63 @@ const inboxGrid = makeReadGrid("inbox-table", [
       };
       const doFile = () => {
         const t = FILE_TARGETS[m.classification]; if (!t) return;
+        // File into the email's OWN tournament, not whatever is active. The inbox
+        // is cross-tournament and every filing form POSTs to
+        // /tournaments/<active>/… , so re-scope the workspace to the email's
+        // tournament first (setActive toasts the switch). An unassigned email
+        // (no tournament_id) falls through and files under the active workspace.
+        if (m.tournament_id && (!active || m.tournament_id !== active.id)) {
+          setActive(String(m.tournament_id));
+        }
+        // Switch tab FIRST — the tab handler refreshes some player selects, which
+        // would otherwise wipe a preset value (same ordering as the roster→withdraw
+        // flow above). Set the form fields after, then open the modal so
+        // scheduleComboSync() shows the chosen name in the type-in combobox.
+        document.querySelector(`.tab[data-target="${t.tab}"]`).click();
         t.form.source_email_id.value = m.id;
+        // Carry the auto-detected player into the form's required picker so the
+        // TD doesn't re-select someone the inbox already identified (mirrors the
+        // bulk-populate path, which files on detected_player_id directly). Stays
+        // editable before saving; forms without a single player_ref (e.g.
+        // pairing's member rows) are skipped by the guard.
+        if (t.form.player_ref && m.detected_player_id) {
+          t.form.player_ref.value = String(m.detected_player_id);
+          // Sync the combobox display SYNCHRONOUSLY (not the rAF-debounced
+          // scheduleComboSync): this same menu click bubbles to the document
+          // click handler that closes open comboboxes, and close() resets the
+          // select to blank when the combo's text input is still empty. Filling
+          // the display now means the input is non-empty by the time that fires.
+          if (typeof t.form.player_ref._comboSync === "function") t.form.player_ref._comboSync();
+        }
         // Carry the auto-detected withdrawal reason into the form so the TD
         // doesn't retype it (still editable before saving).
         if (m.classification === "withdrawal" && t.form.reason && m.detected_reason) {
           t.form.reason.value = m.detected_reason;
         }
-        document.querySelector(`.tab[data-target="${t.tab}"]`).click();
+        // Carry the locally-parsed age division + events into the form's
+        // catalog pickers (late entry has both; withdrawal has events). Only
+        // select option values that actually exist for this tournament's
+        // catalog; unknown/unmatched values are left blank for the TD.
+        const div = t.form.elements.age_division;
+        if (div && m.detected_division &&
+            [...div.options].some((o) => o.value === m.detected_division)) {
+          div.value = m.detected_division;
+          if (typeof div._comboSync === "function") div._comboSync();
+        }
+        const evSel = t.form.elements.events;
+        if (evSel && evSel.multiple && m.detected_events) {
+          const want = new Set(m.detected_events.split(",").map((s) => s.trim()));
+          [...evSel.options].forEach((o) => { if (want.has(o.value)) o.selected = true; });
+        }
+        // Scheduling avoidance: carry the parsed day + time-range free-text.
+        if (t.form.elements.avoid_day && m.detected_avoid_day) {
+          t.form.elements.avoid_day.value = m.detected_avoid_day;
+        }
+        if (t.form.elements.avoid_time_range && m.detected_avoid_time) {
+          t.form.elements.avoid_time_range.value = m.detected_avoid_time;
+        }
         openForm(t.form);
+        scheduleComboSync();
         setMsg(t.msg, `filing from email #${m.id}`, true);
         const focusEl = t.form.querySelector(".combo-input") || t.form.querySelector("input, select");
         if (focusEl) focusEl.focus();
@@ -2915,6 +3010,7 @@ inboxGrid.grid.on("cellEdited", async (cell) => {
 // Detail pane: clicking a row opens it below the grid. Lets the TD read the
 // full email body and override the classification or status.
 let _inboxDetailId = null;
+let _inboxDetailTid = null;  // the open email's own tournament_id (preserved on save)
 function _populateInboxClassSelect() {
   const sel = document.getElementById("inbox-detail-classification");
   if (!sel || sel.options.length) return;
@@ -2971,6 +3067,7 @@ async function _populateInboxPlayerSelect(activeId) {
 function _openInboxDetail(m) {
   _populateInboxClassSelect();
   _inboxDetailId = m.id;
+  _inboxDetailTid = m.tournament_id ?? null;  // preserve on save (don't re-home to active)
   const box = document.getElementById("inbox-detail");
   box.hidden = false;
   document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
@@ -3062,7 +3159,10 @@ document.getElementById("inbox-detail-save").addEventListener("click", async () 
     await api(`/emails/${_inboxDetailId}`, {
       method: "PUT",
       body: JSON.stringify({
-        tournament_id: active.id, classification: cls, status,
+        // keep the email's own tournament (see _inboxPutClass) — don't re-home
+        // to the active workspace; only default to active if it was unassigned.
+        tournament_id: _inboxDetailTid ?? (active && active.id) ?? null,
+        classification: cls, status,
         detected_player_id,
       }),
     });
@@ -4107,6 +4207,7 @@ async function loadReports() {
     const worked = new Set(o.days.map((d) => d.work_date));
     const roles = [...new Set(o.days.map((d) => d.working_as))].map(certLabel).join(", ");
     const flags = [
+      o.has_conflict ? "double-booked" : "",
       o.missing_distance ? "no distance" : "",
       o.hotel_date_mismatch ? "hotel dates" : "",
       o.work_date_out_of_window ? "off-window day" : "",
@@ -4125,7 +4226,8 @@ async function loadReports() {
   const lead = 6 + cols.length;  // columns before Pay
   if (reportData.officials.length === 0)
     tbody.innerHTML = `<tr><td class="empty" colspan="${lead + 2}">No officials assigned yet.</td></tr>`;
-  const note = (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
+  const note = (totals.conflict_count ? ` · ${totals.conflict_count} double-booked` : "") +
+    (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
     (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "");
   document.getElementById("report-totals").innerHTML =
@@ -4858,4 +4960,8 @@ function _consolidateRosterToolbar() {
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
   applyAuth(who);
+  // Reconcile the inbox File-target labels/keys with the backend registry
+  // (admin-only endpoint). Fire-and-forget: refines labels + surfaces drift, but
+  // the literal FILE_TARGETS already works if this is slow or unavailable.
+  if (who && who.role === "admin") verifyEmailTargets();
 })();

@@ -35,7 +35,13 @@ from .routers import (
     tournaments,
     withdrawals,
 )
+from .config import settings
 from .security import require_admin
+
+# PII hardening H1: refuse to start a shared/hosted deployment that still carries
+# the POC defaults (superuser creds / no TLS). No-op in dev/test.
+# See docs/pii-hardening-plan.md §H1.
+settings.validate()
 
 app = FastAPI(title="CourtOps Tennis API", version="0.4.0")
 
