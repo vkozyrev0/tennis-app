@@ -308,7 +308,12 @@ Critical review of the running POC UI. Ordered by impact.
   add ARIA + keyboard support. Status colors already pair with text (good).
 - **Mobile**: the two-group menu wraps to several rows; consider a compact/scrolling
   nav. (master-detail already stacks.)
-- **Server-side filtering/pagination** once lists grow (filters are client-side).
+- **Server-side filtering/pagination** — ✅ **started (inbox)**: `GET /api/emails`
+  gains `q` (SQL `ILIKE` on subject/sender — body is encrypted so it's metadata
+  search), `limit`/`offset`, and an `X-Total-Count` header; the inbox loads a
+  capped page with a debounced server-side search box. Other big lists (players)
+  still client-filter — the same params are the pattern to extend (players needs
+  decoupling its grid from the full `playersById` the pickers rely on first).
 
 ### Notes
 - These are captured from the UI as built; they do **not** change earlier

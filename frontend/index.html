@@ -767,6 +767,11 @@
           <span class="msg" id="inbox-bulk-msg"></span>
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
+        <div class="row mb-half">
+          <input type="search" id="inbox-search" class="filter filter--narrow"
+                 placeholder="Search subject / sender…" aria-label="Search inbox (server-side)" />
+          <span class="muted" id="inbox-search-note"></span>
+        </div>
         <table id="inbox-table" class="list-table">
           <thead><tr><th></th><th>Received</th><th>From</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
@@ -1138,6 +1143,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=66"></script>
+  <script type="module" src="/app.js?v=67"></script>
 </body>
 </html>

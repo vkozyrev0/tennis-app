@@ -48,15 +48,29 @@ _FROM = ("FROM email_message e "
 
 
 @router.get("", response_model=list[EmailOut])
-def list_emails(tournament_id: int | None = None, status: str | None = None, conn=Depends(db_dep)):
+def list_emails(response: Response, tournament_id: int | None = None,
+                status: str | None = None, q: str | None = None,
+                limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    """Server-side filtered/paged inbox. `q` searches subject + from_address
+    (NOT body — it's encrypted at rest, H2). `limit`/`offset` page the result;
+    the full match count is returned in the `X-Total-Count` header. With no
+    limit the whole (filtered) set is returned (back-compat)."""
     clauses, params = [], []
     if tournament_id is not None:
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
     if status is not None:
         clauses.append("e.status = %s"); params.append(status)
+    if q:
+        clauses.append("(e.subject ILIKE %s OR e.from_address ILIKE %s)")
+        params += [f"%{q}%", f"%{q}%"]
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} {_FROM}{where} ORDER BY e.received_at DESC", params)
+        cur.execute(f"SELECT count(*) AS n FROM email_message e{where}", params)
+        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
+        page, page_params = "", list(params)
+        if limit is not None:
+            page = " LIMIT %s OFFSET %s"; page_params += [limit, offset]
+        cur.execute(f"SELECT {_COLS} {_FROM}{where} ORDER BY e.received_at DESC{page}", page_params)
         rows = cur.fetchall()
     # Attach a parsed withdrawal reason for withdrawal-classified emails (cheap
     # regex over the body; skipped for everything else).

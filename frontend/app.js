@@ -3457,14 +3457,24 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
 // Populate the tournament dropdown lazily — once when the panel opens.
 _inboxPopulateTournamentDropdown();
 let _inboxFilterInit = false;
+const _INBOX_PAGE = 200;  // server-side cap; search to reach older mail
 async function loadInbox() {
   if (!active) return;
-  // Fetch ALL emails (not just the active tournament's) so the inbox is a true
-  // triage surface — the TD can see which tournament each email belongs to and
-  // reassign across tournaments. The Tournament column header-filter is set to
-  // the active tournament by default so the familiar single-tournament view is
-  // what shows first; clearing it reveals every tournament's mail + unassigned.
-  inboxGrid.setData(await api(`/emails`));
+  // Fetch emails across tournaments (a true triage surface) but capped + with a
+  // SERVER-SIDE search (q matches subject/sender in SQL — body is encrypted, so
+  // it's metadata search). The Tournament column header-filter still narrows the
+  // loaded page client-side. Scales past the old "load every row" approach.
+  const q = (document.getElementById("inbox-search")?.value || "").trim();
+  const params = new URLSearchParams({ limit: String(_INBOX_PAGE) });
+  if (q) params.set("q", q);
+  const rows = await api(`/emails?${params}`);
+  inboxGrid.setData(rows);
+  const note = document.getElementById("inbox-search-note");
+  if (note) {
+    note.textContent = rows.length >= _INBOX_PAGE
+      ? `showing the first ${_INBOX_PAGE} — refine the search to narrow`
+      : (q ? `${rows.length} match(es)` : "");
+  }
   // Default filters: status "new" + the active tournament. One-time for status
   // (respect manual choice); the tournament filter re-applies each load so it
   // tracks the active tournament as the TD switches between them.
@@ -3474,6 +3484,12 @@ async function loadInbox() {
   }
   try { inboxGrid.grid.setHeaderFilterValue("tournament_name", active.name || ""); } catch (_) {}
 }
+// Debounced server-side inbox search (re-queries; no per-keystroke round-trip).
+let _inboxSearchTimer = null;
+document.getElementById("inbox-search")?.addEventListener("input", () => {
+  clearTimeout(_inboxSearchTimer);
+  _inboxSearchTimer = setTimeout(() => { if (active) loadInbox(); }, 300);
+});
 onSubmit(document.getElementById("email-form"), async (e) => {
   if (!active) return;
   const b = formObj(e.target); b.tournament_id = active.id;
