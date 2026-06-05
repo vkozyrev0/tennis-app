@@ -150,6 +150,9 @@ pay snapshots).
       each day, zeros in red), finer than the tournament-wide counts. Rows include
       every linked site (a fully-uncovered venue still shows) + a "(no site)" row
       for venue-less assignments. On screen + in the PDF. (`site_coverage`.)
+- [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
+      per day" row + a per-site row, aligned under the same day columns, so the
+      TD can track/share coverage gaps in a spreadsheet.
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.

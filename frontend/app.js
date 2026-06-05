@@ -4731,6 +4731,19 @@ function _reportMatrix(includeData) {
     }
     const tt = reportData.totals;
     rows.push(["Totals", "", "", "", "", "", ...cols.map(() => ""), tt.pay, tt.mileage]);
+    // Coverage section — per-day officials count + per-site grid, aligned under
+    // the same day columns so the TD can track gaps in a spreadsheet.
+    const covByDate = {};
+    for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
+    rows.push([]);  // blank separator
+    rows.push(["Officials per day", "", "", "", "", "",
+      ...cols.map((c) => covByDate[c.date] ?? 0), "", ""]);
+    for (const s of (reportData.site_coverage || [])) {
+      const byDate = {};
+      for (const b of s.by_date) byDate[b.date] = b.officials;
+      rows.push([s.site_label, "", "", "", "", "",
+        ...cols.map((c) => byDate[c.date] ?? 0), "", ""]);
+    }
   }
   return rows;
 }
