@@ -4452,6 +4452,73 @@ function _reportMatrix(includeData) {
   return rows;
 }
 document.getElementById("report-print").addEventListener("click", () => window.print());
+// PDF export: open a clean, self-contained report (officials staffing plan +
+// lodging + other staff) in a new window and auto-print → the TD saves as PDF.
+// No PDF lib — mirrors the hotel-report print-window pattern.
+function exportReportPdf() {
+  if (!reportData) { toast("Load the report first", false); return; }
+  const e = esc, t = reportData.tournament, totals = reportData.totals;
+  const cols = _reportColumns(t);
+  const dayHead = cols.map((c) => `<th class="day">${e(c.head)}</th>`).join("");
+  const offRows = reportData.officials.length ? reportData.officials.map((o) => {
+    const worked = new Set(o.days.map((d) => d.work_date));
+    const roles = [...new Set(o.days.map((d) => d.working_as))].map(certLabel).join(", ");
+    const dayCells = cols.map((c) => `<td class="day">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
+    const flags = [o.has_conflict ? "double-booked" : "", o.missing_distance ? "no distance" : "",
+      o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window" : ""].filter(Boolean).join("; ");
+    return `<tr><td>${e(o.official_name)}${flags ? ` <span class="flag">⚠ ${e(flags)}</span>` : ""}</td>` +
+      `<td>${e(roles)}</td><td>${e(o.dietary_restrictions || "")}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
+      `<td>${e(_fmtMDY(o.check_in))}</td><td>${e(_fmtMDY(o.check_out))}</td>${dayCells}` +
+      `<td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td></tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${cols.length + 8}">No officials assigned.</td></tr>`;
+  const staff = reportData.staff || [];
+  const staffRows = staff.length ? staff.map((s) => {
+    const worked = new Set(s.days || []);
+    const dayCells = cols.map((c) => `<td class="day">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
+    return `<tr><td>${e(s.name)}</td><td>${e(STAFF_ROLES[s.role] || s.role)}</td>${dayCells}` +
+      `<td class="num">${s.pay ? money(s.pay) : ""}</td></tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${cols.length + 3}">No non-official staff.</td></tr>`;
+  const housed = reportData.officials.filter((o) => o.hotel_name);
+  const lodgeRows = housed.length ? housed.map((o) => {
+    const ds = o.days.map((d) => d.work_date).sort();
+    const span = ds.length ? `${fmtDOW(ds[0])} – ${fmtDOW(ds[ds.length - 1])}` : "—";
+    return `<tr><td>${e(o.official_name)}</td><td>${e(o.hotel_name)}</td><td>${e(span)}</td></tr>`;
+  }).join("") : `<tr><td class="empty" colspan="3">No officials with a hotel assignment.</td></tr>`;
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.2cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.2rem; }
+      h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom: 2px solid #2e6f40; padding-bottom: 0.2rem; color: #2e6f40; }
+      .meta { color: #556070; font-size: 11px; margin-bottom: 0.4rem; }
+      table { border-collapse: collapse; width: 100%; margin: 0.4rem 0 0.8rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      th { background: #f4f6f8; font-weight: 700; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      td.day, th.day { text-align: center; }
+      td.empty { color: #556070; font-style: italic; text-align: center; }
+      .flag { color: #c62828; font-size: 10px; }
+      tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
+      @media print { @page { margin: 1cm; size: landscape; } .noprint { display: none; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Officials staffing plan</h1>
+    <div class="meta">${e(t.name)} · ${e(t.play_start_date)} → ${e(t.play_end_date)}${totals.rule_version ? ` · pay rule ${e(reportData.officials.find((o) => o.rule_version)?.rule_version || "")}` : ""}</div>
+    <table><thead><tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th><th>Check-in</th><th>Check-out</th>${dayHead}<th class="num">Pay</th><th class="num">Mileage</th></tr></thead>
+      <tbody>${offRows}
+        <tr class="totals"><td colspan="${cols.length + 6}">Totals — ${totals.official_count} official(s)</td><td class="num">${money(totals.pay)}</td><td class="num">${money(totals.mileage)}</td></tr>
+      </tbody></table>
+    <h2>Officials needing accommodation</h2>
+    <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
+    <h2>Other staff${totals.staff_pay ? ` — pay ${money(totals.staff_pay)}` : ""}</h2>
+    <table><thead><tr><th>Name</th><th>Role</th>${dayHead}<th class="num">Pay</th></tr></thead><tbody>${staffRows}</tbody></table>
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-pdf").addEventListener("click", exportReportPdf);
 async function reportCsvExport() {
   if (!active) { toast("Select a tournament first", false); return; }
   await loadReports();

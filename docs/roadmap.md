@@ -197,7 +197,9 @@ Remaining: the optional auto-triage agent.
 - [ ] Multi-user TD access if needed (D8).
 - [x] **CSV export on every list** — a generic "⬇ CSV" button on the roster,
       t-shirts, inbox, and all Part B list tables (skips the actions column), plus
-      the officials report's existing Print + CSV. (PDF still optional.)
+      the officials report's existing Print + CSV, and a **PDF export** (a clean,
+      self-contained landscape report — officials day-grid + lodging + other
+      staff — opened in a print window to save as PDF; no PDF lib).
 - [x] **Correction handling** (migration 0034): a follow-up email can be marked
       as amending an earlier one (`email_message.amends_email_id`,
       `POST /api/emails/{id}/amends`). The inbox shows **↻ correction** /
