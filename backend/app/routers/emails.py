@@ -112,6 +112,28 @@ def list_emails(response: Response, tournament_id: int | None = None,
     return rows
 
 
+@router.get("/status-counts")
+def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
+    """Inbox progress at a glance: how many emails are still **new** (unfiled) vs
+    **filed** vs **need follow-up**, so the TD sees what's left to process. The
+    `new` count is the actionable one."""
+    clauses, params = [], []
+    if tournament_id is not None:
+        clauses.append("tournament_id = %s"); params.append(tournament_id)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT status, count(*) AS n FROM email_message{where} GROUP BY status",
+            params,
+        )
+        by = {r["status"]: r["n"] for r in cur.fetchall()}
+    new = by.get("new", 0)
+    filed = by.get("filed", 0)
+    follow = by.get("needs_followup", 0)
+    return {"new": new, "filed": filed, "needs_followup": follow,
+            "total": new + filed + follow}
+
+
 @router.post("", response_model=EmailOut, status_code=201)
 def create_email(body: EmailCreate, conn=Depends(db_dep)):
     try:

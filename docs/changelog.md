@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **190** green, migrations
+A large round of fixes + features (full backend suite: **193** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -110,6 +110,11 @@ live in the running app, not just by tests.
   the player picker is pre-selected by the detected USTA # (precise even when two
   players share a surname), falling back from the linked player. Pure resolver
   (`resolveFilePlayerId`) with node-test coverage.
+- **Inbox progress summary** — the inbox shows an at-a-glance status line
+  ("N unfiled · M filed · K need follow-up · T total") from a new lightweight
+  `GET /api/emails/status-counts`. (Per-email filed status, filed-on-save, and the
+  status filter already existed; this surfaces the aggregate "what's left to
+  process".) The unfiled count links to the new-only filter.
 - **Re-detect after add-to-roster** — once "Add player to roster" saves, the
   source email is re-run through the detector and links to the just-added player
   automatically (no manual "Detect"). Best-effort: the roster save itself always

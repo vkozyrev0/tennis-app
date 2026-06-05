@@ -1176,3 +1176,9 @@ td.toggle { white-space: nowrap; }
 .daycol.cov-thin { color: var(--warn-ink); background: var(--warn-bg); font-weight: 600; }
 .cov-min-ctl { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; }
 .cov-min-ctl input { width: 3.2rem; padding: 0.15rem 0.3rem; }
+/* Inbox progress summary (unfiled / filed / follow-up counts). */
+.inbox-summary { font-size: 0.88rem; color: var(--muted); margin: 0.2rem 0 0.5rem; }
+.inbox-summary a { color: var(--accent); text-decoration: none; }
+.inbox-summary a:hover { text-decoration: underline; }
+.inbox-summary .inbox-sum-todo { font-weight: 700; }
+.inbox-summary .resp-ok { color: var(--ok); }

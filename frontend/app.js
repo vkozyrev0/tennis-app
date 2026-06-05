@@ -3796,6 +3796,29 @@ async function loadInbox() {
     try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
   }
   try { inboxGrid.grid.setHeaderFilterValue("tournament_name", active.name || ""); } catch (_) {}
+  _loadInboxStatusSummary();
+}
+// Inbox progress summary: counts of unfiled (new) / filed / need-follow-up for
+// the active tournament, so the TD sees what's left to process at a glance.
+// "unfiled" is the actionable number and clicking it filters the grid to new.
+async function _loadInboxStatusSummary() {
+  const el = document.getElementById("inbox-status-summary");
+  if (!el || !active) return;
+  let c;
+  try { c = await api(`/emails/status-counts?tournament_id=${active.id}`); }
+  catch (_) { el.hidden = true; return; }
+  if (!c.total) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.innerHTML =
+    `<a href="#" id="inbox-sum-new" class="${c.new ? "inbox-sum-todo" : ""}">${c.new} unfiled</a>` +
+    ` · <span class="resp-ok">${c.filed} filed</span>` +
+    (c.needs_followup ? ` · <span class="warn">${c.needs_followup} need follow-up</span>` : "") +
+    ` · ${c.total} total`;
+  const link = document.getElementById("inbox-sum-new");
+  if (link) link.addEventListener("click", (e) => {
+    e.preventDefault();
+    try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
+  });
 }
 // Debounced server-side inbox search (re-queries; no per-keystroke round-trip).
 let _inboxSearchTimer = null;
