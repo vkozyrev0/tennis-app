@@ -146,6 +146,10 @@ pay snapshots).
       red) + a callout listing tournament days with **no official assigned**, so
       the TD fills uncovered days before the event. On screen + in the PDF.
       (`coverage` / `uncovered_days` / `uncovered_days_count` in the report.)
+- [x] **Per-site coverage by day** — a site×day grid (officials at each venue
+      each day, zeros in red), finer than the tournament-wide counts. Rows include
+      every linked site (a fully-uncovered venue still shows) + a "(no site)" row
+      for venue-less assignments. On screen + in the PDF. (`site_coverage`.)
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.

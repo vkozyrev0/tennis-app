@@ -4634,6 +4634,20 @@ async function loadReports() {
       `${uncovered.map((d) => esc(fmtDOW(d))).join(", ")} — fill before the event.`;
   } else { covNote.hidden = true; covNote.textContent = ""; }
 
+  // Per-site coverage grid: rows = sites, columns = play-window days, cell =
+  // officials at that site that day (zero highlighted). Finer than the
+  // tournament-wide counts — surfaces a specific venue/day that's thin.
+  const siteCov = reportData.site_coverage || [];
+  document.querySelector("#site-coverage-table thead").innerHTML =
+    "<tr><th>Site</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
+  const scBody = document.querySelector("#site-coverage-table tbody");
+  scBody.innerHTML = siteCov.length
+    ? siteCov.map((s) => {
+        const cells = s.by_date.map((b) => `<td class="daycol${b.officials === 0 ? " warn" : ""}">${b.officials}</td>`).join("");
+        return `<tr><td>${esc(s.site_label)}</td>${cells}</tr>`;
+      }).join("")
+    : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
+
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
   const lodge = document.querySelector("#lodging-table tbody");
@@ -4772,6 +4786,11 @@ function exportReportPdf() {
     return `<td class="day"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`;
   }).join("");
   const coverageRow = `<tr class="totals"><td colspan="6">Officials per day</td>${covCells}<td></td><td></td></tr>`;
+  const siteCov = reportData.site_coverage || [];
+  const siteCovRows = siteCov.length ? siteCov.map((s) => {
+    const cells = s.by_date.map((b) => `<td class="day"${b.officials === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${b.officials}</td>`).join("");
+    return `<tr><td>${e(s.site_label)}</td>${cells}</tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked.</td></tr>`;
   const win = window.open("", "_blank");
   if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
@@ -4799,6 +4818,8 @@ function exportReportPdf() {
         ${coverageRow}
       </tbody></table>
     ${totals.uncovered_days_count ? `<p style="color:#c62828">⚠ ${totals.uncovered_days_count} day(s) with no official assigned: ${reportData.uncovered_days.map((d) => e(fmtDOW(d))).join(", ")}</p>` : ""}
+    <h2>Coverage by site &amp; day</h2>
+    <table><thead><tr><th>Site</th>${dayHead}</tr></thead><tbody>${siteCovRows}</tbody></table>
     <h2>Officials needing accommodation</h2>
     <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
     <h2>Room-block pickup (officials)</h2>

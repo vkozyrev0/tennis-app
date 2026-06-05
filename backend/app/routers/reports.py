@@ -96,6 +96,41 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         cur_day += timedelta(days=1)
     uncovered_days = [c["date"] for c in coverage if c["officials"] == 0]
 
+    # Per-site coverage: officials per site per day, finer than the tournament-wide
+    # counts above, so the TD spots a specific venue/day that's thin or empty.
+    # Rows include EVERY site linked to the tournament (so a fully-uncovered site
+    # still shows) plus a "(no site)" row if any assignment lacks a venue.
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT s.id, COALESCE(s.code, s.name) AS label "
+            "FROM tournament_site ts JOIN site s ON s.id = ts.site_id "
+            "WHERE ts.tournament_id = %s ORDER BY label",
+            (tournament_id,),
+        )
+        linked_sites = cur.fetchall()
+    # (site_id | None) -> {date -> count}
+    site_counts: dict = {}
+    window = {c["date"] for c in coverage}
+    for o in officials:
+        sid = o["site_id"]
+        for d in o["days"]:
+            if d["work_date"] in window:
+                site_counts.setdefault(sid, {})[d["work_date"]] = (
+                    site_counts.get(sid, {}).get(d["work_date"], 0) + 1
+                )
+    site_rows = [{"site_id": s["id"], "site_label": s["label"]} for s in linked_sites]
+    # add a synthetic row for assignments with no site, if any officials lack one
+    if None in site_counts:
+        site_rows.append({"site_id": None, "site_label": "(no site)"})
+    site_coverage = []
+    for row in site_rows:
+        counts = site_counts.get(row["site_id"], {})
+        site_coverage.append({
+            **row,
+            "by_date": [{"date": c["date"], "officials": counts.get(c["date"], 0)}
+                        for c in coverage],
+        })
+
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
@@ -120,4 +155,5 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "staff": staff,
             "room_blocks": room_blocks, "coverage": coverage,
+            "site_coverage": site_coverage,
             "uncovered_days": uncovered_days, "totals": totals}
