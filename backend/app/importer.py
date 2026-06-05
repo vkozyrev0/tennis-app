@@ -781,10 +781,12 @@ def _merge_email_pdf(cur, tid, d):
         return "already in inbox — skipped"
     cls = classify(subj, body)  # classify on plaintext, before encrypting at rest
     from .crypto import encrypt as _enc_body  # PII H2
+    from .routers.emails import extract_usta  # parse the USTA # from the plaintext
+    usta_text = extract_usta(subj, body)
     cur.execute(
-        "INSERT INTO email_message (tournament_id, from_address, subject, body, classification) "
-        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
-        (tid, from_addr, subj, _enc_body(body), cls),
+        "INSERT INTO email_message (tournament_id, from_address, subject, body, classification, detected_usta_text) "
+        "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (tid, from_addr, subj, _enc_body(body), cls, usta_text),
     )
     new_id = cur.fetchone()["id"]
     # Auto-detect the player this email is about (USTA # / name against the

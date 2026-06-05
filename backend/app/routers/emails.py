@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 _COLS = (
     "e.id, e.tournament_id, e.message_id, e.received_at, e.from_address, "
     "e.subject, e.body, e.classification, e.status, e.detected_player_id, "
-    "e.detected_match_kind, "
+    "e.detected_match_kind, e.detected_usta_text, "
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
@@ -51,50 +51,64 @@ _FROM = ("FROM email_message e "
 def list_emails(response: Response, tournament_id: int | None = None,
                 status: str | None = None, q: str | None = None,
                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
-    """Server-side filtered/paged inbox. `q` searches subject + from_address
-    (NOT body — it's encrypted at rest, H2). `limit`/`offset` page the result;
-    the full match count is returned in the `X-Total-Count` header. With no
-    limit the whole (filtered) set is returned (back-compat)."""
+    """Server-side filtered/paged inbox. `q` searches subject + from_address +
+    the player's USTA # (matched player's number AND the USTA # parsed from the
+    email text) — but NOT the body itself, which is encrypted at rest (H2).
+    `limit`/`offset` page the result; the full match count is in the
+    `X-Total-Count` header. With no limit the whole (filtered) set is returned."""
     clauses, params = [], []
     if tournament_id is not None:
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
     if status is not None:
         clauses.append("e.status = %s"); params.append(status)
     if q:
-        clauses.append("(e.subject ILIKE %s OR e.from_address ILIKE %s)")
-        params += [f"%{q}%", f"%{q}%"]
+        # USTA # search hits the matched player's number (p.usta_number) and the
+        # number parsed from the email (e.detected_usta_text, persisted so it's
+        # SQL-searchable even though the body is encrypted).
+        clauses.append("(e.subject ILIKE %s OR e.from_address ILIKE %s "
+                       "OR p.usta_number ILIKE %s OR e.detected_usta_text ILIKE %s)")
+        params += [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"]
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT count(*) AS n FROM email_message e{where}", params)
+        # Count uses the same FROM (joins to player) so a USTA-# `q` resolves.
+        cur.execute(f"SELECT count(*) AS n {_FROM}{where}", params)
         response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
         page, page_params = "", list(params)
         if limit is not None:
             page = " LIMIT %s OFFSET %s"; page_params += [limit, offset]
         cur.execute(f"SELECT {_COLS} {_FROM}{where} ORDER BY e.received_at DESC{page}", page_params)
         rows = cur.fetchall()
-    # Attach a parsed withdrawal reason for withdrawal-classified emails (cheap
-    # regex over the body; skipped for everything else).
-    for r in rows:
-        r["body"] = _dec_body(r.get("body"))  # PII H2: encrypted at rest
-        r["detected_reason"] = (
-            extract_withdrawal_reason(r.get("subject"), r.get("body"))
-            if r.get("classification") == "withdrawal" else None
-        )
-        # Structured fields the late-entry / withdrawal forms ask for — parsed
-        # locally (no LLM) so single-file filing pre-fills them. Cheap regex;
-        # null when nothing recognizable is present.
-        r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
-        r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
-        # USTA # parsed straight from the email text (PDF-imported or otherwise),
-        # shown in the inbox even when no roster player is matched yet.
-        r["detected_usta_text"] = extract_usta(r.get("subject"), r.get("body"))
-        # Day/time only make sense for scheduling-avoidance emails (a weekday in
-        # a withdrawal email isn't an "avoid day"), so scope them to that class.
-        is_sched = r.get("classification") == "scheduling_avoidance"
-        r["detected_avoid_day"] = (
-            extract_avoid_day(r.get("subject"), r.get("body")) if is_sched else None)
-        r["detected_avoid_time"] = (
-            extract_avoid_time(r.get("subject"), r.get("body")) if is_sched else None)
+        # Post-process inside the cursor so we can lazily backfill the persisted
+        # USTA # for pre-0039 rows (their column is NULL): compute from the
+        # decrypted body once, store it, and it becomes searchable next time.
+        for r in rows:
+            r["body"] = _dec_body(r.get("body"))  # PII H2: encrypted at rest
+            r["detected_reason"] = (
+                extract_withdrawal_reason(r.get("subject"), r.get("body"))
+                if r.get("classification") == "withdrawal" else None
+            )
+            # Structured fields the late-entry / withdrawal forms ask for — parsed
+            # locally (no LLM) so single-file filing pre-fills them. Cheap regex;
+            # null when nothing recognizable is present.
+            r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
+            r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
+            # USTA # parsed from the email text — shown even when no roster player
+            # is matched. Prefer the persisted column; backfill it if missing.
+            if not r.get("detected_usta_text"):
+                computed = extract_usta(r.get("subject"), r.get("body"))
+                if computed:
+                    cur.execute(
+                        "UPDATE email_message SET detected_usta_text = %s WHERE id = %s",
+                        (computed, r["id"]),
+                    )
+                r["detected_usta_text"] = computed
+            # Day/time only make sense for scheduling-avoidance emails (a weekday in
+            # a withdrawal email isn't an "avoid day"), so scope them to that class.
+            is_sched = r.get("classification") == "scheduling_avoidance"
+            r["detected_avoid_day"] = (
+                extract_avoid_day(r.get("subject"), r.get("body")) if is_sched else None)
+            r["detected_avoid_time"] = (
+                extract_avoid_time(r.get("subject"), r.get("body")) if is_sched else None)
     return rows
 
 
@@ -103,11 +117,13 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             # PII H2: encrypt the body at rest (decrypt-on-read everywhere else).
-            params = {**body.model_dump(), "body": _enc_body(body.body)}
+            # Persist the USTA # parsed from the plaintext so it stays searchable.
+            params = {**body.model_dump(), "body": _enc_body(body.body),
+                      "detected_usta_text": extract_usta(body.subject, body.body)}
             cur.execute(
                 """
-                INSERT INTO email_message (tournament_id, message_id, from_address, subject, body)
-                VALUES (%(tournament_id)s, %(message_id)s, %(from_address)s, %(subject)s, %(body)s)
+                INSERT INTO email_message (tournament_id, message_id, from_address, subject, body, detected_usta_text)
+                VALUES (%(tournament_id)s, %(message_id)s, %(from_address)s, %(subject)s, %(body)s, %(detected_usta_text)s)
                 RETURNING id
                 """,
                 params,

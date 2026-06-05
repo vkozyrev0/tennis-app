@@ -80,3 +80,31 @@ def test_no_number_yields_none():
     t = _tournament()
     e = _email(t["id"], subject="Hello", body="Just checking in, no numbers here.")
     assert _get(t["id"], e["id"])["detected_usta_text"] is None
+
+
+def _search(tid, q):
+    return client.get(f"/api/emails?tournament_id={tid}&q={q}").json()
+
+
+def test_server_side_search_matches_email_text_usta():
+    t = _tournament()
+    target = _email(t["id"], subject="Withdrawal", body="USTA #: 2004445556 please withdraw.")
+    _email(t["id"], subject="Unrelated", body="no number here")
+    hits = _search(t["id"], "2004445556")
+    assert [h["id"] for h in hits] == [target["id"]]
+
+
+def test_server_side_search_matches_matched_player_usta():
+    t = _tournament()
+    usta = "2007778889"
+    _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+        "usta_number": usta, "first_name": "Ana", "last_name": "Ruiz",
+        "gender": "female", "age_division": "G12", "selection_status": "selected"}))
+    # email names the player (no USTA in text) → matched by name, p.usta_number set
+    target = _email(t["id"], subject="Withdrawal: Ana Ruiz", body="please withdraw")
+    _ok(client.post(f"/api/emails/{target['id']}/detect-player", json={}), 200)
+    _email(t["id"], subject="Other", body="nothing")
+    hits = _search(t["id"], usta)
+    assert target["id"] in [h["id"] for h in hits]
+    assert all("Ana Ruiz" == h["detected_player_name"] or h["id"] == target["id"]
+               for h in hits if h["id"] == target["id"])

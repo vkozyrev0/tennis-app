@@ -6,8 +6,8 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **183** green, migrations
-through **0038**). Driven by a UI/design review + a competitor-benchmark research
+A large round of fixes + features (full backend suite: **185** green, migrations
+through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
 - **Inbox / Part B filing** — fixed bulk-populate's `scheduling` key drift;
@@ -92,6 +92,11 @@ live in the running app, not just by tests.
   detector the "Detect" button uses, so a PDF-imported inbox opens with players
   + USTA #s already populated (no per-row click). A no-match leaves the row blank
   as before; dedup + classification unchanged.
+- **Server-side USTA search** — the inbox `q` now also matches the player's USTA #
+  (both the matched player's number and the one parsed from the email). The
+  email-text USTA is persisted (migration 0039 `detected_usta_text`, populated on
+  insert/import; pre-existing rows lazily backfilled on read) since the body is
+  encrypted and can't be searched in SQL.
 
 ---
 
