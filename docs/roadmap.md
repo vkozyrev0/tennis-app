@@ -143,6 +143,12 @@ pay snapshots).
       chip on the assignment card, and an availability count in the report totals.
       Suppressed when the official declared nothing. (`days_outside_availability`
       / `has_availability_data` in the assignment summary.)
+- [x] **Per-day certification guard** — the assign path already hard-blocks an
+      uncertified role (409); the report/card now also **flag** a day that became
+      uncertified after the fact (cert revoked post-assignment): per-day ⚠, a
+      "not certified" card chip, `uncertified_count` in report totals. The
+      add-day form blocks early with a friendly message + held-cert pre-check
+      (`held_certs` / `uncertified_days` in the summary).
 - [x] **Officials accept/decline** (migration 0038, benchmark gap): the official
       accepts/declines the assignment the TD made from their self-service "My
       assignments" view (`GET/POST /api/me/assignments...`); the

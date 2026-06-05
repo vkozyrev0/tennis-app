@@ -58,6 +58,22 @@ def _summary(cur, a: dict) -> dict:
         d["rate_applied"] = float(d["rate_applied"])
         d["work_date"] = d["work_date"].isoformat()
 
+    # Certification check: a day whose role the official doesn't hold a cert for
+    # is flagged (never blocked — the picker filters at assign time, but manual /
+    # edit / pre-existing rows can carry an uncertified role). Mirrors the
+    # availability / off-window flag policy.
+    cur.execute(
+        "SELECT cert_type FROM certification WHERE official_id = %s",
+        (a["official_id"],),
+    )
+    held_certs = {r["cert_type"] for r in cur.fetchall()}
+    uncertified_days: list[dict] = []
+    for d in days:
+        bad = d["working_as"] not in held_certs
+        d["uncertified"] = bad
+        if bad:
+            uncertified_days.append({"work_date": d["work_date"], "working_as": d["working_as"]})
+
     pay = round(sum(d["rate_applied"] for d in days), 2)
 
     mileage = None
@@ -184,6 +200,11 @@ def _summary(cur, a: dict) -> dict:
         # Declared available dates — feeds the add-day pre-check (warn before
         # booking a date the official did not mark available).
         "available_dates": sorted(avail_dates),
+        # Roles the official is certified for (feeds the add-day cert pre-check)
+        # + the days that carry a role they don't hold.
+        "held_certs": sorted(held_certs),
+        "uncertified_days": uncertified_days,
+        "has_uncertified": bool(uncertified_days),
         # Cross-tournament double-booking (audit §3.4 — a warning, not a block).
         "has_conflict": bool(conflicts),
         "has_hard_conflict": any(c["different_site"] for c in conflicts),

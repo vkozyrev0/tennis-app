@@ -2459,6 +2459,8 @@ function renderAssignment(a, availDates) {
     a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
     (a.days_outside_availability && a.days_outside_availability.length)
       ? `<span class="badge badge-warn" title="${esc("Worked on day(s) the official did not declare available: " + a.days_outside_availability.join(", "))}">⚠ not available</span>` : "",
+    (a.uncertified_days && a.uncertified_days.length)
+      ? `<span class="badge badge-bad" title="${esc("Assigned a role the official isn't certified for: " + a.uncertified_days.map((u) => certLabel(u.working_as) + " on " + u.work_date).join("; "))}">⚠ not certified</span>` : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
   ].filter(Boolean).join(" ");
   // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
@@ -2555,6 +2557,7 @@ function renderAssignment(a, availDates) {
     chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
       `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
       `${d.outside_availability ? '<span class="warn" title="official did not declare this day available">⚠ </span>' : ""}` +
+      `${d.uncertified ? '<span class="warn" title="official is not certified for this role">⚠ </span>' : ""}` +
       `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
     x.setAttribute("aria-label", `Remove ${fmtDOW(d.work_date)}`);
@@ -2622,6 +2625,14 @@ function renderAssignment(a, availDates) {
       `${clash.length} day(s) double-book ${a.official_name} — already assigned elsewhere: ` +
       clash.map((d) => { const c = elsewhere.get(d); return `${d}${c.other_site ? ` @ ${c.other_site}` : ""} (${c.other_tournament})`; }).join("; ") +
       `. Add anyway?`, "Add anyway"))) return;
+    // Certification pre-check: the backend hard-blocks adding a role the official
+    // doesn't hold (409). Stop early with a friendly message + a pointer to fix
+    // it, instead of letting the POST fail mid-loop.
+    const held = a.held_certs || [];
+    if (!held.includes(certSel.value)) {
+      setMsg("asg-msg", `${a.official_name} is not certified for ${certLabel(certSel.value)} — add the certification on the Official record first, or pick a role they hold.`, false);
+      return;
+    }
     try {
       for (const d of dates) {
         await api(`/assignments/${a.id}/days`, { method: "POST", body: JSON.stringify({ work_date: d, working_as: certSel.value }) });
@@ -4522,6 +4533,7 @@ async function loadReports() {
       o.hotel_date_mismatch ? "hotel dates" : "",
       o.work_date_out_of_window ? "off-window day" : "",
       (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : "",
+      (o.uncertified_days && o.uncertified_days.length) ? "not certified" : "",
       o.response_status === "declined" ? "DECLINED" : "",
     ].filter(Boolean);
     const warn = flags.length ? ` <span class="warn" title="${esc(flags.join(", "))}">⚠</span>` : "";
@@ -4543,6 +4555,7 @@ async function loadReports() {
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
     (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "") +
     (totals.availability_count ? ` · ${totals.availability_count} availability alert(s)` : "") +
+    (totals.uncertified_count ? ` · ${totals.uncertified_count} cert alert(s)` : "") +
     (totals.declined_count ? ` · ${totals.declined_count} declined` : "") +
     (totals.pending_count ? ` · ${totals.pending_count} pending` : "");
   document.getElementById("report-totals").innerHTML =
@@ -4651,6 +4664,7 @@ function exportReportPdf() {
     const flags = [o.has_conflict ? "double-booked" : "", o.missing_distance ? "no distance" : "",
       o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window" : "",
       (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : "",
+      (o.uncertified_days && o.uncertified_days.length) ? "not certified" : "",
       o.response_status === "declined" ? "DECLINED" : ""].filter(Boolean).join("; ");
     return `<tr><td>${e(o.official_name)}${flags ? ` <span class="flag">⚠ ${e(flags)}</span>` : ""}</td>` +
       `<td>${e(roles)}</td><td>${e(o.dietary_restrictions || "")}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
