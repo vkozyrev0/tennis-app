@@ -97,6 +97,11 @@ live in the running app, not just by tests.
   email-text USTA is persisted (migration 0039 `detected_usta_text`, populated on
   insert/import; pre-existing rows lazily backfilled on read) since the body is
   encrypted and can't be searched in SQL.
+- **Add to roster from an email** — an inbox row that carries a USTA # but matched
+  no roster player gets an "Add player to roster" action: it jumps to the Roster
+  tab and opens the new-player form pre-filled from the email (USTA #, name if
+  known, parsed division + gender inferred from a B/G division code), so the TD
+  just confirms + Saves. Reuses the existing roster upsert.
 
 ---
 
