@@ -783,9 +783,23 @@ def _merge_email_pdf(cur, tid, d):
     from .crypto import encrypt as _enc_body  # PII H2
     cur.execute(
         "INSERT INTO email_message (tournament_id, from_address, subject, body, classification) "
-        "VALUES (%s, %s, %s, %s, %s)",
+        "VALUES (%s, %s, %s, %s, %s) RETURNING id",
         (tid, from_addr, subj, _enc_body(body), cls),
     )
+    new_id = cur.fetchone()["id"]
+    # Auto-detect the player this email is about (USTA # / name against the
+    # roster), so the inbox opens with players + USTA #s already populated — no
+    # per-row "Detect" click. Best-effort: a no-match just leaves the row blank,
+    # exactly as before. Lazy import avoids a module-load cycle (emails router
+    # doesn't import importer).
+    from .routers.emails import _detect_player_for
+    det = _detect_player_for(cur, tid, subj, body, from_addr)
+    if det.get("detected_player_id"):
+        cur.execute(
+            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s "
+            "WHERE id = %s",
+            (det["detected_player_id"], det["match_kind"], new_id),
+        )
     return None
 
 

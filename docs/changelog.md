@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **179** green, migrations
+A large round of fixes + features (full backend suite: **183** green, migrations
 through **0038**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -88,6 +88,10 @@ live in the running app, not just by tests.
   visible for PDF-imported emails even before a roster player is matched (a ✉
   glyph marks an email-only number). The matched player's number takes
   precedence once detected.
+- **Auto-detect on PDF import** — the emails_pdf merge now runs the same player
+  detector the "Detect" button uses, so a PDF-imported inbox opens with players
+  + USTA #s already populated (no per-row click). A no-match leaves the row blank
+  as before; dedup + classification unchanged.
 
 ---
 
