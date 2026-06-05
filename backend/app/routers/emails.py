@@ -85,6 +85,9 @@ def list_emails(response: Response, tournament_id: int | None = None,
         # null when nothing recognizable is present.
         r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
         r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
+        # USTA # parsed straight from the email text (PDF-imported or otherwise),
+        # shown in the inbox even when no roster player is matched yet.
+        r["detected_usta_text"] = extract_usta(r.get("subject"), r.get("body"))
         # Day/time only make sense for scheduling-avoidance emails (a weekday in
         # a withdrawal email isn't an "avoid day"), so scope them to that class.
         is_sched = r.get("classification") == "scheduling_avoidance"
@@ -290,6 +293,26 @@ def bulk_reassign(body: EmailBulkReassign, conn=Depends(db_dep)):
 # tournament roster, (3) last-name unique match. Returns the most confident
 # hit + a `match_kind` for the UI to display.
 _USTA_RE = re.compile(r"\b(\d{9,11})\b")
+# A USTA # explicitly labeled in the text ("USTA #: 1234567890", "membership
+# number 1234567890"). Higher confidence than a bare run of digits, so it wins.
+_USTA_LABELED_RE = re.compile(
+    r"(?:usta|membership)\s*(?:member(?:ship)?\s*)?(?:#|no\.?|number|id)?\s*[:#]?\s*(\d{8,11})",
+    re.I,
+)
+
+
+def extract_usta(subject: str | None, body: str | None) -> str | None:
+    """Pull the player's USTA # out of an email when present, independent of any
+    roster match (so a PDF-imported email shows its USTA # even before — or
+    without — a player is matched). Prefers an explicitly *labeled* number; falls
+    back to a lone bare 9–11 digit run, and gives up if several bare numbers
+    appear (ambiguous — could be a phone, a confirmation #, etc.)."""
+    text = f"{subject or ''}\n{body or ''}"
+    m = _USTA_LABELED_RE.search(text)
+    if m:
+        return m.group(1)
+    nums = set(_USTA_RE.findall(text))
+    return next(iter(nums)) if len(nums) == 1 else None
 # USTA portal withdrawal body line: "<Full Name> has requested to be withdrawn"
 _WITHDRAW_BODY_RE = re.compile(
     r"([A-Z][\w'.\-]+(?:\s+[A-Z][\w'.\-]+)+)\s+has\s+requested\s+to\s+be\s+withdrawn", re.I)

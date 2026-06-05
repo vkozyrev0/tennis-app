@@ -3192,12 +3192,27 @@ const inboxGrid = makeReadGrid("inbox-table", [
         wrap.appendChild(btn);
         return wrap;
       }
-      const usta = m.detected_usta ? ` <span class="muted">(${esc(m.detected_usta)})</span>` : "";
-      return esc(m.detected_player_name) + usta + matchHint(m.detected_match_kind);
+      return esc(m.detected_player_name) + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
       ((e.detected_player_name || "") + " " + (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
+  // USTA # — the matched player's number when a player is detected, otherwise the
+  // number parsed straight from the email text (PDF import etc.). The ✉ glyph
+  // marks an email-only number (no roster player matched yet), so the TD can add
+  // the player. Filterable by digits.
+  { title: "USTA #", field: "detected_usta_text", width: 118,
+    formatter: (c) => {
+      const m = c.getData();
+      const num = m.detected_usta || m.detected_usta_text;
+      if (!num) return '<span class="muted">—</span>';
+      const emailOnly = !m.detected_usta && m.detected_usta_text;
+      return esc(num) + (emailOnly
+        ? ' <span class="muted" title="parsed from the email; no roster player matched yet">✉</span>' : "");
+    },
+    headerFilter: "input",
+    headerFilterFunc: (term, _v, e) =>
+      String(e.detected_usta || e.detected_usta_text || "").includes(String(term).trim()) },
   { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
     formatter: (c) => classChip(c.getValue()),
     editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },

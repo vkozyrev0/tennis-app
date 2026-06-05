@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **174** green, migrations
+A large round of fixes + features (full backend suite: **179** green, migrations
 through **0038**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -82,6 +82,12 @@ live in the running app, not just by tests.
 - **Review pass** — a branch code-review caught + fixed two bugs: declined
   assignments inflating room pickup, and a response-filter that stuck across
   tournament switches (now per-tournament).
+- **Inbox USTA #** — the inbox parses the player's **USTA #** straight from the
+  email text (`detected_usta_text`, prefers a labeled number, falls back to a
+  lone bare 9–11 digit run) and shows it in a dedicated **USTA #** grid column —
+  visible for PDF-imported emails even before a roster player is matched (a ✉
+  glyph marks an email-only number). The matched player's number takes
+  precedence once detected.
 
 ---
 
