@@ -13,6 +13,13 @@
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
 | `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`. |
 
+**Frontend unit check (JS):** the one piece of pure frontend logic that's
+risky to verify only through the live grid — seeding the roster add-form from an
+inbox email — is factored into `frontend/app/roster_prefill.js` and asserted by
+`frontend/app/roster_prefill.test.mjs` (run: `node frontend/app/roster_prefill.test.mjs`,
+7 checks). Covers the off-roster→pick-mode and unmatched→new-mode plans plus the
+"can't add" gates, independent of Tabulator rendering.
+
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the
 E2E module — the auth router rotates sessions on every login per audit C3,

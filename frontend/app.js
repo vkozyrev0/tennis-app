@@ -9,6 +9,7 @@ import {
   SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
   SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
 } from "./app/shirts.js";
+import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail } from "./app/roster_prefill.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
@@ -516,14 +517,6 @@ function _populateCatalogSelects(type, gender) {
 // When a division/events input gains focus, infer the player gender from the
 // containing form (player_ref combobox, roster's player_id picker, or the
 // inline-create gender select) and refresh the shared datalists accordingly.
-// Junior division codes are gendered (B14 → male, G12 → female); used to
-// pre-pick the gender when adding a player to the roster from a parsed email.
-function _genderFromDivision(div) {
-  const c = String(div || "").trim().toUpperCase();
-  if (c.startsWith("B")) return "male";
-  if (c.startsWith("G")) return "female";
-  return "";
-}
 function _inferFormGender(form) {
   if (!form || typeof playersById !== "object") return null;
   const pref = form.querySelector("[name='player_ref']");
@@ -3339,39 +3332,33 @@ const inboxGrid = makeReadGrid("inbox-table", [
           loadInbox();
         } catch (e) { toast(e.message, false); }
       };
-      // "Add to roster" — two cases:
-      //  (a) OFF-ROSTER match (usta_offroster): the player exists but isn't on
-      //      this tournament's roster → pick-existing mode, pre-selected.
-      //  (b) NO match but the email carries a USTA # → new-player mode, pre-filled
-      //      from the email (USTA #, name if known, division + inferred gender).
-      // Either way the TD just confirms + Saves; reuses the roster upsert.
-      const offRoster = m.detected_match_kind === "usta_offroster" && m.detected_player_id;
+      // "Add to roster" — what to pre-fill is decided by the pure, unit-tested
+      // rosterPrefillFromEmail(m) (see app/roster_prefill.js + its node test);
+      // this handler just APPLIES that plan to the live form.
+      const _rosterPlan = rosterPrefillFromEmail(m);
+      const offRoster = _rosterPlan.offRoster;
       const doAddToRoster = () => {
+        const plan = _rosterPlan;
         document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
         rosterShowNew();
-        if (offRoster) {
-          rosterSetMode("pick");
+        rosterSetMode(plan.mode);
+        if (plan.mode === "pick") {
           const picker = rosterForm.elements.player_id;
-          if (picker) { picker.value = String(m.detected_player_id); if (typeof picker._comboSync === "function") picker._comboSync(); }
+          if (picker) { picker.value = plan.player_id; if (typeof picker._comboSync === "function") picker._comboSync(); }
           refreshDivisionLists(_inferFormGender(rosterForm));
         } else {
-          rosterSetMode("new");
-          const gender = _genderFromDivision(m.detected_division);
-          if (gender && rosterForm.elements.gender) rosterForm.elements.gender.value = gender;
+          if (plan.gender && rosterForm.elements.gender) rosterForm.elements.gender.value = plan.gender;
           // populate the division options for that gender before setting a value
-          refreshDivisionLists(gender || _inferFormGender(rosterForm));
-          rosterForm.elements.usta_number.value = m.detected_usta_text || m.detected_usta || "";
-          const nm = (m.detected_player_name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
-          if (nm.length) {
-            rosterForm.elements.first_name.value = nm[0];
-            rosterForm.elements.last_name.value = nm.slice(1).join(" ");
-          }
+          refreshDivisionLists(plan.gender || _inferFormGender(rosterForm));
+          rosterForm.elements.usta_number.value = plan.usta_number;
+          if (plan.first_name) rosterForm.elements.first_name.value = plan.first_name;
+          if (plan.last_name) rosterForm.elements.last_name.value = plan.last_name;
           const g = rosterForm.elements.gender;
           if (g && typeof g._comboSync === "function") g._comboSync();
         }
         const div = rosterForm.elements.age_division;
-        if (div && m.detected_division && [...div.options].some((o) => o.value === m.detected_division)) {
-          div.value = m.detected_division;
+        if (div && plan.age_division && [...div.options].some((o) => o.value === plan.age_division)) {
+          div.value = plan.age_division;
           if (typeof div._comboSync === "function") div._comboSync();
         }
         rosterOpenModal();
@@ -3380,7 +3367,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
           ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
           : "Pre-filled from the email — confirm gender/division, add the name, then Save", true);
       };
-      const canAddToRoster = offRoster || (!m.detected_player_id && m.detected_usta_text);
+      const canAddToRoster = _rosterPlan.canAdd;
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
         { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
