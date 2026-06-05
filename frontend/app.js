@@ -2832,19 +2832,41 @@ const availGrid = makeReadGrid("avail-table", [
   { title: "Official", field: "official_name" },
   { title: "Available dates", field: "dates_text", headerSort: false },
   { title: "Hotel", field: "hotel", width: 90, noFilter: true, formatter: (c) => (c.getData().hotel ? "yes" : "") },
+  // Availability-vs-assigned gap: an official who offered dates but has no
+  // assigned day yet is the TD's cue to staff them (audit §Availability).
+  { title: "Assigned", field: "assigned", width: 130, noFilter: true,
+    formatter: (c) => (c.getData().assigned ? "✓ yes" : '<span class="warn">⚠ not yet</span>') },
 ], "availability", "No availability recorded yet.");
+// Official ids that have at least one assigned day in this tournament (set in
+// loadAvailability), so the table + gap callout can flag the unstaffed.
+let availAssignedIds = new Set();
 function renderAvailTable() {
   const byOff = {};
   for (const r of availAll) {
-    (byOff[r.official_name] ||= { dates: [], hotel: false });
-    byOff[r.official_name].dates.push(r.available_date);
-    if (r.hotel_needed) byOff[r.official_name].hotel = true;
+    (byOff[r.official_id] ||= { name: r.official_name, dates: [], hotel: false });
+    byOff[r.official_id].dates.push(r.available_date);
+    if (r.hotel_needed) byOff[r.official_id].hotel = true;
   }
-  const rows = Object.keys(byOff).sort().map((n) => ({
-    official_name: n, hotel: byOff[n].hotel,
-    dates_text: byOff[n].dates.sort().map(fmtDOW).join(", "),
-  }));
+  const rows = Object.keys(byOff)
+    .map((id) => ({ id: Number(id), ...byOff[id] }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((o) => ({
+      official_name: o.name, hotel: o.hotel,
+      dates_text: o.dates.sort().map(fmtDOW).join(", "),
+      assigned: availAssignedIds.has(o.id),
+    }));
   availGrid.setData(rows);
+  // Gap callout: how many available officials aren't staffed yet.
+  const gap = rows.filter((r) => !r.assigned);
+  const el = document.getElementById("avail-gap");
+  if (gap.length) {
+    el.hidden = false;
+    el.innerHTML = `⚠ ${gap.length} of ${rows.length} available official(s) have no assigned day yet: ` +
+      `<strong>${gap.map((r) => esc(r.official_name)).join("; ")}</strong>. ` +
+      `Staff them on the Assignments tab.`;
+  } else {
+    el.hidden = true; el.textContent = "";
+  }
 }
 async function renderAvailCerts(oid) {
   const box = document.getElementById("avail-certs");
@@ -2876,7 +2898,17 @@ async function loadAvailability() {
     ? Object.values(officialsById)
     : await api("/officials");
   fillSelect(sel, officials, officialLabel, false);
-  availAll = await api(`/tournaments/${active.id}/availability`);
+  // Availability + assignments together so the table can flag who offered dates
+  // but isn't staffed yet. allSettled so an assignments hiccup doesn't blank the
+  // availability view.
+  const [availR, asgR] = await Promise.allSettled([
+    api(`/tournaments/${active.id}/availability`),
+    api(`/tournaments/${active.id}/assignments`),
+  ]);
+  availAll = availR.status === "fulfilled" ? availR.value : [];
+  const asgList = asgR.status === "fulfilled" ? asgR.value : [];
+  // An official counts as "assigned" only with at least one working day.
+  availAssignedIds = new Set(asgList.filter((a) => a.days && a.days.length).map((a) => a.official_id));
   // Pick the current value once and feed it through both renderers, instead of
   // letting renderAvailDates read .value while comboSync may still be settling.
   const oid = sel.value ? Number(sel.value) : null;

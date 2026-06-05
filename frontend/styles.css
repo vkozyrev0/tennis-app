@@ -1156,3 +1156,8 @@ td.toggle { white-space: nowrap; }
 .avail-bulk-label { font-size: 0.85rem; color: var(--muted); }
 .avail-range { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.5rem; }
 .avail-range input[type="date"] { padding: 0.15rem 0.3rem; }
+.avail-gap {
+  margin: 0 0 0.6rem; padding: 0.4rem 0.6rem; font-size: 0.9rem;
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  color: var(--warn-ink); border-radius: 6px;
+}

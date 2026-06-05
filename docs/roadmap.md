@@ -129,6 +129,11 @@ pay snapshots).
       controls (All days / None / Weekdays / Weekends, plus an additive
       from–to range) so the TD sets a season of dates in one action instead of
       day-by-day; the user still reviews then Saves (same PUT, frontend-only).
+- [x] **Availability-vs-assigned gap** — the Availability table gained an
+      "Assigned" column (✓ / ⚠ not yet) and a callout listing officials who
+      offered dates but have no assigned day, so the TD staffs everyone who
+      volunteered. Frontend-only (joins the tournament's availability +
+      assignments client-side); verified live (gap callout correct).
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.
