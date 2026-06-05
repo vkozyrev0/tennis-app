@@ -150,6 +150,10 @@ pay snapshots).
       each day, zeros in red), finer than the tournament-wide counts. Rows include
       every linked site (a fully-uncovered venue still shows) + a "(no site)" row
       for venue-less assignments. On screen + in the PDF. (`site_coverage`.)
+- [x] **Per-role coverage by day** — a role×day grid (officials working each role
+      each day, same zero/thin highlighting), so the TD spots a day thin on a
+      needed role (e.g. chairs Mon–Wed but none Thu), not just headcount. Rows are
+      the roles used in assignments. Screen + PDF + CSV. (`role_coverage`.)
 - [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
       per day" row + a per-site row, aligned under the same day columns, so the
       TD can track/share coverage gaps in a spreadsheet.

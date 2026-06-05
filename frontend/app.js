@@ -4701,6 +4701,22 @@ function _renderCoverage() {
         return `<tr><td>${esc(s.site_label)}</td>${cells}</tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
+
+  // Per-role coverage grid: rows = roles used, columns = days, cell = officials
+  // working that role that day (same zero/thin highlighting as the others).
+  const roleCov = reportData.role_coverage || [];
+  document.querySelector("#role-coverage-table thead").innerHTML =
+    "<tr><th>Role</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
+  const rcBody = document.querySelector("#role-coverage-table tbody");
+  rcBody.innerHTML = roleCov.length
+    ? roleCov.map((r) => {
+        const cells = r.by_date.map((b) => {
+          const cls = _covClass(b.officials);
+          return `<td class="daycol${cls ? " " + cls : ""}">${b.officials}</td>`;
+        }).join("");
+        return `<tr><td>${esc(certLabel(r.role))}</td>${cells}</tr>`;
+      }).join("")
+    : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
 }
 
 async function loadReports() {
@@ -4856,6 +4872,12 @@ function _reportMatrix(includeData) {
       rows.push([s.site_label, "", "", "", "", "",
         ...cols.map((c) => byDate[c.date] ?? 0), "", ""]);
     }
+    for (const r of (reportData.role_coverage || [])) {
+      const byDate = {};
+      for (const b of r.by_date) byDate[b.date] = b.officials;
+      rows.push([certLabel(r.role), "", "", "", "", "",
+        ...cols.map((c) => byDate[c.date] ?? 0), "", ""]);
+    }
   }
   return rows;
 }
@@ -4920,6 +4942,11 @@ function exportReportPdf() {
     const cells = s.by_date.map((b) => `<td class="day"${_covStyle(b.officials)}>${b.officials}</td>`).join("");
     return `<tr><td>${e(s.site_label)}</td>${cells}</tr>`;
   }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked.</td></tr>`;
+  const roleCov = reportData.role_coverage || [];
+  const roleCovRows = roleCov.length ? roleCov.map((r) => {
+    const cells = r.by_date.map((b) => `<td class="day"${_covStyle(b.officials)}>${b.officials}</td>`).join("");
+    return `<tr><td>${e(certLabel(r.role))}</td>${cells}</tr>`;
+  }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned.</td></tr>`;
   const win = window.open("", "_blank");
   if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
@@ -4949,6 +4976,8 @@ function exportReportPdf() {
     ${totals.uncovered_days_count ? `<p style="color:#c62828">⚠ ${totals.uncovered_days_count} day(s) with no official assigned: ${reportData.uncovered_days.map((d) => e(fmtDOW(d))).join(", ")}</p>` : ""}
     <h2>Coverage by site &amp; day</h2>
     <table><thead><tr><th>Site</th>${dayHead}</tr></thead><tbody>${siteCovRows}</tbody></table>
+    <h2>Coverage by role &amp; day</h2>
+    <table><thead><tr><th>Role</th>${dayHead}</tr></thead><tbody>${roleCovRows}</tbody></table>
     <h2>Officials needing accommodation</h2>
     <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
     <h2>Room-block pickup (officials)</h2>

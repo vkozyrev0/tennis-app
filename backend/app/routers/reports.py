@@ -131,6 +131,26 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
                         for c in coverage],
         })
 
+    # Per-role coverage: officials working each ROLE (cert type) per day, so the
+    # TD spots a day thin on a needed role (e.g. chairs Mon–Wed but none Thu) —
+    # not just total headcount. An official works one role per date
+    # (UNIQUE(assignment_id, work_date)), so a per-date row-count = officials.
+    # Rows are the roles actually used in this tournament's assignments.
+    role_counts: dict = {}
+    for o in officials:
+        for d in o["days"]:
+            if d["work_date"] in window:
+                role = d["working_as"]
+                role_counts.setdefault(role, {})[d["work_date"]] = (
+                    role_counts.get(role, {}).get(d["work_date"], 0) + 1
+                )
+    role_coverage = [
+        {"role": role,
+         "by_date": [{"date": c["date"], "officials": counts.get(c["date"], 0)}
+                     for c in coverage]}
+        for role, counts in sorted(role_counts.items())
+    ]
+
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
@@ -155,5 +175,5 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "staff": staff,
             "room_blocks": room_blocks, "coverage": coverage,
-            "site_coverage": site_coverage,
+            "site_coverage": site_coverage, "role_coverage": role_coverage,
             "uncovered_days": uncovered_days, "totals": totals}
