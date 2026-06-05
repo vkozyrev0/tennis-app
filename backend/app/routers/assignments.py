@@ -179,6 +179,10 @@ def _summary(cur, a: dict) -> dict:
         "tournament_name": a.get("tournament_name"),
         "official_id": a["official_id"],
         "official_name": f'{a["last_name"]}, {a["first_name"]}',
+        # Contact info (plaintext for officials) — feeds the "chase pending
+        # responders" helper so the TD can email/call non-responders.
+        "official_email": a.get("official_email"),
+        "official_phone": a.get("official_phone"),
         "dietary_restrictions": a.get("dietary_restrictions"),
         "site_id": a["site_id"],
         "site_label": a["site_label"],
@@ -230,6 +234,7 @@ SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        a.snapshot_at, a.rule_version, a.pay_audit,
        a.response_status, a.responded_at,
        o.first_name, o.last_name, o.dietary_restrictions,
+       o.email AS official_email, o.phone AS official_phone,
        t.play_start_date, t.play_end_date, t.name AS tournament_name,
        COALESCE(s.code, s.name) AS site_label,
        h.name AS hotel_name, rb.check_in AS hotel_check_in, rb.check_out AS hotel_check_out

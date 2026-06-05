@@ -2410,11 +2410,23 @@ function _renderAsgList() {
   const { list, availByOfficial } = _asgState;
   const counts = { all: list.length, pending: 0, accepted: 0, declined: 0 };
   for (const a of list) counts[a.response_status] = (counts[a.response_status] || 0) + 1;
-  // Summary line — declines highlighted as the actionable number.
+  // Summary line — declines highlighted as the actionable number. When there are
+  // pending responders with an email on file, offer a one-click "chase" mailto
+  // that BCCs all of them so the TD can nudge non-responders before the event.
+  const pendingEmails = [...new Set(list
+    .filter((a) => a.response_status === "pending" && a.official_email)
+    .map((a) => a.official_email))];
+  let chase = "";
+  if (pendingEmails.length) {
+    const subj = encodeURIComponent(`Assignment confirmation needed — ${active.name}`);
+    const bodyTxt = encodeURIComponent(`Please confirm (accept or decline) your assignment for ${active.name} via your CourtOps self-service "My assignments" page. Thank you.`);
+    const href = `mailto:?bcc=${encodeURIComponent(pendingEmails.join(","))}&subject=${subj}&body=${bodyTxt}`;
+    chase = ` · <a href="${href}" class="chase-link">✉ Email ${pendingEmails.length} pending</a>`;
+  }
   const sum = document.getElementById("asg-resp-summary");
   sum.innerHTML = `${counts.all} assigned · <span class="resp-ok">${counts.accepted} accepted</span> · ` +
     `${counts.pending} pending · <span class="${counts.declined ? "resp-bad" : ""}">${counts.declined} declined</span>` +
-    (counts.declined ? " — needs re-staffing" : "");
+    (counts.declined ? " — needs re-staffing" : "") + chase;
   document.getElementById("asg-respbar").hidden = false;
   // Reflect counts on the filter chips + active state.
   document.querySelectorAll("#asg-respbar .chip-toggle").forEach((btn) => {
@@ -2472,10 +2484,20 @@ function renderAssignment(a, availDates) {
     `first ${pa.constants?.free_miles}mi free · cap $${pa.constants?.mileage_cap} · ` +
     `pay $${pa.pay} + mileage $${pa.mileage ?? 0} = $${pa.total}`) : "";
   const head = document.createElement("div"); head.className = "asg-head";
+  // Contact line — shown for pending responders so the TD can chase directly
+  // (mailto/tel). Hidden once accepted/declined to keep the card uncluttered.
+  let contact = "";
+  if (a.response_status === "pending" && (a.official_email || a.official_phone)) {
+    const parts = [];
+    if (a.official_email) parts.push(`<a href="mailto:${esc(a.official_email)}?subject=${encodeURIComponent("Assignment confirmation — " + (active ? active.name : ""))}">${esc(a.official_email)}</a>`);
+    if (a.official_phone) parts.push(`<a href="tel:${esc(a.official_phone)}">${esc(a.official_phone)}</a>`);
+    contact = `<div class="asg-contact">awaiting response · ${parts.join(" · ")}</div>`;
+  }
   head.innerHTML =
     `<div class="asg-name"><strong>${esc(a.official_name)}</strong></div>` +
     `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · hotel: ${esc(a.hotel_name) || "—"}` +
     (a.dietary_restrictions ? ` · diet: ${esc(a.dietary_restrictions)}` : "") + `</div>` +
+    contact +
     `<div class="asg-badges">` +
       `<span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>` +
       `<span class="badge badge-info">mileage ${mileage}</span>` +

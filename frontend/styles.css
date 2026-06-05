@@ -1142,6 +1142,11 @@ td.toggle { white-space: nowrap; }
 .respbar-summary { font-size: 0.9rem; color: var(--muted); }
 .respbar-summary .resp-ok { color: var(--ok); font-weight: 600; }
 .respbar-summary .resp-bad { color: var(--bad); font-weight: 700; }
+.respbar-summary .chase-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.respbar-summary .chase-link:hover { text-decoration: underline; }
+.asg-contact { font-size: 0.82rem; color: var(--muted); margin-top: 0.1rem; }
+.asg-contact a { color: var(--accent); text-decoration: none; }
+.asg-contact a:hover { text-decoration: underline; }
 .respbar-filters { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; margin-left: auto; }
 .chip-toggle {
   border: 1px solid var(--border); background: var(--card); color: inherit;

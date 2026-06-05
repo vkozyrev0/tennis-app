@@ -159,6 +159,10 @@ pay snapshots).
       Declined, declines sorted first) so the TD jumps straight to what needs
       re-staffing; the report totals carry `declined_count` / `pending_count`
       and the roster flags a DECLINED official inline (table + PDF).
+- [x] **Chase pending responders** — the assignment summary carries the
+      official's email/phone; the response bar offers a one-click "✉ Email N
+      pending" mailto (BCCs all non-responders) and each pending card shows an
+      "awaiting response" contact line with mailto/tel links.
 - [x] **Reassign from a declined slot** — a "Reassign" button on a declined
       assignment card pre-fills the add-form with the same site/hotel (official
       cleared) and copies the declined days onto the replacement on save; the
