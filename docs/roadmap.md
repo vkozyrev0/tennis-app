@@ -153,6 +153,10 @@ pay snapshots).
 - [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
       per day" row + a per-site row, aligned under the same day columns, so the
       TD can track/share coverage gaps in a spreadsheet.
+- [x] **Thin-coverage threshold** — a "Min officials/day" control on the report:
+      days/sites at zero stay red (hard gap), those below the minimum (but >0)
+      are flagged amber, with a separate note line. Persisted in localStorage;
+      re-renders from memory (no refetch); honored on screen + in the PDF.
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.

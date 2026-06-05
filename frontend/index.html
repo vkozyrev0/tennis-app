@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=32" />
+  <link rel="stylesheet" href="/styles.css?v=33" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -1091,6 +1091,7 @@
           <button type="button" id="report-pdf" title="Open a clean, self-contained report to save as PDF"><span aria-hidden="true">⬇</span> PDF</button>
           <button type="button" id="report-csv" title="Download the current staffing plan with all officials + days filled in"><span aria-hidden="true">⬇</span> CSV</button>
           <button type="button" id="report-template" title="Download an empty staffing-plan template (headers + day columns, no data)"><span aria-hidden="true">⬇</span> Template</button>
+          <label class="cov-min-ctl" title="Highlight any day/site below this many officials">Min officials/day <input type="number" id="report-min-cov" min="0" step="1" /></label>
         </div>
         <div id="report-meta" class="muted"></div>
         <table id="report-table" class="list-table">
@@ -1209,6 +1210,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=84"></script>
+  <script type="module" src="/app.js?v=85"></script>
 </body>
 </html>

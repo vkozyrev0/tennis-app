@@ -4561,6 +4561,54 @@ doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
 function money(n) { return n == null ? "—" : "$" + Number(n).toFixed(2); }
+
+// Minimum officials/day the TD wants — a day/site below it (but >0) is flagged
+// "thin" (amber); zero stays a hard gap (red). Persisted so it survives reloads.
+let _coverageMin = Math.max(0, parseInt(localStorage.getItem("courtops.coverageMin"), 10) || 1);
+// Cell class for a coverage count given the threshold: red at 0, amber if below
+// the minimum, plain otherwise.
+function _covClass(n) { return n === 0 ? "warn" : (n < _coverageMin ? "cov-thin" : ""); }
+// Renders the per-day footer row, the per-site grid, and the coverage note from
+// reportData + the current threshold (no refetch — used on threshold change).
+function _renderCoverage() {
+  if (!reportData) return;
+  const cols = _reportColumns(reportData.tournament);
+  const covByDate = {};
+  for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
+  const covCells = cols.map((c) => {
+    const n = covByDate[c.date] ?? 0;
+    const cls = _covClass(n);
+    return `<th class="daycol${cls ? " " + cls : ""}">${n}</th>`;
+  }).join("");
+  document.getElementById("report-coverage").innerHTML =
+    `<th colspan="6">Officials per day</th>${covCells}<th></th><th></th>`;
+  // Note: zero-coverage days (hard gap) + below-minimum days (thin), separately.
+  const covNote = document.getElementById("report-coverage-note");
+  const uncovered = reportData.uncovered_days || [];
+  const thin = (reportData.coverage || [])
+    .filter((c) => c.officials > 0 && c.officials < _coverageMin)
+    .map((c) => c.date);
+  const bits = [];
+  if (uncovered.length) bits.push(`<strong>${uncovered.length} day(s) with no official</strong>: ${uncovered.map((d) => esc(fmtDOW(d))).join(", ")}`);
+  if (thin.length) bits.push(`${thin.length} day(s) below the ${_coverageMin}-official minimum: ${thin.map((d) => esc(fmtDOW(d))).join(", ")}`);
+  if (bits.length) { covNote.hidden = false; covNote.innerHTML = "⚠ " + bits.join(" · ") + " — fill before the event."; }
+  else { covNote.hidden = true; covNote.textContent = ""; }
+
+  const siteCov = reportData.site_coverage || [];
+  document.querySelector("#site-coverage-table thead").innerHTML =
+    "<tr><th>Site</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
+  const scBody = document.querySelector("#site-coverage-table tbody");
+  scBody.innerHTML = siteCov.length
+    ? siteCov.map((s) => {
+        const cells = s.by_date.map((b) => {
+          const cls = _covClass(b.officials);
+          return `<td class="daycol${cls ? " " + cls : ""}">${b.officials}</td>`;
+        }).join("");
+        return `<tr><td>${esc(s.site_label)}</td>${cells}</tr>`;
+      }).join("")
+    : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
+}
+
 async function loadReports() {
   if (!active) return;
   reportData = await api(`/tournaments/${active.id}/reports/officials`);
@@ -4616,37 +4664,7 @@ async function loadReports() {
     `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
     `<th class="num">${money(totals.mileage)}</th>`;
 
-  // Per-day coverage footer row, aligned under the weekday columns. A day with
-  // ZERO officials is highlighted as a coverage gap to fill before the event.
-  const covByDate = {};
-  for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
-  const covCells = cols.map((c) => {
-    const n = covByDate[c.date] ?? 0;
-    return `<th class="daycol${n === 0 ? " warn" : ""}">${n}</th>`;
-  }).join("");
-  document.getElementById("report-coverage").innerHTML =
-    `<th colspan="6">Officials per day</th>${covCells}<th></th><th></th>`;
-  const covNote = document.getElementById("report-coverage-note");
-  const uncovered = reportData.uncovered_days || [];
-  if (uncovered.length) {
-    covNote.hidden = false;
-    covNote.innerHTML = `⚠ ${uncovered.length} day(s) have <strong>no official assigned</strong>: ` +
-      `${uncovered.map((d) => esc(fmtDOW(d))).join(", ")} — fill before the event.`;
-  } else { covNote.hidden = true; covNote.textContent = ""; }
-
-  // Per-site coverage grid: rows = sites, columns = play-window days, cell =
-  // officials at that site that day (zero highlighted). Finer than the
-  // tournament-wide counts — surfaces a specific venue/day that's thin.
-  const siteCov = reportData.site_coverage || [];
-  document.querySelector("#site-coverage-table thead").innerHTML =
-    "<tr><th>Site</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
-  const scBody = document.querySelector("#site-coverage-table tbody");
-  scBody.innerHTML = siteCov.length
-    ? siteCov.map((s) => {
-        const cells = s.by_date.map((b) => `<td class="daycol${b.officials === 0 ? " warn" : ""}">${b.officials}</td>`).join("");
-        return `<tr><td>${esc(s.site_label)}</td>${cells}</tr>`;
-      }).join("")
-    : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
+  _renderCoverage();
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
@@ -4792,16 +4810,20 @@ function exportReportPdf() {
   }).join("") + `<tr class="totals"><td colspan="3">Totals</td><td class="num">${totals.rooms_reserved}</td>` +
       `<td class="num">${totals.rooms_assigned}</td><td class="num">${totals.rooms_remaining}</td></tr>`
     : `<tr><td class="empty" colspan="6">No official room blocks.</td></tr>`;
+  // Coverage cells honor the same threshold as the on-screen tables: red at 0,
+  // amber below the minimum.
+  const _covStyle = (n) => n === 0 ? ' style="color:#c62828;font-weight:700"'
+    : (n < _coverageMin ? ' style="color:#735710;background:#fff8e6;font-weight:700"' : "");
   const covByDate = {};
   for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
   const covCells = cols.map((c) => {
     const n = covByDate[c.date] ?? 0;
-    return `<td class="day"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`;
+    return `<td class="day"${_covStyle(n)}>${n}</td>`;
   }).join("");
   const coverageRow = `<tr class="totals"><td colspan="6">Officials per day</td>${covCells}<td></td><td></td></tr>`;
   const siteCov = reportData.site_coverage || [];
   const siteCovRows = siteCov.length ? siteCov.map((s) => {
-    const cells = s.by_date.map((b) => `<td class="day"${b.officials === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${b.officials}</td>`).join("");
+    const cells = s.by_date.map((b) => `<td class="day"${_covStyle(b.officials)}>${b.officials}</td>`).join("");
     return `<tr><td>${e(s.site_label)}</td>${cells}</tr>`;
   }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked.</td></tr>`;
   const win = window.open("", "_blank");
@@ -5147,6 +5169,18 @@ document.getElementById("tshirt-order-csv").addEventListener("click", tshirtOrde
 document.getElementById("report-csv").addEventListener("click", reportCsvExport);
 // Design-crit pass 6: wire the previously-orphan reportTemplateExport.
 document.getElementById("report-template").addEventListener("click", reportTemplateExport);
+// Thin-coverage threshold: re-highlight the coverage tables from memory (no
+// refetch) when the TD changes the minimum, and persist their choice.
+(() => {
+  const inp = document.getElementById("report-min-cov");
+  if (!inp) return;
+  inp.value = _coverageMin;
+  inp.addEventListener("input", () => {
+    _coverageMin = Math.max(0, parseInt(inp.value, 10) || 0);
+    localStorage.setItem("courtops.coverageMin", String(_coverageMin));
+    _renderCoverage();
+  });
+})();
 
 // =================== Workspace add-forms as modal overlays (grid stays primary) ===================
 // Each add-form becomes a centered modal opened by a "＋ Add X" button; the grid

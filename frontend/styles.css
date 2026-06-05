@@ -1166,3 +1166,7 @@ td.toggle { white-space: nowrap; }
   background: var(--warn-bg); border: 1px solid var(--warn-border);
   color: var(--warn-ink); border-radius: 6px;
 }
+/* Coverage threshold: amber for below-minimum (but non-zero) day/site cells. */
+.daycol.cov-thin { color: var(--warn-ink); background: var(--warn-bg); font-weight: 600; }
+.cov-min-ctl { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; }
+.cov-min-ctl input { width: 3.2rem; padding: 0.15rem 0.3rem; }
