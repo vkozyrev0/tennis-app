@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=29" />
+  <link rel="stylesheet" href="/styles.css?v=30" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -671,6 +671,19 @@
         </div>
         <div class="avail-certs-wrap"><span class="muted">Certifications held:</span> <span id="avail-certs" class="days"></span></div>
         <p class="muted">Tick the dates this official is available, then save.</p>
+        <div class="avail-bulk" role="group" aria-label="Bulk select dates">
+          <span class="avail-bulk-label">Quick select:</span>
+          <button type="button" class="chip-toggle" data-bulk="all">All days</button>
+          <button type="button" class="chip-toggle" data-bulk="none">None</button>
+          <button type="button" class="chip-toggle" data-bulk="weekdays">Weekdays</button>
+          <button type="button" class="chip-toggle" data-bulk="weekends">Weekends</button>
+          <span class="avail-range">
+            <input type="date" id="avail-range-from" aria-label="Range start" />
+            <span aria-hidden="true">–</span>
+            <input type="date" id="avail-range-to" aria-label="Range end" />
+            <button type="button" class="chip-toggle" data-bulk="range">Add range</button>
+          </span>
+        </div>
         <div id="avail-dates" class="days"></div>
         <div class="actions-row">
           <button type="button" id="avail-save">Save availability</button>
@@ -1163,6 +1176,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=72"></script>
+  <script type="module" src="/app.js?v=73"></script>
 </body>
 </html>

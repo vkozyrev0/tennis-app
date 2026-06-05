@@ -2865,6 +2865,35 @@ document.getElementById("avail-save").addEventListener("click", async () => {
   } catch (e) { setMsg("avail-msg", e.message, false); }
 });
 
+// Bulk date selection — toggles the day checkboxes in place (the user still
+// reviews + clicks Save, consistent with the manual flow). 0=Sun … 6=Sat via
+// getUTCDay (dates are midnight-UTC ISO strings, matching _datesInRange).
+function _availDow(iso) { return new Date(iso + "T00:00:00Z").getUTCDay(); }
+document.querySelectorAll("#panel-t-availability .avail-bulk [data-bulk]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.bulk;
+    const boxes = [...document.querySelectorAll("#avail-dates input")];
+    if (!boxes.length) { setMsg("avail-msg", "no dates in the play window", false); return; }
+    if (mode === "range") {
+      const from = document.getElementById("avail-range-from").value;
+      const to = document.getElementById("avail-range-to").value;
+      if (!from || !to || from > to) { setMsg("avail-msg", "pick a valid from–to range", false); return; }
+      // additive: ticks dates in range, leaves the rest as-is
+      boxes.forEach((cb) => { if (cb.value >= from && cb.value <= to) cb.checked = true; });
+    } else {
+      boxes.forEach((cb) => {
+        const dow = _availDow(cb.value);
+        if (mode === "all") cb.checked = true;
+        else if (mode === "none") cb.checked = false;
+        else if (mode === "weekdays") cb.checked = dow >= 1 && dow <= 5;
+        else if (mode === "weekends") cb.checked = dow === 0 || dow === 6;
+      });
+    }
+    const n = boxes.filter((c) => c.checked).length;
+    setMsg("avail-msg", `${n} day(s) selected — click Save availability`, true);
+  });
+});
+
 // --- Part B: review inbox + late entries ---
 const EMAIL_CLASSES = ["unclassified", "late_entry", "withdrawal", "doubles",
   "pairing_avoidance", "scheduling_avoidance", "division_flex", "hotel", "other"];

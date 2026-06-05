@@ -1150,3 +1150,9 @@ td.toggle { white-space: nowrap; }
 .chip-toggle:hover:not(:disabled) { border-color: var(--accent); }
 .chip-toggle.is-on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .chip-toggle:disabled { opacity: 0.45; cursor: default; }
+
+/* Bulk date-select toolbar on the Availability tab. */
+.avail-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.3rem 0 0.6rem; }
+.avail-bulk-label { font-size: 0.85rem; color: var(--muted); }
+.avail-range { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.5rem; }
+.avail-range input[type="date"] { padding: 0.15rem 0.3rem; }

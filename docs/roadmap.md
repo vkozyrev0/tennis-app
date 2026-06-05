@@ -125,6 +125,10 @@ pay snapshots).
 - [x] TD sees availability when making assignments — the Assignments official
       picker shows each official's available-day count for the tournament, and the
       day picker offers their available dates.
+- [x] **Bulk availability entry** — the Availability tab has quick-select
+      controls (All days / None / Weekdays / Weekends, plus an additive
+      from–to range) so the TD sets a season of dates in one action instead of
+      day-by-day; the user still reviews then Saves (same PUT, frontend-only).
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.
