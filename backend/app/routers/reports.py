@@ -65,6 +65,8 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "out_of_window_count": sum(1 for o in officials if o["work_date_out_of_window"]),
         "conflict_count": sum(1 for o in officials if o["has_conflict"]),
         "availability_count": sum(1 for o in officials if o.get("days_outside_availability")),
+        "declined_count": sum(1 for o in officials if o.get("response_status") == "declined"),
+        "pending_count": sum(1 for o in officials if o.get("response_status") == "pending"),
         "staff_pay": round(sum(s["pay"] for s in staff), 2),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)

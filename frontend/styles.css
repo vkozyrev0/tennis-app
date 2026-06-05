@@ -1131,3 +1131,22 @@ td.toggle { white-space: nowrap; }
   /* don't clip scrollable tables when printing the report */
   .list-scroll, .tbl-scroll { max-height: none !important; overflow: visible !important; border: 0; }
 }
+
+/* Assignment response-status bar: a summary line + filter chips that let the TD
+   jump straight to declined assignments to re-staff. */
+.respbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem;
+  margin: 0.4rem 0 0.7rem; padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.respbar-summary { font-size: 0.9rem; color: var(--muted); }
+.respbar-summary .resp-ok { color: var(--ok); font-weight: 600; }
+.respbar-summary .resp-bad { color: var(--bad); font-weight: 700; }
+.respbar-filters { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; margin-left: auto; }
+.chip-toggle {
+  border: 1px solid var(--border); background: var(--card); color: inherit;
+  border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.85rem; cursor: pointer;
+}
+.chip-toggle:hover:not(:disabled) { border-color: var(--accent); }
+.chip-toggle.is-on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip-toggle:disabled { opacity: 0.45; cursor: default; }

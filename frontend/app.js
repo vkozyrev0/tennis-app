@@ -2340,6 +2340,10 @@ if (document.readyState === "loading") {
 // --- Assignments ---
 const asgForm = document.getElementById("asg-form");
 let asgEditId = null;
+// Response-status filter chips (re-render from memory, no refetch).
+document.querySelectorAll("#asg-respbar .chip-toggle").forEach((btn) => {
+  btn.addEventListener("click", () => { _asgRespFilter = btn.dataset.resp; _renderAsgList(); });
+});
 // True when a work date falls outside the active tournament's play window.
 // Audit M23: string-compare only when all three values are valid `YYYY-MM-DD`
 // (the API always returns this form; defensive against any future drift).
@@ -2384,10 +2388,51 @@ async function loadAssignments() {
   // Audit P42: match the Tabulator placeholder styling so empty states across
   // the app look the same (✦ icon + centered muted text).
   if (list.length === 0) {
+    document.getElementById("asg-respbar").hidden = true;
     box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — click <strong>+ Assign official</strong> above to start.</div>';
     return;
   }
-  for (const a of list) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
+  // Stash the list + availability so the response-status filter can re-render
+  // without re-fetching, and so the TD can jump straight to declines to re-staff.
+  _asgState = { list, availByOfficial };
+  _renderAsgList();
+}
+
+// Response-status filter ('all' | 'pending' | 'accepted' | 'declined') + the
+// fetched assignment list, kept module-level so toggling a filter re-renders
+// from memory (no refetch). Declines sort first within the active filter so the
+// TD sees what needs re-staffing without scrolling.
+let _asgRespFilter = "all";
+let _asgState = null;
+const _RESP_ORDER = { declined: 0, pending: 1, accepted: 2 };
+function _renderAsgList() {
+  if (!_asgState) return;
+  const { list, availByOfficial } = _asgState;
+  const counts = { all: list.length, pending: 0, accepted: 0, declined: 0 };
+  for (const a of list) counts[a.response_status] = (counts[a.response_status] || 0) + 1;
+  // Summary line — declines highlighted as the actionable number.
+  const sum = document.getElementById("asg-resp-summary");
+  sum.innerHTML = `${counts.all} assigned · <span class="resp-ok">${counts.accepted} accepted</span> · ` +
+    `${counts.pending} pending · <span class="${counts.declined ? "resp-bad" : ""}">${counts.declined} declined</span>` +
+    (counts.declined ? " — needs re-staffing" : "");
+  document.getElementById("asg-respbar").hidden = false;
+  // Reflect counts on the filter chips + active state.
+  document.querySelectorAll("#asg-respbar .chip-toggle").forEach((btn) => {
+    const k = btn.dataset.resp;
+    btn.classList.toggle("is-on", k === _asgRespFilter);
+    const n = counts[k] ?? 0;
+    btn.disabled = k !== "all" && n === 0;
+  });
+  const box = document.getElementById("asg-list");
+  box.innerHTML = "";
+  const shown = list
+    .filter((a) => _asgRespFilter === "all" || a.response_status === _asgRespFilter)
+    .sort((x, y) => (_RESP_ORDER[x.response_status] ?? 3) - (_RESP_ORDER[y.response_status] ?? 3));
+  if (!shown.length) {
+    box.innerHTML = `<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No ${esc(_asgRespFilter)} assignments.</div>`;
+    return;
+  }
+  for (const a of shown) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
 }
 // Official accept/decline status → a colored chip (TD card + self-service).
 const _RESP_META = { pending: ["muted", "⏳ pending"], accepted: ["ok", "✓ accepted"], declined: ["bad", "✗ declined"] };
@@ -4378,6 +4423,7 @@ async function loadReports() {
       o.hotel_date_mismatch ? "hotel dates" : "",
       o.work_date_out_of_window ? "off-window day" : "",
       (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : "",
+      o.response_status === "declined" ? "DECLINED" : "",
     ].filter(Boolean);
     const warn = flags.length ? ` <span class="warn" title="${esc(flags.join(", "))}">⚠</span>` : "";
     const dayCells = cols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
@@ -4397,7 +4443,9 @@ async function loadReports() {
     (totals.missing_distance_count ? ` · ${totals.missing_distance_count} missing distance` : "") +
     (totals.hotel_mismatch_count ? ` · ${totals.hotel_mismatch_count} hotel-date alert(s)` : "") +
     (totals.out_of_window_count ? ` · ${totals.out_of_window_count} off-window day alert(s)` : "") +
-    (totals.availability_count ? ` · ${totals.availability_count} availability alert(s)` : "");
+    (totals.availability_count ? ` · ${totals.availability_count} availability alert(s)` : "") +
+    (totals.declined_count ? ` · ${totals.declined_count} declined` : "") +
+    (totals.pending_count ? ` · ${totals.pending_count} pending` : "");
   document.getElementById("report-totals").innerHTML =
     `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
     `<th class="num">${money(totals.mileage)}</th>`;
@@ -4478,7 +4526,8 @@ function exportReportPdf() {
     const dayCells = cols.map((c) => `<td class="day">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
     const flags = [o.has_conflict ? "double-booked" : "", o.missing_distance ? "no distance" : "",
       o.hotel_date_mismatch ? "hotel dates" : "", o.work_date_out_of_window ? "off-window" : "",
-      (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : ""].filter(Boolean).join("; ");
+      (o.days_outside_availability && o.days_outside_availability.length) ? "not available" : "",
+      o.response_status === "declined" ? "DECLINED" : ""].filter(Boolean).join("; ");
     return `<tr><td>${e(o.official_name)}${flags ? ` <span class="flag">⚠ ${e(flags)}</span>` : ""}</td>` +
       `<td>${e(roles)}</td><td>${e(o.dietary_restrictions || "")}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
       `<td>${e(_fmtMDY(o.check_in))}</td><td>${e(_fmtMDY(o.check_out))}</td>${dayCells}` +

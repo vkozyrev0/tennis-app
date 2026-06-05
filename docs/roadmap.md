@@ -135,6 +135,11 @@ pay snapshots).
       assignments" view (`GET/POST /api/me/assignments...`); the
       `response_status` (pending/accepted/declined) shows as a chip on the TD's
       assignment card.
+- [x] **Decline visibility for the TD** — the Assignments panel has a
+      response-status summary + filter chips (All / Pending / Accepted /
+      Declined, declines sorted first) so the TD jumps straight to what needs
+      re-staffing; the report totals carry `declined_count` / `pending_count`
+      and the roster flags a DECLINED official inline (table + PDF).
 - [x] **Per-official season pay** — a pay/mileage summary across ALL the
       official's tournaments (per-tournament breakdown + season totals):
       `GET /api/officials/{id}/pay-summary` (TD) and `/api/me/pay-summary`
