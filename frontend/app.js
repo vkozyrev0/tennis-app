@@ -2383,6 +2383,11 @@ async function loadAssignments() {
     const n = (availByOfficial[o.id] || []).length;
     return `${officialLabel(o)} — ${n ? n + " avail day(s)" : "no availability"}`;
   }, false);
+  // Reset the response-status filter when the active tournament changes, so a
+  // 'declined' filter from tournament A doesn't strand tournament B's list
+  // behind a now-empty, disabled-but-on chip. Persists across same-tournament
+  // reloads (e.g. after an accept/decline) so an in-progress filter survives.
+  if (_asgFilterTid !== active.id) { _asgRespFilter = "all"; _asgFilterTid = active.id; }
   const box = document.getElementById("asg-list");
   box.innerHTML = "";
   // Audit P42: match the Tabulator placeholder styling so empty states across
@@ -2403,6 +2408,7 @@ async function loadAssignments() {
 // from memory (no refetch). Declines sort first within the active filter so the
 // TD sees what needs re-staffing without scrolling.
 let _asgRespFilter = "all";
+let _asgFilterTid = null;  // tournament the current filter applies to
 let _asgState = null;
 const _RESP_ORDER = { declined: 0, pending: 1, accepted: 2 };
 function _renderAsgList() {

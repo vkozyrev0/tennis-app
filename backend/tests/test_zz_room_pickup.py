@@ -96,6 +96,35 @@ def test_pickup_excludes_player_blocks_and_other_tournaments():
     assert rep["totals"]["rooms_remaining"] == 0
 
 
+def test_declined_assignment_does_not_count_as_picked_up():
+    # A declined official won't occupy the room, so it must NOT count toward
+    # pickup — otherwise the reassign flow (declined row kept + replacement)
+    # double-counts and hides a room the TD should release.
+    t, h = _tournament(), _hotel()
+    block = _ok(client.post("/api/room-blocks", json={
+        "hotel_id": h["id"], "tournament_id": t["id"], "kind": "official", "room_count": 2}))
+    # one accepted-by-default (pending) assignment, one that declines
+    o_keep = _official()
+    _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                    json={"official_id": o_keep["id"], "room_block_id": block["id"]}))
+
+    # an official with a login who declines their room-block assignment
+    o_decl = _official()
+    uname = "rp_" + uuid.uuid4().hex[:8]
+    _ok(client.put(f"/api/officials/{o_decl['id']}/account",
+                   json={"username": uname, "password": "pw"}), code=200)
+    a_decl = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                             json={"official_id": o_decl["id"], "room_block_id": block["id"]}))
+    sess = TestClient(app)
+    _ok(sess.post("/api/auth/login", json={"username": uname, "password": "pw"}), 200)
+    _ok(sess.post(f"/api/me/assignments/{a_decl['id']}/respond", json={"status": "declined"}), 200)
+
+    b = _report(t["id"])["room_blocks"][0]
+    assert b["room_count"] == 2
+    assert b["assigned"] == 1          # only the non-declined one
+    assert b["remaining"] == 1         # the declined room is releasable
+
+
 def test_fully_picked_up_block_has_zero_remaining():
     t, h = _tournament(), _hotel()
     block = _ok(client.post("/api/room-blocks", json={

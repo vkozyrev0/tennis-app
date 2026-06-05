@@ -57,12 +57,15 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
 
         # Room-block pickup: per OFFICIAL comp block, rooms reserved vs assigned
         # (pickup), so the TD can release unused rooms before the hotel cutoff.
-        # `assigned` counts assignments pointing at the block (matches the
-        # rooms_remaining formula used elsewhere).
+        # A DECLINED assignment won't occupy its room, so it is excluded from the
+        # pickup count — otherwise the reassign flow (which keeps the declined row
+        # pointing at the block, plus a replacement also pointing at it) would
+        # double-count and hide rooms the TD should release.
         cur.execute(
             "SELECT rb.id, h.name AS hotel_name, rb.confirmation_number, "
             "       rb.check_in, rb.check_out, rb.room_count, "
-            "       (SELECT count(*) FROM assignment a WHERE a.room_block_id = rb.id) AS assigned "
+            "       (SELECT count(*) FROM assignment a WHERE a.room_block_id = rb.id "
+            "        AND a.response_status <> 'declined') AS assigned "
             "FROM room_block rb JOIN hotel h ON h.id = rb.hotel_id "
             "WHERE rb.tournament_id = %s AND rb.kind = 'official' "
             "ORDER BY h.name, rb.id",
