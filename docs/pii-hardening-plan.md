@@ -112,15 +112,19 @@ provisioning steps.
 ### Phase H2 — Encryption at rest
 - **H2.1 Volume/disk encryption** on the DB host (managed-Postgres "encryption
   at rest" or LUKS/cloud KMS) — the baseline §312.8 measure. ⏳ *Deploy-time.*
-- **H2.2 Column-level encryption.** ✅ **`email_message.body` + `player.emails`
-  /`player.phones` ship.** `app/crypto.py` (Fernet) encrypts on write, decrypts
-  on read; ciphertext is base64 text so columns stay `text` (**no migration** —
-  `decrypt()` passes through legacy plaintext). Chose **option (a)**: the body
-  flows decrypted-in-memory to the detector/extractors so no-LLM parsing is
-  unaffected. **Intentionally left plaintext:** `email_message.subject` /
-  `from_address` — they back the server-side inbox search (SQL `ILIKE`) and the
-  player detector's subject/sender matching, so encrypting them would break both
-  (a documented trade-off). *Remaining same-pattern field:* `player.birthdate`.
+- **H2.2 Column-level encryption.** ✅ **Done — `email_message.body`,
+  `player.emails`/`phones`, and `player.birthdate` ship.** `app/crypto.py`
+  (Fernet) encrypts on write, decrypts on read; ciphertext is base64 text. The
+  text columns needed no schema change (`decrypt()` passes through legacy
+  plaintext); **`birthdate` was `date`** so migration 0037 changes it to `text`
+  and — because Fernet is non-deterministic — drops it from the history trigger's
+  equality-based change detection (still snapshotted on a name change; names
+  remain the audit anchor). Chose **option (a)**: the body flows
+  decrypted-in-memory to the detector/extractors so no-LLM parsing is unaffected.
+  **Intentionally left plaintext:** `email_message.subject` / `from_address` —
+  they back the server-side inbox search (SQL `ILIKE`) and the detector's
+  subject/sender matching, so encrypting them would break both (documented
+  trade-off; covered by disk-level H2.1 instead).
 - **H2.3 Key management.** `PII_ENCRYPTION_KEY` (Fernet) from the environment; a
   POC dev default is used locally and the **boot guard refuses prod** without a
   real key (`config.py` `validate()`). *Remaining:* a real secret-manager/KMS +

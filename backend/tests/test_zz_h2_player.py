@@ -64,3 +64,38 @@ def test_null_contact_stays_null():
         "usta_number": usta, "first_name": "No", "last_name": "Contact", "gender": "female"}))
     detail = client.get(f"/api/players/{p['id']}").json()
     assert detail["emails"] is None and detail["phones"] is None
+    assert detail["birthdate"] is None
+
+
+def _raw_birthdate(pid):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT birthdate FROM player WHERE id = %s", (pid,))
+        return cur.fetchone()["birthdate"]
+
+
+def test_birthdate_encrypted_at_rest_but_api_returns_the_date():
+    usta = str(uuid.uuid4().int % 10**10).zfill(10)
+    p = _ok(client.post("/api/players", json={
+        "usta_number": usta, "first_name": "Dob", "last_name": "Test",
+        "gender": "male", "birthdate": "2014-03-15"}))
+    assert p["birthdate"] == "2014-03-15"          # API returns the date
+    raw = _raw_birthdate(p["id"])
+    assert raw != "2014-03-15" and "2014" not in raw   # ciphertext at rest
+    assert decrypt(raw) == "2014-03-15"
+    assert client.get(f"/api/players/{p['id']}").json()["birthdate"] == "2014-03-15"
+
+
+def test_name_change_still_historizes_with_decryptable_birthdate():
+    usta = str(uuid.uuid4().int % 10**10).zfill(10)
+    p = _ok(client.post("/api/players", json={
+        "usta_number": usta, "first_name": "Old", "last_name": "Name",
+        "gender": "male", "birthdate": "2013-07-01"}))
+    # rename → the trigger snapshots the old name + (encrypted) birthdate
+    _ok(client.put(f"/api/players/{p['id']}", json={
+        "usta_number": usta, "first_name": "New", "last_name": "Name",
+        "gender": "male", "birthdate": "2013-07-01"}), code=200)
+    hist = client.get(f"/api/players/{p['id']}/history").json()
+    assert any(h["first_name"] == "Old" for h in hist)     # name historized
+    # the history birthdate is decrypted on read (not a token)
+    row = next(h for h in hist if h["first_name"] == "Old")
+    assert row["birthdate"] == "2013-07-01"

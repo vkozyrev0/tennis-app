@@ -615,7 +615,7 @@ def _ext_player_initial(cur, pid, d):
             wtn_singles_conf = COALESCE(%s, wtn_singles_conf),
             wtn_doubles      = COALESCE(%s::numeric, wtn_doubles),
             wtn_doubles_conf = COALESCE(%s, wtn_doubles_conf),
-            birthdate        = COALESCE(%s::date, birthdate),
+            birthdate        = COALESCE(%s, birthdate),
             birthdate_precision = CASE
                 WHEN %s::date IS NOT NULL AND birthdate IS NULL THEN 'year'
                 ELSE birthdate_precision END
@@ -630,8 +630,8 @@ def _ext_player_initial(cur, pid, d):
             _s(d.get("city")), _s(d.get("state")),
             _coerce_decimal(d.get("wtn_singles")), _s(d.get("wtn_singles_conf")),
             _coerce_decimal(d.get("wtn_doubles")), _s(d.get("wtn_doubles_conf")),
-            _year_to_date(d.get("year_of_birth")),
-            _year_to_date(d.get("year_of_birth")),
+            _enc_pii(_year_to_date(d.get("year_of_birth"))),  # stored: encrypted (PII H2)
+            _year_to_date(d.get("year_of_birth")),            # precision check: raw ::date
             pid,
         ),
     )

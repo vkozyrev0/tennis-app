@@ -4,18 +4,28 @@ import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from ..crypto import decrypt as _dec_pii
+from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
 
+def _enc_birthdate(d) -> str | None:
+    """Encrypt a date/None for the (now text) birthdate column (PII H2)."""
+    if d is None:
+        return None
+    return _enc_pii(d.isoformat() if hasattr(d, "isoformat") else str(d))
+
+
 def _decrypt_contact(row: dict) -> dict:
-    """Decrypt the at-rest-encrypted contact fields (PII H2). Passes through
-    legacy plaintext (see app/crypto.py)."""
+    """Decrypt the at-rest-encrypted PII fields (contact + birthdate, PII H2).
+    Passes through legacy plaintext (see app/crypto.py); the decrypted birthdate
+    is an ISO date string that Pydantic re-parses to a date in PlayerOut."""
     if row is not None:
         row["emails"] = _dec_pii(row.get("emails"))
         row["phones"] = _dec_pii(row.get("phones"))
+        row["birthdate"] = _dec_pii(row.get("birthdate"))
     return row
 
 
@@ -84,7 +94,10 @@ def player_history(player_id: int, conn=Depends(db_dep)):
             """,
             (player_id,),
         )
-        return cur.fetchall()
+        rows = cur.fetchall()
+    for r in rows:                          # decrypt the at-rest birthdate (PII H2)
+        r["birthdate"] = _dec_pii(r.get("birthdate"))
+    return rows
 
 
 @router.post("", response_model=PlayerOut, status_code=201)
@@ -98,9 +111,9 @@ def create_player(body: PlayerCreate, conn=Depends(db_dep)):
                         %(birthdate)s, %(city)s, %(state)s)
                 RETURNING {_COLS}
                 """,
-                body.model_dump(),
+                {**body.model_dump(), "birthdate": _enc_birthdate(body.birthdate)},
             )
-            return cur.fetchone()
+            return _decrypt_contact(cur.fetchone())
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="usta_number already exists")
 
@@ -152,14 +165,15 @@ def update_player(
                 WHERE id = %(id)s
                 RETURNING {_COLS}
                 """,
-                {**body.model_dump(), "id": player_id},
+                {**body.model_dump(), "birthdate": _enc_birthdate(body.birthdate),
+                 "id": player_id},
             )
             row = cur.fetchone()
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="usta_number already exists")
     if row is None:
         raise HTTPException(status_code=404, detail="player not found")
-    return row
+    return _decrypt_contact(row)
 
 
 @router.delete("/{player_id}", status_code=204)
