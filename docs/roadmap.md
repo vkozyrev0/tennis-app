@@ -144,6 +144,11 @@ pay snapshots).
       Declined, declines sorted first) so the TD jumps straight to what needs
       re-staffing; the report totals carry `declined_count` / `pending_count`
       and the roster flags a DECLINED official inline (table + PDF).
+- [x] **Reassign from a declined slot** — a "Reassign" button on a declined
+      assignment card pre-fills the add-form with the same site/hotel (official
+      cleared) and copies the declined days onto the replacement on save; the
+      declined assignment is kept as an audit trail. Frontend-only (composes the
+      existing create + add-day endpoints); verified live end-to-end.
 - [x] **Per-official season pay** — a pay/mileage summary across ALL the
       official's tournaments (per-tournament breakdown + season totals):
       `GET /api/officials/{id}/pay-summary` (TD) and `/api/me/pay-summary`

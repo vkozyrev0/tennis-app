@@ -2484,7 +2484,7 @@ function renderAssignment(a, availDates) {
   const actions = document.createElement("span"); actions.className = "asg-actions";
   const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
   ed.addEventListener("click", () => {
-    asgEditId = a.id;
+    asgEditId = a.id; _reassignDays = null;   // editing is not a reassign
     asgForm.official_id.value = a.official_id;
     asgForm.site_id.value = a.site_id || "";
     asgForm.room_block_id.value = a.room_block_id || "";
@@ -2500,7 +2500,28 @@ function renderAssignment(a, availDates) {
     if (!(await confirmDialog("Delete assignment?"))) return;
     try { await api(`/assignments/${a.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); }
   });
-  actions.append(ed, dl); head.appendChild(actions); card.appendChild(head);
+  // Reassign: only offered when the official DECLINED. Pre-fills the add-form
+  // with the same site/hotel (NOT the official — that's the point) and stashes
+  // the declined days so they copy onto the replacement on save. The declined
+  // assignment is left in place as an audit trail (TD deletes it if desired).
+  let ra = null;
+  if (a.response_status === "declined") {
+    ra = document.createElement("button"); ra.type = "button"; ra.className = "btn-link"; ra.textContent = "Reassign";
+    ra.addEventListener("click", () => {
+      asgReset();                                   // ensure create mode (clears edit id)
+      _reassignDays = a.days.map((d) => ({ work_date: d.work_date, working_as: d.working_as }));
+      asgForm.official_id.value = "";               // TD picks the replacement
+      asgForm.site_id.value = a.site_id || "";
+      asgForm.room_block_id.value = a.room_block_id || "";
+      openForm(asgForm);
+      if (typeof syncCombos === "function") syncCombos();
+      asgForm.scrollIntoView({ block: "nearest" });
+      const dn = _reassignDays.length;
+      setMsg("asg-msg", `reassigning ${a.official_name}'s declined slot — pick a new official; ${dn} day(s) will be copied`, true);
+      asgForm.official_id.focus();
+    });
+  }
+  actions.append(ed, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
 
   // Inline mileage fix: if the venue site has no distance on file, add it right
   // here instead of switching to the Distances tab.
@@ -2612,15 +2633,32 @@ function renderAssignment(a, availDates) {
   card.appendChild(addRow);
   return card;
 }
-function asgReset() { asgEditId = null; asgForm.reset(); asgForm.querySelector('button[type="submit"]').textContent = "Add official"; }
+// Days stashed by a "Reassign" click, copied onto the replacement assignment on
+// the next create. Cleared on reset so a normal add never inherits them.
+let _reassignDays = null;
+function asgReset() {
+  asgEditId = null; _reassignDays = null;
+  asgForm.reset(); asgForm.querySelector('button[type="submit"]').textContent = "Add official";
+}
 onSubmit(asgForm, async (e) => {
   const b = formObj(asgForm);
   b.official_id = Number(b.official_id);
   b.site_id = b.site_id ? Number(b.site_id) : null;
   b.room_block_id = b.room_block_id ? Number(b.room_block_id) : null;
   try {
-    if (asgEditId) await api(`/assignments/${asgEditId}`, { method: "PUT", body: JSON.stringify(b) });
-    else await api(`/tournaments/${active.id}/assignments`, { method: "POST", body: JSON.stringify(b) });
+    if (asgEditId) {
+      await api(`/assignments/${asgEditId}`, { method: "PUT", body: JSON.stringify(b) });
+    } else {
+      const created = await api(`/tournaments/${active.id}/assignments`, { method: "POST", body: JSON.stringify(b) });
+      // Reassign-from-declined: copy the declined slot's days onto the new
+      // official's assignment so the TD doesn't re-enter them by hand.
+      if (_reassignDays && _reassignDays.length && created && created.id) {
+        for (const d of _reassignDays) {
+          try { await api(`/assignments/${created.id}/days`, { method: "POST", body: JSON.stringify(d) }); }
+          catch (de) { toast(`couldn't copy ${d.work_date}: ${de.message}`, false); }
+        }
+      }
+    }
     setMsg("asg-msg", asgEditId ? "saved" : "added", true); asgReset(); loadAssignments();
   } catch (err) { setMsg("asg-msg", err.message, false); markInvalid(asgForm, err.message); }
 });
