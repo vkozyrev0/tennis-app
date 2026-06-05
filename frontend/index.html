@@ -117,6 +117,7 @@
       <button class="tab" data-target="panel-divisions">Divisions</button>
       <button class="tab" data-target="panel-events">Events</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
+      <button class="tab" data-target="panel-users">Users</button>
       <!-- design-crit pass 2 #2: folded the orphan one-tab "Data" group into
            Setup. Bulk import is a Setup workflow conceptually (you stage
            records and merge them into the catalogs); keeping it as its own
@@ -433,6 +434,25 @@
         <input class="filter filter--narrow" id="tshirt-filter" type="search" placeholder="Filter…" aria-label="Filter t-shirts" />
         <table id="tshirt-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Tournament</th><th>Size</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Users (Setup: admin/TD accounts — multi-user access, D8) -->
+    <section class="panel" id="panel-users">
+      <div class="card">
+        <h3>Admin users (TD access)</h3>
+        <p class="muted">Each person who runs tournaments gets their own admin login instead of a shared password. Officials' logins are managed from the Official detail.</p>
+        <form id="user-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Username <input name="username" required autocomplete="off" /></label>
+            <label>Password <input name="password" type="password" required autocomplete="new-password" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Add admin</button><span class="msg" id="user-msg"></span></div>
+        </form>
+        <table id="user-table" class="list-table">
+          <thead><tr><th>Username</th><th>Created</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1118,6 +1138,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=63"></script>
+  <script type="module" src="/app.js?v=64"></script>
 </body>
 </html>

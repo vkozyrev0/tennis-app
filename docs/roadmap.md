@@ -392,7 +392,7 @@ A round of fixes + features, merged to `main` (full backend suite: 109 green).
   for the retention sweep — tied to the post-POC deployment switch (see
   `docs/pii-hardening-plan.md`). *(H3 retention **policy + sweep job** with
   dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
-- **Multi-user TD access** (D8) — single-admin POC for now.
+- **Multi-user TD access** (D8) — ✅ **shipped**: admin user management (create/list/reset-password/delete with self + last-admin guards) at `/api/admin/users` + a Setup → Users tab.
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
   refactor); structured assignment-card layout. *(Inline "add distance" on the
   assignments tab is done.)*

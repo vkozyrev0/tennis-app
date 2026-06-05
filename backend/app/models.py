@@ -98,4 +98,10 @@ from ._models_inbox import (  # noqa: F401
     WithdrawalOut,
     WithdrawalUpdate,
 )
-from ._models_auth import AccountCreate, LoginIn  # noqa: F401
+from ._models_auth import (  # noqa: F401
+    AccountCreate,
+    AdminUserCreate,
+    AdminUserOut,
+    LoginIn,
+    PasswordReset,
+)
