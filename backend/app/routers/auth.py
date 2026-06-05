@@ -8,8 +8,8 @@ from threading import Lock
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 
 from ..db import db_dep
-from ..models import LoginIn
-from ..security import COOKIE_NAME, get_current_user, verify_pw
+from ..models import LoginIn, PasswordChange
+from ..security import COOKIE_NAME, get_current_user, hash_pw, verify_pw
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -131,6 +131,34 @@ def logout(response: Response, sid: str | None = Cookie(default=None), conn=Depe
         with conn.cursor() as cur:
             cur.execute("DELETE FROM session WHERE token = %s", (sid,))
     response.delete_cookie(COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@router.post("/change-password")
+def change_password(body: PasswordChange, sid: str | None = Cookie(default=None),
+                    user=Depends(get_current_user), conn=Depends(db_dep)):
+    """Self-service password change for ANY logged-in user (admin or official).
+    Verifies the current password, sets the new one, and invalidates every OTHER
+    session for this user (other devices must re-login); the caller's current
+    session is kept alive so they aren't logged out of the tab they're using."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT password_hash FROM user_account WHERE id = %s", (user["id"],))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="account not found")
+        if not verify_pw(body.current_password, row["password_hash"]):
+            raise HTTPException(status_code=400, detail="current password is incorrect")
+        if verify_pw(body.new_password, row["password_hash"]):
+            raise HTTPException(status_code=400, detail="new password must differ from the current one")
+        cur.execute(
+            "UPDATE user_account SET password_hash = %s WHERE id = %s",
+            (hash_pw(body.new_password), user["id"]),
+        )
+        # Invalidate other sessions (defends a leaked/old cookie); keep this one.
+        cur.execute(
+            "DELETE FROM session WHERE user_id = %s AND token <> %s",
+            (user["id"], sid),
+        )
     return {"ok": True}
 
 

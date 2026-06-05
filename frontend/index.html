@@ -84,6 +84,7 @@
       <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
       <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
+        <button type="button" id="change-pw-btn">Change password</button>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
     <div id="context-bar">
@@ -1159,6 +1160,21 @@
       </div>
     </div>
   </div>
+  <div id="change-pw-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="change-pw-title">
+    <div class="modal-box">
+      <h3 id="change-pw-title">Change password</h3>
+      <form id="change-pw-form" autocomplete="off">
+        <label>Current password<br /><input type="password" id="cpw-current" autocomplete="current-password" required /></label>
+        <label>New password (min 8 chars)<br /><input type="password" id="cpw-new" autocomplete="new-password" minlength="8" required /></label>
+        <label>Confirm new password<br /><input type="password" id="cpw-confirm" autocomplete="new-password" minlength="8" required /></label>
+        <p class="msg" id="cpw-msg"></p>
+        <div class="modal-actions">
+          <button type="button" id="cpw-cancel" class="cancel">Cancel</button>
+          <button type="submit" id="cpw-submit">Update password</button>
+        </div>
+      </form>
+    </div>
+  </div>
   <!-- Shared lookup lists for division + events. JS repopulates based on the
        active tournament's type (junior vs adult). Inputs reference them via
        `list="divisions-list"` / `list="events-list"` — datalists let the TD
@@ -1177,6 +1193,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=75"></script>
+  <script type="module" src="/app.js?v=76"></script>
 </body>
 </html>

@@ -104,5 +104,6 @@ from ._models_auth import (  # noqa: F401
     AdminUserCreate,
     AdminUserOut,
     LoginIn,
+    PasswordChange,
     PasswordReset,
 )

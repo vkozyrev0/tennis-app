@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 152 tests, all passing (migrations through 0038).
+**Status:** 157 tests, all passing (migrations through 0038).
 
 ## How the suite is wired
 
@@ -11,7 +11,7 @@
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
-| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`. |
+| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`. |
 
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the

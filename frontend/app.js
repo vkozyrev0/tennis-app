@@ -5303,6 +5303,33 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
   adminLoaded = false;
   applyAuth(null);
 });
+
+// --- Change own password (admin or official; available from the header) ---
+const _cpwModal = document.getElementById("change-pw-modal");
+function _openChangePw() {
+  document.getElementById("change-pw-form").reset();
+  setMsg("cpw-msg", "", true);
+  _cpwModal.hidden = false;
+  document.getElementById("cpw-current").focus();
+}
+function _closeChangePw() { _cpwModal.hidden = true; }
+document.getElementById("change-pw-btn").addEventListener("click", _openChangePw);
+document.getElementById("cpw-cancel").addEventListener("click", _closeChangePw);
+_cpwModal.addEventListener("click", (e) => { if (e.target.id === "change-pw-modal") _closeChangePw(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !_cpwModal.hidden) _closeChangePw(); });
+onSubmit(document.getElementById("change-pw-form"), async () => {
+  const cur = document.getElementById("cpw-current").value;
+  const nw = document.getElementById("cpw-new").value;
+  const cf = document.getElementById("cpw-confirm").value;
+  if (nw !== cf) { setMsg("cpw-msg", "new passwords don't match", false); return; }
+  if (nw.length < 8) { setMsg("cpw-msg", "new password must be at least 8 characters", false); return; }
+  if (nw === cur) { setMsg("cpw-msg", "new password must differ from the current one", false); return; }
+  try {
+    await api("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: cur, new_password: nw }) });
+    _closeChangePw();
+    toast("Password updated — other devices were signed out", true);
+  } catch (e) { setMsg("cpw-msg", e.message, false); }
+});
 // Audit F27: explicit allow-list matches OfficialCreate so a future template
 // change can't silently introduce an extra input that breaks the PUT with a
 // confusing 422.

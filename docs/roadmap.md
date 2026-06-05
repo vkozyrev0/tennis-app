@@ -120,6 +120,10 @@ pay snapshots).
       (pbkdf2), `admin`/`official` roles, role-split UI. Officials edit their own
       profile and set per-tournament **availability** via `/api/me/*`; admin sets
       an official's login from the Official detail.
+- [x] **Change own password** (`POST /api/auth/change-password`): any logged-in
+      user (admin or official) verifies their current password and sets a new one
+      (min 8 chars, must differ); other sessions are invalidated while the
+      current one stays alive. Header "Change password" button → modal.
 - [x] **Availability** — both **TD-side** (Availability tab, migration 0007) and
       **officials' own** (self-service).
 - [x] TD sees availability when making assignments — the Assignments official

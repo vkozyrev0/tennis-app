@@ -25,6 +25,14 @@ class PasswordReset(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class PasswordChange(BaseModel):
+    """Self-service change: prove the current password, then set a new one.
+    The new password has a real minimum (the admin reset path allows 1 because
+    it's a deliberate operator action; self-service should not weaken it)."""
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=8, max_length=256)
+
+
 class AdminUserOut(BaseModel):
     id: int
     username: str

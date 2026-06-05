@@ -33,7 +33,7 @@ new `migrations/*.sql` (tracked in `schema_migrations`).
 
 ## Test
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q   # 152 end-to-end tests; skips if Postgres is down
+.\.venv\Scripts\python.exe -m pytest -q   # 157 end-to-end tests; skips if Postgres is down
 ```
 Tests run against a **separate `courtops_test` database** (created/migrated/seeded
 automatically by `tests/conftest.py`), so they never pollute the working DB.
@@ -65,7 +65,7 @@ backend/
     crypto.py          PII H2: Fernet encrypt/decrypt (email body, player contact/DOB)
     retention.py       PII H3: policy + retention sweep (dry-run, count-only)
     geocode.py         auto-distance: haversine estimate + geocoder seam (D3 fallback)
-    routers/           health, auth (login/logout/me), me (official self-service:
+    routers/           health, auth (login/logout/me + change-password), me (official self-service:
                        profile, availability, assignments accept/decline, pay-summary),
                        sites, tournaments (+ /sites M2M), officials (+ /account,
                        /pay-summary), players (+ /history), rates, hotels, room_blocks,
@@ -93,7 +93,7 @@ backend/
   reset_demo.py        wipe + re-seed the working DB
   backfill_distances.py  import officials + distances from the mileage workbook
   tests/conftest.py    points the suite at courtops_test (isolation)
-  tests/                end-to-end suite (152; admin-authenticated). test_smoke +
+  tests/                end-to-end suite (157; admin-authenticated). test_smoke +
                         test_td_e2e + per-feature test_zz_*.py (inbox, conflicts,
                         retention, staff, crypto/H2, admin users, accept/decline, …)
 frontend/              index.html, styles.css, app.js (vanilla fetch, no framework)
