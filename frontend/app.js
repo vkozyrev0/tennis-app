@@ -1326,6 +1326,7 @@ function _populateTournamentLoaders() {
     "panel-t-roster": () => loadRoster(),
     "panel-t-assignments": () => loadAssignments(),
     "panel-t-roomblocks": () => loadRoomBlocks(),
+    "panel-t-staff": () => loadStaff(),
     "panel-t-availability": () => loadAvailability(),
     "panel-t-tshirt-order": () => { loadTshirtOrder(); loadTshirtsBySite(); },
     "panel-t-inbox": () => loadInbox(),
@@ -2611,6 +2612,56 @@ onSubmit(trbForm, async (e) => {
   } catch (err) { setMsg("trb-msg", err.message, false); markInvalid(trbForm, err.message); }
 });
 trbForm.querySelector(".cancel").addEventListener("click", trbReset);
+
+// --- Staff (non-official support roles, tournament-scoped) ---
+const STAFF_ROLES = { site_director: "Site Director", player_amenities: "Player Amenities",
+  trainer: "Trainer", operations: "Operations", stringer: "Stringer", other: "Other" };
+const staffForm = document.getElementById("staff-form");
+let staffEditId = null;
+const staffGrid = makeListGrid("staff-table", [
+  { title: "Name", field: "name", headerFilter: "input" },
+  { title: "Role", field: "role", cssClass: "editable-cell",
+    formatter: (c) => esc(STAFF_ROLES[c.getValue()] || c.getValue()),
+    editor: "list", editorParams: { values: STAFF_ROLES } },
+  { title: "Phone", field: "phone" },
+  { title: "Email", field: "email" },
+  { title: "Notes", field: "notes" },
+], "staff", "No staff for this tournament yet.",
+  async (s) => { if (!(await confirmDialog("Delete staff member?"))) return; try { await api(`/staff/${s.id}`, { method: "DELETE" }); loadStaff(); } catch (e) { setMsg("staff-msg", e.message, false); } },
+  (s) => {
+    staffEditId = s.id;
+    staffForm.name.value = s.name;
+    staffForm.role.value = s.role;
+    staffForm.phone.value = s.phone || "";
+    staffForm.email.value = s.email || "";
+    staffForm.notes.value = s.notes || "";
+    staffForm.querySelector('button[type="submit"]').textContent = "Update staff";
+    openForm(staffForm);
+  },
+  // In-grid edit: PUT the whole row (StaffOut carries name + role).
+  async (cell) => {
+    if (cell.getValue() === cell.getOldValue()) return;
+    const s = cell.getRow().getData();
+    try {
+      const body = { ...s }; delete body._act; delete body.id; delete body.tournament_id;
+      await api(`/staff/${s.id}`, { method: "PUT", body: JSON.stringify(body) });
+      setMsg("staff-msg", "saved", true); loadStaff();
+    } catch (e) { setMsg("staff-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadStaff(); }
+  });
+async function loadStaff() {
+  if (!active) return;
+  staffGrid.setData(await api(`/tournaments/${active.id}/staff`));
+}
+function staffReset() { staffEditId = null; staffForm.reset(); staffForm.querySelector('button[type="submit"]').textContent = "Add staff"; }
+onSubmit(staffForm, async (e) => {
+  const b = formObj(staffForm);
+  try {
+    if (staffEditId) await api(`/staff/${staffEditId}`, { method: "PUT", body: JSON.stringify(b) });
+    else await api(`/tournaments/${active.id}/staff`, { method: "POST", body: JSON.stringify(b) });
+    setMsg("staff-msg", staffEditId ? "saved" : "added", true); staffReset(); loadStaff();
+  } catch (err) { setMsg("staff-msg", err.message, false); markInvalid(staffForm, err.message); }
+});
+staffForm.querySelector(".cancel").addEventListener("click", staffReset);
 
 // --- Availability (per official, per tournament) ---
 let availAll = [];
@@ -4245,6 +4296,14 @@ async function loadReports() {
         return `<tr><td>${esc(o.official_name)}</td><td>${esc(o.hotel_name)}</td><td>${esc(span)}</td></tr>`;
       }).join("")
     : '<tr><td class="empty" colspan="3">No officials have a hotel assignment yet.</td></tr>';
+
+  // Non-official support staff (Site Director, Trainer, …), grouped by role.
+  const staffBody = document.querySelector("#report-staff-table tbody");
+  const staff = reportData.staff || [];
+  staffBody.innerHTML = staff.length
+    ? staff.map((s) => `<tr><td>${esc(s.name)}</td><td>${esc(STAFF_ROLES[s.role] || s.role)}</td>` +
+        `<td>${esc(s.phone || "")}</td><td>${esc(s.email || "")}</td><td>${esc(s.notes || "")}</td></tr>`).join("")
+    : '<tr><td class="empty" colspan="5">No non-official staff added for this tournament.</td></tr>';
 }
 // Weekday columns for the tournament's play window (TD staffing-plan format).
 function _reportColumns(t) {

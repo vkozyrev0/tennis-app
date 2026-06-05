@@ -134,6 +134,7 @@
       <span class="menu-label">Staffing</span>
       <button class="tab needs-active" data-target="panel-t-assignments">Assignments</button>
       <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
+      <button class="tab needs-active" data-target="panel-t-staff">Staff</button>
       <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
     </div>
     <!-- Inbox promoted to its own top-level group: it's the cross-tournament
@@ -596,6 +597,36 @@
       </div>
     </section>
 
+    <!-- T: Staff (non-official support roles) -->
+    <section class="panel tpanel" id="panel-t-staff">
+      <div class="needs-active-note">Select a tournament in the bar above to manage staff.</div>
+      <div class="t-content card">
+        <h3>Staff — <span class="t-name"></span> <span class="h3-subtitle">(non-official support roles for the staffing plan)</span></h3>
+        <form id="staff-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Name <input name="name" required /></label>
+            <label>Role
+              <select name="role" required>
+                <option value="site_director">Site Director</option>
+                <option value="player_amenities">Player Amenities</option>
+                <option value="trainer">Trainer</option>
+                <option value="operations">Operations</option>
+                <option value="stringer">Stringer</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Phone <input name="phone" /></label>
+            <label>Email <input name="email" type="email" /></label>
+            <label>Notes <input name="notes" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="staff-msg"></span></div>
+        </form>
+        <table id="staff-table" class="list-table"><thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
     <!-- T: Availability -->
     <section class="panel tpanel" id="panel-t-availability">
       <div class="needs-active-note">Select a tournament in the bar above to manage availability.</div>
@@ -1009,6 +1040,12 @@
           <thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead>
           <tbody></tbody>
         </table>
+
+        <h4>Other staff</h4>
+        <table id="report-staff-table" class="list-table">
+          <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
   </main>
@@ -1065,6 +1102,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=58"></script>
+  <script type="module" src="/app.js?v=59"></script>
 </body>
 </html>

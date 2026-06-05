@@ -41,6 +41,8 @@ from ._models_setup import (  # noqa: F401
     SiteCreate,
     SiteIds,
     SiteOut,
+    StaffCreate,
+    StaffOut,
     TournamentCreate,
     TournamentEventCreate,
     TournamentEventOut,

@@ -199,3 +199,22 @@ class DistanceAuto(BaseModel):
     """Request to estimate a distance from stored coordinates (auto-mileage)."""
     official_id: int
     site_id: int
+
+
+# ---------- Non-official tournament staff ----------
+StaffRole = Literal[
+    "site_director", "player_amenities", "trainer", "operations", "stringer", "other"
+]
+
+
+class StaffCreate(BaseModel):
+    name: str
+    role: StaffRole
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class StaffOut(StaffCreate):
+    id: int
+    tournament_id: int

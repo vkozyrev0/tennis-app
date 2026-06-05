@@ -37,7 +37,17 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         # so no per-official follow-up query is needed.
         officials = [_summary(cur, a) for a in rows]
 
+        # Non-official support staff round out the TD's staffing plan — listed
+        # separately (no pay/mileage/days), grouped by role in the report.
+        cur.execute(
+            "SELECT id, name, role, phone, email, notes FROM tournament_staff "
+            "WHERE tournament_id = %s ORDER BY role, name",
+            (tournament_id,),
+        )
+        staff = cur.fetchall()
+
     totals = {
+        "staff_count": len(staff),
         "official_count": len(officials),
         "pay": round(sum(o["pay"] for o in officials), 2),
         "mileage": round(sum((o["mileage"] or 0.0) for o in officials), 2),
@@ -47,4 +57,4 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "conflict_count": sum(1 for o in officials if o["has_conflict"]),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
-    return {"tournament": t, "officials": officials, "totals": totals}
+    return {"tournament": t, "officials": officials, "staff": staff, "totals": totals}
