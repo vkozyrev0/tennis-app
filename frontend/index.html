@@ -621,9 +621,12 @@
             <label>Email <input name="email" type="email" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
+          <div class="row">
+            <label>Days <select name="days" id="staff-days" multiple size="4" aria-describedby="multi-hint"></select></label>
+          </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="staff-msg"></span></div>
         </form>
-        <table id="staff-table" class="list-table"><thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+        <table id="staff-table" class="list-table"><thead><tr><th>Name</th><th>Role</th><th>Days</th><th>Phone</th><th>Email</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </section>
 
@@ -1102,6 +1105,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=59"></script>
+  <script type="module" src="/app.js?v=60"></script>
 </body>
 </html>

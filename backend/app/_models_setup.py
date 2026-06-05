@@ -213,8 +213,12 @@ class StaffCreate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     notes: Optional[str] = None
+    # Optional per-day schedule (the days this person works). When provided on
+    # create/update it REPLACES the staff member's existing days.
+    days: Optional[list[date]] = None
 
 
 class StaffOut(StaffCreate):
     id: int
     tournament_id: int
+    days: list[date] = []

@@ -40,11 +40,16 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         # Non-official support staff round out the TD's staffing plan — listed
         # separately (no pay/mileage/days), grouped by role in the report.
         cur.execute(
-            "SELECT id, name, role, phone, email, notes FROM tournament_staff "
-            "WHERE tournament_id = %s ORDER BY role, name",
+            "SELECT s.id, s.name, s.role, s.phone, s.email, s.notes, "
+            "       COALESCE(array_agg(d.work_date ORDER BY d.work_date) "
+            "                FILTER (WHERE d.work_date IS NOT NULL), '{}') AS days "
+            "FROM tournament_staff s LEFT JOIN staff_day d ON d.staff_id = s.id "
+            "WHERE s.tournament_id = %s GROUP BY s.id ORDER BY s.role, s.name",
             (tournament_id,),
         )
         staff = cur.fetchall()
+        for s in staff:
+            s["days"] = [d.isoformat() for d in s["days"]]
 
     totals = {
         "staff_count": len(staff),

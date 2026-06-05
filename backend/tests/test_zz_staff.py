@@ -72,6 +72,39 @@ def test_report_includes_staff_grouped():
     assert roles == {"site_director", "trainer"}
 
 
+def test_staff_days_create_update_and_report():
+    t = _tournament()
+    # create with two days
+    s = _ok(client.post(f"/api/tournaments/{t['id']}/staff", json={
+        "name": "Day Worker", "role": "operations",
+        "days": ["2026-06-02", "2026-06-03"]}))
+    assert s["days"] == ["2026-06-02", "2026-06-03"]
+    # update replaces the day set (and de-dups)
+    up = _ok(client.put(f"/api/staff/{s['id']}", json={
+        "name": "Day Worker", "role": "operations",
+        "days": ["2026-06-04", "2026-06-04"]}), 200)
+    assert up["days"] == ["2026-06-04"]
+    # omitting days leaves them unchanged
+    up2 = _ok(client.put(f"/api/staff/{s['id']}", json={
+        "name": "Day Worker II", "role": "operations"}), 200)
+    assert up2["days"] == ["2026-06-04"]
+    # the report carries the staff days
+    rep = client.get(f"/api/tournaments/{t['id']}/reports/officials").json()
+    me = next(x for x in rep["staff"] if x["id"] == s["id"])
+    assert me["days"] == ["2026-06-04"]
+
+
+def test_staff_days_cascade_on_staff_delete():
+    t = _tournament()
+    s = _ok(client.post(f"/api/tournaments/{t['id']}/staff", json={
+        "name": "Gone", "role": "other", "days": ["2026-06-01"]}))
+    assert client.delete(f"/api/staff/{s['id']}").status_code == 204
+    # (staff_day rows cascade with the staff member — no orphans; re-create clean)
+    s2 = _ok(client.post(f"/api/tournaments/{t['id']}/staff", json={
+        "name": "New", "role": "other"}))
+    assert s2["days"] == []
+
+
 def test_staff_cascades_on_tournament_delete():
     t = _tournament()
     s = _ok(client.post(f"/api/tournaments/{t['id']}/staff",
