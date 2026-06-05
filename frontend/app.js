@@ -5028,6 +5028,24 @@ async function officialInit() {
   }
   await loadMyAvailability();
   await loadMyAssignments();
+  await loadMyPay();
+}
+async function loadMyPay() {
+  const box = document.getElementById("me-pay");
+  if (!box) return;
+  let s;
+  try { s = await api("/me/pay-summary"); } catch (_) { return; }
+  if (!s.tournaments.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
+  const rows = s.tournaments.map((t) =>
+    `<tr><td>${esc(t.tournament_name || ("Tournament " + t.tournament_id))}</td>` +
+    `<td>${t.days}</td><td>${_respChip(t.response_status)}</td>` +
+    `<td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td>` +
+    `<td class="num">${money(t.total)}</td></tr>`).join("");
+  box.innerHTML = `<table class="list-table"><thead><tr><th>Tournament</th><th>Days</th><th>Status</th>` +
+    `<th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th></tr></thead><tbody>${rows}` +
+    `<tr><th colspan="3">Season total — ${s.totals.assignments} assignment(s), ${s.totals.days} day(s)</th>` +
+    `<th class="num">${money(s.totals.pay)}</th><th class="num">${money(s.totals.mileage)}</th>` +
+    `<th class="num">${money(s.totals.total)}</th></tr></tbody></table>`;
 }
 async function loadMyAssignments() {
   const box = document.getElementById("me-assignments");

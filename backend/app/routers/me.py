@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from ..db import db_dep
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
 from ..security import get_current_user
-from .assignments import _ASG_SELECT, _summary
+from .assignments import _ASG_SELECT, _summary, pay_summary
 
 # Belt-and-suspenders: every endpoint also takes `Depends(get_current_user)` to
 # get `user`, but mounting the dep on the router means nothing here can ever be
@@ -90,6 +90,14 @@ def my_assignments(user=Depends(get_current_user), conn=Depends(db_dep)):
         )
         rows = cur.fetchall()
         return [_summary(cur, a) for a in rows]
+
+
+@router.get("/pay-summary")
+def my_pay_summary(user=Depends(get_current_user), conn=Depends(db_dep)):
+    """The logged-in official's own season pay/mileage across all tournaments."""
+    oid = _my_official_id(user)
+    with conn.cursor() as cur:
+        return pay_summary(cur, oid)
 
 
 @router.post("/assignments/{assignment_id}/respond")

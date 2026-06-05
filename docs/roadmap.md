@@ -130,6 +130,10 @@ pay snapshots).
       assignments" view (`GET/POST /api/me/assignments...`); the
       `response_status` (pending/accepted/declined) shows as a chip on the TD's
       assignment card.
+- [x] **Per-official season pay** — a pay/mileage summary across ALL the
+      official's tournaments (per-tournament breakdown + season totals):
+      `GET /api/officials/{id}/pay-summary` (TD) and `/api/me/pay-summary`
+      (the official's own, in a self-service "My pay" view).
 - [ ] **Google Maps geocoding** to auto-compute home↔site round-trip distance
       (the primary mileage source), with **manual entry as fallback** when the
       lookup is unavailable (D3/U2).

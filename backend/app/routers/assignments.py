@@ -137,6 +137,7 @@ def _summary(cur, a: dict) -> dict:
     return {
         "id": a["id"],
         "tournament_id": a["tournament_id"],
+        "tournament_name": a.get("tournament_name"),
         "official_id": a["official_id"],
         "official_name": f'{a["last_name"]}, {a["first_name"]}',
         "dietary_restrictions": a.get("dietary_restrictions"),
@@ -177,7 +178,7 @@ SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        a.snapshot_at, a.rule_version, a.pay_audit,
        a.response_status, a.responded_at,
        o.first_name, o.last_name, o.dietary_restrictions,
-       t.play_start_date, t.play_end_date,
+       t.play_start_date, t.play_end_date, t.name AS tournament_name,
        COALESCE(s.code, s.name) AS site_label,
        h.name AS hotel_name, rb.check_in AS hotel_check_in, rb.check_out AS hotel_check_out
 FROM assignment a
@@ -238,6 +239,40 @@ def _persist_snapshot(cur, assignment_id: int) -> dict:
     s["pay_audit"] = audit
     s["snapshot_at"] = cur.fetchone()["snapshot_at"].isoformat()
     return s
+
+
+def pay_summary(cur, official_id: int) -> dict:
+    """Season pay/mileage summary for an official across ALL their tournaments
+    (a per-tournament breakdown + totals). Used by the TD endpoint and the
+    official's self-service `/api/me/pay-summary`."""
+    cur.execute("SELECT first_name, last_name FROM official WHERE id = %s", (official_id,))
+    off = cur.fetchone()
+    if off is None:
+        raise HTTPException(status_code=404, detail="official not found")
+    cur.execute(_ASG_SELECT + " WHERE a.official_id = %s ORDER BY t.play_start_date DESC",
+                (official_id,))
+    rows = [_summary(cur, a) for a in cur.fetchall()]
+    tournaments = [{
+        "tournament_id": r["tournament_id"], "tournament_name": r["tournament_name"],
+        "pay": r["pay"], "mileage": r["mileage"] or 0.0, "total": r["total"],
+        "days": len(r["days"]), "response_status": r["response_status"],
+    } for r in rows]
+    totals = {
+        "pay": round(sum(t["pay"] for t in tournaments), 2),
+        "mileage": round(sum(t["mileage"] for t in tournaments), 2),
+        "total": round(sum(t["total"] for t in tournaments), 2),
+        "assignments": len(tournaments),
+        "days": sum(t["days"] for t in tournaments),
+    }
+    return {"official_id": official_id,
+            "official_name": f'{off["last_name"]}, {off["first_name"]}',
+            "tournaments": tournaments, "totals": totals}
+
+
+@router.get("/api/officials/{official_id}/pay-summary")
+def official_pay_summary(official_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        return pay_summary(cur, official_id)
 
 
 @router.get("/api/tournaments/{tournament_id}/assignments")
