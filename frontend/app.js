@@ -2472,15 +2472,22 @@ function renderAssignment(a, availDates) {
       `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
       `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
+    x.setAttribute("aria-label", `Remove ${fmtDOW(d.work_date)}`);
     x.addEventListener("click", async () => { try { await api(`/assignment-days/${d.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); } });
     chip.appendChild(x); days.appendChild(chip);
   }
+  if (!a.days.length) days.innerHTML = '<span class="muted">No days assigned yet.</span>';
   card.appendChild(days);
 
-  // Add days: certification dropdown + the official's available days (select all /
-  // individual), falling back to a manual date if no availability is on file.
+  // Add days: a labelled certification dropdown + the official's available days
+  // (select all / individual), falling back to a manual date if no availability
+  // is on file.
   const addRow = document.createElement("div"); addRow.className = "add-day";
+  const addLbl = document.createElement("span"); addLbl.className = "add-day-label";
+  addLbl.textContent = "Add day(s) as";
+  addRow.appendChild(addLbl);
   const certSel = document.createElement("select");
+  certSel.setAttribute("aria-label", "Role for the added day(s)");
   CERTS.forEach(([v, lbl]) => { const o = document.createElement("option"); o.value = v; o.textContent = lbl; certSel.appendChild(o); });
   addRow.appendChild(certSel);
 
@@ -2507,6 +2514,7 @@ function renderAssignment(a, availDates) {
   } else {
     pickWrap.innerHTML = '<span class="muted">no availability set — </span>';
     manualIn = document.createElement("input"); manualIn.type = "date";
+    manualIn.setAttribute("aria-label", "Work date to add");
     pickWrap.appendChild(manualIn);
   }
   addRow.appendChild(pickWrap);

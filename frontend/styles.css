@@ -951,8 +951,9 @@ td.toggle { white-space: nowrap; }
   font-size: 0.8rem;
 }
 .chip-x { border: 0; background: transparent; color: var(--bad); cursor: pointer; font-size: 0.9rem; padding: 0 0 0 0.1rem; }
-.add-day { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
+.add-day { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.45rem; padding-top: 0.45rem; border-top: 1px dashed var(--border); }
 .add-day input, .add-day select { padding: 0.3rem 0.4rem; }
+.add-day-label { color: var(--muted); font-size: 0.8rem; }
 
 /* ---- reports ---- */
 .report-toolbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
