@@ -141,6 +141,11 @@ pay snapshots).
 - [x] **Unassigned-availability nudge** — the same gap surfaced on the
       Assignments panel (where staffing happens): a callout naming available
       officials with no assigned day + an "Open Availability →" jump link.
+- [x] **Coverage gaps by day** — the officials report reports a per-day
+      officials count (footer row aligned under the weekday columns, zero-days in
+      red) + a callout listing tournament days with **no official assigned**, so
+      the TD fills uncovered days before the event. On screen + in the PDF.
+      (`coverage` / `uncovered_days` / `uncovered_days_count` in the report.)
 - [x] **Availability mismatch check** — a worked day the official did **not**
       declare available is flagged (never blocked): a per-day ⚠, a "not available"
       chip on the assignment card, and an availability count in the report totals.

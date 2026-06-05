@@ -4,6 +4,8 @@ Reuses the assignment summary (per-day roles, computed pay/mileage, hotel
 date-mismatch flag) and adds the official's dietary restrictions (audit §2.3) and
 tournament-level totals. This is the Phase 1 "print both reports" deliverable.
 """
+from datetime import date, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
@@ -78,6 +80,22 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
             b["assigned"] = int(b["assigned"])
             b["remaining"] = b["room_count"] - b["assigned"]
 
+    # Per-day coverage: how many officials work each day of the play window, so a
+    # day with ZERO officials is surfaced before the event. Built from the
+    # already-loaded officials' days (in-window dates only) — no extra query.
+    day_counts: dict[str, int] = {}
+    for o in officials:
+        for d in o["days"]:
+            day_counts[d["work_date"]] = day_counts.get(d["work_date"], 0) + 1
+    coverage = []
+    cur_day = date.fromisoformat(t["play_start_date"])
+    end_day = date.fromisoformat(t["play_end_date"])
+    while cur_day <= end_day:
+        iso = cur_day.isoformat()
+        coverage.append({"date": iso, "officials": day_counts.get(iso, 0)})
+        cur_day += timedelta(days=1)
+    uncovered_days = [c["date"] for c in coverage if c["officials"] == 0]
+
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
@@ -96,7 +114,10 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         "rooms_reserved": sum(b["room_count"] for b in room_blocks),
         "rooms_assigned": sum(b["assigned"] for b in room_blocks),
         "rooms_remaining": sum(b["remaining"] for b in room_blocks),
+        # Days in the play window with zero officials assigned (coverage gaps).
+        "uncovered_days_count": len(uncovered_days),
     }
     totals["total"] = round(totals["pay"] + totals["mileage"], 2)
     return {"tournament": t, "officials": officials, "staff": staff,
-            "room_blocks": room_blocks, "totals": totals}
+            "room_blocks": room_blocks, "coverage": coverage,
+            "uncovered_days": uncovered_days, "totals": totals}

@@ -4616,6 +4616,24 @@ async function loadReports() {
     `<th colspan="${lead}">Totals${note}</th><th class="num">${money(totals.pay)}</th>` +
     `<th class="num">${money(totals.mileage)}</th>`;
 
+  // Per-day coverage footer row, aligned under the weekday columns. A day with
+  // ZERO officials is highlighted as a coverage gap to fill before the event.
+  const covByDate = {};
+  for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
+  const covCells = cols.map((c) => {
+    const n = covByDate[c.date] ?? 0;
+    return `<th class="daycol${n === 0 ? " warn" : ""}">${n}</th>`;
+  }).join("");
+  document.getElementById("report-coverage").innerHTML =
+    `<th colspan="6">Officials per day</th>${covCells}<th></th><th></th>`;
+  const covNote = document.getElementById("report-coverage-note");
+  const uncovered = reportData.uncovered_days || [];
+  if (uncovered.length) {
+    covNote.hidden = false;
+    covNote.innerHTML = `⚠ ${uncovered.length} day(s) have <strong>no official assigned</strong>: ` +
+      `${uncovered.map((d) => esc(fmtDOW(d))).join(", ")} — fill before the event.`;
+  } else { covNote.hidden = true; covNote.textContent = ""; }
+
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
   const lodge = document.querySelector("#lodging-table tbody");
@@ -4747,6 +4765,13 @@ function exportReportPdf() {
   }).join("") + `<tr class="totals"><td colspan="3">Totals</td><td class="num">${totals.rooms_reserved}</td>` +
       `<td class="num">${totals.rooms_assigned}</td><td class="num">${totals.rooms_remaining}</td></tr>`
     : `<tr><td class="empty" colspan="6">No official room blocks.</td></tr>`;
+  const covByDate = {};
+  for (const c of (reportData.coverage || [])) covByDate[c.date] = c.officials;
+  const covCells = cols.map((c) => {
+    const n = covByDate[c.date] ?? 0;
+    return `<td class="day"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`;
+  }).join("");
+  const coverageRow = `<tr class="totals"><td colspan="6">Officials per day</td>${covCells}<td></td><td></td></tr>`;
   const win = window.open("", "_blank");
   if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
@@ -4771,7 +4796,9 @@ function exportReportPdf() {
     <table><thead><tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th><th>Check-in</th><th>Check-out</th>${dayHead}<th class="num">Pay</th><th class="num">Mileage</th></tr></thead>
       <tbody>${offRows}
         <tr class="totals"><td colspan="${cols.length + 6}">Totals — ${totals.official_count} official(s)</td><td class="num">${money(totals.pay)}</td><td class="num">${money(totals.mileage)}</td></tr>
+        ${coverageRow}
       </tbody></table>
+    ${totals.uncovered_days_count ? `<p style="color:#c62828">⚠ ${totals.uncovered_days_count} day(s) with no official assigned: ${reportData.uncovered_days.map((d) => e(fmtDOW(d))).join(", ")}</p>` : ""}
     <h2>Officials needing accommodation</h2>
     <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
     <h2>Room-block pickup (officials)</h2>

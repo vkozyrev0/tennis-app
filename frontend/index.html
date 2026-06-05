@@ -1099,8 +1099,9 @@
             <th>Dietary</th><th>Pay</th><th>Mileage</th><th>Total</th><th>Flags</th>
           </tr></thead>
           <tbody></tbody>
-          <tfoot><tr id="report-totals"></tr></tfoot>
+          <tfoot><tr id="report-coverage"></tr><tr id="report-totals"></tr></tfoot>
         </table>
+        <p id="report-coverage-note" class="avail-gap" hidden></p>
 
         <h4>Officials needing accommodation</h4>
         <table id="lodging-table" class="list-table">
@@ -1202,6 +1203,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=81"></script>
+  <script type="module" src="/app.js?v=82"></script>
 </body>
 </html>
