@@ -204,10 +204,10 @@ buildable without them is done; revisit when the prerequisite is available.
 
 | Item | Why it's blocked | To unblock |
 |------|------------------|------------|
-| **Google Maps auto-distance** (geocoding home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress; manual entry already covers the need. | Provide an API key + confirm cost; add a geocode call with manual entry as fallback. |
+| **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), plus a provider seam for Google. | Provide an API key + confirm cost; implement `geocode_address`/driving-distance behind the existing seam (the estimate is the fallback). |
 | **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | Needs a mail domain + inbound webhook/IMAP infra. POC uses manual paste into the review inbox. | Stand up a forwarding address + ingestion endpoint; dedup by `message_id` already exists. |
 | **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
-| **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption, retention policy. |
+| **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS for the *encryption* piece. **Partly shipped** (see `docs/pii-hardening-plan.md`): **H1** ENV-gated boot guard refusing default creds / non-TLS in prod + `sslmode`; **H3** PII erased from `player_history` on delete + an email-body retention-purge endpoint. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption (H2), retention schedule + purge job (H3.1/H3.3). |
 | **Non-official staff in the Staffing Plan** (Site Director, Player Amenities, Trainer, Operations, Stringer) | Not a blocker — a deliberate scope choice; the model currently covers **officials** only, so the staffing-plan report shows officials. | Add a staff/role model (or extend assignment with a non-cert role + per-day availability/pay) and group them in the report like the TD's sheet. *(Deferred at the TD's request.)* |
 
 > Session expiry/invalidation (migration `0017`) and admin/official access control
@@ -359,20 +359,36 @@ glance, themes delivered through 2026-05-27:
   analytics counts stays per `(player, tournament)` for the CVB number;
   pairing-avoidance validates all members up front then commits as a unit.
 
-## Open work (as of 2026-05-27)
-- **Google Maps geocoding** for auto-distance (Phase 2) — needs API key
-  + network egress. Manual entry + the workbook backfill cover the gap.
+## Shipped 2026-06-04 (benchmark-driven improvements)
+A round of fixes + features, merged to `main` (full backend suite: 109 green).
+- **Inbox filing** — fixed bulk-populate's `scheduling` key drift; single-file
+  now **pre-fills the detected player**; a single **email-target registry**
+  (`app/email_targets.py`, `GET /api/emails/targets`) is the source of truth for
+  both single-file + bulk (drift-guarded by a test); **local field extraction**
+  (age division, events, scheduling day/time) surfaced on the email + filled into
+  the forms and bulk; filing uses the **email's own tournament** (no re-homing).
+- **Assignments** — cross-tournament **double-booking detection**: a card chip +
+  per-day marker, a report count, and a confirm before adding a clashing day.
+- **Officials pay** — fixed a player-PUT **optimistic-concurrency false-409**
+  (compare parsed instants, not raw timestamp strings).
+- **Auto-distance** — great-circle **estimate** fallback + geocoder seam (above).
+- **PII hardening** — plan doc + **H1** (boot guard/TLS) + **H3**
+  (history erasure on delete, email-body purge) (above).
+
+## Open work (as of 2026-06-04)
+- **Google Maps *driving* distance** (Phase 2) — needs API key + egress; the
+  great-circle estimate + manual entry + workbook backfill cover the gap.
 - **Dedicated forwarding-address auto-ingest** (D4) — needs mail infra;
   manual paste into the review inbox is the working POC path.
 - **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM
   that reads minors' email content requires the **cloud-vs-local privacy
   call first**.
-- **PII encryption at rest / retention** + **DB hardening** — tied to the
-  post-POC deployment switch (dedicated DB user, secrets, TLS).
+- **PII H2 (encryption at rest) + H3 schedule/job** + **least-priv DB role** —
+  tied to the post-POC deployment switch (see `docs/pii-hardening-plan.md`).
 - **Multi-user TD access** (D8) — single-admin POC for now.
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
-  refactor); inline "add distance" affordance on the assignments tab;
-  structured assignment-card layout.
+  refactor); structured assignment-card layout. *(Inline "add distance" on the
+  assignments tab is done.)*
 
 ## Backlog (2026-05-28 questionnaire — decisions locked in)
 
