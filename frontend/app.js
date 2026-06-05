@@ -1981,7 +1981,7 @@ function rosterMarkRows() {
 }
 function applyRosterSel() { rosterMarkRows(); rosterUpdateNav(); }
 function rosterSelect(e) {
-  rosterEditId = e.id;
+  rosterEditId = e.id; _rosterFromEmailId = null;  // editing, not an email-seeded add
   rosterSetMode("pick");  // editing an existing entry — always pick mode
   rosterForm.player_id.value = e.player_id;
   // Filter the division + events lists by the picked player's gender BEFORE
@@ -2007,8 +2007,12 @@ function _setMultiSelect(sel, csv) {
   const wanted = new Set(String(csv ?? "").split(",").map((s) => s.trim()).filter(Boolean));
   [...sel.options].forEach((o) => { o.selected = wanted.has(o.value); });
 }
+// When the roster add-form was opened from an inbox email ("Add to roster"),
+// this holds that email's id so a successful save can re-run detection and link
+// the email to the just-added player. Cleared on any other form open.
+let _rosterFromEmailId = null;
 function rosterShowNew() {
-  rosterEditId = null; rosterForm.reset();
+  rosterEditId = null; _rosterFromEmailId = null; rosterForm.reset();
   rosterTitle.textContent = "New roster entry";
   rosterSubmit.textContent = "Create";  // audit P40: matches wireEntity's "Create" on new
   rosterSetMode("pick");
@@ -2096,6 +2100,17 @@ onSubmit(rosterForm, async () => {
     // If we just inline-created a player, refresh the Setup Players list so
     // the picker has the new option next time.
     if (!editing && rosterMode === "new") { try { await playersCrud.refresh(); } catch (_) {} }
+    // If this entry was added from an inbox email, re-run detection on that
+    // email so it now links to the player we just put on the roster — no manual
+    // "Detect" needed. (Best-effort; the roster save itself already succeeded.)
+    const fromEmail = _rosterFromEmailId; _rosterFromEmailId = null;
+    if (fromEmail) {
+      try {
+        const det = await api(`/emails/${fromEmail}/detect-player`, { method: "POST" });
+        if (typeof loadInbox === "function") loadInbox();
+        if (det && det.detected_player_name) toast(`Linked email to ${det.detected_player_name}`, true);
+      } catch (_) { /* detection is a convenience; ignore failures */ }
+    }
     await loadRoster();
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();
@@ -3341,6 +3356,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
         const plan = _rosterPlan;
         document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
         rosterShowNew();
+        _rosterFromEmailId = m.id;   // re-detect this email after the save links it
         rosterSetMode(plan.mode);
         if (plan.mode === "pick") {
           const picker = rosterForm.elements.player_id;

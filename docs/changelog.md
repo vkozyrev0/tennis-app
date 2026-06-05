@@ -106,6 +106,10 @@ live in the running app, not just by tests.
   every loaded email with no matched player (and a tournament), in one call to
   the existing `bulk/detect-players` endpoint — no per-row selection. Reports how
   many of the unmatched it resolved.
+- **Re-detect after add-to-roster** — once "Add player to roster" saves, the
+  source email is re-run through the detector and links to the just-added player
+  automatically (no manual "Detect"). Best-effort: the roster save itself always
+  succeeds even if the follow-up detect hiccups.
 - **Off-roster USTA match** — detection used to search only the tournament roster;
   it now adds a final high-confidence layer (`usta_offroster`) that matches a
   player who exists in the system but isn't entered in this tournament (USTA # only
