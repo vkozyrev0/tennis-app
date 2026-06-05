@@ -158,6 +158,10 @@ pay snapshots).
       column (each official's total assigned days) + a grand total in the footer
       (`official_days_total`), so the TD sees per-official load at a glance.
       Screen + PDF + CSV.
+- [x] **Certification pool report** — a matrix of every official × the certs they
+      hold + a holder count per cert (zeros flagged), so the TD plans role
+      coverage against the available pool. Global (not tournament-scoped). Screen
+      + PDF. (`cert_pool` in the report.)
 - [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
       per day" row + a per-site row, aligned under the same day columns, so the
       TD can track/share coverage gaps in a spreadsheet.

@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **194** green, migrations
+A large round of fixes + features (full backend suite: **197** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -124,6 +124,12 @@ live in the running app, not just by tests.
   player who exists in the system but isn't entered in this tournament (USTA # only
   — never a bare name). The inbox flags it and the "Add to roster" action opens
   pick-existing mode pre-selected, so the TD adds the existing player in one step.
+- **Report coverage trio** — the staffing report gained **per-role coverage by
+  day** (`role_coverage` — officials per role per day, thin/zero highlighting), a
+  per-official **Days column** + grand total (`official_days_total`), and a
+  **certification pool** matrix (`cert_pool` — every official × the certs they
+  hold + holder counts, zeros flagged) so the TD plans role coverage against the
+  available pool. Coverage grids on screen + PDF (+ CSV for the day-aligned ones).
 
 ---
 

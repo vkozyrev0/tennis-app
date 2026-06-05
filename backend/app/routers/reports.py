@@ -108,6 +108,17 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
             (tournament_id,),
         )
         linked_sites = cur.fetchall()
+        # Certification pool — every official + the certs they hold, so the TD can
+        # plan role coverage against the available pool (e.g. "I have 5 chairs but
+        # only staffed 2 Tuesday"). Global (not tournament-scoped) on purpose.
+        cur.execute(
+            "SELECT o.id, o.last_name, o.first_name, "
+            "  COALESCE(array_agg(c.cert_type::text ORDER BY c.cert_type::text) "
+            "           FILTER (WHERE c.cert_type IS NOT NULL), ARRAY[]::text[]) AS certs "
+            "FROM official o LEFT JOIN certification c ON c.official_id = o.id "
+            "GROUP BY o.id ORDER BY o.last_name, o.first_name"
+        )
+        pool_rows = cur.fetchall()
     # (site_id | None) -> {date -> count}
     site_counts: dict = {}
     window = {c["date"] for c in coverage}
@@ -151,6 +162,17 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
         for role, counts in sorted(role_counts.items())
     ]
 
+    # Certification pool: officials × the certs they hold + a count per cert.
+    cert_pool_officials = [
+        {"official_name": f'{r["last_name"]}, {r["first_name"]}', "certs": list(r["certs"])}
+        for r in pool_rows
+    ]
+    cert_counts: dict = {}
+    for r in cert_pool_officials:
+        for ct in r["certs"]:
+            cert_counts[ct] = cert_counts.get(ct, 0) + 1
+    cert_pool = {"officials": cert_pool_officials, "counts": cert_counts}
+
     totals = {
         "staff_count": len(staff),
         "official_count": len(officials),
@@ -179,4 +201,5 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     return {"tournament": t, "officials": officials, "staff": staff,
             "room_blocks": room_blocks, "coverage": coverage,
             "site_coverage": site_coverage, "role_coverage": role_coverage,
+            "cert_pool": cert_pool,
             "uncovered_days": uncovered_days, "totals": totals}

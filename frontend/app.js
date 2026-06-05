@@ -4859,6 +4859,30 @@ async function loadReports() {
     staffBody.innerHTML += `<tr><th colspan="${scols.length + 2}">Staff pay total</th>` +
       `<th class="num">${money(totals.staff_pay)}</th><th></th></tr>`;
   }
+
+  _renderCertPool();
+}
+// Certification pool matrix: officials (rows) × cert types (cols), ✓ where held,
+// with a holder count per cert in the footer — so the TD plans role coverage
+// against the available pool. A cert with zero holders is flagged (a gap).
+function _renderCertPool() {
+  const pool = reportData.cert_pool || { officials: [], counts: {} };
+  document.querySelector("#cert-pool-table thead").innerHTML =
+    "<tr><th>Official</th>" + CERTS.map(([, lbl]) => `<th class="num">${esc(lbl)}</th>`).join("") + "</tr>";
+  const body = document.querySelector("#cert-pool-table tbody");
+  body.innerHTML = pool.officials.length
+    ? pool.officials.map((o) => {
+        const held = new Set(o.certs);
+        const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
+        return `<tr><td>${esc(o.official_name)}</td>${cells}</tr>`;
+      }).join("")
+    : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials in the system yet.</td></tr>`;
+  // Footer: holders per cert (zero flagged as a coverage gap in the pool).
+  document.getElementById("cert-pool-totals").innerHTML =
+    `<th>Holders</th>` + CERTS.map(([v]) => {
+      const n = pool.counts[v] || 0;
+      return `<th class="num${n === 0 ? " warn" : ""}">${n}</th>`;
+    }).join("");
 }
 // Weekday columns for the tournament's play window (TD staffing-plan format).
 function _reportColumns(t) {
@@ -4953,6 +4977,16 @@ function exportReportPdf() {
   }).join("") + `<tr class="totals"><td colspan="3">Totals</td><td class="num">${totals.rooms_reserved}</td>` +
       `<td class="num">${totals.rooms_assigned}</td><td class="num">${totals.rooms_remaining}</td></tr>`
     : `<tr><td class="empty" colspan="6">No official room blocks.</td></tr>`;
+  // Certification pool matrix (officials × cert types).
+  const pool = reportData.cert_pool || { officials: [], counts: {} };
+  const certHead = CERTS.map(([, lbl]) => `<th class="num">${e(lbl)}</th>`).join("");
+  const certRows = pool.officials.length ? pool.officials.map((o) => {
+    const held = new Set(o.certs);
+    const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
+    return `<tr><td>${e(o.official_name)}</td>${cells}</tr>`;
+  }).join("") + `<tr class="totals"><td>Holders</td>` +
+      CERTS.map(([v]) => { const n = pool.counts[v] || 0; return `<td class="num"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`; }).join("") + `</tr>`
+    : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials.</td></tr>`;
   // Coverage cells honor the same threshold as the on-screen tables: red at 0,
   // amber below the minimum.
   const _covStyle = (n) => n === 0 ? ' style="color:#c62828;font-weight:700"'
@@ -5005,6 +5039,8 @@ function exportReportPdf() {
     <table><thead><tr><th>Site</th>${dayHead}</tr></thead><tbody>${siteCovRows}</tbody></table>
     <h2>Coverage by role &amp; day</h2>
     <table><thead><tr><th>Role</th>${dayHead}</tr></thead><tbody>${roleCovRows}</tbody></table>
+    <h2>Certification pool — all officials</h2>
+    <table><thead><tr><th>Official</th>${certHead}</tr></thead><tbody>${certRows}</tbody></table>
     <h2>Officials needing accommodation</h2>
     <table><thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead><tbody>${lodgeRows}</tbody></table>
     <h2>Room-block pickup (officials)</h2>
