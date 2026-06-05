@@ -88,6 +88,30 @@ def test_detect_by_usta_number_in_body():
     assert d["detected_player_name"] == "Reetisha Phukan"
 
 
+def test_detect_off_roster_player_by_usta():
+    # A player who exists in the system but is NOT on this tournament's roster:
+    # detection still matches by USTA # and flags it with `usta_offroster` so the
+    # UI can offer "add to roster".
+    t = _tournament()
+    usta = str(uuid.uuid4().int % 10**10).zfill(10)
+    _ok(client.post("/api/players", json={
+        "usta_number": usta, "first_name": "Off", "last_name": "Roster", "gender": "male"}))
+    e = _email(t["id"], subject="Late entry", body=f"Please add USTA {usta} to the draw.")
+    d = _detect(e["id"])
+    assert d["match_kind"] == "usta_offroster"
+    assert d["detected_usta"] == usta
+    assert d["detected_player_name"] == "Off Roster"
+
+
+def test_roster_usta_beats_off_roster():
+    # When the USTA # belongs to a ROSTER player, the high-precision roster layer
+    # (L1, kind 'usta') wins — off-roster is only a fallback.
+    t = _tournament()
+    usta = _rostered(t["id"], "On", "Roster", "male", "B14")
+    e = _email(t["id"], subject="Q", body=f"USTA {usta} update")
+    assert _detect(e["id"])["match_kind"] == "usta"
+
+
 def test_detect_by_fullname_in_subject():
     t = _tournament()
     _rostered(t["id"], "Vera", "Pantovic", "female", "G14")

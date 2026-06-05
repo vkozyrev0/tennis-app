@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **185** green, migrations
+A large round of fixes + features (full backend suite: **187** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -106,6 +106,11 @@ live in the running app, not just by tests.
   every loaded email with no matched player (and a tournament), in one call to
   the existing `bulk/detect-players` endpoint — no per-row selection. Reports how
   many of the unmatched it resolved.
+- **Off-roster USTA match** — detection used to search only the tournament roster;
+  it now adds a final high-confidence layer (`usta_offroster`) that matches a
+  player who exists in the system but isn't entered in this tournament (USTA # only
+  — never a bare name). The inbox flags it and the "Add to roster" action opens
+  pick-existing mode pre-selected, so the TD adds the existing player in one step.
 
 ---
 

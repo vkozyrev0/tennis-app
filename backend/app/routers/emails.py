@@ -433,6 +433,25 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
     if len(text_last) == 1:
         return ret(text_last[0], "lastname")
 
+    # L8 — OFF-ROSTER USTA match: the email's USTA # belongs to a player who
+    # exists in the system but isn't entered in THIS tournament (so L1 missed
+    # them). USTA #s are unique → high confidence; we never off-roster-match on a
+    # bare name (too many collisions system-wide). The distinct `usta_offroster`
+    # kind lets the UI flag it and offer "add to roster". Reaching here means no
+    # roster player carried any of these USTA #s.
+    if ustas:
+        cur.execute(
+            "SELECT id, usta_number, "
+            "TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name "
+            "FROM player WHERE usta_number = ANY(%s)",
+            (list(ustas),),
+        )
+        offs = cur.fetchall()
+        if len(offs) == 1:
+            r = offs[0]
+            return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
+                    "detected_player_name": r["name"], "match_kind": "usta_offroster"}
+
     return {"detected_player_id": None, "detected_usta": None,
             "detected_player_name": None, "match_kind": None}
 

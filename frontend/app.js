@@ -3074,6 +3074,7 @@ const MATCH_KIND_META = {
   fullname_body:     { dot: "◐", cls: "warn", label: "Full name in the body — medium confidence" },
   lastname_subject:  { dot: "○", cls: "warn", label: "Surname only (subject) — please verify" },
   lastname:          { dot: "○", cls: "warn", label: "Surname only — please verify" },
+  usta_offroster:    { dot: "◑", cls: "warn", label: "Matched by USTA # — but this player is NOT on this tournament's roster; add them" },
   manual:            { dot: "✎", cls: "info", label: "Set manually" },
 };
 function matchHint(kind) {
@@ -3338,40 +3339,54 @@ const inboxGrid = makeReadGrid("inbox-table", [
           loadInbox();
         } catch (e) { toast(e.message, false); }
       };
-      // "Add to roster" — the email carries a USTA # but matched no roster
-      // player. Jump to the Roster form pre-filled from the email (USTA #, name
-      // if known, division + inferred gender) so the TD just confirms + Saves.
+      // "Add to roster" — two cases:
+      //  (a) OFF-ROSTER match (usta_offroster): the player exists but isn't on
+      //      this tournament's roster → pick-existing mode, pre-selected.
+      //  (b) NO match but the email carries a USTA # → new-player mode, pre-filled
+      //      from the email (USTA #, name if known, division + inferred gender).
+      // Either way the TD just confirms + Saves; reuses the roster upsert.
+      const offRoster = m.detected_match_kind === "usta_offroster" && m.detected_player_id;
       const doAddToRoster = () => {
         document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
         rosterShowNew();
-        rosterSetMode("new");
-        const gender = _genderFromDivision(m.detected_division);
-        if (gender && rosterForm.elements.gender) rosterForm.elements.gender.value = gender;
-        // populate the division options for that gender before setting a value
-        refreshDivisionLists(gender || _inferFormGender(rosterForm));
-        rosterForm.elements.usta_number.value = m.detected_usta_text || m.detected_usta || "";
-        const nm = (m.detected_player_name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
-        if (nm.length) {
-          rosterForm.elements.first_name.value = nm[0];
-          rosterForm.elements.last_name.value = nm.slice(1).join(" ");
+        if (offRoster) {
+          rosterSetMode("pick");
+          const picker = rosterForm.elements.player_id;
+          if (picker) { picker.value = String(m.detected_player_id); if (typeof picker._comboSync === "function") picker._comboSync(); }
+          refreshDivisionLists(_inferFormGender(rosterForm));
+        } else {
+          rosterSetMode("new");
+          const gender = _genderFromDivision(m.detected_division);
+          if (gender && rosterForm.elements.gender) rosterForm.elements.gender.value = gender;
+          // populate the division options for that gender before setting a value
+          refreshDivisionLists(gender || _inferFormGender(rosterForm));
+          rosterForm.elements.usta_number.value = m.detected_usta_text || m.detected_usta || "";
+          const nm = (m.detected_player_name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
+          if (nm.length) {
+            rosterForm.elements.first_name.value = nm[0];
+            rosterForm.elements.last_name.value = nm.slice(1).join(" ");
+          }
+          const g = rosterForm.elements.gender;
+          if (g && typeof g._comboSync === "function") g._comboSync();
         }
         const div = rosterForm.elements.age_division;
         if (div && m.detected_division && [...div.options].some((o) => o.value === m.detected_division)) {
           div.value = m.detected_division;
           if (typeof div._comboSync === "function") div._comboSync();
         }
-        const g = rosterForm.elements.gender;
-        if (g && typeof g._comboSync === "function") g._comboSync();
         rosterOpenModal();
         scheduleComboSync();
-        toast("Pre-filled from the email — confirm gender/division, add the name, then Save", true);
+        toast(offRoster
+          ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
+          : "Pre-filled from the email — confirm gender/division, add the name, then Save", true);
       };
+      const canAddToRoster = offRoster || (!m.detected_player_id && m.detected_usta_text);
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
         { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
           title: fileable ? "" : "Pick a fileable classification first", onClick: () => { if (fileable) doFile(); } },
-        ...(!m.detected_player_id && m.detected_usta_text ? [{ label: "Add player to roster",
-          title: "Open the roster form pre-filled with this email's USTA # + division", onClick: doAddToRoster }] : []),
+        ...(canAddToRoster ? [{ label: offRoster ? "Add to roster (player exists)" : "Add player to roster",
+          title: offRoster ? "Add this existing player to the tournament roster" : "Open the roster form pre-filled with this email's USTA # + division", onClick: doAddToRoster }] : []),
         ...(m.amends_email_id ? [{ label: "Apply correction → update filed row",
           title: "Re-point the amended email's filed row to this one and re-apply the parsed fields", onClick: doApplyCorrection }] : []),
         { separator: true },
