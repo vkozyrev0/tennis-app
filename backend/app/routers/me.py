@@ -3,8 +3,9 @@ profile and availability. Officials never touch the admin routers."""
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
-from ..models import MyAvailabilitySet, OfficialCreate
+from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
 from ..security import get_current_user
+from .assignments import _ASG_SELECT, _summary
 
 # Belt-and-suspenders: every endpoint also takes `Depends(get_current_user)` to
 # get `user`, but mounting the dep on the router means nothing here can ever be
@@ -74,6 +75,43 @@ def my_tournaments(user=Depends(get_current_user), conn=Depends(db_dep)):
             "FROM tournament ORDER BY play_start_date DESC"
         )
         return cur.fetchall()
+
+
+@router.get("/assignments")
+def my_assignments(user=Depends(get_current_user), conn=Depends(db_dep)):
+    """The logged-in official's own assignments (across tournaments), each with
+    its days + pay/mileage + accept/decline status."""
+    oid = _my_official_id(user)
+    with conn.cursor() as cur:
+        cur.execute(
+            _ASG_SELECT + " WHERE a.official_id = %s "
+            "ORDER BY t.play_start_date DESC, a.id",
+            (oid,),
+        )
+        rows = cur.fetchall()
+        return [_summary(cur, a) for a in rows]
+
+
+@router.post("/assignments/{assignment_id}/respond")
+def respond_to_assignment(assignment_id: int, body: AssignmentResponse,
+                          user=Depends(get_current_user), conn=Depends(db_dep)):
+    """Accept / decline (or reset to pending) one's OWN assignment."""
+    oid = _my_official_id(user)
+    with conn.cursor() as cur:
+        cur.execute("SELECT official_id FROM assignment WHERE id = %s", (assignment_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="assignment not found")
+        if row["official_id"] != oid:
+            raise HTTPException(status_code=403, detail="not your assignment")
+        cur.execute(
+            "UPDATE assignment SET response_status = %s, "
+            "responded_at = CASE WHEN %s = 'pending' THEN NULL ELSE now() END "
+            "WHERE id = %s",
+            (body.status, body.status, assignment_id),
+        )
+        cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
+        return _summary(cur, cur.fetchone())
 
 
 @router.get("/availability/{tournament_id}")

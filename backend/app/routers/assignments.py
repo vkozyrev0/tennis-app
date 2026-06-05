@@ -166,12 +166,16 @@ def _summary(cur, a: dict) -> dict:
         # so a reimbursement is reproducible even if the distance/rate later
         # changes (audit §5.3). Null until first snapshot.
         "pay_audit": a.get("pay_audit"),
+        # Official's accept/decline (self-service); 'pending' until they respond.
+        "response_status": a.get("response_status"),
+        "responded_at": a["responded_at"].isoformat() if a.get("responded_at") else None,
     }
 
 
 _ASG_SELECT = """
 SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        a.snapshot_at, a.rule_version, a.pay_audit,
+       a.response_status, a.responded_at,
        o.first_name, o.last_name, o.dietary_restrictions,
        t.play_start_date, t.play_end_date,
        COALESCE(s.code, s.name) AS site_label,

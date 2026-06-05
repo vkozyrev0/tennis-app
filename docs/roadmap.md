@@ -125,6 +125,11 @@ pay snapshots).
 - [x] TD sees availability when making assignments — the Assignments official
       picker shows each official's available-day count for the tournament, and the
       day picker offers their available dates.
+- [x] **Officials accept/decline** (migration 0038, benchmark gap): the official
+      accepts/declines the assignment the TD made from their self-service "My
+      assignments" view (`GET/POST /api/me/assignments...`); the
+      `response_status` (pending/accepted/declined) shows as a chip on the TD's
+      assignment card.
 - [ ] **Google Maps geocoding** to auto-compute home↔site round-trip distance
       (the primary mileage source), with **manual entry as fallback** when the
       lookup is unavailable (D3/U2).

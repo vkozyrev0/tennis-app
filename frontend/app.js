@@ -2389,6 +2389,12 @@ async function loadAssignments() {
   }
   for (const a of list) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
 }
+// Official accept/decline status → a colored chip (TD card + self-service).
+const _RESP_META = { pending: ["muted", "⏳ pending"], accepted: ["ok", "✓ accepted"], declined: ["bad", "✗ declined"] };
+function _respChip(status) {
+  const [cls, label] = _RESP_META[status] || ["muted", status || ""];
+  return `<span class="badge badge-${cls}" title="official's accept/decline">${esc(label)}</span>`;
+}
 function renderAssignment(a, availDates) {
   const card = document.createElement("div");
   card.className = "asg";
@@ -2425,6 +2431,7 @@ function renderAssignment(a, availDates) {
       `<span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>` +
       `<span class="badge badge-info">mileage ${mileage}</span>` +
       `<span class="badge badge-ok"${auditTip ? ` title="${auditTip}"` : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>` +
+      ` ${_respChip(a.response_status)}` +
       (flagChips ? " " + flagChips : "") +
     `</div>`;
   const actions = document.createElement("span"); actions.className = "asg-actions";
@@ -5020,6 +5027,38 @@ async function officialInit() {
     sel.appendChild(op);
   }
   await loadMyAvailability();
+  await loadMyAssignments();
+}
+async function loadMyAssignments() {
+  const box = document.getElementById("me-assignments");
+  if (!box) return;
+  let rows = [];
+  try { rows = await api("/me/assignments"); } catch (_) {}
+  if (!rows.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
+  box.innerHTML = "";
+  for (const a of rows) {
+    const tname = (meTournaments.find((t) => t.id === a.tournament_id) || {}).name || `Tournament ${a.tournament_id}`;
+    const days = a.days.map((d) => fmtDOW(d.work_date)).join(", ") || "—";
+    const card = document.createElement("div"); card.className = "asg";
+    card.innerHTML = `<div class="asg-head"><strong>${esc(tname)}</strong> ${_respChip(a.response_status)}` +
+      `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · days: ${esc(days)}</div></div>`;
+    const actions = document.createElement("div"); actions.className = "add-day";
+    const mk = (status, txt, danger) => {
+      const b = document.createElement("button"); b.type = "button";
+      b.className = "btn-link" + (danger ? " danger" : ""); b.textContent = txt;
+      b.disabled = a.response_status === status;
+      b.addEventListener("click", async () => {
+        try { await api(`/me/assignments/${a.id}/respond`, { method: "POST", body: JSON.stringify({ status }) });
+          toast(`Marked ${status}`, true); loadMyAssignments(); }
+        catch (e) { toast(e.message, false); }
+      });
+      return b;
+    };
+    actions.append(mk("accepted", "Accept"), mk("declined", "Decline", true));
+    if (a.response_status !== "pending") actions.append(mk("pending", "Clear"));
+    card.appendChild(actions);
+    box.appendChild(card);
+  }
 }
 async function loadMyAvailability() {
   const sel = document.getElementById("me-tournament");

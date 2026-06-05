@@ -1,7 +1,7 @@
 """Tournament-workspace operations: roster, assignment, certification,
 availability, t-shirt order (audit A50)."""
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -77,6 +77,11 @@ class AssignmentCreate(BaseModel):
 class AssignmentDayCreate(BaseModel):
     work_date: date
     working_as: CertType
+
+
+class AssignmentResponse(BaseModel):
+    """An official accepting or declining their assignment (self-service)."""
+    status: Literal["accepted", "declined", "pending"]
 
 
 # ---------- Official certifications ----------
