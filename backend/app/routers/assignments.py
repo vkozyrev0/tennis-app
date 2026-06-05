@@ -10,6 +10,8 @@ Room-count IS a hard guard — an official can't be put in a full block (audit �
 Pay/mileage/total are snapshotted on every change with the rule version, so a
 figure is reproducible later even if rates/distances change — audit §5.3.
 """
+import json
+
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -60,6 +62,7 @@ def _summary(cur, a: dict) -> dict:
 
     mileage = None
     missing_distance = False
+    one_way_miles = None  # the mileage calc input (snapshotted for audit §5.3)
     if a["site_id"] is not None:
         cur.execute(
             "SELECT one_way_miles FROM official_site_distance "
@@ -70,7 +73,8 @@ def _summary(cur, a: dict) -> dict:
         if dist is None:
             missing_distance = True
         else:
-            reimbursable = max(2 * float(dist["one_way_miles"]) - FREE_MILES, 0.0)
+            one_way_miles = float(dist["one_way_miles"])
+            reimbursable = max(2 * one_way_miles - FREE_MILES, 0.0)
             mileage = round(min(reimbursable * MILEAGE_RATE, MILEAGE_CAP), 2)
 
     check_in = a["hotel_check_in"].isoformat() if a.get("hotel_check_in") else None
@@ -155,14 +159,19 @@ def _summary(cur, a: dict) -> dict:
         # All dates this official works elsewhere — feeds the add-day pre-check.
         "official_other_dates": official_other_dates,
         "total": round(pay + (mileage or 0.0), 2),
+        "one_way_miles": one_way_miles,  # mileage input (live)
         "rule_version": a.get("rule_version"),
         "snapshot_at": a["snapshot_at"].isoformat() if a.get("snapshot_at") else None,
+        # Frozen money audit (inputs + rule constants) from the last snapshot,
+        # so a reimbursement is reproducible even if the distance/rate later
+        # changes (audit §5.3). Null until first snapshot.
+        "pay_audit": a.get("pay_audit"),
     }
 
 
 _ASG_SELECT = """
 SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
-       a.snapshot_at, a.rule_version,
+       a.snapshot_at, a.rule_version, a.pay_audit,
        o.first_name, o.last_name, o.dietary_restrictions,
        t.play_start_date, t.play_end_date,
        COALESCE(s.code, s.name) AS site_label,
@@ -201,16 +210,28 @@ def _check_room_capacity(cur, room_block_id, exclude_id=None) -> None:
 
 
 def _persist_snapshot(cur, assignment_id: int) -> dict:
-    """Recompute and freeze pay/mileage/total + rule version on the assignment."""
+    """Recompute and freeze pay/mileage/total + the full calc AUDIT (inputs +
+    rule constants) on the assignment, so the reimbursement is reproducible even
+    if the distance/rates change later (audit §5.3)."""
     cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
     s = _summary(cur, cur.fetchone())
+    audit = {
+        "rule_version": RULE_VERSION,
+        "constants": {"free_miles": FREE_MILES, "mileage_rate": MILEAGE_RATE,
+                      "mileage_cap": MILEAGE_CAP},
+        "one_way_miles": s["one_way_miles"],
+        "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
+                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+        "pay": s["pay"], "mileage": s["mileage"], "total": s["total"],
+    }
     cur.execute(
         "UPDATE assignment SET snapshot_pay=%s, snapshot_mileage=%s, "
-        "snapshot_total=%s, rule_version=%s, snapshot_at=now() WHERE id=%s "
-        "RETURNING snapshot_at",
-        (s["pay"], s["mileage"], s["total"], RULE_VERSION, assignment_id),
+        "snapshot_total=%s, rule_version=%s, pay_audit=%s::jsonb, snapshot_at=now() "
+        "WHERE id=%s RETURNING snapshot_at",
+        (s["pay"], s["mileage"], s["total"], RULE_VERSION, json.dumps(audit), assignment_id),
     )
     s["rule_version"] = RULE_VERSION
+    s["pay_audit"] = audit
     s["snapshot_at"] = cur.fetchone()["snapshot_at"].isoformat()
     return s
 

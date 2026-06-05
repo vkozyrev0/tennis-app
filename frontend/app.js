@@ -2408,6 +2408,14 @@ function renderAssignment(a, availDates) {
     a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
   ].filter(Boolean).join(" ");
+  // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
+  // inputs (miles + rule constants) so the TD can see how a figure was reached.
+  const pa = a.pay_audit;
+  const auditTip = pa ? esc(
+    `Frozen audit — ${pa.rule_version || ""} · ` +
+    `miles ${pa.one_way_miles ?? "—"} · rate $${pa.constants?.mileage_rate}/mi · ` +
+    `first ${pa.constants?.free_miles}mi free · cap $${pa.constants?.mileage_cap} · ` +
+    `pay $${pa.pay} + mileage $${pa.mileage ?? 0} = $${pa.total}`) : "";
   const head = document.createElement("div"); head.className = "asg-head";
   head.innerHTML =
     `<div class="asg-name"><strong>${esc(a.official_name)}</strong></div>` +
@@ -2416,7 +2424,7 @@ function renderAssignment(a, availDates) {
     `<div class="asg-badges">` +
       `<span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>` +
       `<span class="badge badge-info">mileage ${mileage}</span>` +
-      `<span class="badge badge-ok">total $${a.total.toFixed(2)}</span>` +
+      `<span class="badge badge-ok"${auditTip ? ` title="${auditTip}"` : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>` +
       (flagChips ? " " + flagChips : "") +
     `</div>`;
   const actions = document.createElement("span"); actions.className = "asg-actions";

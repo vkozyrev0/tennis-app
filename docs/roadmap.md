@@ -188,7 +188,12 @@ Remaining: the optional auto-triage agent.
 
 ## Phase 5 — Polish & hardening
 - [ ] PII: encryption at rest, access control, retention policy (audit §5.1).
-- [ ] Audit trail for money (store calc inputs + rule version — audit §5.3).
+- [x] **Audit trail for money** (migration 0036, audit §5.3): the snapshot now
+      also freezes the calc **inputs** in `assignment.pay_audit` (jsonb) — the
+      one-way miles used, the rule constants (free-miles / rate / cap), and the
+      per-day rates — alongside the outputs + rule version, so a reimbursement is
+      reproducible even after a distance/rate changes. Surfaced as an ⓘ tooltip
+      on the assignment card's total badge.
 - [ ] Multi-user TD access if needed (D8).
 - [x] **CSV export on every list** — a generic "⬇ CSV" button on the roster,
       t-shirts, inbox, and all Part B list tables (skips the actions column), plus
