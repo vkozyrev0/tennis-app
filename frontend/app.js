@@ -3667,6 +3667,24 @@ document.getElementById("inbox-bulk-detect").addEventListener("click", async () 
     await loadInbox();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
+// One-click "Detect players" over the whole inbox: runs the detector on every
+// loaded email that has no matched player yet (and an assigned tournament — the
+// detector needs a roster). No row selection required.
+document.getElementById("inbox-detect-all").addEventListener("click", async () => {
+  const ids = inboxGrid.grid.getData()
+    .filter((m) => !m.detected_player_id && m.tournament_id)
+    .map((m) => m.id);
+  if (!ids.length) { setMsg("inbox-import-pdf-msg", "every inbox email already has a matched player", true); return; }
+  setMsg("inbox-import-pdf-msg", `detecting players for ${ids.length} email(s)…`, true);
+  try {
+    const res = await api("/emails/bulk/detect-players", {
+      method: "POST", body: JSON.stringify({ email_ids: ids }),
+    });
+    const hits = res.filter((r) => r.detected_player_id).length;
+    setMsg("inbox-import-pdf-msg", `matched ${hits} of ${ids.length} unmatched email(s)`, true);
+    await loadInbox();
+  } catch (e) { setMsg("inbox-import-pdf-msg", e.message, false); }
+});
 document.getElementById("inbox-bulk-reassign").addEventListener("click", async () => {
   if (!_inboxSelected.size) return;
   const sel = document.getElementById("inbox-bulk-tournament");

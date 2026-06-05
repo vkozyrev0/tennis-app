@@ -771,6 +771,7 @@
              auto-created "+ Add email" trigger so all three sit inline. -->
         <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
         <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
+        <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
         <span class="msg" id="inbox-import-pdf-msg"></span>
         <!-- Bulk-action toolbar: appears once a row is selected via the
              checkbox column. Detect populates detected_player_id per email,
@@ -1210,6 +1211,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=88"></script>
+  <script type="module" src="/app.js?v=89"></script>
 </body>
 </html>

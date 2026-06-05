@@ -102,6 +102,10 @@ live in the running app, not just by tests.
   tab and opens the new-player form pre-filled from the email (USTA #, name if
   known, parsed division + gender inferred from a B/G division code), so the TD
   just confirms + Saves. Reuses the existing roster upsert.
+- **One-click "Detect players"** — an inbox toolbar button runs the detector over
+  every loaded email with no matched player (and a tournament), in one call to
+  the existing `bulk/detect-players` endpoint — no per-row selection. Reports how
+  many of the unmatched it resolved.
 
 ---
 
