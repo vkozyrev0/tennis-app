@@ -35,6 +35,56 @@ pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
 ---
 
+## Staffing-confidence build-out (2026-06-05) — applied
+An iterative, question-driven round focused on giving the TD confidence the
+event is correctly staffed — every assignment-quality signal, the response loop,
+and coverage visibility. All on the `official-season-pay` branch; backend suite
+**147 → 174** green (one new `test_zz_*` module per feature). Each was verified
+live in the running app, not just by tests.
+
+- **Assignment quality flags** (warn, never block — consistent with the
+  off-window/hotel-date policy):
+  - **Availability mismatch** — a worked day the official didn't declare
+    available is flagged (per-day ⚠, card chip, report count). Suppressed when
+    they declared nothing. (`days_outside_availability` / `has_availability_data`.)
+  - **Certification guard** — the assign path already 409s an uncertified role;
+    a cert *revoked after* booking now also flags the day (card chip + per-day ⚠
+    + report `uncertified_count`). The add-day form pre-checks held certs and
+    blocks early with a friendly message. (`held_certs` / `uncertified_days`.)
+- **Response loop** (accept/decline):
+  - **Decline visibility** — Assignments panel response-status summary + filter
+    chips (All/Pending/Accepted/Declined, declines first); report
+    `declined_count`/`pending_count`; DECLINED flagged inline on the roster.
+  - **Reassign from a declined slot** — one click pre-fills the add-form with the
+    same site/hotel (official cleared) and copies the declined days onto the
+    replacement; the declined row stays as an audit trail.
+  - **Chase pending responders** — the summary carries the official's email/phone;
+    a "✉ Email N pending" mailto BCCs all non-responders, and each pending card
+    shows an "awaiting response · email · phone" line (mailto/tel).
+- **Availability tooling**:
+  - **Bulk quick-select** — All / None / Weekdays / Weekends + an additive
+    from–to range on the Availability tab.
+  - **Availability-vs-assigned gap** — an "Assigned" column + callout on the
+    Availability tab, and a mirrored nudge on the Assignments panel (with a jump
+    link), naming officials who offered dates but aren't staffed.
+- **Coverage visibility** (report):
+  - **Per-day coverage** — an "Officials per day" footer row (zero-days red) +
+    a callout/PDF note listing uncovered days. (`coverage`/`uncovered_days`.)
+  - **Per-site coverage** — a site×day grid (every linked site + a "(no site)"
+    row), zeros red. (`site_coverage`.)
+  - Both surfaced in the **PDF** and appended to the **CSV** export.
+- **Room-block pickup** — the report shows rooms reserved vs assigned (pickup) vs
+  unused per official comp block + a release-before-cutoff warning; **declined**
+  assignments are excluded from pickup (a declined official frees the room).
+- **Auth** — **change-own-password** for any logged-in user
+  (`POST /api/auth/change-password`): verify current, set new (≥8, must differ),
+  invalidate other sessions, keep the caller's. Header button → modal.
+- **Review pass** — a branch code-review caught + fixed two bugs: declined
+  assignments inflating room pickup, and a response-filter that stuck across
+  tournament switches (now per-tournament).
+
+---
+
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
 - **✅ Design-critique pass: usability + a11y + visual coherence** (phase 14) —

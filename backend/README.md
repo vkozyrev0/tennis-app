@@ -70,8 +70,10 @@ backend/
                        sites, tournaments (+ /sites M2M), officials (+ /account,
                        /pay-summary), players (+ /history), rates, hotels, room_blocks,
                        distances (+ /auto estimate), roster (+ CSV/XLSX import),
-                       assignments (+ days, pay/mileage, conflict flags, money audit),
-                       reports (+ staff + PDF data), certifications, availability,
+                       assignments (+ days, pay/mileage, conflict/availability/cert
+                       flags, accept-decline, money audit, contact for chase),
+                       reports (+ staff, PDF data, room-block pickup, per-day +
+                       per-site coverage gaps), certifications, availability,
                        emails (inbox + /suggest, /targets, extraction, /amends +
                        /apply-correction, /purge, server-side q/limit), retention
                        (policy + sweep), users (admin account mgmt), staff (non-official
@@ -142,14 +144,22 @@ scrolling. The toolbar/header are **condensed** for vertical density.
   **TD-entered availability**, **auth + officials self-service** (login,
   `admin`/`official` roles, `/api/me/*`), and the start of **Part B** (review
   **Inbox** + **Late entries** + **Withdrawals**, **Scheduling avoidances**, **Division flexibility**, **Player hotels** + CVB analytics, and the cumulative **T-shirt** list, **Pairing avoidances** (juniors), and **Doubles** (mutual + random) — **all Part B lists** — with file-from-email) are done — availability is surfaced in the Assignments picker and a local
-  rule-based triage **/suggest** proposes a classification. **Remaining:**
-  auto-distance (geocoding), real email auto-ingest, and the **LLM** upgrade of the
-  triage agent (the open **D5** call). (All Part B lists are built, each
-  with **CSV export**.) See `docs/roadmap.md` and `docs/data-model.md` markers.
+  rule-based triage **/suggest** proposes a classification. A **staffing-confidence**
+  layer rounds out the assignment workflow: officials **accept/decline** (chip +
+  filter + chase-by-email), each assignment is flagged when it falls outside the
+  official's **availability** or **certification** (warn, not block), the TD can
+  **reassign a declined slot** and **bulk-enter availability**, and the report
+  surfaces **room-block pickup** + **per-day/per-site coverage gaps** (screen, PDF,
+  CSV). Any logged-in user can **change their own password**. **Remaining:**
+  Google-Maps geocoding (the great-circle estimate + manual entry are in), real
+  email auto-ingest, and the **LLM** upgrade of the triage agent (the open **D5**
+  call). (All Part B lists are built, each with **CSV export**.) See
+  `docs/roadmap.md` and `docs/data-model.md` markers.
 
 **Login (POC):** `admin` / `admin` (seeded). Admins set an official's login from
 the Official detail; officials then sign in to a self-service profile + availability
-view. Sessions are HttpOnly cookies — harden before any shared deployment.
+view. Any logged-in user can change their own password from the header. Sessions
+are HttpOnly cookies — harden before any shared deployment.
 
 > **Security (POC only):** localhost Postgres on default admin creds is for local
 > development (`ENV=dev`). Before any shared deployment, switch to a
