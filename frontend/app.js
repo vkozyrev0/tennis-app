@@ -9,7 +9,7 @@ import {
   SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
   SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
 } from "./app/shirts.js";
-import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail } from "./app/roster_prefill.js";
+import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail, resolveFilePlayerId } from "./app/roster_prefill.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
@@ -3291,8 +3291,13 @@ const inboxGrid = makeReadGrid("inbox-table", [
         // bulk-populate path, which files on detected_player_id directly). Stays
         // editable before saving; forms without a single player_ref (e.g.
         // pairing's member rows) are skipped by the guard.
-        if (t.form.player_ref && m.detected_player_id) {
-          t.form.player_ref.value = String(m.detected_player_id);
+        // Resolve the player to pre-select: the linked player, or — when none was
+        // linked but the email carries a USTA # — the player with that USTA #
+        // (precise even when surnames collide). The picker lists all players, so
+        // an off-roster match still displays.
+        const _fillPid = resolveFilePlayerId(m, Object.values(playersById));
+        if (t.form.player_ref && _fillPid) {
+          t.form.player_ref.value = String(_fillPid);
           // Sync the combobox display SYNCHRONOUSLY (not the rAF-debounced
           // scheduleComboSync): this same menu click bubbles to the document
           // click handler that closes open comboboxes, and close() resets the

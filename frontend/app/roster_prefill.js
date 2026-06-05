@@ -1,6 +1,23 @@
-// Pure (DOM-free) logic for seeding a roster add-form from an inbox email.
-// Kept separate from app.js so it can be unit-tested in Node without a browser
-// — the UI handler in app.js just *applies* the plan this returns.
+// Pure (DOM-free) logic for seeding forms from an inbox email — both the roster
+// add-form and the late-entry/withdrawal "File" forms. Kept separate from app.js
+// so it can be unit-tested in Node without a browser; the UI handlers just apply
+// what these return.
+
+// Which player id to pre-select when FILING an email into a list form: the
+// linked player when detection set one, otherwise the player whose USTA # the
+// email carries — precise even when two players share a surname. `players` is an
+// array of {id, usta_number} (the app's full player list). Returns null when
+// nothing resolves, so the TD picks manually.
+export function resolveFilePlayerId(m, players) {
+  m = m || {};
+  if (m.detected_player_id) return m.detected_player_id;
+  const usta = m.detected_usta_text || m.detected_usta;
+  if (usta && Array.isArray(players)) {
+    const hit = players.find((p) => p && String(p.usta_number) === String(usta));
+    if (hit) return hit.id;
+  }
+  return null;
+}
 
 // Junior division codes are gendered (B14 → male, G12 → female). Returns "" for
 // anything else (adult divisions, blank) so the TD picks gender manually.

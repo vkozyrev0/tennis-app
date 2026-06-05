@@ -106,6 +106,10 @@ live in the running app, not just by tests.
   every loaded email with no matched player (and a tournament), in one call to
   the existing `bulk/detect-players` endpoint — no per-row selection. Reports how
   many of the unmatched it resolved.
+- **USTA # into filed forms** — when filing a late-entry/withdrawal from an email,
+  the player picker is pre-selected by the detected USTA # (precise even when two
+  players share a surname), falling back from the linked player. Pure resolver
+  (`resolveFilePlayerId`) with node-test coverage.
 - **Re-detect after add-to-roster** — once "Add player to roster" saves, the
   source email is re-run through the detector and links to the just-added player
   automatically (no manual "Detect"). Best-effort: the roster save itself always

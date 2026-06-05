@@ -1,7 +1,7 @@
 // Deterministic unit test for the roster-prefill logic (DOM-free).
 // Run: node frontend/app/roster_prefill.test.mjs
 import assert from "node:assert/strict";
-import { genderFromDivision, rosterPrefillFromEmail } from "./roster_prefill.js";
+import { genderFromDivision, rosterPrefillFromEmail, resolveFilePlayerId } from "./roster_prefill.js";
 
 let passed = 0;
 function test(name, fn) { fn(); passed++; console.log("  ok -", name); }
@@ -77,6 +77,30 @@ test("already-on-roster match → cannot add", () => {
 test("no USTA #, no player → cannot add", () => {
   assert.equal(rosterPrefillFromEmail({}).canAdd, false);
   assert.equal(rosterPrefillFromEmail({ detected_player_name: "Someone" }).canAdd, false);
+});
+
+// --- resolveFilePlayerId (player for the "File" forms) ----------------------
+const PLAYERS = [
+  { id: 11, usta_number: "2001110001" },
+  { id: 12, usta_number: "2002220002" },  // shares a surname with 13 in real life
+  { id: 13, usta_number: "2003330003" },
+];
+test("file: detected player id wins", () => {
+  assert.equal(resolveFilePlayerId({ detected_player_id: 12, detected_usta_text: "2003330003" }, PLAYERS), 12);
+});
+test("file: falls back to the USTA # when no player linked", () => {
+  // surname-ambiguous email, no linked player, but a USTA # → resolves precisely
+  assert.equal(resolveFilePlayerId({ detected_player_id: null, detected_usta_text: "2003330003" }, PLAYERS), 13);
+});
+test("file: uses detected_usta when usta_text absent", () => {
+  assert.equal(resolveFilePlayerId({ detected_usta: "2001110001" }, PLAYERS), 11);
+});
+test("file: USTA # not in the player list → null", () => {
+  assert.equal(resolveFilePlayerId({ detected_usta_text: "9999999999" }, PLAYERS), null);
+});
+test("file: nothing to go on → null", () => {
+  assert.equal(resolveFilePlayerId({}, PLAYERS), null);
+  assert.equal(resolveFilePlayerId({ detected_usta_text: "2001110001" }, null), null);
 });
 
 console.log(`\n${passed} roster-prefill checks passed`);
