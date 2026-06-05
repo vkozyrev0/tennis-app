@@ -33,7 +33,7 @@ new `migrations/*.sql` (tracked in `schema_migrations`).
 
 ## Test
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q   # 34 end-to-end tests; skips if Postgres is down
+.\.venv\Scripts\python.exe -m pytest -q   # 147 end-to-end tests; skips if Postgres is down
 ```
 Tests run against a **separate `courtops_test` database** (created/migrated/seeded
 automatically by `tests/conftest.py`), so they never pollute the working DB.
@@ -61,31 +61,41 @@ backend/
     security.py        pbkdf2 hashing + cookie-session auth dependencies
     triage.py          local rule-based email classifier (agent v0, no LLM)
     importer.py        spreadsheet import registry (parse/validate/merge, CSV+XLSX templates)
-    routers/           health, auth (login/logout/me), me (official self-service),
-                       sites, tournaments (+ /sites M2M), officials (+ /account),
-                       players (+ /history), rates, hotels, room_blocks, distances,
-                       roster (+ CSV/XLSX import), assignments (+ days, pay/mileage),
-                       reports, certifications, availability,
-                       emails (review inbox + /suggest triage), late_entries, withdrawals,
+    email_targets.py   single source of truth: classification → list/SQL (drift-guarded)
+    crypto.py          PII H2: Fernet encrypt/decrypt (email body, player contact/DOB)
+    retention.py       PII H3: policy + retention sweep (dry-run, count-only)
+    geocode.py         auto-distance: haversine estimate + geocoder seam (D3 fallback)
+    routers/           health, auth (login/logout/me), me (official self-service:
+                       profile, availability, assignments accept/decline, pay-summary),
+                       sites, tournaments (+ /sites M2M), officials (+ /account,
+                       /pay-summary), players (+ /history), rates, hotels, room_blocks,
+                       distances (+ /auto estimate), roster (+ CSV/XLSX import),
+                       assignments (+ days, pay/mileage, conflict flags, money audit),
+                       reports (+ staff + PDF data), certifications, availability,
+                       emails (inbox + /suggest, /targets, extraction, /amends +
+                       /apply-correction, /purge, server-side q/limit), retention
+                       (policy + sweep), users (admin account mgmt), staff (non-official
+                       + per-day + pay), late_entries, withdrawals,
                        adult_lists (scheduling avoid. + division flex),
                        player_hotels (+ CVB analytics + /tshirts list),
                        pairing_avoidances (juniors, group of 2+),
                        doubles (mutual verification + random queue)
-  migrations/          0001_core_schema, 0002_rates_hotels,
-                       0003_mappings_assignments, 0004_player_history,
-                       0005_assignment_snapshots, 0006_certifications,
-                       0007_availability, 0008_auth, 0009_certification_types,
-                       0010_room_block_kind, 0011_player_ops, 0012_withdrawals,
-                       0013_avoid_divflex, 0014_player_hotels, 0015_pairing_avoidances,
-                       0016_doubles, 0017_session_expiry, 0018_lodging_plan,
-                       0019_player_city_state, 0020_import_staging, 0021_perf_indexes,
-                       0022_tshirt_constraint, 0023_player_hotel_fk
+  migrations/          0001–0023 (core … player_hotel_fk), then:
+                       0024_tshirt_orders, 0025_player_gender, 0026_player_gender_required,
+                       0027_divisions_events, 0028_roster_import_columns,
+                       0029_division_site_assignment, 0030_email_detected_player,
+                       0031_email_match_kind, 0032_tournament_staff, 0033_staff_day,
+                       0034_email_amendment, 0035_staff_daily_rate,
+                       0036_assignment_pay_audit, 0037_encrypt_birthdate,
+                       0038_assignment_response
   migrate.py           migration runner (creates DB, tracks schema_migrations)
   seed.py              demo data (sites, a tournament + site link, cert rates)
   reset_demo.py        wipe + re-seed the working DB
   backfill_distances.py  import officials + distances from the mileage workbook
   tests/conftest.py    points the suite at courtops_test (isolation)
-  tests/test_smoke.py  end-to-end smoke tests (34; admin-authenticated)
+  tests/                end-to-end suite (147; admin-authenticated). test_smoke +
+                        test_td_e2e + per-feature test_zz_*.py (inbox, conflicts,
+                        retention, staff, crypto/H2, admin users, accept/decline, …)
 frontend/              index.html, styles.css, app.js (vanilla fetch, no framework)
 ```
 

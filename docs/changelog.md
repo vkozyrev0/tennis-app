@@ -5,6 +5,36 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
+A large round of fixes + features (full backend suite: **147** green, migrations
+through **0038**). Driven by a UI/design review + a competitor-benchmark research
+pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
+
+- **Inbox / Part B filing** — fixed bulk-populate's `scheduling` key drift;
+  single-file pre-fills the detected player; a single **email-target registry**
+  (`app/email_targets.py`, `GET /api/emails/targets`) is the source of truth for
+  single-file + bulk (drift-guarded); **local field extraction** (age division,
+  events, scheduling day/time) surfaced + filled on filing and bulk; filing uses
+  the **email's own tournament**; **correction handling** (`amends_email_id`,
+  ↻/⤺ badges) + **auto-rewrite** (update the amended row in place);
+  **server-side search/pagination** (`q`/`limit`, `X-Total-Count`).
+- **Assignments** — cross-tournament **double-booking detection** (chip + per-day
+  marker + report count + add-time confirm); add-day-row a11y polish; **money
+  audit trail** (`pay_audit` jsonb freezes calc inputs, §5.3).
+- **Officials** — player-PUT **optimistic-concurrency** false-409 fix;
+  **accept/decline** assignments (self-service → TD chip); **per-official season
+  pay** summary; **auto-distance** great-circle estimate + geocoder seam.
+- **PII hardening (COPPA)** — `pii-hardening-plan.md`; **H1** boot guard
+  (refuses default creds / non-TLS / dev key in prod) + `sslmode`; **H2** column
+  encryption (email body, player emails/phones/birthdate); **H3** history
+  erasure on delete + email-body purge + policy-driven retention sweep.
+- **Staff** — non-official `tournament_staff` (roster + role) in the staffing
+  report; **per-day scheduling** (day-grid) + **daily pay**.
+- **Auth** — **multi-user TD access** (admin account management).
+- **Reports** — **PDF export** of the staffing plan (print-window, no lib).
+
+---
+
 ## Post-audit improvements (2026-05-25) — applied
 After the code+docs audit (see "Audit follow-ups" below), a further in-scope batch:
 - **✅ Design-critique pass: usability + a11y + visual coherence** (phase 14) —
