@@ -161,7 +161,10 @@ pay snapshots).
 - [x] **Certification pool report** — a matrix of every official × the certs they
       hold + a holder count per cert (zeros flagged), so the TD plans role
       coverage against the available pool. Global (not tournament-scoped). Screen
-      + PDF. (`cert_pool` in the report.)
+      + PDF. (`cert_pool` in the report.) The role-coverage grid ties to it: a ⚑
+      marks a role/day undercovered while more certified officials are available,
+      and officials holding **no certification** are flagged (can't be assigned
+      any role) with a chase-the-paperwork note.
 - [x] **Coverage in the CSV export** — the report CSV now appends an "Officials
       per day" row + a per-site row, aligned under the same day columns, so the
       TD can track/share coverage gaps in a spreadsheet.

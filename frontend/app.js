@@ -4882,7 +4882,12 @@ function _renderCertPool() {
     ? pool.officials.map((o) => {
         const held = new Set(o.certs);
         const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
-        return `<tr><td>${esc(o.official_name)}</td>${cells}</tr>`;
+        // An official with no certs can't be assigned ANY role — flag the name.
+        const noCert = !o.certs.length;
+        const name = noCert
+          ? `<span class="warn" title="holds no certification — can't be assigned any role">⚠ ${esc(o.official_name)}</span>`
+          : esc(o.official_name);
+        return `<tr><td>${name}</td>${cells}</tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials in the system yet.</td></tr>`;
   // Footer: holders per cert (zero flagged as a coverage gap in the pool).
@@ -4891,6 +4896,16 @@ function _renderCertPool() {
       const n = pool.counts[v] || 0;
       return `<th class="num${n === 0 ? " warn" : ""}">${n}</th>`;
     }).join("");
+  // A note when any official holds no cert at all (chase their paperwork).
+  const note = document.getElementById("cert-pool-note");
+  const noneCert = pool.officials.filter((o) => !o.certs.length);
+  if (note) {
+    if (noneCert.length) {
+      note.hidden = false;
+      note.innerHTML = `⚠ ${noneCert.length} official(s) hold no certification: ` +
+        `<strong>${noneCert.map((o) => esc(o.official_name)).join("; ")}</strong> — can't be assigned any role.`;
+    } else { note.hidden = true; note.textContent = ""; }
+  }
 }
 // Weekday columns for the tournament's play window (TD staffing-plan format).
 function _reportColumns(t) {
@@ -4991,7 +5006,8 @@ function exportReportPdf() {
   const certRows = pool.officials.length ? pool.officials.map((o) => {
     const held = new Set(o.certs);
     const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
-    return `<tr><td>${e(o.official_name)}</td>${cells}</tr>`;
+    const name = o.certs.length ? e(o.official_name) : `<span style="color:#c62828">⚠ ${e(o.official_name)}</span>`;
+    return `<tr><td>${name}</td>${cells}</tr>`;
   }).join("") + `<tr class="totals"><td>Holders</td>` +
       CERTS.map(([v]) => { const n = pool.counts[v] || 0; return `<td class="num"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`; }).join("") + `</tr>`
     : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials.</td></tr>`;
