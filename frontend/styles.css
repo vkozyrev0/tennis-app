@@ -1144,6 +1144,12 @@ td.toggle { white-space: nowrap; }
 .respbar-summary .resp-bad { color: var(--bad); font-weight: 700; }
 .respbar-summary .chase-link { color: var(--accent); font-weight: 600; text-decoration: none; }
 .respbar-summary .chase-link:hover { text-decoration: underline; }
+.asg-flags {
+  font-size: 0.85rem; margin: 0.3rem 0; padding: 0.3rem 0.5rem;
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+  color: var(--warn-ink); border-radius: 5px;
+}
+.asg-prompt { font-size: 0.85rem; color: var(--accent); font-weight: 600; margin: 0.25rem 0; }
 .asg-contact { font-size: 0.82rem; color: var(--muted); margin-top: 0.1rem; }
 .asg-contact a { color: var(--accent); text-decoration: none; }
 .asg-contact a:hover { text-decoration: underline; }

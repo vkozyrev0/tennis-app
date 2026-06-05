@@ -182,6 +182,11 @@ pay snapshots).
       official's email/phone; the response bar offers a one-click "✉ Email N
       pending" mailto (BCCs all non-responders) and each pending card shows an
       "awaiting response" contact line with mailto/tel links.
+- [x] **Status + flags in "My assignments"** — the official's self-service view
+      shows a "Please accept or decline" prompt while pending, their pay/mileage,
+      and a plain-language heads-up for any day scheduled outside their declared
+      availability, on an uncertified role, or double-booked — so they can
+      decline or contact the TD informedly.
 - [x] **Reassign from a declined slot** — a "Reassign" button on a declined
       assignment card pre-fills the add-form with the same site/hotel (official
       cleared) and copies the declined days onto the replacement on save; the

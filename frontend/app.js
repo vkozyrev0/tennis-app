@@ -5411,8 +5411,22 @@ async function loadMyAssignments() {
     const tname = (meTournaments.find((t) => t.id === a.tournament_id) || {}).name || `Tournament ${a.tournament_id}`;
     const days = a.days.map((d) => fmtDOW(d.work_date)).join(", ") || "—";
     const card = document.createElement("div"); card.className = "asg";
-    card.innerHTML = `<div class="asg-head"><strong>${esc(tname)}</strong> ${_respChip(a.response_status)}` +
-      `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · days: ${esc(days)}</div></div>`;
+    // Pay/mileage the official actually cares about.
+    const mileage = a.missing_distance ? "—" : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
+    // Day-level issues the official should see and can act on (decline / contact
+    // the TD): scheduled outside their availability, on a role they aren't
+    // certified for, or double-booked with another tournament.
+    const issues = [];
+    for (const d of (a.days_outside_availability || [])) issues.push(`${fmtDOW(d)} — outside the dates you marked available`);
+    for (const u of (a.uncertified_days || [])) issues.push(`${fmtDOW(u.work_date)} — ${certLabel(u.working_as)}, which isn't in your certifications`);
+    if (a.has_conflict) for (const c of (a.conflicts || [])) issues.push(`${fmtDOW(c.work_date)} — also booked at ${esc(c.other_tournament)}`);
+    const issuesHtml = issues.length
+      ? `<div class="asg-flags">⚠ Heads-up: ${issues.map(esc).join("; ")}.</div>` : "";
+    const prompt = a.response_status === "pending"
+      ? '<div class="asg-prompt">Please <strong>accept</strong> or <strong>decline</strong> below.</div>' : "";
+    const card_head = `<div class="asg-head"><strong>${esc(tname)}</strong> ${_respChip(a.response_status)}` +
+      `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · days: ${esc(days)} · pay $${a.pay.toFixed(2)} · mileage ${mileage}</div></div>`;
+    card.innerHTML = card_head + prompt + issuesHtml;
     const actions = document.createElement("div"); actions.className = "add-day";
     const mk = (status, txt, danger) => {
       const b = document.createElement("button"); b.type = "button";
