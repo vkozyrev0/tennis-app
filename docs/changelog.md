@@ -9,6 +9,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 A question-driven round closing the top gaps from a TD-perspective UI/feature
 review (full backend suite: **298** green, migrations through **0039**).
 
+- **Test stability — login-throttle leak fixed** — the suite had a rare,
+  order-independent flake (a self-contained test failing ~1 run in 2, passing in
+  isolation). Root cause: `app.routers.auth` keeps failed-login counts + lockouts
+  in process-global dicts; under the shared test client every request comes from
+  one host, so tests that POST a wrong `admin` password could accumulate ≥5
+  failures for the `("testclient","admin")` key and lock the account — making a
+  *later* test's autouse `admin/admin` login return 429 (no cookie → misleading
+  401 downstream). Added an autouse `_reset_login_throttle` conftest fixture that
+  clears that state before each test. **3+ consecutive clean full runs** since.
 - **Invite all** — an **✉ Invite all** button on the Assignments response bar
   generates a personalised invite for every assigned official at once (`GET
   /api/tournaments/{id}/invite-texts`, reusing the single-invite composer),

@@ -1,13 +1,14 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 298 tests, all passing (migrations through 0039).
+**Status:** 298 tests, all passing (migrations through 0039) — now deterministic
+(3+ consecutive clean full runs) after fixing a login-throttle state leak.
 
 ## How the suite is wired
 
 | File | Purpose |
 |------|---------|
-| `tests/conftest.py` | Sets `PGDATABASE=courtops_test` *before* `app.config` reads env, then runs migrate + seed once per session. All tests run against a sibling DB that never touches the dev/demo `courtops` DB. |
+| `tests/conftest.py` | Sets `PGDATABASE=courtops_test` *before* `app.config` reads env, then runs migrate + seed once per session. All tests run against a sibling DB that never touches the dev/demo `courtops` DB. Also an **autouse `_reset_login_throttle`** fixture that clears `app.routers.auth`'s process-global failed-attempt / lockout dicts before each test — those leaked across tests (the shared test-client IP + tests that POST wrong `admin` passwords could lock the account and 429 a *later* test's autouse login, the old intermittent flake). |
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
