@@ -3991,15 +3991,13 @@ document.getElementById("inbox-bulk-detect").addEventListener("click", async () 
     await loadInbox();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
-// "Unmatched only" toggle: a client-side data filter (combines with the status /
-// tournament header filters via AND) to show only emails with no matched player,
-// so the TD can work through the detection gaps. Persists across inbox reloads.
-const _inboxUnmatchedFilter = (data) => !data.detected_player_id;
+// "Unmatched only" drilldown: a SERVER-SIDE filter (unmatched=true) so it's
+// accurate across the whole inbox, not just the loaded page — the TD works
+// through every detection gap. Reloads on toggle; persists across reloads.
+let _inboxUnmatchedOnly = false;
 document.getElementById("inbox-unmatched-only")?.addEventListener("change", (e) => {
-  try {
-    if (e.target.checked) inboxGrid.grid.addFilter(_inboxUnmatchedFilter);
-    else inboxGrid.grid.removeFilter(_inboxUnmatchedFilter);
-  } catch (_) {}
+  _inboxUnmatchedOnly = e.target.checked;
+  loadInbox();
 });
 // One-click "Detect players" over the whole inbox: runs the detector on every
 // loaded email that has no matched player yet (and an assigned tournament — the
@@ -4123,6 +4121,7 @@ async function loadInbox() {
   const q = (document.getElementById("inbox-search")?.value || "").trim();
   const params = new URLSearchParams({ limit: String(_INBOX_PAGE) });
   if (q) params.set("q", q);
+  if (_inboxUnmatchedOnly) params.set("unmatched", "true");
   const rows = await api(`/emails?${params}`);
   inboxGrid.setData(rows);
   const note = document.getElementById("inbox-search-note");
@@ -4156,11 +4155,22 @@ async function _loadInboxStatusSummary() {
     `<a href="#" id="inbox-sum-new" class="${c.new ? "inbox-sum-todo" : ""}">${c.new} unfiled</a>` +
     ` · <span class="resp-ok">${c.filed} filed</span>` +
     (c.needs_followup ? ` · <span class="warn">${c.needs_followup} need follow-up</span>` : "") +
+    (c.unmatched ? ` · <a href="#" id="inbox-sum-unmatched" class="warn">${c.unmatched} unmatched</a>` : "") +
     ` · ${c.total} total`;
   const link = document.getElementById("inbox-sum-new");
   if (link) link.addEventListener("click", (e) => {
     e.preventDefault();
     try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
+  });
+  // "N unmatched" → flip on the server-side unmatched-only drilldown (and sync
+  // the checkbox so the two controls agree).
+  const um = document.getElementById("inbox-sum-unmatched");
+  if (um) um.addEventListener("click", (e) => {
+    e.preventDefault();
+    const cb = document.getElementById("inbox-unmatched-only");
+    if (cb && !cb.checked) { cb.checked = true; }
+    _inboxUnmatchedOnly = true;
+    loadInbox();
   });
 }
 // Debounced server-side inbox search (re-queries; no per-keystroke round-trip).

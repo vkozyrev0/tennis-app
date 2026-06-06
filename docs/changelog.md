@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **282** green, migrations through **0039**).
+review (full backend suite: **286** green, migrations through **0039**).
 
+- **Unmatched-player drilldown** — the inbox progress summary now shows an
+  **"N unmatched"** count (still-unfiled emails on a tournament that no roster
+  player matched, from `GET /api/emails/status-counts`), and clicking it flips on
+  a **server-side** `unmatched=true` filter (`GET /api/emails?unmatched=true`) —
+  accurate across the whole inbox, not just the loaded page (the old toggle was
+  client-side). The TD resolves detection gaps before triaging.
 - **One-click "Triage all"** — a single inbox action (`POST
   /api/emails/bulk/triage`) chains classify → detect-players → populate over the
   selected emails in one request and returns a combined summary (classified /

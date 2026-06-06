@@ -51,6 +51,7 @@ _FROM = ("FROM email_message e "
 @router.get("", response_model=list[EmailOut])
 def list_emails(response: Response, tournament_id: int | None = None,
                 status: str | None = None, q: str | None = None,
+                unmatched: bool | None = None,
                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
     """Server-side filtered/paged inbox. `q` searches subject + from_address +
     the player's USTA # (matched player's number AND the USTA # parsed from the
@@ -62,6 +63,9 @@ def list_emails(response: Response, tournament_id: int | None = None,
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
     if status is not None:
         clauses.append("e.status = %s"); params.append(status)
+    if unmatched:
+        # Detection gap: no roster player matched. Feeds the unmatched drilldown.
+        clauses.append("e.detected_player_id IS NULL")
     if q:
         # USTA # search hits the matched player's number (p.usta_number) and the
         # number parsed from the email (e.detected_usta_text, persisted so it's
@@ -128,11 +132,18 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
             params,
         )
         by = {r["status"]: r["n"] for r in cur.fetchall()}
+        # Detection gaps: still-unfiled emails on a tournament that no roster
+        # player matched — the actionable drilldown the TD resolves before triage.
+        gap_clauses = clauses + ["status = 'new'", "detected_player_id IS NULL",
+                                 "tournament_id IS NOT NULL"]
+        gap_where = " WHERE " + " AND ".join(gap_clauses)
+        cur.execute(f"SELECT count(*) AS n FROM email_message{gap_where}", params)
+        unmatched = cur.fetchone()["n"]
     new = by.get("new", 0)
     filed = by.get("filed", 0)
     follow = by.get("needs_followup", 0)
     return {"new": new, "filed": filed, "needs_followup": follow,
-            "total": new + filed + follow}
+            "unmatched": unmatched, "total": new + filed + follow}
 
 
 @router.post("", response_model=EmailOut, status_code=201)
