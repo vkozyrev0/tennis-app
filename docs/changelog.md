@@ -7,8 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **275** green, migrations through **0039**).
+review (full backend suite: **279** green, migrations through **0039**).
 
+- **Bulk auto-classify inbox** — an **Auto-classify** action on the inbox bulk
+  toolbar runs the local rule-based triage classifier (`POST
+  /api/emails/bulk/classify`, no data leaves the building) over the selected
+  emails and writes each one's suggested classification — by default only
+  touching still-'unclassified' rows so a manual choice is never clobbered. This
+  completes the bulk-triage chain (classify → detect players → populate) so the
+  TD can clear the unfiled queue in three clicks instead of editing each email.
 - **Conflict count on the dashboard + digest** — a cheap set-based
   `hard_conflict_counts` helper (cross-tournament double-bookings + uncertified
   worked days) now feeds a **staffing-conflict tile** on the per-tournament

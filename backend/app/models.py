@@ -76,6 +76,7 @@ from ._models_inbox import (  # noqa: F401
     DoublesRequestCreate,
     DoublesRequestOut,
     DoublesRequestUpdate,
+    EmailBulkClassify,
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,

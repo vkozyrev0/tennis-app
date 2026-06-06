@@ -832,6 +832,7 @@
              creates the matching withdrawal/late_entry/etc. rows. -->
         <div id="inbox-bulk-toolbar" class="bulk-bar" hidden role="region" aria-label="Bulk actions for selected emails">
           <span id="inbox-bulk-count" class="bulk-count"></span>
+          <button type="button" id="inbox-bulk-classify" title="Run the local rule-based classifier over the selected unclassified emails (no data leaves the building)">Auto-classify</button>
           <button type="button" id="inbox-bulk-detect">Detect players</button>
           <!-- Reassign group: label + dropdown + Apply button visually bound
                together so it reads as one action, not three loose controls. -->
@@ -1296,6 +1297,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=120"></script>
+  <script type="module" src="/app.js?v=121"></script>
 </body>
 </html>

@@ -14,6 +14,7 @@ from ..email_targets import (
 )
 from ..models import (
     EmailAmend,
+    EmailBulkClassify,
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,
@@ -668,6 +669,38 @@ def list_targets():
 # pairing_avoidance are deliberately absent (SINGLE_FILE_ONLY_KEYS): their rows
 # need fields a single email + detected player can't supply, so the TD files
 # them through the form; the bulk action reports them with a clear reason.
+
+
+@router.post("/bulk/classify")
+def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
+    """Run the local rule-based triage classifier over the selected emails and
+    write each one's suggested classification. By default only 'unclassified'
+    emails are touched (a TD's manual classification is never clobbered). Returns
+    the new classification per changed email + a count, so the inbox can then run
+    detect-players + populate to file them — the full bulk-triage chain."""
+    if not body.email_ids:
+        return {"classified": 0, "changed": [], "counts": {}}
+    changed: list[dict] = []
+    counts: dict = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, subject, body, classification FROM email_message WHERE id = ANY(%s)",
+            (body.email_ids,),
+        )
+        rows = cur.fetchall()
+        for em in rows:
+            if body.only_unclassified and em["classification"] != "unclassified":
+                continue
+            cls = classify(em["subject"], _dec_body(em.get("body")))
+            if cls == em["classification"]:
+                continue
+            cur.execute(
+                "UPDATE email_message SET classification = %s WHERE id = %s",
+                (cls, em["id"]),
+            )
+            changed.append({"id": em["id"], "classification": cls})
+            counts[cls] = counts.get(cls, 0) + 1
+    return {"classified": len(changed), "changed": changed, "counts": counts}
 
 
 @router.post("/bulk/populate")

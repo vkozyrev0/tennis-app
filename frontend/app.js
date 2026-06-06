@@ -3959,6 +3959,27 @@ document.getElementById("inbox-bulk-clear").addEventListener("click", () => {
   inboxGrid.grid.redraw();
   _inboxBulkRefreshUi();
 });
+document.getElementById("inbox-bulk-classify").addEventListener("click", async (ev) => {
+  if (!_inboxSelected.size) return;
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    const res = await api("/emails/bulk/classify", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    if (!res.classified) {
+      setMsg("inbox-bulk-msg", "Nothing to classify (already classified, or no rule matched).", false);
+    } else {
+      const parts = Object.entries(res.counts)
+        .map(([k, n]) => `${n} ${(EMAIL_CLASS_META[k] && EMAIL_CLASS_META[k].label) || k}`).join(", ");
+      setMsg("inbox-bulk-msg", `classified ${res.classified}: ${parts}`, true);
+      toast(`Auto-classified ${res.classified} email${res.classified === 1 ? "" : "s"} — review, then Detect players → Populate.`, true);
+    }
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+  finally { btn.disabled = false; }
+});
 document.getElementById("inbox-bulk-detect").addEventListener("click", async () => {
   if (!_inboxSelected.size) return;
   try {
