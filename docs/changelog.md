@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **289** green, migrations through **0039**).
+review (full backend suite: **292** green, migrations through **0039**).
 
+- **Personalised invite text** — each assignment card gained a **✉ Invite**
+  button that composes a ready-to-paste email (`GET
+  /api/assignments/{id}/invite-text`) with that official's specific worked days +
+  roles, the site, and estimated pay/mileage — then copies it to the clipboard
+  and (when an email is on file) offers a pre-filled mailto. Beyond the generic
+  bulk-invite mailto, which had no per-official detail.
 - **Per-official pay statement (PDF)** — the Official 360 drawer gained a
   **⬇ Pay statement** button that opens a reimbursement-grade printable
   statement (`GET /api/officials/{id}/pay-statement`): every assignment with its

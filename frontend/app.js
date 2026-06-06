@@ -2768,7 +2768,27 @@ function renderAssignment(a, availDates) {
       asgForm.official_id.focus();
     });
   }
-  actions.append(ed, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
+  // ✉ Invite: compose a personalised assignment email (this official's days,
+  // role, site, pay) — copy it to the clipboard and, if an email is on file,
+  // offer to open a pre-filled message.
+  const inv = document.createElement("button");
+  inv.type = "button"; inv.className = "btn-link"; inv.textContent = "✉ Invite";
+  inv.title = "Copy a ready-to-paste assignment email for this official";
+  inv.addEventListener("click", async () => {
+    let t;
+    try { t = await api(`/assignments/${a.id}/invite-text`); }
+    catch (e) { toast(e.message, false); return; }
+    const full = `Subject: ${t.subject}\n\n${t.body}`;
+    try { await navigator.clipboard.writeText(full); } catch (_) {}
+    const action = t.official_email ? {
+      label: "Open email →",
+      onClick: () => window.open(
+        `mailto:${encodeURIComponent(t.official_email)}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.body)}`,
+        "_blank"),
+    } : null;
+    toast(`Invite for ${a.official_name} copied to clipboard${t.official_email ? "" : " (no email on file)"}`, true, action);
+  });
+  actions.append(ed, inv, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
 
   // Inline mileage fix: if the venue site has no distance on file, add it right
   // here instead of switching to the Distances tab.

@@ -575,6 +575,60 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
     }
 
 
+@router.get("/api/assignments/{assignment_id}/invite-text")
+def assignment_invite_text(assignment_id: int, conn=Depends(db_dep)):
+    """A ready-to-paste assignment email personalised to this official: their
+    specific worked days + roles, the site, and the estimated pay/mileage. Beyond
+    the generic bulk mailto — the TD copies it or opens a pre-filled email."""
+    from datetime import date as _date
+    with conn.cursor() as cur:
+        cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="assignment not found")
+        s = _summary(cur, row)
+        first_name = row["first_name"] or "official"
+        tname = s["tournament_name"] or "the tournament"
+
+    def _fmt(iso):
+        try:
+            return _date.fromisoformat(iso).strftime("%a %b %d, %Y")
+        except ValueError:
+            return iso
+
+    if s["days"]:
+        day_lines = "\n".join(
+            f"  - {_fmt(d['work_date'])}: {d['working_as'].replace('_', ' ').title()}"
+            for d in s["days"])
+        dates = sorted(d["work_date"] for d in s["days"])
+        when = f"{_fmt(dates[0])}" if len(dates) == 1 else f"{_fmt(dates[0])} – {_fmt(dates[-1])}"
+    else:
+        day_lines = "  (days to be confirmed)"
+        when = "dates TBD"
+
+    site_line = f"\nSite: {s['site_label']}" if s.get("site_label") else ""
+    pay_line = f"${s['pay']:.2f}"
+    if s["mileage"]:
+        pay_line += f" + ${s['mileage']:.2f} mileage = ${s['total']:.2f} total"
+    subject = f"Officiating assignment — {tname} ({when})"
+    body = (
+        f"Dear {first_name},\n\n"
+        f"You've been assigned to officiate {tname}. Your schedule:\n\n"
+        f"{day_lines}\n{site_line}\n"
+        f"Estimated pay: {pay_line}\n\n"
+        f"Please confirm (accept or decline) via your CourtOps self-service "
+        f'"My assignments" page at your earliest convenience.\n\n'
+        f"Thank you,\nTournament Director"
+    )
+    return {
+        "assignment_id": assignment_id,
+        "official_name": s["official_name"],
+        "official_email": s.get("official_email"),
+        "subject": subject,
+        "body": body,
+    }
+
+
 @router.put("/api/assignments/{assignment_id}")
 def update_assignment(assignment_id: int, body: AssignmentCreate, conn=Depends(db_dep)):
     try:
