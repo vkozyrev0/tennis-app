@@ -5084,8 +5084,56 @@ async function _renderDeadlines() {
     li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
   });
 }
+// Cross-tournament digest: every active event's open-task tally + soonest key
+// date, most-urgent first, so the TD triages across all tournaments at once.
+const _DIGEST_TASKS = [
+  ["unfiled_inbox", "unfiled", ["inbox", "panel-t-inbox"]],
+  ["officials_pending", "pending", ["staffing", "panel-t-assignments"]],
+  ["officials_declined", "declined", ["staffing", "panel-t-assignments"]],
+  ["uncovered_days", "uncovered days", ["staffing", "panel-t-reports"]],
+  ["roster_incomplete", "roster gaps", ["tournament", "panel-t-roster"]],
+];
+async function _renderDigest() {
+  const el = document.getElementById("dash-digest");
+  if (!el) return;
+  let dg;
+  try { dg = await api("/dashboard/digest"); } catch (_) { el.hidden = true; return; }
+  const rows = dg.tournaments || [];
+  if (!rows.length) { el.hidden = true; el.innerHTML = ""; return; }
+  const due = (nd) => {
+    if (!nd) return "";
+    const n = nd.days_until;
+    const when = n < 0 ? `${Math.abs(n)}d ago` : (n === 0 ? "today" : `in ${n}d`);
+    const cls = n <= 0 ? "resp-bad" : (n <= 7 ? "warn" : "muted");
+    return ` · <span class="${cls}">${esc(_DEADLINE_LABEL[nd.kind] || nd.kind)} ${when}</span>`;
+  };
+  const t = dg.totals;
+  el.hidden = false;
+  el.innerHTML =
+    `<div class="dash-dg-head">📋 ${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div>` +
+    `<ul class="dash-dg-list">` + rows.map((r) => {
+      const chips = _DIGEST_TASKS.filter(([k]) => r.tasks[k] > 0).map(([k, label, go]) =>
+        `<button type="button" class="dash-dg-chip" data-go-group="${go[0]}" data-go-tab="${go[1]}" data-tid="${r.tournament_id}">` +
+        `${r.tasks[k]} ${esc(label)}</button>`).join("");
+      const clean = r.open_tasks === 0 ? '<span class="dash-dg-clean">✓ all clear</span>' : "";
+      return `<li class="dash-dg-row"><span class="dash-dg-name" data-tid="${r.tournament_id}" tabindex="0" role="button">` +
+        `<strong>${esc(r.tournament_name)}</strong>${due(r.next_deadline)}</span>` +
+        `<span class="dash-dg-chips">${chips}${clean}</span></li>`;
+    }).join("") + `</ul>`;
+  // chip → set that tournament active AND jump to the relevant tab.
+  el.querySelectorAll(".dash-dg-chip").forEach((b) => b.addEventListener("click", () => {
+    setActive(Number(b.dataset.tid));
+    _dashGo(b.dataset.goGroup, b.dataset.goTab);
+  }));
+  el.querySelectorAll(".dash-dg-name").forEach((n) => {
+    const go = () => setActive(Number(n.dataset.tid));
+    n.addEventListener("click", go);
+    n.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
 async function loadDashboard() {
   _renderDeadlines();  // cross-tournament approaching-deadline banner
+  _renderDigest();     // cross-tournament open-task digest
   // Cross-tournament overview table.
   let tournaments = [];
   try { tournaments = await api("/tournaments"); } catch (_) {}

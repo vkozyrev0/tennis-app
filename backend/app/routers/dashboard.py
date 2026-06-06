@@ -47,6 +47,114 @@ def upcoming_deadlines(within_days: int = 14, conn=Depends(db_dep)):
     return {"deadlines": items, "within_days": within_days}
 
 
+@router.get("/api/dashboard/digest")
+def digest(conn=Depends(db_dep)):
+    """Cross-tournament digest: one row per not-yet-finished tournament with its
+    soonest key date and a tally of open tasks (unfiled inbox, pending/declined
+    officials, uncovered play-window days, incomplete roster entries) — so the TD
+    sees everything that needs attention across every active event in one place.
+    Set-based aggregates (one query per category), not per-tournament loops."""
+    today = date.today()
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, play_start_date, play_end_date, "
+            "       registration_deadline, late_entry_deadline "
+            "FROM tournament WHERE play_end_date >= CURRENT_DATE ORDER BY play_start_date"
+        )
+        tours = cur.fetchall()
+        ids = [t["id"] for t in tours]
+        unfiled, pending, declined, worked_days, incomplete = {}, {}, {}, {}, {}
+        if ids:
+            cur.execute(
+                "SELECT tournament_id, count(*) AS n FROM email_message "
+                "WHERE tournament_id = ANY(%s) AND status = 'new' GROUP BY tournament_id",
+                (ids,),
+            )
+            unfiled = {r["tournament_id"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute(
+                "SELECT tournament_id, response_status, count(*) AS n FROM assignment "
+                "WHERE tournament_id = ANY(%s) GROUP BY tournament_id, response_status",
+                (ids,),
+            )
+            for r in cur.fetchall():
+                if r["response_status"] == "pending":
+                    pending[r["tournament_id"]] = r["n"]
+                elif r["response_status"] == "declined":
+                    declined[r["tournament_id"]] = r["n"]
+
+            cur.execute(
+                "SELECT a.tournament_id, count(DISTINCT ad.work_date) AS n "
+                "FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
+                "JOIN tournament t ON t.id = a.tournament_id "
+                "WHERE a.tournament_id = ANY(%s) "
+                "  AND ad.work_date BETWEEN t.play_start_date AND t.play_end_date "
+                "GROUP BY a.tournament_id",
+                (ids,),
+            )
+            worked_days = {r["tournament_id"]: r["n"] for r in cur.fetchall()}
+
+            cur.execute(
+                "SELECT e.tournament_id, count(*) AS n FROM tournament_entry e "
+                "JOIN player p ON p.id = e.player_id "
+                "WHERE e.tournament_id = ANY(%s) "
+                "  AND e.selection_status IN ('selected','alternate') "
+                "  AND (e.age_division IS NULL OR e.age_division = '' OR p.gender IS NULL "
+                "       OR e.t_shirt_size IS NULL OR e.t_shirt_size = '' "
+                "       OR (e.amount_outstanding IS NOT NULL AND e.amount_outstanding > 0)) "
+                "GROUP BY e.tournament_id",
+                (ids,),
+            )
+            incomplete = {r["tournament_id"]: r["n"] for r in cur.fetchall()}
+
+    def _next_deadline(t):
+        cands = []
+        for kind, dval in (("registration", t["registration_deadline"]),
+                           ("late_entry", t["late_entry_deadline"]),
+                           ("play_start", t["play_start_date"])):
+            if dval is None:
+                continue
+            n = (dval - today).days
+            if n >= -3:  # upcoming, or just-passed grace
+                cands.append({"kind": kind, "date": dval.isoformat(), "days_until": n})
+        cands.sort(key=lambda x: x["days_until"])
+        return cands[0] if cands else None
+
+    out = []
+    for t in tours:
+        tid = t["id"]
+        window_len = (t["play_end_date"] - t["play_start_date"]).days + 1
+        uncovered = max(window_len - worked_days.get(tid, 0), 0)
+        tasks = {
+            "unfiled_inbox": unfiled.get(tid, 0),
+            "officials_pending": pending.get(tid, 0),
+            "officials_declined": declined.get(tid, 0),
+            "uncovered_days": uncovered,
+            "roster_incomplete": incomplete.get(tid, 0),
+        }
+        out.append({
+            "tournament_id": tid, "tournament_name": t["name"],
+            "play_start_date": t["play_start_date"].isoformat(),
+            "play_end_date": t["play_end_date"].isoformat(),
+            "next_deadline": _next_deadline(t),
+            "tasks": tasks,
+            "open_tasks": sum(tasks.values()),
+        })
+    # Most urgent first: soonest upcoming key date, then events with the most
+    # open work, then play-start order.
+    def _urgency(row):
+        nd = row["next_deadline"]
+        return (nd["days_until"] if nd else 9999, -row["open_tasks"], row["play_start_date"])
+    out.sort(key=_urgency)
+
+    totals = {k: sum(r["tasks"][k] for r in out) for k in
+              ("unfiled_inbox", "officials_pending", "officials_declined",
+               "uncovered_days", "roster_incomplete")}
+    totals["open_tasks"] = sum(r["open_tasks"] for r in out)
+    totals["active_tournaments"] = len(out)
+    return {"tournaments": out, "totals": totals}
+
+
 @router.get("/api/tournaments/{tournament_id}/dashboard")
 def dashboard(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

@@ -7,8 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **268** green, migrations through **0039**).
+review (full backend suite: **273** green, migrations through **0039**).
 
+- **Cross-tournament digest** — the Today dashboard now leads with a digest
+  (`GET /api/dashboard/digest`) rolling up **every active tournament** with its
+  soonest key date and a tally of open tasks (unfiled inbox, pending/declined
+  officials, uncovered play-window days, incomplete roster entries),
+  most-urgent first. Each open-task count is a clickable chip that sets that
+  tournament active and jumps straight to the relevant tab. Set-based
+  aggregates (one query per category), with grand totals across all events.
 - **Roster completeness check** — the Roster panel now flags active entries
   (selected/alternate) missing data the TD needs before the event (`GET
   /api/tournaments/{id}/roster-completeness`): missing age division, missing
