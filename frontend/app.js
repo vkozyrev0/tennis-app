@@ -4898,6 +4898,43 @@ async function openPlayer360(playerId, tournamentId) {
       : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
 }
 
+// --- Global player search (top bar → Player 360) ---
+(() => {
+  const input = document.getElementById("player-search");
+  const box = document.getElementById("player-search-results");
+  if (!input || !box) return;
+  let timer = null;
+  const close = () => { box.hidden = true; box.innerHTML = ""; input.setAttribute("aria-expanded", "false"); };
+  const render = (rows, q) => {
+    if (!rows.length) {
+      box.innerHTML = `<div class="ps-empty">No players match “${esc(q)}”.</div>`;
+    } else {
+      box.innerHTML = rows.map((p) => {
+        const loc = [p.city, p.state].filter(Boolean).join(", ");
+        return `<button type="button" class="ps-item" role="option" data-pid="${p.id}">` +
+          `<span class="ps-name">${esc([p.last_name, p.first_name].filter(Boolean).join(", "))}</span>` +
+          `<span class="ps-meta">USTA #${esc(p.usta_number || "—")}${loc ? " · " + esc(loc) : ""}</span></button>`;
+      }).join("");
+      box.querySelectorAll(".ps-item").forEach((b) => b.addEventListener("click", () => {
+        openPlayer360(Number(b.dataset.pid), active ? active.id : null);
+        input.value = ""; close();
+      }));
+    }
+    box.hidden = false; input.setAttribute("aria-expanded", "true");
+  };
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) { close(); return; }
+    timer = setTimeout(async () => {
+      try { render(await api(`/players/search?q=${encodeURIComponent(q)}`), q); }
+      catch (_) { close(); }
+    }, 200);
+  });
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; close(); } });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#player-search-wrap")) close(); });
+})();
+
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
 function money(n) { return n == null ? "—" : "$" + Number(n).toFixed(2); }

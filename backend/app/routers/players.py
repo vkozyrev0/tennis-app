@@ -73,6 +73,29 @@ def list_players(conn=Depends(db_dep)):
         return [_decrypt_contact(r) for r in cur.fetchall()]
 
 
+# NOTE: declared BEFORE GET /{player_id} so "/search" isn't swallowed as an id.
+@router.get("/search")
+def search_players(q: str, limit: int = 10, conn=Depends(db_dep)):
+    """Global player lookup by name or USTA #, for the top-bar search → Player 360.
+    Name + USTA # are plaintext (only contact/birthdate are encrypted), so a plain
+    ILIKE works. Returns a lightweight shape (no decrypted contact)."""
+    term = (q or "").strip()
+    if len(term) < 2:
+        return []
+    like = f"%{term}%"
+    limit = max(1, min(limit, 50))
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, usta_number, first_name, last_name, city, state FROM player "
+            "WHERE usta_number ILIKE %(l)s OR first_name ILIKE %(l)s OR last_name ILIKE %(l)s "
+            "   OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %(l)s "
+            "   OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %(l)s "
+            "ORDER BY last_name, first_name LIMIT %(lim)s",
+            {"l": like, "lim": limit},
+        )
+        return cur.fetchall()
+
+
 @router.get("/{player_id}", response_model=PlayerOut)
 def get_player(player_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
