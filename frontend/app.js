@@ -2568,6 +2568,30 @@ function _bulkSyncCount() {
   if (go) go.disabled = sel === 0;
 }
 
+// "✉ Invite all": fetch a personalised invite for every assigned official, copy
+// the combined document to the clipboard, and (when emails are on file) offer a
+// BCC-all mailto for the whole panel.
+document.getElementById("asg-invite-all")?.addEventListener("click", async () => {
+  if (!active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/invite-texts`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.count) { toast("No officials assigned yet", false); return; }
+  const combined = d.invites.map((i) =>
+    `=== ${i.official_name}${i.official_email ? ` <${i.official_email}>` : " (no email on file)"} ===\n` +
+    `Subject: ${i.subject}\n\n${i.body}`).join("\n\n----------------------------------------\n\n");
+  try { await navigator.clipboard.writeText(combined); } catch (_) {}
+  const action = d.emails.length ? {
+    label: `BCC ${d.emails.length} →`,
+    onClick: () => {
+      const subj = encodeURIComponent(`Officiating assignment — ${active.name}`);
+      window.open(`mailto:?bcc=${encodeURIComponent(d.emails.join(","))}&subject=${subj}`, "_blank");
+    },
+  } : null;
+  toast(`Copied ${d.count} personalised invite${d.count === 1 ? "" : "s"} to the clipboard` +
+    (d.emails.length ? "" : " (no emails on file)"), true, action);
+});
+
 // --- Bulk-invite controls (wired once; list is repopulated per loadAssignments) ---
 (() => {
   const list = document.getElementById("asg-bulk-list");

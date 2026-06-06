@@ -618,20 +618,10 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
     }
 
 
-@router.get("/api/assignments/{assignment_id}/invite-text")
-def assignment_invite_text(assignment_id: int, conn=Depends(db_dep)):
-    """A ready-to-paste assignment email personalised to this official: their
-    specific worked days + roles, the site, and the estimated pay/mileage. Beyond
-    the generic bulk mailto — the TD copies it or opens a pre-filled email."""
+def _compose_invite(s: dict, first_name: str) -> dict:
+    """Build the {subject, body} of a personalised assignment email from an
+    assignment summary. Shared by the single + tournament-batch invite endpoints."""
     from datetime import date as _date
-    with conn.cursor() as cur:
-        cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=404, detail="assignment not found")
-        s = _summary(cur, row)
-        first_name = row["first_name"] or "official"
-        tname = s["tournament_name"] or "the tournament"
 
     def _fmt(iso):
         try:
@@ -639,6 +629,7 @@ def assignment_invite_text(assignment_id: int, conn=Depends(db_dep)):
         except ValueError:
             return iso
 
+    tname = s["tournament_name"] or "the tournament"
     if s["days"]:
         day_lines = "\n".join(
             f"  - {_fmt(d['work_date'])}: {d['working_as'].replace('_', ' ').title()}"
@@ -663,13 +654,52 @@ def assignment_invite_text(assignment_id: int, conn=Depends(db_dep)):
         f'"My assignments" page at your earliest convenience.\n\n'
         f"Thank you,\nTournament Director"
     )
+    return {"subject": subject, "body": body}
+
+
+@router.get("/api/assignments/{assignment_id}/invite-text")
+def assignment_invite_text(assignment_id: int, conn=Depends(db_dep)):
+    """A ready-to-paste assignment email personalised to this official: their
+    specific worked days + roles, the site, and the estimated pay/mileage. Beyond
+    the generic bulk mailto — the TD copies it or opens a pre-filled email."""
+    with conn.cursor() as cur:
+        cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="assignment not found")
+        s = _summary(cur, row)
+        composed = _compose_invite(s, row["first_name"] or "official")
     return {
         "assignment_id": assignment_id,
         "official_name": s["official_name"],
         "official_email": s.get("official_email"),
-        "subject": subject,
-        "body": body,
+        **composed,
     }
+
+
+@router.get("/api/tournaments/{tournament_id}/invite-texts")
+def tournament_invite_texts(tournament_id: int, conn=Depends(db_dep)):
+    """A personalised invite for every official assigned to this tournament — the
+    TD generates them all at once, copies the combined document, or BCCs everyone
+    who has an email on file. Each carries the same per-official detail as the
+    single invite."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name, o.first_name",
+                    (tournament_id,))
+        rows = cur.fetchall()
+        invites = []
+        for row in rows:
+            s = _summary(cur, row)
+            composed = _compose_invite(s, row["first_name"] or "official")
+            invites.append({
+                "assignment_id": s["id"], "official_name": s["official_name"],
+                "official_email": s.get("official_email"), **composed,
+            })
+    emails = [i["official_email"] for i in invites if i["official_email"]]
+    return {"invites": invites, "count": len(invites), "emails": emails}
 
 
 @router.put("/api/assignments/{assignment_id}")

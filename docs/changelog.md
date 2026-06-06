@@ -7,8 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **295** green, migrations through **0039**).
+review (full backend suite: **298** green, migrations through **0039**).
 
+- **Invite all** — an **✉ Invite all** button on the Assignments response bar
+  generates a personalised invite for every assigned official at once (`GET
+  /api/tournaments/{id}/invite-texts`, reusing the single-invite composer),
+  copies the combined document to the clipboard, and offers a **BCC-all** mailto
+  for everyone with an email on file.
 - **Batch pay statements (PDF)** — a **⬇ Pay statements** button on the Reports
   toolbar opens one printable statement per assigned official (`GET
   /api/tournaments/{id}/pay-statements`) — each with worked days + rate, mileage,
