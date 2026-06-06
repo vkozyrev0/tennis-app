@@ -22,7 +22,10 @@ review (full backend suite: **263** green, migrations through **0039**).
   ● = actually assigned that day (amber ring if assigned without declaring
   available), a 🛏 tag for hotel-needed officials, and a footer tallying
   available/assigned per day (empty days flagged) so the TD sees thin days at a
-  glance before staffing.
+  glance before staffing. **Cells are clickable to staff directly**: a popover
+  offers the official's certified roles (or the full list if none on file) and
+  one click runs coverage-fill — assign + day in one move, turning the heatmap
+  into an action surface.
 - **Roster CSV import — discoverable** — the simple hand-typed roster importer
   (USTA #, name, division, status, t-shirt, dietary) is now a first-class option
   on the **Roster panel's ⬆ Import menu** (was buried on the global Import page

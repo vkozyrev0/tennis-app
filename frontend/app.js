@@ -3148,9 +3148,13 @@ async function renderAvailHeatmap() {
       if (a) cls.push("hm-avail");
       if (s) cls.push("hm-asg");
       if (s && !a) cls.push("hm-asg-only");
+      // Non-assigned cells are clickable to staff this official on this day.
+      const click = !s;
+      if (click) cls.push("hm-clickable");
+      const attrs = click ? ` data-oid="${o.official_id}" data-date="${esc(d)}" data-name="${esc(o.official_name)}"` : "";
       const title = `${esc(o.official_name)} · ${esc(fmtDOW(d))}: ` +
-        (a ? "available" : "not declared") + (s ? ", assigned" : "");
-      return `<td class="${cls.join(" ")}" title="${title}">${s ? "●" : ""}</td>`;
+        (a ? "available" : "not declared") + (s ? ", assigned" : " — click to assign");
+      return `<td class="${cls.join(" ")}"${attrs} title="${title}">${s ? "●" : ""}</td>`;
     }).join("");
     const pid = `<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${esc(o.official_name)}` +
       (o.hotel_needed ? ' <span class="hm-hotel-tag" title="needs hotel">🛏</span>' : "") + `</span>`;
@@ -3166,6 +3170,60 @@ async function renderAvailHeatmap() {
     `<table class="avail-heatmap"><thead><tr>${head}</tr></thead>` +
     `<tbody>${body}</tbody>` +
     `<tfoot><tr>${foot}</tr></tfoot></table>`;
+}
+
+// Click a heatmap cell → assign that official on that day. The role isn't in the
+// heatmap, so a small popover offers the official's held certifications (or the
+// full role list when they hold none); picking one runs coverage-fill.
+let _hmPop = null;
+function _closeHmPop() { if (_hmPop) { _hmPop.remove(); _hmPop = null; } }
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest && e.target.closest("#avail-heatmap .hm-clickable");
+  if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeHmPop(); return; }
+  _openAssignCell(cell);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeHmPop(); });
+
+async function _openAssignCell(cell) {
+  _closeHmPop();
+  if (!active) return;
+  const oid = Number(cell.dataset.oid), date = cell.dataset.date, name = cell.dataset.name;
+  const pop = document.createElement("div");
+  pop.className = "cov-pop";
+  pop.innerHTML = `<div class="cov-pop-head">${esc(name)} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  document.body.appendChild(pop);
+  _hmPop = pop;
+  const r = cell.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + r.bottom + 4}px`;
+  pop.style.left = `${window.scrollX + Math.min(r.left, window.innerWidth - 280)}px`;
+  let held = [];
+  try { held = await api(`/officials/${oid}/certifications`); }
+  catch (_) {}
+  if (_hmPop !== pop) return;
+  // Offer the roles they're certified for; if none on file, the whole list (the
+  // backend cert guard allows any role when no certs are recorded).
+  const roles = held.length ? held.map((c) => c.cert_type) : CERTS.map(([v]) => v);
+  const note = held.length ? "Assign as:" : "No certifications on file — assign as:";
+  pop.innerHTML =
+    `<div class="cov-pop-head">Assign ${esc(name)} · ${esc(fmtDOW(date))}</div>` +
+    `<p class="cov-pop-note">${note}</p>` +
+    `<ul class="cov-cand-list">` +
+    roles.map((role) =>
+      `<li class="cov-cand"><span class="cov-cand-name">${esc(certLabel(role))}</span>` +
+      `<button type="button" class="cov-fill-btn" data-role="${esc(role)}">Assign</button></li>`
+    ).join("") + `</ul>`;
+  pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/tournaments/${active.id}/coverage-fill`, {
+        method: "POST",
+        body: JSON.stringify({ official_id: oid, work_date: date, working_as: btn.dataset.role }),
+      });
+      toast(`Assigned ${name} as ${certLabel(btn.dataset.role)} on ${fmtDOW(date)}`, true);
+      _closeHmPop();
+      loadAvailability();
+    } catch (err) { toast(err.message, false); btn.disabled = false; }
+  }));
 }
 document.getElementById("avail-official").addEventListener("change", () => {
   renderAvailDates();
