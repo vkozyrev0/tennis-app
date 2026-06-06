@@ -5710,6 +5710,29 @@ async function _renderConflicts() {
   box.innerHTML = `<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>` + groups.join("");
 }
 
+// Day-by-day schedule: one block per play-day listing who works (official, role,
+// site), with a headcount and an empty-day flag — the TD's day-of sheet. Officials
+// link to their 360. Built from the lightweight /schedule aggregate.
+async function _renderSchedule() {
+  const box = document.getElementById("report-schedule");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/schedule`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.days.length) { box.innerHTML = '<p class="muted">No play-date window set.</p>'; return; }
+  box.innerHTML = d.days.map((day) => {
+    const head = `<div class="sched-day-head">${esc(fmtDOW(day.date))} ` +
+      `<span class="sched-count${day.count === 0 ? " sched-empty" : ""}">${day.count} working</span></div>`;
+    if (!day.count) return `<div class="sched-day">${head}<p class="sched-none">— no officials assigned —</p></div>`;
+    const rows = day.entries.map((e) =>
+      `<tr><td>${esc(e.official_name)}</td><td>${esc(certLabel(e.working_as))}</td>` +
+      `<td>${esc(e.site_label || "—")}</td><td>${_respChip(e.response_status)}</td></tr>`).join("");
+    return `<div class="sched-day">${head}` +
+      `<table class="list-table sched-table"><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table></div>`;
+  }).join("");
+}
+
 async function loadReports() {
   if (!active) return;
   reportData = await api(`/tournaments/${active.id}/reports/officials`);
@@ -5769,6 +5792,7 @@ async function loadReports() {
 
   _renderCoverage();
   _renderConflicts();
+  _renderSchedule();
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).

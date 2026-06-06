@@ -14,6 +14,56 @@ from .assignments import _ASG_SELECT, _summary
 router = APIRouter(prefix="/api/tournaments", tags=["reports"])
 
 
+@router.get("/{tournament_id}/schedule")
+def day_schedule(tournament_id: int, conn=Depends(db_dep)):
+    """Day-by-day operational schedule: for each play-window day, who's working —
+    official, role, and site — so the TD has a day-of sheet. One entry per
+    (official, day) since an official works a single role per date. Declined
+    assignments are excluded (they're not actually staffed); a per-day headcount
+    is included so thin days stand out."""
+    from datetime import timedelta
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, play_start_date, play_end_date FROM tournament WHERE id = %s",
+            (tournament_id,),
+        )
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT ad.work_date, ad.working_as, a.response_status, "
+            "       o.first_name, o.last_name, "
+            "       COALESCE(s.code, s.name) AS site_label "
+            "FROM assignment_day ad "
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN site s ON s.id = a.site_id "
+            "WHERE a.tournament_id = %s AND a.response_status <> 'declined' "
+            "ORDER BY ad.work_date, site_label NULLS FIRST, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    by_date: dict = {}
+    for r in rows:
+        by_date.setdefault(r["work_date"].isoformat(), []).append({
+            "official_name": f'{r["last_name"]}, {r["first_name"]}',
+            "working_as": r["working_as"],
+            "site_label": r["site_label"],
+            "response_status": r["response_status"],
+        })
+    days = []
+    start, end = t["play_start_date"], t["play_end_date"]
+    if start and end and start <= end:
+        d = start
+        while d <= end:
+            iso = d.isoformat()
+            ents = by_date.get(iso, [])
+            days.append({"date": iso, "entries": ents, "count": len(ents)})
+            d += timedelta(days=1)
+    return {"tournament": {"id": t["id"], "name": t["name"]}, "days": days}
+
+
 @router.get("/{tournament_id}/rooming-list")
 def rooming_list(tournament_id: int, conn=Depends(db_dep)):
     """Per-hotel-block rooming list to hand to the hotel: each official-comp block

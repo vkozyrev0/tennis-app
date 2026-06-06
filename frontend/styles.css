@@ -1206,6 +1206,16 @@ td.toggle { white-space: nowrap; }
 .rc-issue-pay { background: #f6d4d4; color: #8a1f1f; }
 :root[data-theme="dark"] .rc-issue { background: #4a3a16; color: #e8c779; }
 :root[data-theme="dark"] .rc-issue-pay { background: #4a1d1d; color: #f0b0b0; }
+/* Day-by-day schedule */
+#report-schedule { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.8rem; }
+.sched-day { border: 1px solid var(--line); border-radius: 8px; padding: 0.45rem 0.6rem; }
+.sched-day-head { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.35rem;
+  display: flex; align-items: center; gap: 0.6rem; }
+.sched-count { font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  background: var(--sel); color: var(--muted); }
+.sched-count.sched-empty { background: var(--warn-bg); color: #9a6700; }
+.sched-none { font-size: 0.84rem; color: var(--muted); margin: 0; }
+.sched-table { margin: 0; }
 /* Staffing conflict report */
 .conflict-clean { color: var(--ok, #1f7a44); font-weight: 600; font-size: 0.9rem; }
 .conflict-summary { color: #9a2020; font-weight: 700; margin: 0.2rem 0 0.6rem; }
