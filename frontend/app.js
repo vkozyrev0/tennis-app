@@ -1927,7 +1927,18 @@ const rosterGrid = new Tabulator(rosterMount, {
           try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) { rosterShowNew(); rosterCloseModal(); } await loadRoster(); }
           catch (err) { toast(err.message, false); }
         };
+        // Promote an alternate to selected (the move when a slot opens up).
+        const isAlt = e.selection_status === "alternate";
+        const doPromote = async () => {
+          try {
+            await api(`/roster/${e.id}/promote`, { method: "POST" });
+            toast(`Promoted ${rosterName(e)} to selected`, true);
+            await loadRoster();
+          } catch (err) { toast(err.message, false); }
+        };
         const items = [
+          ...(isAlt ? [{ label: "↑ Promote to selected",
+            title: "Move this alternate into a selected slot", onClick: doPromote }] : []),
           { label: withdrawn ? "Already withdrawn" : "Withdraw…",
             title: withdrawn ? "Player is already withdrawn" : "File a withdrawal for this player",
             onClick: doWithdraw },
@@ -4073,7 +4084,12 @@ onSubmit(wdForm, async (e) => {
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
     await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
-    setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadRoster(); loadInbox();
+    setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadInbox();
+    await loadRoster();
+    // A slot just opened — nudge the TD to promote an alternate if any exist.
+    const alts = (rosterRows || []).filter((r) => r.selection_status === "alternate").length;
+    if (alts) toast(`${alts} alternate(s) available to promote`, true,
+      { label: "Open Roster", onClick: () => _dashGo("tournament", "panel-t-roster") });
   } catch (err) { setMsg("withdrawal-msg", err.message, false); markInvalid(wdForm, err.message); }
 });
 wdForm.querySelector(".cancel").addEventListener("click", wdReset);

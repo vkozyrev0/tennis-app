@@ -173,3 +173,27 @@ def delete_roster_entry(entry_id: int, conn=Depends(db_dep)):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="roster entry not found")
     return Response(status_code=204)
+
+
+@router.post("/api/roster/{entry_id}/promote", response_model=RosterEntryOut)
+def promote_alternate(entry_id: int, conn=Depends(db_dep)):
+    """Promote an alternate to selected (the standard move when a selected player
+    withdraws and a slot opens). Only an *alternate* can be promoted — promoting a
+    selected entry is a no-op error, and a withdrawn one is rejected so a
+    withdrawal isn't silently reversed."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT selection_status FROM tournament_entry WHERE id = %s", (entry_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="roster entry not found")
+        if row["selection_status"] != "alternate":
+            raise HTTPException(
+                status_code=400,
+                detail=f"only an alternate can be promoted (this entry is {row['selection_status']})",
+            )
+        cur.execute(
+            "UPDATE tournament_entry SET selection_status = 'selected' WHERE id = %s",
+            (entry_id,),
+        )
+        cur.execute(_SELECT + " WHERE e.id = %s", (entry_id,))
+        return cur.fetchone()
