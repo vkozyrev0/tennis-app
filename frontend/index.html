@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=56" />
+  <link rel="stylesheet" href="/styles.css?v=61" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -194,6 +194,7 @@
         <p class="muted" id="dash-sub">Pick a tournament in the bar above to see its status board.</p>
         <div id="dash-deadlines" class="dash-deadlines" hidden></div>
         <div id="dash-digest" class="dash-digest" hidden></div>
+        <div id="dash-readiness" class="dash-readiness" hidden></div>
         <div id="dash-declined" class="dash-declined" hidden></div>
         <div id="dash-tiles" class="dash-tiles" hidden></div>
         <h3>All tournaments</h3>
@@ -202,6 +203,9 @@
           <thead><tr><th>Tournament</th><th>Type</th><th>Play dates</th><th>Starts in</th><th>Reg. deadline</th><th>Late-entry deadline</th></tr></thead>
           <tbody></tbody>
         </table>
+
+        <h3>Official workload <span class="h3-subtitle">(across all tournaments — balance staffing)</span></h3>
+        <div id="dash-workload"></div>
       </div>
     </section>
 
@@ -639,6 +643,7 @@
           </div>
         </details>
         <p id="asg-avail-nudge" class="avail-gap" hidden></p>
+        <div id="asg-nologin" class="asg-nologin" hidden></div>
         <div id="asg-respbar" class="respbar" hidden>
           <span class="respbar-summary" id="asg-resp-summary"></span>
           <span class="respbar-filters" role="group" aria-label="Filter by response">
@@ -1173,6 +1178,12 @@
         <h4>Day-by-day schedule <span class="h3-subtitle">(who works each day — the day-of sheet)</span></h4>
         <div id="report-schedule"></div>
 
+        <h4>Dietary summary <span class="h3-subtitle">(officials' restrictions, for catering)</span></h4>
+        <div id="report-dietary"></div>
+
+        <h4>Missing distances <span class="h3-subtitle">(no mileage on file — reimbursement can't compute)</span></h4>
+        <div id="report-missing-dist"></div>
+
         <h4>Coverage by site &amp; day</h4>
         <table id="site-coverage-table" class="list-table">
           <thead></thead>
@@ -1313,6 +1324,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=132"></script>
+  <script type="module" src="/app.js?v=137"></script>
 </body>
 </html>

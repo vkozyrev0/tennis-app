@@ -2531,6 +2531,28 @@ async function loadAssignments() {
   _asgState = { list, availByOfficial };
   _renderBulkInvite(new Set(list.map((a) => a.official_id)), availByOfficial);
   _renderAsgList();
+  _renderNoLogin();
+}
+
+// Assigned officials with no self-service login can't accept/decline, so their
+// assignments sit pending forever — flag them with a jump to Officials setup
+// (where the TD creates the login).
+async function _renderNoLogin() {
+  const box = document.getElementById("asg-nologin");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/officials-without-login`); }
+  catch (_) { box.hidden = true; return; }
+  if (!d.count) { box.hidden = true; box.innerHTML = ""; return; }
+  const names = d.officials.map((o) =>
+    `${esc(o.official_name)}${o.has_email ? "" : ' <span class="muted">(no email)</span>'}`).join("; ");
+  box.hidden = false;
+  box.innerHTML =
+    `<span class="asg-nologin-text">🔑 ${d.count} assigned official${d.count === 1 ? "" : "s"} ` +
+    `can't accept/decline — no login: <strong>${names}</strong>.</span> ` +
+    `<button type="button" id="asg-nologin-go" class="btn-small">Set up logins →</button>`;
+  document.getElementById("asg-nologin-go")?.addEventListener("click", () =>
+    _dashGo("setup", "panel-officials"));
 }
 
 // Bulk invite: pick several not-yet-assigned officials and create a pending
@@ -5239,9 +5261,40 @@ async function _renderDigest() {
     n.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
   });
 }
+// Official workload (cross-tournament): days/assignments per official, busiest
+// first, with zero-load officials flagged — so the TD balances staffing. Links to
+// each official's 360. No active tournament needed.
+async function _renderWorkload() {
+  const box = document.getElementById("dash-workload");
+  if (!box) return;
+  let w;
+  try { w = await api("/officials/workload"); } catch (_) { box.innerHTML = ""; return; }
+  if (!w.officials.length) { box.innerHTML = '<p class="muted">No officials yet.</p>'; return; }
+  const t = w.totals;
+  const maxDays = Math.max(1, ...w.officials.map((o) => o.days));
+  const rows = w.officials.map((o) => {
+    const cls = o.assignments === 0 ? "wl-zero" : "";
+    const bar = `<span class="wl-bar" style="width:${Math.round((o.days / maxDays) * 100)}%"></span>`;
+    const mix = o.assignments
+      ? `<span class="muted">${o.accepted}✓ ${o.pending}⏳ ${o.declined}✗</span>` : "";
+    return `<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${esc(o.official_name)}</span></td>` +
+      `<td class="num">${o.days}</td><td class="num">${o.assignments}</td>` +
+      `<td class="num">${o.tournaments}</td><td class="wl-barcell">${bar}</td><td>${mix}</td></tr>`;
+  }).join("");
+  box.innerHTML =
+    `<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)` +
+    `${t.unused ? ` · <span class="warn">${t.unused} unused</span>` : ""}.</p>` +
+    `<table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th>` +
+    `<th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+  box.querySelectorAll(".wl-off-link[data-oid]").forEach((el) =>
+    el.addEventListener("click", () => openOfficial360(Number(el.dataset.oid))));
+}
+
 async function loadDashboard() {
   _renderDeadlines();  // cross-tournament approaching-deadline banner
   _renderDigest();     // cross-tournament open-task digest
+  _renderWorkload();   // cross-tournament official workload balance
   // Cross-tournament overview table.
   let tournaments = [];
   try { tournaments = await api("/tournaments"); } catch (_) {}
@@ -5299,6 +5352,44 @@ async function loadDashboard() {
   tiles.querySelectorAll("[data-go-group]").forEach((b) =>
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
   _renderDeclinedAlert(d.officials.declined);
+  _renderReadiness();
+}
+
+// Pre-tournament readiness scorecard: one pass/warn/fail row per area, with an
+// overall "ready / N blockers" headline. Each row deep-links to where it's fixed.
+const _READY_GO = {
+  coverage: ["staffing", "panel-t-reports"], conflicts: ["staffing", "panel-t-reports"],
+  declined: ["staffing", "panel-t-assignments"], responses: ["staffing", "panel-t-assignments"],
+  roster: ["tournament", "panel-t-roster"], rooms: ["staffing", "panel-t-reports"],
+  inbox: ["inbox", "panel-t-inbox"],
+};
+const _READY_ICON = { pass: "✓", warn: "▲", fail: "✗" };
+async function _renderReadiness() {
+  const box = document.getElementById("dash-readiness");
+  if (!box || !active) return;
+  let r;
+  try { r = await api(`/tournaments/${active.id}/readiness`); }
+  catch (_) { box.hidden = true; return; }
+  const s = r.summary;
+  const headClass = s.fail ? "rdy-fail" : (s.warn ? "rdy-warn" : "rdy-pass");
+  const headText = s.fail
+    ? `✗ Not ready — ${s.fail} blocker${s.fail === 1 ? "" : "s"}${s.warn ? `, ${s.warn} warning${s.warn === 1 ? "" : "s"}` : ""}`
+    : (s.warn ? `▲ Ready with ${s.warn} warning${s.warn === 1 ? "" : "s"}` : "✓ Ready — all checks pass");
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="rdy-head ${headClass}">${headText}</div>` +
+    `<ul class="rdy-list">` + r.checks.map((c) =>
+      `<li class="rdy-row rdy-${c.status}" data-key="${c.key}" tabindex="0" role="button">` +
+      `<span class="rdy-icon">${_READY_ICON[c.status]}</span>` +
+      `<span class="rdy-label">${esc(c.label)}</span>` +
+      `<span class="rdy-detail">${esc(c.detail)}</span></li>`).join("") + `</ul>`;
+  box.querySelectorAll(".rdy-row").forEach((row) => {
+    const go = _READY_GO[row.dataset.key];
+    if (!go) return;
+    const jump = () => _dashGo(go[0], go[1]);
+    row.addEventListener("click", jump);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jump(); } });
+  });
 }
 
 // Named declined-assignment alert: when officials have declined, show WHO (+ the
@@ -5764,6 +5855,63 @@ async function _renderSchedule() {
   }).join("");
 }
 
+// Dietary summary: assigned officials grouped by restriction (most common first),
+// each with a count + the names, plus a none-count — a catering-ready rollup.
+async function _renderDietary() {
+  const box = document.getElementById("report-dietary");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/dietary-summary`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.total_people) { box.innerHTML = '<p class="muted">No officials staffed yet.</p>'; return; }
+  if (!d.items.length) {
+    box.innerHTML = `<p class="muted">No dietary restrictions on file (${d.total_people} official(s) staffed).</p>`;
+    return;
+  }
+  const rows = d.items.map((i) =>
+    `<tr><td><strong>${esc(i.restriction)}</strong></td><td class="num">${i.count}</td>` +
+    `<td>${esc(i.people.join("; "))}</td></tr>`).join("");
+  box.innerHTML =
+    `<p class="diet-sub">${d.with_restrictions} of ${d.total_people} staffed official(s) have a dietary restriction` +
+    `${d.none_count ? ` · ${d.none_count} none` : ""}.</p>` +
+    `<table class="list-table diet-table"><thead><tr><th>Restriction</th><th class="num">Count</th><th>Officials</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+}
+
+// Missing distances: official↔site pairs with no mileage on file (mileage stays
+// null). Each row has an inline miles input + Save (POST /distances) so the TD
+// fills them all here; saving refreshes the list.
+async function _renderMissingDistances() {
+  const box = document.getElementById("report-missing-dist");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/missing-distances`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.count) { box.innerHTML = '<p class="muted">✓ Every assigned official has a distance to their site.</p>'; return; }
+  const rows = d.items.map((i) =>
+    `<tr data-oid="${i.official_id}" data-sid="${i.site_id}"><td>${esc(i.official_name)}</td>` +
+    `<td>${esc(i.site_label || "—")}</td><td class="num">${i.days}</td>` +
+    `<td><input type="number" class="md-miles" min="0" step="0.1" placeholder="miles" style="width:6rem" /> ` +
+    `<button type="button" class="md-save btn-small">Save</button></td></tr>`).join("");
+  box.innerHTML =
+    `<p class="muted md-sub">${d.count} official↔site pair(s) need a one-way distance for mileage.</p>` +
+    `<table class="list-table md-table"><thead><tr><th>Official</th><th>Site</th><th class="num">Days</th><th>One-way miles</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+  box.querySelectorAll(".md-save").forEach((btn) => btn.addEventListener("click", async () => {
+    const tr = btn.closest("tr");
+    const miles = parseFloat(tr.querySelector(".md-miles").value);
+    if (!(miles >= 0)) { toast("Enter a valid mileage", false); return; }
+    btn.disabled = true;
+    try {
+      await api("/distances", { method: "POST", body: JSON.stringify({
+        official_id: Number(tr.dataset.oid), site_id: Number(tr.dataset.sid),
+        one_way_miles: miles, source: "manual" }) });
+      toast("Distance saved", true);
+      loadReports();  // re-render: the pair clears + mileage recomputes
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  }));
+}
+
 async function loadReports() {
   if (!active) return;
   reportData = await api(`/tournaments/${active.id}/reports/officials`);
@@ -5824,6 +5972,8 @@ async function loadReports() {
   _renderCoverage();
   _renderConflicts();
   _renderSchedule();
+  _renderDietary();
+  _renderMissingDistances();
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).

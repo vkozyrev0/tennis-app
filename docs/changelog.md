@@ -7,8 +7,36 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **312** green, migrations through **0039**).
+review (full backend suite: **329** green, migrations through **0039**).
 
+- **Missing-distance report** — the Reports tab now consolidates official↔site
+  assignment pairs with no mileage on file (`GET
+  /api/tournaments/{id}/missing-distances`) — mileage can't compute for them — as
+  a table with an **inline miles input + Save** (`POST /distances`); saving
+  clears the pair and recomputes mileage. Fixes them all in one place instead of
+  card-by-card.
+- **Officials needing a login** — the Assignments panel now flags assigned
+  officials with no self-service account (`GET
+  /api/tournaments/{id}/officials-without-login`) — they can't accept/decline so
+  their assignments sit pending — naming them (with a no-email note) and a "Set
+  up logins →" jump to Officials setup where the TD creates the account.
+- **Official workload balance** — the dashboard now shows a cross-tournament
+  workload table (`GET /api/officials/workload`, declared before `/{id}` so it
+  isn't parsed as an id): days / assignments / events per official with a load
+  bar and accept-decline mix, busiest first, zero-load officials flagged — so the
+  TD spots over- and under-used officials when staffing. Each name opens the
+  Official 360.
+- **Pre-tournament readiness scorecard** — the dashboard now leads with an "are
+  we ready?" check (`GET /api/tournaments/{id}/readiness`): one pass/warn/fail
+  row per area (day coverage, staffing conflicts, declined assignments, official
+  responses, roster completeness, room pickup, inbox) with an overall
+  ready/blocker headline. `fail` = hard blocker (uncovered day, double-booking,
+  declined slot); `warn` = should-resolve. Each row deep-links to where it's
+  fixed. Reuses the dashboard aggregate + `hard_conflict_counts`.
+- **Dietary summary for catering** — the Reports tab now rolls up staffed
+  officials' dietary restrictions (`GET /api/tournaments/{id}/dietary-summary`):
+  grouped case-insensitively, most-common first, each with a count + the names,
+  plus a none-count — the catering-ready list. Declined officials are excluded.
 - **Self-service availability — quick-select** — officials already set their own
   available dates (`PUT /api/me/availability/{id}`, play-window validated) from
   the self-service page; added the **bulk quick-select** (All / None / Weekdays /

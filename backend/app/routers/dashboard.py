@@ -247,3 +247,56 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
                   "unused": max(reserved - assigned, 0)},
         "conflicts": conflicts,
     }
+
+
+@router.get("/api/tournaments/{tournament_id}/readiness")
+def readiness(tournament_id: int, conn=Depends(db_dep)):
+    """Pre-tournament "are we ready?" scorecard. Rolls the dashboard signals into
+    one pass/warn/fail check per area so the TD sees blockers at a glance.
+    `fail` = a hard blocker (uncovered day, double-booking, declined slot to
+    re-staff); `warn` = should-resolve (pending replies, incomplete roster,
+    unused rooms, unfiled mail). `ready` is true when there are no fails."""
+    dash = dashboard(tournament_id, conn)  # reuses every aggregate (+ 404 guard)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) AS n FROM tournament_entry e JOIN player p ON p.id = e.player_id "
+            "WHERE e.tournament_id = %s AND e.selection_status IN ('selected','alternate') "
+            "  AND (e.age_division IS NULL OR e.age_division = '' OR p.gender IS NULL "
+            "       OR e.t_shirt_size IS NULL OR e.t_shirt_size = '' "
+            "       OR (e.amount_outstanding IS NOT NULL AND e.amount_outstanding > 0))",
+            (tournament_id,),
+        )
+        roster_incomplete = cur.fetchone()["n"]
+
+    cov = dash["coverage"]["uncovered_days_count"]
+    off = dash["officials"]
+    unused = dash["rooms"]["unused"]
+    new_mail = dash["inbox"]["new"]
+    conflicts = dash["conflicts"]
+
+    def chk(key, label, value, fail_if, warn_if, ok_text, bad_text):
+        status = "fail" if fail_if else ("warn" if warn_if else "pass")
+        return {"key": key, "label": label, "value": value, "status": status,
+                "detail": (ok_text if status == "pass" else bad_text)}
+
+    checks = [
+        chk("coverage", "Day coverage", cov, cov > 0, False,
+            "every play day has an official", f"{cov} day(s) with no official"),
+        chk("conflicts", "Staffing conflicts", conflicts, conflicts > 0, False,
+            "no double-bookings or uncertified days", f"{conflicts} staffing conflict(s)"),
+        chk("declined", "Declined assignments", off["declined"], off["declined"] > 0, False,
+            "no declined assignments to re-staff", f"{off['declined']} declined — needs re-staffing"),
+        chk("responses", "Official responses", off["pending"], False, off["pending"] > 0,
+            "all officials have responded", f"{off['pending']} awaiting accept/decline"),
+        chk("roster", "Roster completeness", roster_incomplete, False, roster_incomplete > 0,
+            "every active entry is complete", f"{roster_incomplete} incomplete entr(y/ies)"),
+        chk("rooms", "Room pickup", unused, False, unused > 0,
+            "no unused reserved rooms", f"{unused} reserved room(s) unused — release before cutoff"),
+        chk("inbox", "Inbox", new_mail, False, new_mail > 0,
+            "inbox is clear", f"{new_mail} unfiled email(s)"),
+    ]
+    summary = {"pass": sum(1 for c in checks if c["status"] == "pass"),
+               "warn": sum(1 for c in checks if c["status"] == "warn"),
+               "fail": sum(1 for c in checks if c["status"] == "fail")}
+    return {"tournament": dash["tournament"], "checks": checks,
+            "ready": summary["fail"] == 0, "summary": summary}
