@@ -87,6 +87,14 @@ class AssignmentDayCreate(BaseModel):
     working_as: CertType
 
 
+class CoverageFillCreate(BaseModel):
+    """Fill a coverage gap: assign `official_id` to the tournament (if not already)
+    and add this (work_date, working_as) day in one call."""
+    official_id: int
+    work_date: date
+    working_as: CertType
+
+
 class AssignmentResponse(BaseModel):
     """An official accepting or declining their assignment (self-service)."""
     status: Literal["accepted", "declined", "pending"]

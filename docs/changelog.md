@@ -7,8 +7,16 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **243** green, migrations through **0039**).
+review (full backend suite: **250** green, migrations through **0039**).
 
+- **Coverage gap → invite** — a fixable cell on the role-coverage grid (a day
+  undercovered for a role while certified officials are free) is now **clickable**:
+  a popover lists certified officials not already working that day (`GET
+  /api/tournaments/{id}/coverage-candidates?role=&date=`), ranked
+  available-first and tagged *available / already-on-event / busy-elsewhere*. One
+  click **fills** the gap (`POST /api/tournaments/{id}/coverage-fill`) — assigns
+  the official (creating a pending assignment if needed) and adds the (date,
+  role) day atomically, with the cert guard + pay snapshot.
 - **Withdrawal → auto-suggest alternate** — recording a withdrawal now surfaces
   an inline panel of alternates to promote (`GET
   /api/tournaments/{id}/alternates?age_division=`): the withdrawing player's

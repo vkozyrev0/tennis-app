@@ -1186,6 +1186,26 @@ td.toggle { white-space: nowrap; }
 .wd-alt-done { opacity: .6; }
 .wd-alt-sep { list-style: none; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); margin-top: 0.3rem; padding: 0 0.2rem; }
+/* Coverage gap → invite popover (role-coverage grid) */
+.cov-fixable { cursor: pointer; }
+.cov-fixable:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cov-pop { position: absolute; z-index: 60; width: 290px; max-height: 320px; overflow-y: auto;
+  background: var(--card, #fff); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 0.55rem 0.65rem; font-size: 0.86rem; }
+.cov-pop-head { font-weight: 700; margin-bottom: 0.45rem; }
+.cov-pop-empty { color: var(--muted); margin: 0; font-size: 0.83rem; }
+.cov-cand-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.cov-cand { display: flex; align-items: center; gap: 0.5rem; }
+.cov-cand-name { flex: 1; }
+.cov-fill-btn { padding: 0.2rem 0.55rem; font-size: 0.78rem; background: var(--accent);
+  color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+.cov-fill-btn:hover { filter: brightness(1.07); }
+.cov-fill-btn:disabled { opacity: .5; cursor: default; }
+.cov-tag { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  padding: 1px 4px; border-radius: 5px; background: var(--sel); color: var(--muted); }
+.cov-tag-ok { background: #e7f5ec; color: #1f7a44; }
+.cov-tag-warn { background: var(--warn-bg); color: #9a6700; }
+:root[data-theme="dark"] .cov-tag-ok { background: #16301f; color: #8ed3a5; }
 .asg-flags {
   font-size: 0.85rem; margin: 0.3rem 0; padding: 0.3rem 0.5rem;
   background: var(--warn-bg); border: 1px solid var(--warn-border);

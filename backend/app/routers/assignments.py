@@ -16,7 +16,12 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import AssignmentBulkCreate, AssignmentCreate, AssignmentDayCreate
+from ..models import (
+    AssignmentBulkCreate,
+    AssignmentCreate,
+    AssignmentDayCreate,
+    CoverageFillCreate,
+)
 
 router = APIRouter(tags=["assignments"])
 
@@ -467,6 +472,33 @@ def delete_assignment(assignment_id: int, conn=Depends(db_dep)):
     return Response(status_code=204)
 
 
+def _insert_day(cur, assignment_id: int, official_id: int, work_date, working_as) -> None:
+    """Add a worked day to an assignment with the certification guard (audit §3.2)
+    + per-day rate snapshot. Raises HTTPException on a cert mismatch / duplicate
+    date. Shared by add_day and coverage_fill."""
+    # If the official has certifications on file, the worked role must be one of
+    # them. If none are recorded, allow (data may be incomplete).
+    cur.execute("SELECT count(*) AS n FROM certification WHERE official_id = %s", (official_id,))
+    if cur.fetchone()["n"] > 0:
+        cur.execute(
+            "SELECT 1 FROM certification WHERE official_id = %s AND cert_type = %s",
+            (official_id, working_as),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=409, detail=f"official is not certified as {working_as}",
+            )
+    rate = _rate_for(cur, working_as, work_date)
+    try:
+        cur.execute(
+            "INSERT INTO assignment_day (assignment_id, work_date, working_as, rate_applied) "
+            "VALUES (%s, %s, %s, %s)",
+            (assignment_id, work_date, working_as, rate),
+        )
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(status_code=409, detail="this work date is already on the assignment")
+
+
 @router.post("/api/assignments/{assignment_id}/days", status_code=201)
 def add_day(assignment_id: int, body: AssignmentDayCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:
@@ -474,30 +506,7 @@ def add_day(assignment_id: int, body: AssignmentDayCreate, conn=Depends(db_dep))
         asg = cur.fetchone()
         if asg is None:
             raise HTTPException(status_code=404, detail="assignment not found")
-        # If the official has certifications on file, the worked role must be one
-        # of them (audit §3.2). If none are recorded, allow (data may be incomplete).
-        cur.execute("SELECT count(*) AS n FROM certification WHERE official_id = %s", (asg["official_id"],))
-        if cur.fetchone()["n"] > 0:
-            cur.execute(
-                "SELECT 1 FROM certification WHERE official_id = %s AND cert_type = %s",
-                (asg["official_id"], body.working_as),
-            )
-            if cur.fetchone() is None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"official is not certified as {body.working_as}",
-                )
-        rate = _rate_for(cur, body.working_as, body.work_date)
-        try:
-            cur.execute(
-                """
-                INSERT INTO assignment_day (assignment_id, work_date, working_as, rate_applied)
-                VALUES (%s, %s, %s, %s) RETURNING id
-                """,
-                (assignment_id, body.work_date, body.working_as, rate),
-            )
-        except psycopg.errors.UniqueViolation:
-            raise HTTPException(status_code=409, detail="this work date is already on the assignment")
+        _insert_day(cur, assignment_id, asg["official_id"], body.work_date, body.working_as)
         return _persist_snapshot(cur, assignment_id)
 
 
@@ -512,3 +521,73 @@ def delete_day(day_id: int, conn=Depends(db_dep)):
         cur.execute("DELETE FROM assignment_day WHERE id = %s", (day_id,))
         _persist_snapshot(cur, assignment_id)
     return Response(status_code=204)
+
+
+@router.get("/api/tournaments/{tournament_id}/coverage-candidates")
+def coverage_candidates(tournament_id: int, role: str, date: str, conn=Depends(db_dep)):
+    """Who could fill an uncovered (role, date) cell on the coverage report —
+    officials CERTIFIED for `role` who aren't already working `date` in this
+    tournament. Each carries flags so the UI can rank them: `available` (declared
+    available that day), `assigned_here` (already on this tournament — fill just
+    adds a day, no new invite), and `busy_elsewhere` (working that date in another
+    tournament — a soft double-book warning). Best candidates sort first."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT o.id, o.last_name, o.first_name,
+                   EXISTS (SELECT 1 FROM assignment a
+                           WHERE a.tournament_id = %(tid)s AND a.official_id = o.id)
+                       AS assigned_here,
+                   EXISTS (SELECT 1 FROM availability av
+                           WHERE av.official_id = o.id AND av.tournament_id = %(tid)s
+                             AND av.available_date = %(d)s) AS available,
+                   EXISTS (SELECT 1 FROM assignment a
+                           JOIN assignment_day ad ON ad.assignment_id = a.id
+                           WHERE a.official_id = o.id AND ad.work_date = %(d)s
+                             AND a.tournament_id <> %(tid)s) AS busy_elsewhere
+            FROM official o
+            JOIN certification c
+              ON c.official_id = o.id AND c.cert_type::text = %(role)s
+            WHERE NOT EXISTS (
+                SELECT 1 FROM assignment a
+                JOIN assignment_day ad ON ad.assignment_id = a.id
+                WHERE a.tournament_id = %(tid)s AND a.official_id = o.id
+                  AND ad.work_date = %(d)s
+            )
+            ORDER BY available DESC, busy_elsewhere ASC, o.last_name, o.first_name
+            """,
+            {"tid": tournament_id, "role": role, "d": date},
+        )
+        rows = cur.fetchall()
+    return [
+        {"official_id": r["id"], "official_name": f'{r["last_name"]}, {r["first_name"]}',
+         "available": r["available"], "assigned_here": r["assigned_here"],
+         "busy_elsewhere": r["busy_elsewhere"]}
+        for r in rows
+    ]
+
+
+@router.post("/api/tournaments/{tournament_id}/coverage-fill", status_code=201)
+def coverage_fill(tournament_id: int, body: CoverageFillCreate, conn=Depends(db_dep)):
+    """Fill a coverage gap in one click: ensure the official has an assignment on
+    this tournament (create a pending one if needed), then add the (date, role)
+    day. Reuses the cert guard + pay snapshot. 409 if they already work that day."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM assignment WHERE tournament_id = %s AND official_id = %s",
+                (tournament_id, body.official_id),
+            )
+            row = cur.fetchone()
+            if row is not None:
+                aid = row["id"]
+            else:
+                cur.execute(
+                    "INSERT INTO assignment (tournament_id, official_id) VALUES (%s, %s) RETURNING id",
+                    (tournament_id, body.official_id),
+                )
+                aid = cur.fetchone()["id"]
+            _insert_day(cur, aid, body.official_id, body.work_date, body.working_as)
+            return _persist_snapshot(cur, aid)
+    except psycopg.errors.ForeignKeyViolation:
+        raise HTTPException(status_code=400, detail="tournament_id or official_id invalid")

@@ -5182,16 +5182,82 @@ function _renderCoverage() {
           const n = b.officials;
           const cls = _covClass(n);
           // Cert-pool gap: a day undercovered for this role while MORE certified
-          // officials are available is a *fixable* gap — flag it with a ⚑.
+          // officials are available is a *fixable* gap — flag it with a ⚑ and make
+          // the cell clickable to pick a certified official and fill it on the spot.
           const below = n === 0 || n < _coverageMin;
           const fixable = below && holders > n;
           const flag = fixable
-            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — you can staff more`)}">⚑</span>` : "";
-          return `<td class="daycol${cls ? " " + cls : ""}" title="${esc(`${n} staffed · ${holders} certified`)}">${n}${flag}</td>`;
+            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — click to fill`)}">⚑</span>` : "";
+          const attrs = fixable ? ` data-cov-role="${esc(r.role)}" data-cov-date="${esc(b.date)}"` : "";
+          return `<td class="daycol${cls ? " " + cls : ""}${fixable ? " cov-fixable" : ""}"${attrs} ` +
+            `title="${esc(`${n} staffed · ${holders} certified${fixable ? " — click to fill" : ""}`)}">${n}${flag}</td>`;
         }).join("");
         return `<tr><td>${esc(certLabel(r.role))} <span class="muted">(${holders} certified)</span></td>${cells}</tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
+}
+
+// Coverage gap → invite: clicking a fixable role/day cell opens a popover of
+// certified officials who could fill it, each with a one-click "Fill" that
+// assigns them (if needed) + adds the day in the right role, then refreshes.
+let _covPop = null;
+function _closeCovPop() { if (_covPop) { _covPop.remove(); _covPop = null; } }
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest && e.target.closest("#role-coverage-table .cov-fixable");
+  if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeCovPop(); return; }
+  _openCovGap(cell);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeCovPop(); });
+
+async function _openCovGap(cell) {
+  _closeCovPop();
+  if (!active) return;
+  const role = cell.dataset.covRole, date = cell.dataset.covDate;
+  const pop = document.createElement("div");
+  pop.className = "cov-pop";
+  pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  document.body.appendChild(pop);
+  _covPop = pop;
+  // Anchor below the cell, clamped to the viewport.
+  const r = cell.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + r.bottom + 4}px`;
+  pop.style.left = `${window.scrollX + Math.min(r.left, window.innerWidth - 300)}px`;
+  let cands;
+  try {
+    cands = await api(`/tournaments/${active.id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${encodeURIComponent(date)}`);
+  } catch (err) { pop.innerHTML = `<p class="msg bad">${esc(err.message)}</p>`; return; }
+  if (_covPop !== pop) return;  // closed while loading
+  if (!cands.length) {
+    pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
+      `<p class="cov-pop-empty">No un-booked official holds this certification. Add a certification or a new official first.</p>`;
+    return;
+  }
+  const tag = (c) => {
+    const t = [];
+    if (c.available) t.push('<span class="cov-tag cov-tag-ok">available</span>');
+    if (c.assigned_here) t.push('<span class="cov-tag">already on event</span>');
+    if (c.busy_elsewhere) t.push('<span class="cov-tag cov-tag-warn">busy elsewhere</span>');
+    return t.join(" ");
+  };
+  pop.innerHTML =
+    `<div class="cov-pop-head">Fill ${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
+    `<ul class="cov-cand-list">` +
+    cands.map((c) =>
+      `<li class="cov-cand"><span class="cov-cand-name">${esc(c.official_name)} ${tag(c)}</span>` +
+      `<button type="button" class="cov-fill-btn" data-oid="${c.official_id}" data-name="${esc(c.official_name)}">Fill</button></li>`
+    ).join("") + `</ul>`;
+  pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/tournaments/${active.id}/coverage-fill`, {
+        method: "POST",
+        body: JSON.stringify({ official_id: Number(btn.dataset.oid), work_date: date, working_as: role }),
+      });
+      toast(`Assigned ${btn.dataset.name} as ${certLabel(role)} on ${fmtDOW(date)}`, true);
+      _closeCovPop();
+      loadReports();
+    } catch (err) { toast(err.message, false); btn.disabled = false; }
+  }));
 }
 
 async function loadReports() {

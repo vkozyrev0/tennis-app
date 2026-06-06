@@ -52,6 +52,7 @@ from ._models_workspace import (  # noqa: F401
     AssignmentBulkCreate,
     AssignmentCreate,
     AssignmentDayCreate,
+    CoverageFillCreate,
     AssignmentResponse,
     AvailabilityOut,
     AvailabilitySet,
