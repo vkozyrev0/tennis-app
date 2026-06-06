@@ -5326,11 +5326,66 @@ async function openOfficial360(officialId) {
       `<tr class="totals"><td>Season totals (${tt.assignments} assignment${tt.assignments === 1 ? "" : "s"})</td><td>${tt.days}</td>` +
       `<td class="num">${money(tt.pay)}</td><td class="num">${money(tt.mileage)}</td><td class="num">${money(tt.total)}</td><td></td></tr></tbody></table>`
     : '<p class="muted">No assignments yet.</p>';
+  const payBtn = tt.assignments
+    ? `<p><button type="button" id="off-pay-statement" class="btn-small" data-oid="${officialId}" data-name="${esc(o.last_name)}, ${esc(o.first_name)}">⬇ Pay statement (PDF)</button></p>`
+    : "";
   body.innerHTML =
     `<p class="p360-id">Official${loc ? ` · ${esc(loc)}` : ""}</p>` +
     `<h4>Certifications</h4><p>${certs}</p>` +
-    `<h4>Assignments &amp; pay</h4>${asg}`;
+    `<h4>Assignments &amp; pay</h4>${asg}${payBtn}`;
   _p360Export = { title: `${o.last_name}, ${o.first_name}`, subtitle: "Official profile", html: body.innerHTML };
+  document.getElementById("off-pay-statement")?.addEventListener("click", (e) =>
+    exportPayStatement(Number(e.currentTarget.dataset.oid)));
+}
+
+// Reimbursement pay statement → print window (day-level rates + mileage), reusing
+// the report print-window pattern. No PDF lib.
+async function exportPayStatement(officialId) {
+  let d;
+  try { d = await api(`/officials/${officialId}/pay-statement`); }
+  catch (e) { toast(e.message, false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  const e = esc, off = d.official, tt = d.totals;
+  const sections = d.assignments.length ? d.assignments.map((a) => {
+    const dayRows = a.days.map((x) =>
+      `<tr><td>${e(_fmtMDY(x.work_date))}</td><td>${e(certLabel(x.working_as))}</td>` +
+      `<td class="num">${money(x.rate_applied)}</td></tr>`).join("") ||
+      `<tr><td colspan="3" class="muted">No worked days.</td></tr>`;
+    const mileage = a.missing_distance ? "—  (no distance on file)"
+      : `${money(a.mileage)}${a.one_way_miles != null ? `  (${a.one_way_miles} mi one-way)` : ""}`;
+    return `<h2>${e(a.tournament_name)}${a.site_label ? ` · ${e(a.site_label)}` : ""}</h2>` +
+      `<table><thead><tr><th>Date</th><th>Role</th><th class="num">Rate</th></tr></thead>` +
+      `<tbody>${dayRows}</tbody></table>` +
+      `<p class="line">Pay: <strong>${money(a.pay)}</strong> · Mileage: <strong>${mileage}</strong>` +
+      ` · Assignment total: <strong>${money(a.total)}</strong></p>`;
+  }).join("") : `<p class="muted">No assignments on file.</p>`;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Pay statement — ${e(off.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Officiating pay statement</h1>
+    <div class="sub">${e(off.name)}${off.location ? ` · ${e(off.location)}` : ""}` +
+      `${off.email ? ` · ${e(off.email)}` : ""}${off.phone ? ` · ${e(off.phone)}` : ""}` +
+      ` · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="grand"><strong>Grand total: ${money(tt.total)}</strong> ` +
+      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.assignments} assignment(s)</div>
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
+  </body></html>`);
+  win.document.close();
 }
 
 // Print/PDF the currently-open 360 drawer (player or official) — reuses the

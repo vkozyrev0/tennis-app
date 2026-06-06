@@ -337,6 +337,53 @@ def official_pay_summary(official_id: int, conn=Depends(db_dep)):
         return pay_summary(cur, official_id)
 
 
+@router.get("/api/officials/{official_id}/pay-statement")
+def official_pay_statement(official_id: int, conn=Depends(db_dep)):
+    """Reimbursement-grade pay statement for one official: every assignment with
+    its per-day role + rate, the mileage calc (one-way miles → reimbursed), and a
+    grand total. Richer than pay-summary (which is per-tournament totals only) —
+    this is the day-level breakdown the official/TD needs for reimbursement."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT first_name, last_name, email, phone, city, state "
+            "FROM official WHERE id = %s",
+            (official_id,),
+        )
+        off = cur.fetchone()
+        if off is None:
+            raise HTTPException(status_code=404, detail="official not found")
+        cur.execute(_ASG_SELECT + " WHERE a.official_id = %s ORDER BY t.play_start_date",
+                    (official_id,))
+        summaries = [_summary(cur, a) for a in cur.fetchall()]
+
+    assignments = [{
+        "tournament_id": s["tournament_id"], "tournament_name": s["tournament_name"],
+        "site_label": s["site_label"],
+        "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
+                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+        "pay": s["pay"], "mileage": s["mileage"], "one_way_miles": s["one_way_miles"],
+        "missing_distance": s["missing_distance"], "total": s["total"],
+        "response_status": s["response_status"],
+    } for s in summaries]
+    totals = {
+        "pay": round(sum(a["pay"] for a in assignments), 2),
+        "mileage": round(sum(a["mileage"] or 0.0 for a in assignments), 2),
+        "total": round(sum(a["total"] for a in assignments), 2),
+        "days": sum(len(a["days"]) for a in assignments),
+        "assignments": len(assignments),
+    }
+    return {
+        "official": {
+            "id": official_id,
+            "name": f'{off["last_name"]}, {off["first_name"]}',
+            "email": off["email"], "phone": off["phone"],
+            "location": ", ".join(x for x in (off["city"], off["state"]) if x),
+        },
+        "assignments": assignments,
+        "totals": totals,
+    }
+
+
 @router.get("/api/officials/{official_id}/overview")
 def official_overview(official_id: int, conn=Depends(db_dep)):
     """Official 360 — the top-bar search lands here: core identity, the certs they

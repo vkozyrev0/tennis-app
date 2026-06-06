@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **286** green, migrations through **0039**).
+review (full backend suite: **289** green, migrations through **0039**).
 
+- **Per-official pay statement (PDF)** — the Official 360 drawer gained a
+  **⬇ Pay statement** button that opens a reimbursement-grade printable
+  statement (`GET /api/officials/{id}/pay-statement`): every assignment with its
+  per-day role + rate, the mileage calc (one-way miles → reimbursed), and a
+  grand total. Day-level detail beyond the per-tournament pay-summary, via the
+  report print-window pattern (no PDF lib).
 - **Unmatched-player drilldown** — the inbox progress summary now shows an
   **"N unmatched"** count (still-unfiled emails on a tournament that no roster
   player matched, from `GET /api/emails/status-counts`), and clicking it flips on
