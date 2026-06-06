@@ -496,6 +496,47 @@ def tournament_pay_statements(tournament_id: int, conn=Depends(db_dep)):
     }
 
 
+@router.get("/api/tournaments/{tournament_id}/declined")
+def declined_assignments(tournament_id: int, conn=Depends(db_dep)):
+    """Declined assignments needing re-staffing — the named, actionable list
+    behind the dashboard alert (not just a count). Each carries the official, the
+    slot they vacated (site + the days/roles they were going to work), and when
+    they declined (most-recent first), so the TD knows exactly who to replace."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT a.id, a.responded_at, a.site_id, "
+            "       o.first_name, o.last_name, "
+            "       COALESCE(s.code, s.name) AS site_label "
+            "FROM assignment a "
+            "JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN site s ON s.id = a.site_id "
+            "WHERE a.tournament_id = %s AND a.response_status = 'declined' "
+            "ORDER BY a.responded_at DESC NULLS LAST, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+        out = []
+        for r in rows:
+            cur.execute(
+                "SELECT work_date, working_as FROM assignment_day "
+                "WHERE assignment_id = %s ORDER BY work_date",
+                (r["id"],),
+            )
+            days = [{"work_date": dd["work_date"].isoformat(), "working_as": dd["working_as"]}
+                    for dd in cur.fetchall()]
+            out.append({
+                "assignment_id": r["id"],
+                "official_name": f'{r["last_name"]}, {r["first_name"]}',
+                "site_id": r["site_id"], "site_label": r["site_label"],
+                "responded_at": r["responded_at"].isoformat() if r["responded_at"] else None,
+                "days": days, "day_count": len(days),
+            })
+    return {"tournament_id": tournament_id, "declined": out, "count": len(out)}
+
+
 @router.get("/api/tournaments/{tournament_id}/conflicts")
 def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
     """All staffing conflicts for a tournament in one place, so the TD can resolve

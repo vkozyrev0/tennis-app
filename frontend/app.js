@@ -5298,6 +5298,37 @@ async function loadDashboard() {
     tile("withdrawn", d.roster.withdrawn, { go: ["requests", "panel-t-withdrawals"] });
   tiles.querySelectorAll("[data-go-group]").forEach((b) =>
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
+  _renderDeclinedAlert(d.officials.declined);
+}
+
+// Named declined-assignment alert: when officials have declined, show WHO (+ the
+// slot they vacated) right on the dashboard, each with a one-click jump to the
+// Assignments tab filtered to declined for re-staffing. (The tile shows only the
+// count; this is the actionable list.)
+async function _renderDeclinedAlert(declinedCount) {
+  const box = document.getElementById("dash-declined");
+  if (!box || !active) return;
+  if (!declinedCount) { box.hidden = true; box.innerHTML = ""; return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/declined`); }
+  catch (_) { box.hidden = true; return; }
+  if (!d.count) { box.hidden = true; return; }
+  const item = (r) => {
+    const slot = [r.site_label, r.day_count ? `${r.day_count} day${r.day_count === 1 ? "" : "s"}` : ""]
+      .filter(Boolean).join(" · ");
+    return `<li class="dash-dec-item"><span class="dash-dec-name">${esc(r.official_name)}</span>` +
+      (slot ? ` <span class="dash-dec-slot">${esc(slot)}</span>` : "") + `</li>`;
+  };
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="dash-dec-head">✗ ${d.count} declined — needs re-staffing</div>` +
+    `<ul class="dash-dec-list">${d.declined.map(item).join("")}</ul>` +
+    `<button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments →</button>`;
+  document.getElementById("dash-dec-go")?.addEventListener("click", () => {
+    _dashGo("staffing", "panel-t-assignments");
+    // pre-filter the assignments list to declined so the TD lands on the work.
+    setTimeout(() => { try { _asgRespFilter = "declined"; _renderAsgList(); } catch (_) {} }, 300);
+  });
 }
 
 // --- Player 360 drawer: everything about one player, unified by USTA # ---
