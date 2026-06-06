@@ -11,12 +11,13 @@ router = APIRouter(tags=["withdrawals"])
 
 _SELECT = """
 SELECT w.id, w.tournament_id, w.player_id, w.events, w.reason, w.notes,
-       w.was_alternate, w.source_email_id,
+       w.was_alternate, w.source_email_id, em.subject AS source_subject,
        p.usta_number, p.first_name, p.last_name, te.age_division
 FROM withdrawal w
 JOIN player p ON p.id = w.player_id
 LEFT JOIN tournament_entry te
        ON te.tournament_id = w.tournament_id AND te.player_id = w.player_id
+LEFT JOIN email_message em ON em.id = w.source_email_id
 """
 
 

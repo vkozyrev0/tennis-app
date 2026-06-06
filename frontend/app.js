@@ -3960,6 +3960,18 @@ function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
     setFilter: (fn) => { if (built) grid.setFilter(fn); else pendingFilter = fn; },
   };
 }
+// Origin cell: did this list row come from a filed email (✉, tooltip = the
+// email's subject) or was it entered manually? Read-only badge.
+function _originCell(c) {
+  const r = c.getData();
+  if (r.source_email_id) {
+    const subj = r.source_subject || `email #${r.source_email_id}`;
+    return `<span class="origin-email" title="${esc("Filed from email: " + subj)}">✉ email</span>`;
+  }
+  return '<span class="muted">manual</span>';
+}
+const _ORIGIN_COL = { title: "Origin", field: "source_email_id", headerSort: false,
+  width: 100, formatter: _originCell };
 const lateGrid = makeListGrid("late-table", [
   { title: "Date", field: "request_date", editor: "date", cssClass: "editable-cell",
     formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn" title="Past the late-entry deadline">⚠</span>' : ""); } },
@@ -3970,6 +3982,7 @@ const lateGrid = makeListGrid("late-table", [
     editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }) },
   { title: "Events", field: "events", editor: "list", cssClass: "editable-cell",
     editorParams: (cell) => _eventListParams({ multiple: true, gender: _rowGender(cell.getData()) }) },
+  _ORIGIN_COL,
 ], "late-entries", "No late entries yet.",
   async (e) => { if (!(await confirmDialog("Delete late entry?"))) return; try { await api(`/late-entries/${e.id}`, { method: "DELETE" }); loadLate(); } catch (err) { setMsg("late-msg", err.message, false); } },
   undefined,
@@ -4021,6 +4034,7 @@ const wdGrid = makeListGrid("withdrawal-table", [
   { title: "Alt?", field: "was_alternate", formatter: (c) => (c.getData().was_alternate ? "yes" : "") },
   { title: "Reason", field: "reason", editor: "input", cssClass: "editable-cell" },
   { title: "Notes", field: "notes", editor: "input", cssClass: "editable-cell" },
+  _ORIGIN_COL,
 ], "withdrawals", "No withdrawals yet.",
   async (w) => { if (!(await confirmDialog("Delete withdrawal?"))) return; try { await api(`/withdrawals/${w.id}`, { method: "DELETE" }); loadWithdrawals(); loadRoster(); } catch (e) { setMsg("withdrawal-msg", e.message, false); } },
   undefined,

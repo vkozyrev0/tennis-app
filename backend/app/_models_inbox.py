@@ -131,6 +131,7 @@ class LateEntryOut(BaseModel):
     request_date: Optional[date] = None
     request_time: Optional[str] = None
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None   # the filed email's subject (origin)
     past_deadline: bool = False
 
 
@@ -166,6 +167,7 @@ class WithdrawalOut(BaseModel):
     notes: Optional[str] = None
     was_alternate: bool = False
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None   # the filed email's subject (origin)
 
 
 class WithdrawalUpdate(BaseModel):
