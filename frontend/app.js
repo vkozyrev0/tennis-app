@@ -1860,6 +1860,54 @@ async function loadRoster() {
   if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
   applyRosterSel();
   _updateRosterCounts();
+  _renderRosterCompleteness();
+}
+
+// Roster completeness: surface active entries missing data the TD needs before
+// the event (division, gender, t-shirt, or an unpaid balance) so they can be
+// chased. Clicking a flagged player selects them in the grid for editing.
+const _COMPLETE_LABEL = {
+  missing_division: "no division", missing_gender: "no gender",
+  missing_shirt: "no t-shirt size", outstanding_balance: "balance due",
+};
+async function _renderRosterCompleteness() {
+  const box = document.getElementById("roster-completeness");
+  if (!box || !active) return;
+  let c;
+  try { c = await api(`/tournaments/${active.id}/roster-completeness`); }
+  catch (e) { box.innerHTML = ""; return; }
+  if (!c.counts.incomplete_entries) {
+    box.innerHTML = c.counts.total_active
+      ? '<p class="rc-clean">✓ All ' + c.counts.total_active + ' active roster entries are complete.</p>' : "";
+    return;
+  }
+  const k = c.counts;
+  const chips = [
+    k.missing_division ? `${k.missing_division} no division` : "",
+    k.missing_gender ? `${k.missing_gender} no gender` : "",
+    k.missing_shirt ? `${k.missing_shirt} no t-shirt` : "",
+    k.outstanding_balance ? `${k.outstanding_balance} balance due` : "",
+  ].filter(Boolean).join(" · ");
+  box.innerHTML =
+    `<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} active entr` +
+    `${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${esc(chips)})</span></summary>` +
+    `<ul class="rc-list">` +
+    c.entries.map((e) =>
+      `<li class="rc-row" data-eid="${e.entry_id}">` +
+      `<span class="rc-name">${esc(e.player_name)} <span class="muted">#${esc(e.usta_number || "—")}</span></span>` +
+      `<span class="rc-issues">${e.issues.map((i) =>
+        `<span class="rc-issue${i === "outstanding_balance" ? " rc-issue-pay" : ""}">${esc(_COMPLETE_LABEL[i] || i)}` +
+        (i === "outstanding_balance" && e.amount_outstanding != null ? ` ${money(e.amount_outstanding)}` : "") +
+        `</span>`).join(" ")}</span></li>`
+    ).join("") + `</ul></details>`;
+  box.querySelectorAll(".rc-row").forEach((row) => row.addEventListener("click", () => {
+    const id = Number(row.dataset.eid);
+    const r = (rosterRows || []).find((x) => x.id === id);
+    if (!r) return;
+    rosterSelect(r);          // select + load into the editor
+    rosterOpenModal();        // open the edit form so the TD can fill the gap
+    try { rosterGrid.scrollToRow(id, "center", false); } catch (_) {}
+  }));
 }
 // R-4: a one-line summary strip above the roster grid.
 function _updateRosterCounts() {

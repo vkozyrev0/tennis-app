@@ -1186,6 +1186,24 @@ td.toggle { white-space: nowrap; }
 .wd-alt-done { opacity: .6; }
 .wd-alt-sep { list-style: none; font-size: 0.72rem; text-transform: uppercase; letter-spacing: .04em;
   color: var(--muted); margin-top: 0.3rem; padding: 0 0.2rem; }
+/* Roster completeness check */
+.roster-complete { margin: 0.2rem 0 0.6rem; }
+.rc-clean { color: var(--ok, #1f7a44); font-weight: 600; font-size: 0.85rem; margin: 0.2rem 0; }
+.rc-details { border: 1px solid var(--warn-border, #d8a400); border-radius: 8px;
+  background: var(--warn-bg); padding: 0.3rem 0.6rem; }
+.rc-details > summary { cursor: pointer; font-weight: 600; font-size: 0.86rem; color: #9a6700; }
+.rc-chips { font-weight: 400; color: var(--muted); }
+.rc-list { list-style: none; margin: 0.4rem 0 0.2rem; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
+.rc-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0.45rem; border-radius: 6px;
+  background: var(--card, #fff); border: 1px solid var(--line); cursor: pointer; font-size: 0.84rem; }
+.rc-row:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rc-name { font-weight: 600; }
+.rc-issues { margin-left: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.rc-issue { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+  padding: 1px 6px; border-radius: 6px; background: #f3e6c4; color: #8a6500; }
+.rc-issue-pay { background: #f6d4d4; color: #8a1f1f; }
+:root[data-theme="dark"] .rc-issue { background: #4a3a16; color: #e8c779; }
+:root[data-theme="dark"] .rc-issue-pay { background: #4a1d1d; color: #f0b0b0; }
 /* Staffing conflict report */
 .conflict-clean { color: var(--ok, #1f7a44); font-weight: 600; font-size: 0.9rem; }
 .conflict-summary { color: #9a2020; font-weight: 700; margin: 0.2rem 0 0.6rem; }
