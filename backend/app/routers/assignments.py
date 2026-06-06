@@ -367,6 +367,51 @@ def list_assignments(tournament_id: int, conn=Depends(db_dep)):
         return [_summary(cur, a) for a in rows]
 
 
+@router.get("/api/tournaments/{tournament_id}/conflicts")
+def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
+    """All staffing conflicts for a tournament in one place, so the TD can resolve
+    them before the event. Aggregates the per-assignment flags already computed by
+    _summary: cross-tournament double-bookings (hard = a different site same day),
+    uncertified worked days, days worked outside a declared-available window, days
+    outside the play window, and hotel-date mismatches."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name", (tournament_id,))
+        summaries = [_summary(cur, a) for a in cur.fetchall()]
+
+    double_bookings, uncertified, outside_avail, out_of_window, hotel_mismatch = [], [], [], [], []
+    for s in summaries:
+        who = {"assignment_id": s["id"], "official_id": s["official_id"],
+               "official_name": s["official_name"]}
+        for c in s["conflicts"]:
+            double_bookings.append({**who, "work_date": c["work_date"],
+                                    "other_tournament_id": c["other_tournament_id"],
+                                    "other_tournament": c["other_tournament"],
+                                    "other_site": c["other_site"],
+                                    "different_site": c["different_site"]})
+        for u in s["uncertified_days"]:
+            uncertified.append({**who, "work_date": u["work_date"], "working_as": u["working_as"]})
+        for d in s["days_outside_availability"]:
+            outside_avail.append({**who, "work_date": d})
+        if s["work_date_out_of_window"]:
+            out_of_window.append({**who})
+        if s["hotel_date_mismatch"]:
+            hotel_mismatch.append({**who})
+
+    hard = sum(1 for d in double_bookings if d["different_site"])
+    counts = {"double_bookings": len(double_bookings), "hard_double_bookings": hard,
+              "uncertified": len(uncertified), "outside_availability": len(outside_avail),
+              "out_of_window": len(out_of_window), "hotel_mismatch": len(hotel_mismatch)}
+    counts["total"] = (len(double_bookings) + len(uncertified) + len(outside_avail)
+                       + len(out_of_window) + len(hotel_mismatch))
+    return {"tournament_id": tournament_id, "counts": counts,
+            "double_bookings": double_bookings, "uncertified": uncertified,
+            "outside_availability": outside_avail, "out_of_window": out_of_window,
+            "hotel_mismatch": hotel_mismatch}
+
+
 @router.post("/api/tournaments/{tournament_id}/assignments", status_code=201)
 def create_assignment(tournament_id: int, body: AssignmentCreate, conn=Depends(db_dep)):
     try:

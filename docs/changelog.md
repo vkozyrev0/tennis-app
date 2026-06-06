@@ -7,8 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **257** green, migrations through **0039**).
+review (full backend suite: **263** green, migrations through **0039**).
 
+- **Assignment conflict report** — the Reports tab now leads with a consolidated,
+  grouped list of every staffing clash to resolve before the event (`GET
+  /api/tournaments/{id}/conflicts`): cross-tournament double-bookings (hard =
+  different site same day, flagged "impossible"), uncertified worked days, days
+  worked outside a declared-available window, days outside the play window, and
+  hotel-date mismatches — each with the official + date. Aggregates the
+  per-assignment flags `_summary` already computes; a clean event shows a ✓.
 - **Officials availability heatmap** — the Availability tab now leads with a
   matrix (officials × play-window days) from `GET
   /api/tournaments/{id}/availability/grid`: green cells = declared available, a

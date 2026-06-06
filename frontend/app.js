@@ -5303,6 +5303,55 @@ async function _openCovGap(cell) {
   }));
 }
 
+// Staffing-conflict report: one consolidated, grouped list of every clash the
+// TD must resolve (double-bookings, uncertified days, off-availability/off-window
+// days, hotel-date mismatches). Officials link to their 360 for quick triage.
+async function _renderConflicts() {
+  const box = document.getElementById("report-conflicts");
+  if (!box || !active) return;
+  let rep;
+  try { rep = await api(`/tournaments/${active.id}/conflicts`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!rep.counts.total) {
+    box.innerHTML = '<p class="conflict-clean">✓ No staffing conflicts — every assignment is clean.</p>';
+    return;
+  }
+  const name = (c) => `<strong>${esc(c.official_name)}</strong>`;
+  const groups = [];
+  if (rep.double_bookings.length) {
+    groups.push(`<div class="conflict-group"><h5>⛔ Double-booked (${rep.double_bookings.length}` +
+      (rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : "") + `)</h5><ul>` +
+      rep.double_bookings.map((c) =>
+        `<li class="${c.different_site ? "conflict-hard" : ""}">${name(c)} on <strong>${esc(fmtDOW(c.work_date))}</strong> — also at ` +
+        `${esc(c.other_tournament || "another event")}${c.other_site ? ` (${esc(c.other_site)})` : ""}` +
+        `${c.different_site ? ' <span class="conflict-badge">different site — impossible</span>' : ' <span class="conflict-badge soft">same/again — verify</span>'}</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.uncertified.length) {
+    groups.push(`<div class="conflict-group"><h5>⚠ Uncertified for the role (${rep.uncertified.length})</h5><ul>` +
+      rep.uncertified.map((c) =>
+        `<li>${name(c)} works <strong>${esc(certLabel(c.working_as))}</strong> on ${esc(fmtDOW(c.work_date))} without that certification</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.outside_availability.length) {
+    groups.push(`<div class="conflict-group"><h5>📅 Worked outside declared availability (${rep.outside_availability.length})</h5><ul>` +
+      rep.outside_availability.map((c) =>
+        `<li>${name(c)} is assigned <strong>${esc(fmtDOW(c.work_date))}</strong> but didn't declare it available</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.out_of_window.length) {
+    groups.push(`<div class="conflict-group"><h5>🗓 Day outside the play window (${rep.out_of_window.length})</h5><ul>` +
+      rep.out_of_window.map((c) => `<li>${name(c)} has a worked day outside the tournament dates</li>`).join("") +
+      `</ul></div>`);
+  }
+  if (rep.hotel_mismatch.length) {
+    groups.push(`<div class="conflict-group"><h5>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h5><ul>` +
+      rep.hotel_mismatch.map((c) => `<li>${name(c)} works days outside their room-block check-in/out</li>`).join("") +
+      `</ul></div>`);
+  }
+  box.innerHTML = `<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>` + groups.join("");
+}
+
 async function loadReports() {
   if (!active) return;
   reportData = await api(`/tournaments/${active.id}/reports/officials`);
@@ -5361,6 +5410,7 @@ async function loadReports() {
     `<th class="num">${money(totals.pay)}</th><th class="num">${money(totals.mileage)}</th>`;
 
   _renderCoverage();
+  _renderConflicts();
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
