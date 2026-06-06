@@ -1395,8 +1395,29 @@ requestAnimationFrame(() => {
 // Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
 const _playerCell = (cell) => {
   const d = cell.getData();
-  return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+  const name = esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+  // Make the player name a 360 link wherever a player_id is on the row, so the
+  // TD can open the full player view from any Part B list (delegated handler).
+  if (!d.player_id) return name;
+  return `<span class="p360-link" data-pid="${d.player_id}" role="button" tabindex="0" title="View everything about this player (360)">${name}</span>`;
 };
+// One delegated handler opens the Player 360 from any .p360-link (Part B lists,
+// inbox, …). openPlayer360 is a hoisted function declaration defined later.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest && e.target.closest(".p360-link[data-pid]");
+  if (!link) return;
+  // Capture phase + stop so the click doesn't also fire Tabulator's cell/row
+  // handlers underneath the link.
+  e.preventDefault(); e.stopPropagation();
+  openPlayer360(Number(link.dataset.pid), active ? active.id : null);
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const link = e.target.closest && e.target.closest(".p360-link[data-pid]");
+  if (!link) return;
+  e.preventDefault();
+  openPlayer360(Number(link.dataset.pid), active ? active.id : null);
+});
 // Shared backdrop for the master/detail edit overlay (one open at a time).
 const _detailBackdrop = document.createElement("div");
 _detailBackdrop.className = "detail-backdrop";
@@ -3227,7 +3248,11 @@ const inboxGrid = makeReadGrid("inbox-table", [
         wrap.appendChild(btn);
         return wrap;
       }
-      return esc(m.detected_player_name) + matchHint(m.detected_match_kind);
+      // A matched player's name is a 360 link (open the full player view).
+      const nm = m.detected_player_id
+        ? `<span class="p360-link" data-pid="${m.detected_player_id}" role="button" tabindex="0" title="View everything about this player (360)">${esc(m.detected_player_name)}</span>`
+        : esc(m.detected_player_name);
+      return nm + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>

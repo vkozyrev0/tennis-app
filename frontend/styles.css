@@ -1221,3 +1221,5 @@ td.toggle { white-space: nowrap; }
 .p360-sec ul { margin: 0.2rem 0 0.6rem; padding-left: 1.1rem; }
 .p360-sec li { font-size: 0.9rem; margin: 0.1rem 0; }
 .p360-reqhead { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.8rem; }
+.p360-link { color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.p360-link:hover, .p360-link:focus-visible { text-decoration-style: solid; outline: none; }
