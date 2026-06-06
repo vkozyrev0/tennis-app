@@ -3123,6 +3123,49 @@ async function loadAvailability() {
   renderAvailDates();
   renderAvailTable();
   renderAvailCerts(oid);
+  renderAvailHeatmap();
+}
+
+// Staffing heatmap: officials × play-window days. A cell is green when the
+// official declared available, carries a ● when they're actually assigned that
+// day, and the footer tallies available/assigned per day so thin days pop out.
+async function renderAvailHeatmap() {
+  const box = document.getElementById("avail-heatmap");
+  if (!box || !active) return;
+  let g;
+  try { g = await api(`/tournaments/${active.id}/availability/grid`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!g.days.length) { box.innerHTML = '<p class="muted">This tournament has no play-date window set.</p>'; return; }
+  if (!g.officials.length) { box.innerHTML = '<p class="muted">No availability declared and nobody assigned yet.</p>'; return; }
+  const head = `<th class="hm-name">Official</th>` +
+    g.days.map((d) => `<th class="hm-day">${esc(fmtDOW(d))}</th>`).join("");
+  const body = g.officials.map((o) => {
+    const avail = new Set(o.available), asg = new Set(o.assigned);
+    const cells = g.days.map((d) => {
+      const a = avail.has(d), s = asg.has(d);
+      // assigned-but-not-declared-available is worth flagging (amber ring).
+      const cls = ["hm-cell"];
+      if (a) cls.push("hm-avail");
+      if (s) cls.push("hm-asg");
+      if (s && !a) cls.push("hm-asg-only");
+      const title = `${esc(o.official_name)} · ${esc(fmtDOW(d))}: ` +
+        (a ? "available" : "not declared") + (s ? ", assigned" : "");
+      return `<td class="${cls.join(" ")}" title="${title}">${s ? "●" : ""}</td>`;
+    }).join("");
+    const pid = `<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${esc(o.official_name)}` +
+      (o.hotel_needed ? ' <span class="hm-hotel-tag" title="needs hotel">🛏</span>' : "") + `</span>`;
+    return `<tr><th class="hm-name">${pid}</th>${cells}</tr>`;
+  }).join("");
+  const foot = `<th class="hm-name">Available / assigned</th>` +
+    g.per_day.map((p) => {
+      const thin = p.available_count === 0;
+      return `<td class="hm-tot${thin ? " hm-thin" : ""}" title="${p.available_count} available, ${p.assigned_count} assigned">` +
+        `${p.available_count}<span class="hm-sep">/</span>${p.assigned_count}</td>`;
+    }).join("");
+  box.innerHTML =
+    `<table class="avail-heatmap"><thead><tr>${head}</tr></thead>` +
+    `<tbody>${body}</tbody>` +
+    `<tfoot><tr>${foot}</tr></tfoot></table>`;
 }
 document.getElementById("avail-official").addEventListener("change", () => {
   renderAvailDates();

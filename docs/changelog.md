@@ -7,8 +7,15 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **252** green, migrations through **0039**).
+review (full backend suite: **257** green, migrations through **0039**).
 
+- **Officials availability heatmap** — the Availability tab now leads with a
+  matrix (officials × play-window days) from `GET
+  /api/tournaments/{id}/availability/grid`: green cells = declared available, a
+  ● = actually assigned that day (amber ring if assigned without declaring
+  available), a 🛏 tag for hotel-needed officials, and a footer tallying
+  available/assigned per day (empty days flagged) so the TD sees thin days at a
+  glance before staffing.
 - **Roster CSV import — discoverable** — the simple hand-typed roster importer
   (USTA #, name, division, status, t-shirt, dietary) is now a first-class option
   on the **Roster panel's ⬆ Import menu** (was buried on the global Import page
