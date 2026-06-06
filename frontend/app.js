@@ -1900,12 +1900,15 @@ const rosterGrid = new Tabulator(rosterMount, {
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) => ((e.lodging_plan || e.lodging_plan_raw || "").toLowerCase().includes(String(term).toLowerCase())) },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 110, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 140, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
         // Edit is the primary action; Withdraw + Remove fold into a ⋯ overflow
         // menu (design-crit R-2) so the destructive verbs don't sit on every row.
+        const v360 = document.createElement("button"); v360.type = "button"; v360.className = "btn-icon"; v360.textContent = "👤";
+        v360.title = "View everything about this player (360)"; v360.setAttribute("aria-label", v360.title);
+        v360.addEventListener("click", (ev) => { ev.stopPropagation(); openPlayer360(e.player_id, active ? active.id : null); });
         const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
         ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
         ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
@@ -1946,7 +1949,7 @@ const rosterGrid = new Tabulator(rosterMount, {
           { label: "Remove from roster", danger: true, onClick: doDelete },
         ];
         const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
-        wrap.append(ed, menu); return wrap;
+        wrap.append(v360, ed, menu); return wrap;
       } },
   ],
 });
@@ -4800,6 +4803,50 @@ async function loadDashboard() {
     tile("withdrawn", d.roster.withdrawn, { go: ["requests", "panel-t-withdrawals"] });
   tiles.querySelectorAll("[data-go-group]").forEach((b) =>
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
+}
+
+// --- Player 360 drawer: everything about one player, unified by USTA # ---
+const _p360Modal = document.getElementById("player360-modal");
+function _closePlayer360() { if (_p360Modal) _p360Modal.hidden = true; }
+document.getElementById("player360-close")?.addEventListener("click", _closePlayer360);
+_p360Modal?.addEventListener("click", (e) => { if (e.target.id === "player360-modal") _closePlayer360(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && _p360Modal && !_p360Modal.hidden) _closePlayer360(); });
+async function openPlayer360(playerId, tournamentId) {
+  const body = document.getElementById("player360-body");
+  document.getElementById("player360-title").textContent = "Player";
+  body.innerHTML = '<p class="muted">Loading…</p>';
+  _p360Modal.hidden = false;
+  let d;
+  try {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : "";
+    d = await api(`/players/${playerId}/overview${q}`);
+  } catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  const p = d.player;
+  document.getElementById("player360-title").textContent = `${p.last_name}, ${p.first_name}`;
+  const loc = [p.city, p.state].filter(Boolean).join(", ");
+  const entriesHtml = d.entries.length
+    ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Status</th><th>Div</th><th>T-shirt</th><th>Lodging</th></tr></thead><tbody>` +
+      d.entries.map((e) => `<tr><td>${esc(e.tournament_name)}</td><td>${chip(e.selection_status)}</td>` +
+        `<td>${esc(e.age_division || "")}</td><td>${esc(e.t_shirt_size || "")}</td><td>${esc(e.lodging_plan || "")}</td></tr>`).join("") +
+      `</tbody></table>`
+    : '<p class="muted">Not on any roster.</p>';
+  const r = d.requests;
+  const sec = (title, rows, fmt) => rows.length
+    ? `<div class="p360-sec"><h4>${esc(title)} (${rows.length})</h4><ul>${rows.map((x) => `<li>${fmt(x)}</li>`).join("")}</ul></div>` : "";
+  const reqHtml =
+    sec("Late entries", r.late_entries, (x) => `${esc(x.age_division || "")} ${esc(x.events || "")}${x.request_date ? ` · ${esc(x.request_date)}` : ""}`) +
+    sec("Withdrawals", r.withdrawals, (x) => `${esc(x.events || "")} — ${esc(x.reason || "(alternate, no reason)")}${x.was_alternate ? " · was alternate" : ""}`) +
+    sec("Scheduling avoidances", r.scheduling, (x) => `avoid ${esc(x.avoid_day || "")} ${esc(x.avoid_time_range || "")}`) +
+    sec("Division flexibility", r.division_flex, (x) => `${esc(x.home_division || "")} → ${esc(x.willing_divisions || "")}`) +
+    sec("Player hotels", r.hotels, (x) => `${esc(x.hotel_name || "")} ${esc(x.lodging_plan || "")}`) +
+    sec("Doubles", r.doubles, (x) => `${esc(x.age_division || "")} · ${x.wants_random ? "random" : "partner " + esc(x.partner_usta || "?")} · ${esc(x.status || "")}`) +
+    sec("Pairing avoidances", r.pairing, (x) => `${esc(x.age_division || "")} ${esc(x.relationship || "")}`);
+  body.innerHTML =
+    `<p class="p360-id">USTA #${esc(p.usta_number || "—")}${p.gender ? ` · ${esc(p.gender)}` : ""}${loc ? ` · ${esc(loc)}` : ""}</p>` +
+    `<h4>Tournament entries</h4>${entriesHtml}` +
+    (reqHtml
+      ? `<h4 class="p360-reqhead">Requests${d.tournament_id ? " (this tournament)" : ""}</h4>${reqHtml}`
+      : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
 }
 
 // --- Reports (officials confirmation + pay/mileage) ---
