@@ -14,9 +14,10 @@ router = APIRouter(tags=["doubles"])
 
 _REQ = """
 SELECT r.id, r.tournament_id, r.age_division, r.player_id, r.partner_usta,
-       r.wants_random, r.status, r.source_email_id,
+       r.wants_random, r.status, r.source_email_id, em.subject AS source_subject,
        p.usta_number, p.first_name, p.last_name
 FROM doubles_request r JOIN player p ON p.id = r.player_id
+LEFT JOIN email_message em ON em.id = r.source_email_id
 """
 _PAIR = """
 SELECT d.id, d.tournament_id, d.age_division, d.pairing_type, d.verified,

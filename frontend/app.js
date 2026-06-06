@@ -4165,6 +4165,7 @@ const schedList = wirePlayerList({
     { title: "USTA #", field: "usta_number" },
     { title: "Avoid day", field: "avoid_day", editor: "input", cssClass: "editable-cell" },
     { title: "Avoid time", field: "avoid_time_range", editor: "input", cssClass: "editable-cell" },
+    _ORIGIN_COL,
   ],
   exportCols: [
     { header: "usta_number", key: "usta_number" },
@@ -4185,6 +4186,7 @@ const divflexList = wirePlayerList({
     { title: "USTA #", field: "usta_number" },
     { title: "Home", field: "home_division", editor: "input", cssClass: "editable-cell" },
     { title: "Willing", field: "willing_divisions", editor: "input", cssClass: "editable-cell" },
+    _ORIGIN_COL,
   ],
   exportCols: [
     { header: "usta_number", key: "usta_number" },
@@ -4243,6 +4245,7 @@ const photelList = wirePlayerList({
         values: Object.values(hotelsById || {}).map((h) => h.name).sort((a, b) => a.localeCompare(b)),
         autocomplete: true, freetext: true, allowEmpty: true, listOnEmpty: true,
       }) },
+    _ORIGIN_COL,
   ],
   exportCols: [
     { header: "usta_number", key: "usta_number" },
@@ -4555,6 +4558,7 @@ const pairingGrid = makeListGrid("pairing-table", [
     editorParams: { values: ["same_club", "siblings"] } },
   { title: "Players", field: "_players",
     formatter: (c) => esc((c.getData().members || []).map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ")) },
+  _ORIGIN_COL,
 ], "pairing-avoidances", "No pairing avoidances yet.",
   async (g) => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } },
   undefined,
@@ -4628,6 +4632,7 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
       const label = partner ? [partner.last_name, partner.first_name].filter(Boolean).join(", ") || partner.usta_number : (r.partner_usta || "?");
       return `→ ${esc(label)} (awaiting partner)`;
     } },
+  _ORIGIN_COL,
 ], "doubles-requests", "No doubles requests yet.",
   async (r) => { if (!(await confirmDialog("Delete request?"))) return; try { await api(`/doubles-requests/${r.id}`, { method: "DELETE" }); loadDoubles(); } catch (e) { setMsg("doubles-msg", e.message, false); } },
   undefined,

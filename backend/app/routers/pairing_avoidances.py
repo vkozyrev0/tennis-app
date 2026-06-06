@@ -23,8 +23,11 @@ def _members(cur, group_id):
 
 def _group(cur, group_id):
     cur.execute(
-        "SELECT id, tournament_id, age_division, relationship, source_email_id "
-        "FROM pairing_avoidance WHERE id = %s",
+        "SELECT pa.id, pa.tournament_id, pa.age_division, pa.relationship, "
+        "       pa.source_email_id, em.subject AS source_subject "
+        "FROM pairing_avoidance pa "
+        "LEFT JOIN email_message em ON em.id = pa.source_email_id "
+        "WHERE pa.id = %s",
         (group_id,),
     )
     g = cur.fetchone()

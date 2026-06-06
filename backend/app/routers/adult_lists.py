@@ -16,13 +16,17 @@ router = APIRouter(tags=["adult-lists"])
 
 _SA = """
 SELECT a.id, a.tournament_id, a.player_id, a.avoid_day, a.avoid_time_range,
-       a.source_email_id, p.usta_number, p.first_name, p.last_name
+       a.source_email_id, em.subject AS source_subject,
+       p.usta_number, p.first_name, p.last_name
 FROM scheduling_avoidance a JOIN player p ON p.id = a.player_id
+LEFT JOIN email_message em ON em.id = a.source_email_id
 """
 _DF = """
 SELECT d.id, d.tournament_id, d.player_id, d.home_division, d.willing_divisions,
-       d.source_email_id, p.usta_number, p.first_name, p.last_name
+       d.source_email_id, em.subject AS source_subject,
+       p.usta_number, p.first_name, p.last_name
 FROM division_flexibility d JOIN player p ON p.id = d.player_id
+LEFT JOIN email_message em ON em.id = d.source_email_id
 """
 
 

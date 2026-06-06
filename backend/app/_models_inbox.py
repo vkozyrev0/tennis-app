@@ -218,6 +218,7 @@ class DoublesRequestOut(BaseModel):
     wants_random: bool
     status: str
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None
 
 
 class DoublesPairOut(BaseModel):
@@ -271,6 +272,7 @@ class PairingAvoidanceOut(BaseModel):
     age_division: Optional[str] = None
     relationship: Optional[str] = None
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None
     members: list[PairingMemberOut] = []
 
 
@@ -297,6 +299,7 @@ class PlayerHotelOut(BaseModel):
     hotel_name: Optional[str] = None
     lodging_plan: Optional[str] = None
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None
 
 
 class PlayerHotelUpdate(BaseModel):
@@ -330,6 +333,7 @@ class SchedAvoidOut(BaseModel):
     avoid_day: Optional[str] = None
     avoid_time_range: Optional[str] = None
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None
 
 
 # ---------- Division flexibility ----------
@@ -358,3 +362,4 @@ class DivFlexOut(BaseModel):
     home_division: Optional[str] = None
     willing_divisions: Optional[str] = None
     source_email_id: Optional[int] = None
+    source_subject: Optional[str] = None

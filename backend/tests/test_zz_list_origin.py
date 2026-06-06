@@ -81,3 +81,57 @@ def test_withdrawal_carries_source_subject_when_filed():
     row = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()[0]
     assert row["source_email_id"] == em["id"]
     assert row["source_subject"] == subj
+
+
+def _filed(tid, path, usta, subj, **extra):
+    em = _email(tid, subj)
+    _ok(client.post(f"/api/tournaments/{tid}{path}",
+                    json={"usta_number": usta, "source_email_id": em["id"], **extra}))
+    return em, client.get(f"/api/tournaments/{tid}{path}").json()[0]
+
+
+def test_scheduling_avoidance_origin():
+    t = _tournament(); usta = str(uuid.uuid4().int % 10**10).zfill(10); _player(t["id"], usta)
+    subj = "Sched " + uuid.uuid4().hex[:6]
+    em, row = _filed(t["id"], "/scheduling-avoidances", usta, subj, avoid_day="Saturday")
+    assert row["source_email_id"] == em["id"] and row["source_subject"] == subj
+
+
+def test_division_flex_origin():
+    t = _tournament(); usta = str(uuid.uuid4().int % 10**10).zfill(10); _player(t["id"], usta)
+    subj = "DivFlex " + uuid.uuid4().hex[:6]
+    em, row = _filed(t["id"], "/division-flex", usta, subj, home_division="G14")
+    assert row["source_email_id"] == em["id"] and row["source_subject"] == subj
+
+
+def test_player_hotel_origin():
+    t = _tournament(); usta = str(uuid.uuid4().int % 10**10).zfill(10); _player(t["id"], usta)
+    subj = "Hotel " + uuid.uuid4().hex[:6]
+    em, row = _filed(t["id"], "/player-hotels", usta, subj, hotel_name="Grand")
+    assert row["source_email_id"] == em["id"] and row["source_subject"] == subj
+
+
+def test_doubles_request_origin():
+    t = _tournament(); usta = str(uuid.uuid4().int % 10**10).zfill(10); _player(t["id"], usta)
+    subj = "Doubles " + uuid.uuid4().hex[:6]
+    em = _email(t["id"], subj)
+    _ok(client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
+        "usta_number": usta, "wants_random": True, "age_division": "G14",
+        "source_email_id": em["id"]}))
+    row = client.get(f"/api/tournaments/{t['id']}/doubles").json()["requests"][0]
+    assert row["source_email_id"] == em["id"] and row["source_subject"] == subj
+
+
+def test_pairing_avoidance_origin():
+    t = _tournament()
+    u1 = str(uuid.uuid4().int % 10**10).zfill(10); _player(t["id"], u1)
+    u2 = str((uuid.uuid4().int + 7) % 10**10).zfill(10)
+    _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+        "usta_number": u2, "first_name": "Two", "last_name": "Player",
+        "gender": "female", "age_division": "G14", "selection_status": "selected"}))
+    subj = "Pairing " + uuid.uuid4().hex[:6]
+    em = _email(t["id"], subj)
+    _ok(client.post(f"/api/tournaments/{t['id']}/pairing-avoidances", json={
+        "members": [{"usta_number": u1}, {"usta_number": u2}], "source_email_id": em["id"]}))
+    row = client.get(f"/api/tournaments/{t['id']}/pairing-avoidances").json()[0]
+    assert row["source_email_id"] == em["id"] and row["source_subject"] == subj

@@ -6,7 +6,7 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 ---
 
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
-A large round of fixes + features (full backend suite: **202** green, migrations
+A large round of fixes + features (full backend suite: **207** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research
 pass ([roadmap.md](roadmap.md), [pii-hardening-plan.md](pii-hardening-plan.md)).
 
@@ -138,8 +138,9 @@ live in the running app, not just by tests.
 - **Inbox "Unmatched only" filter** — a toggle filters the inbox to emails with
   no matched player (combines with the status/tournament filters), so the TD works
   through detection gaps.
-- **Player-request origin** — the late-entry / withdrawal lists gained an "Origin"
-  column: "✉ email" (tooltip = the filed email's subject, joined in via
+- **Player-request origin** — all the Part B lists (late-entry, withdrawal,
+  scheduling-avoidance, division-flex, player-hotels, doubles, pairing) gained an
+  "Origin" column: "✉ email" (tooltip = the filed email's subject, joined in via
   `source_subject`) vs "manual", so the TD sees which requests came from a filed
   email.
 
