@@ -1237,4 +1237,10 @@ td.toggle { white-space: nowrap; }
 .ps-item:hover, .ps-item:focus-visible { background: var(--sel); outline: none; }
 .ps-name { font-weight: 600; font-size: 0.85rem; }
 .ps-meta { font-size: 0.76rem; color: var(--muted); }
+.ps-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  padding: 1px 5px; border-radius: 6px; vertical-align: middle; margin-left: 4px; }
+.ps-tag-player { background: #e3eefb; color: #1d4f91; }
+.ps-tag-official { background: #e7f5ec; color: #1f7a44; }
+:root[data-theme="dark"] .ps-tag-player { background: #1d2a3f; color: #9ec0ed; }
+:root[data-theme="dark"] .ps-tag-official { background: #16301f; color: #8ed3a5; }
 .ps-empty { padding: 0.5rem 0.6rem; color: var(--muted); font-size: 0.82rem; }

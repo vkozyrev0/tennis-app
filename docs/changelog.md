@@ -5,6 +5,33 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## TD-review build-out (2026-06-05 → 06-06) — applied
+A question-driven round closing the top gaps from a TD-perspective UI/feature
+review (full backend suite: **233** green, migrations through **0039**).
+
+- **"Today" home dashboard** — a landing page (`GET
+  /api/tournaments/{id}/dashboard`) aggregating the existing data: inbox
+  unfiled/filed/follow-up counts, roster mix, officials response mix, uncovered
+  coverage days, and room pickup — each tile deep-links to its panel.
+- **Approaching-deadline banner** — cross-tournament `GET
+  /api/dashboard/deadlines?within_days=` surfaces registration / late-entry /
+  play-start dates inside the window (plus a 3-day "just passed" grace), sorted
+  by date, on the dashboard.
+- **Player 360 drawer** — `GET /api/players/{id}/overview` opens one player's
+  full picture (all tournament entries + Part B requests) in a modal, reachable
+  from **anywhere** a player name appears (Part B lists + inbox), via a shared
+  `_playerCell` formatter + capture-phase click handler.
+- **Alternate promotion** — `POST /api/roster/{entry_id}/promote` flips an
+  alternate to selected in one click, with a withdrawal-nudge toast that points
+  the TD at the alternate list.
+- **Global search** — the top-bar box now finds **players and officials**
+  (`GET /api/players/search`, `GET /api/officials/search`), tagged by type;
+  an official result opens an **Official 360** drawer (`GET
+  /api/officials/{id}/overview`) with certs held + the season assignment/pay
+  summary (reuses `pay_summary`).
+
+---
+
 ## Benchmark-driven build-out (2026-06-04 → 06-05) — applied
 A large round of fixes + features (full backend suite: **207** green, migrations
 through **0039**). Driven by a UI/design review + a competitor-benchmark research

@@ -4898,7 +4898,38 @@ async function openPlayer360(playerId, tournamentId) {
       : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
 }
 
-// --- Global player search (top bar → Player 360) ---
+// Official 360 — reuses the player drawer modal to show an official's certs +
+// season assignments/pay (the search lands here for an official result).
+async function openOfficial360(officialId) {
+  const body = document.getElementById("player360-body");
+  document.getElementById("player360-title").textContent = "Official";
+  body.innerHTML = '<p class="muted">Loading…</p>';
+  _p360Modal.hidden = false;
+  let d;
+  try { d = await api(`/officials/${officialId}/overview`); }
+  catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  const o = d.official;
+  document.getElementById("player360-title").textContent = `${o.last_name}, ${o.first_name} · official`;
+  const loc = [o.city, o.state].filter(Boolean).join(", ");
+  const certs = d.certs.length
+    ? d.certs.map((c) => `<span class="badge badge-info">${esc(certLabel(c))}</span>`).join(" ")
+    : '<span class="muted">no certifications on file</span>';
+  const tt = d.pay.totals;
+  const asg = d.pay.tournaments.length
+    ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Days</th><th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th><th>Response</th></tr></thead><tbody>` +
+      d.pay.tournaments.map((t) => `<tr><td>${esc(t.tournament_name)}</td><td>${t.days}</td>` +
+        `<td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td>` +
+        `<td>${_respChip(t.response_status)}</td></tr>`).join("") +
+      `<tr class="totals"><td>Season totals (${tt.assignments} assignment${tt.assignments === 1 ? "" : "s"})</td><td>${tt.days}</td>` +
+      `<td class="num">${money(tt.pay)}</td><td class="num">${money(tt.mileage)}</td><td class="num">${money(tt.total)}</td><td></td></tr></tbody></table>`
+    : '<p class="muted">No assignments yet.</p>';
+  body.innerHTML =
+    `<p class="p360-id">Official${loc ? ` · ${esc(loc)}` : ""}</p>` +
+    `<h4>Certifications</h4><p>${certs}</p>` +
+    `<h4>Assignments &amp; pay</h4>${asg}`;
+}
+
+// --- Global search (top bar → players AND officials) ---
 (() => {
   const input = document.getElementById("player-search");
   const box = document.getElementById("player-search-results");
@@ -4907,16 +4938,15 @@ async function openPlayer360(playerId, tournamentId) {
   const close = () => { box.hidden = true; box.innerHTML = ""; input.setAttribute("aria-expanded", "false"); };
   const render = (rows, q) => {
     if (!rows.length) {
-      box.innerHTML = `<div class="ps-empty">No players match “${esc(q)}”.</div>`;
+      box.innerHTML = `<div class="ps-empty">No players or officials match “${esc(q)}”.</div>`;
     } else {
-      box.innerHTML = rows.map((p) => {
-        const loc = [p.city, p.state].filter(Boolean).join(", ");
-        return `<button type="button" class="ps-item" role="option" data-pid="${p.id}">` +
-          `<span class="ps-name">${esc([p.last_name, p.first_name].filter(Boolean).join(", "))}</span>` +
-          `<span class="ps-meta">USTA #${esc(p.usta_number || "—")}${loc ? " · " + esc(loc) : ""}</span></button>`;
-      }).join("");
+      box.innerHTML = rows.map((r) =>
+        `<button type="button" class="ps-item" role="option" data-type="${r.type}" data-id="${r.id}">` +
+        `<span class="ps-name">${esc(r.name)} <span class="ps-tag ps-tag-${r.type}">${r.type === "official" ? "Official" : "Player"}</span></span>` +
+        `<span class="ps-meta">${esc(r.meta)}</span></button>`).join("");
       box.querySelectorAll(".ps-item").forEach((b) => b.addEventListener("click", () => {
-        openPlayer360(Number(b.dataset.pid), active ? active.id : null);
+        if (b.dataset.type === "official") openOfficial360(Number(b.dataset.id));
+        else openPlayer360(Number(b.dataset.id), active ? active.id : null);
         input.value = ""; close();
       }));
     }
@@ -4927,8 +4957,22 @@ async function openPlayer360(playerId, tournamentId) {
     clearTimeout(timer);
     if (q.length < 2) { close(); return; }
     timer = setTimeout(async () => {
-      try { render(await api(`/players/search?q=${encodeURIComponent(q)}`), q); }
-      catch (_) { close(); }
+      try {
+        const [players, officials] = await Promise.all([
+          api(`/players/search?q=${encodeURIComponent(q)}`).catch(() => []),
+          api(`/officials/search?q=${encodeURIComponent(q)}`).catch(() => []),
+        ]);
+        const loc = (x) => [x.city, x.state].filter(Boolean).join(", ");
+        const rows = [
+          ...players.map((p) => ({ type: "player", id: p.id,
+            name: [p.last_name, p.first_name].filter(Boolean).join(", "),
+            meta: `USTA #${p.usta_number || "—"}${loc(p) ? " · " + loc(p) : ""}` })),
+          ...officials.map((o) => ({ type: "official", id: o.id,
+            name: [o.last_name, o.first_name].filter(Boolean).join(", "),
+            meta: loc(o) || "official" })),
+        ];
+        render(rows, q);
+      } catch (_) { close(); }
     }, 200);
   });
   input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; close(); } });

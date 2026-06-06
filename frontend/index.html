@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=43" />
+  <link rel="stylesheet" href="/styles.css?v=44" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -99,8 +99,8 @@
       <select id="active-tournament" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
       <span id="player-search-wrap">
-        <input type="search" id="player-search" placeholder="🔍 Find player…" autocomplete="off"
-               aria-label="Find a player by name or USTA number" aria-expanded="false" aria-controls="player-search-results" />
+        <input type="search" id="player-search" placeholder="🔍 Find player or official…" autocomplete="off"
+               aria-label="Find a player or official by name" aria-expanded="false" aria-controls="player-search-results" />
         <div id="player-search-results" class="ps-results" hidden role="listbox"></div>
       </span>
     </div>
@@ -1269,6 +1269,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=108"></script>
+  <script type="module" src="/app.js?v=109"></script>
 </body>
 </html>

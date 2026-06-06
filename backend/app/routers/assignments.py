@@ -332,6 +332,28 @@ def official_pay_summary(official_id: int, conn=Depends(db_dep)):
         return pay_summary(cur, official_id)
 
 
+@router.get("/api/officials/{official_id}/overview")
+def official_overview(official_id: int, conn=Depends(db_dep)):
+    """Official 360 — the top-bar search lands here: core identity, the certs they
+    hold, and their season assignments + pay/mileage totals (reuses pay_summary)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, first_name, last_name, city, state FROM official WHERE id = %s",
+            (official_id,),
+        )
+        off = cur.fetchone()
+        if off is None:
+            raise HTTPException(status_code=404, detail="official not found")
+        cur.execute(
+            "SELECT cert_type::text AS cert_type FROM certification "
+            "WHERE official_id = %s ORDER BY cert_type::text",
+            (official_id,),
+        )
+        certs = [r["cert_type"] for r in cur.fetchall()]
+        pay = pay_summary(cur, official_id)
+    return {"official": off, "certs": certs, "pay": pay}
+
+
 @router.get("/api/tournaments/{tournament_id}/assignments")
 def list_assignments(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

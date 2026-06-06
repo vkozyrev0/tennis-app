@@ -20,6 +20,28 @@ def list_officials(conn=Depends(db_dep)):
         return cur.fetchall()
 
 
+# NOTE: declared BEFORE GET /{official_id} so "/search" isn't parsed as an id.
+@router.get("/search")
+def search_officials(q: str, limit: int = 10, conn=Depends(db_dep)):
+    """Global official lookup by name, for the top-bar search → official overview.
+    Names are plaintext; returns a lightweight shape (no contact)."""
+    term = (q or "").strip()
+    if len(term) < 2:
+        return []
+    like = f"%{term}%"
+    limit = max(1, min(limit, 50))
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, first_name, last_name, city, state FROM official "
+            "WHERE first_name ILIKE %(l)s OR last_name ILIKE %(l)s "
+            "   OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %(l)s "
+            "   OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %(l)s "
+            "ORDER BY last_name, first_name LIMIT %(lim)s",
+            {"l": like, "lim": limit},
+        )
+        return cur.fetchall()
+
+
 @router.get("/{official_id}", response_model=OfficialOut)
 def get_official(official_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
