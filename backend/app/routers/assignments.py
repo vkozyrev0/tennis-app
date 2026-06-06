@@ -453,6 +453,49 @@ def hard_conflict_counts(cur, tournament_ids: list[int]) -> dict:
     return counts
 
 
+@router.get("/api/tournaments/{tournament_id}/pay-statements")
+def tournament_pay_statements(tournament_id: int, conn=Depends(db_dep)):
+    """Batch reimbursement: a pay statement per official assigned to THIS
+    tournament — each with their worked days (role + rate), the mileage calc, and
+    a total — plus a tournament grand total. Feeds the one-click "all statements"
+    PDF the TD hands to finance."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, play_start_date, play_end_date FROM tournament WHERE id = %s",
+            (tournament_id,),
+        )
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name, o.first_name",
+                    (tournament_id,))
+        summaries = [_summary(cur, a) for a in cur.fetchall()]
+
+    officials = [{
+        "assignment_id": s["id"], "official_name": s["official_name"],
+        "official_email": s.get("official_email"),
+        "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
+                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+        "pay": s["pay"], "mileage": s["mileage"], "one_way_miles": s["one_way_miles"],
+        "missing_distance": s["missing_distance"], "total": s["total"],
+        "response_status": s["response_status"],
+    } for s in summaries]
+    totals = {
+        "pay": round(sum(o["pay"] for o in officials), 2),
+        "mileage": round(sum(o["mileage"] or 0.0 for o in officials), 2),
+        "total": round(sum(o["total"] for o in officials), 2),
+        "days": sum(len(o["days"]) for o in officials),
+        "officials": len(officials),
+    }
+    return {
+        "tournament": {"id": t["id"], "name": t["name"],
+                       "play_start_date": t["play_start_date"].isoformat(),
+                       "play_end_date": t["play_end_date"].isoformat()},
+        "officials": officials,
+        "totals": totals,
+    }
+
+
 @router.get("/api/tournaments/{tournament_id}/conflicts")
 def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
     """All staffing conflicts for a tournament in one place, so the TD can resolve
