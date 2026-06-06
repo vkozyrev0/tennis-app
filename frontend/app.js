@@ -3690,6 +3690,16 @@ document.getElementById("inbox-bulk-detect").addEventListener("click", async () 
     await loadInbox();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
+// "Unmatched only" toggle: a client-side data filter (combines with the status /
+// tournament header filters via AND) to show only emails with no matched player,
+// so the TD can work through the detection gaps. Persists across inbox reloads.
+const _inboxUnmatchedFilter = (data) => !data.detected_player_id;
+document.getElementById("inbox-unmatched-only")?.addEventListener("change", (e) => {
+  try {
+    if (e.target.checked) inboxGrid.grid.addFilter(_inboxUnmatchedFilter);
+    else inboxGrid.grid.removeFilter(_inboxUnmatchedFilter);
+  } catch (_) {}
+});
 // One-click "Detect players" over the whole inbox: runs the detector on every
 // loaded email that has no matched player yet (and an assigned tournament — the
 // detector needs a roster). No row selection required.

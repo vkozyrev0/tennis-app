@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=36" />
+  <link rel="stylesheet" href="/styles.css?v=37" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -772,6 +772,7 @@
         <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
         <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
         <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
+        <label class="inbox-unmatched-toggle" title="Show only emails with no matched player"><input type="checkbox" id="inbox-unmatched-only" /> Unmatched only</label>
         <span class="msg" id="inbox-import-pdf-msg"></span>
         <!-- Bulk-action toolbar: appears once a row is selected via the
              checkbox column. Detect populates detected_player_id per email,
@@ -1226,6 +1227,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=99"></script>
+  <script type="module" src="/app.js?v=100"></script>
 </body>
 </html>

@@ -1184,3 +1184,4 @@ td.toggle { white-space: nowrap; }
 .inbox-summary a:hover { text-decoration: underline; }
 .inbox-summary .inbox-sum-todo { font-weight: 700; }
 .inbox-summary .resp-ok { color: var(--ok); }
+.inbox-unmatched-toggle { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
