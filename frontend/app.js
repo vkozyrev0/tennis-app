@@ -6094,6 +6094,73 @@ async function exportPayStatementsBatch() {
   win.document.close();
 }
 document.getElementById("report-pay-statements").addEventListener("click", exportPayStatementsBatch);
+
+// Rooming list → print window: one table per hotel block (official, nights they
+// need, dietary) for the TD to hand to the hotel. A ⬇ CSV button is embedded in
+// the print window for hotels that want a spreadsheet. Reuses the print pattern.
+async function exportRoomingList() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/rooming-list`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.blocks.length) { toast("No official room blocks for this tournament", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export", false); return; }
+  const e = esc, t = d.tournament, tt = d.totals;
+  // CSV rows for the embedded download (flat: one row per occupant).
+  const csv = [["Hotel", "Confirmation", "Official", "First night", "Last night", "Dietary", "Phone"]];
+  const sections = d.blocks.map((b) => {
+    const span = (b.check_in && b.check_out)
+      ? `${e(_fmtMDY(b.check_in))} – ${e(_fmtMDY(b.check_out))}` : "dates TBD";
+    const rows = b.occupants.length ? b.occupants.map((o) => {
+      csv.push([b.hotel_name, b.confirmation_number || "", o.official_name,
+                o.first_night || "", o.last_night || "", o.dietary_restrictions || "", o.official_phone || ""]);
+      const nights = (o.first_night && o.last_night)
+        ? `${e(_fmtMDY(o.first_night))} – ${e(_fmtMDY(o.last_night))}` : "—";
+      return `<tr><td>${e(o.official_name)}</td><td>${nights}</td>` +
+        `<td>${e(o.dietary_restrictions || "")}</td><td>${e(o.official_phone || "")}</td></tr>`;
+    }).join("") : `<tr><td colspan="4" class="muted">No officials assigned to this block.</td></tr>`;
+    return `<h2>${e(b.hotel_name)}${b.confirmation_number ? ` · conf. ${e(b.confirmation_number)}` : ""}</h2>` +
+      `<p class="line">Block dates: ${span} · ${b.occupants.length}/${b.room_count} room(s) used</p>` +
+      `<table><thead><tr><th>Official</th><th>Nights needed</th><th>Dietary</th><th>Phone</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table>`;
+  }).join("");
+  const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Rooming list — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      .line { font-size: 11px; color: #556070; margin: 0.1rem 0 0.4rem; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Hotel rooming list</h1>
+    <div class="sub">${e(t.name)} · ${tt.blocks} block(s) · ${tt.occupants} room night-guest(s) · ${tt.rooms_reserved} room(s) reserved · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="noprint">
+      <button onclick="window.print()">Save as PDF / Print</button>
+      <button id="dl">⬇ CSV</button>
+      <button onclick="window.close()">Close</button>
+    </div>
+    <script>
+      document.getElementById("dl").addEventListener("click", function () {
+        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ${JSON.stringify("rooming-list-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
+        a.click();
+      });
+      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-rooming-list").addEventListener("click", exportRoomingList);
 async function reportCsvExport() {
   if (!active) { toast("Select a tournament first", false); return; }
   await loadReports();

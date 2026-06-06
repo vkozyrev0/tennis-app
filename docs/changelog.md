@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **298** green, migrations through **0039**).
+review (full backend suite: **303** green, migrations through **0039**).
 
+- **Hotel rooming-list export** — a **⬇ Rooming list** button on the Reports
+  toolbar opens a printable per-hotel-block list to hand to the hotel (`GET
+  /api/tournaments/{id}/rooming-list`): each official-comp block with its
+  occupants (name, the nights they need = their worked-day span, dietary, phone),
+  declined assignments excluded. The print window embeds a **⬇ CSV** download for
+  hotels that want a spreadsheet.
 - **Test stability — login-throttle leak fixed** — the suite had a rare,
   order-independent flake (a self-contained test failing ~1 run in 2, passing in
   isolation). Root cause: `app.routers.auth` keeps failed-login counts + lockouts

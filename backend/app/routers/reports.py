@@ -14,6 +14,71 @@ from .assignments import _ASG_SELECT, _summary
 router = APIRouter(prefix="/api/tournaments", tags=["reports"])
 
 
+@router.get("/{tournament_id}/rooming-list")
+def rooming_list(tournament_id: int, conn=Depends(db_dep)):
+    """Per-hotel-block rooming list to hand to the hotel: each official-comp block
+    with its occupants (name, the nights they need = their worked-day span, and
+    dietary restrictions). Declined assignments are excluded (their room is freed).
+    Feeds the printable + CSV rooming-list export."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM tournament WHERE id = %s", (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT rb.id AS block_id, h.name AS hotel_name, rb.confirmation_number, "
+            "       rb.check_in, rb.check_out, rb.room_count, "
+            "       a.id AS assignment_id, a.response_status, "
+            "       o.first_name, o.last_name, o.dietary_restrictions, "
+            "       o.phone AS official_phone, "
+            "       ad.first_day, ad.last_day "
+            "FROM room_block rb "
+            "JOIN hotel h ON h.id = rb.hotel_id "
+            "LEFT JOIN assignment a "
+            "       ON a.room_block_id = rb.id AND a.response_status <> 'declined' "
+            "LEFT JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN (SELECT assignment_id, min(work_date) AS first_day, "
+            "                  max(work_date) AS last_day "
+            "           FROM assignment_day GROUP BY assignment_id) ad "
+            "       ON ad.assignment_id = a.id "
+            "WHERE rb.tournament_id = %s AND rb.kind = 'official' "
+            "ORDER BY h.name, rb.id, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    blocks: dict = {}
+    order: list = []
+    for r in rows:
+        bid = r["block_id"]
+        if bid not in blocks:
+            blocks[bid] = {
+                "block_id": bid, "hotel_name": r["hotel_name"],
+                "confirmation_number": r["confirmation_number"],
+                "check_in": r["check_in"].isoformat() if r["check_in"] else None,
+                "check_out": r["check_out"].isoformat() if r["check_out"] else None,
+                "room_count": r["room_count"], "occupants": [],
+            }
+            order.append(bid)
+        if r["assignment_id"] is not None:
+            blocks[bid]["occupants"].append({
+                "official_name": f'{r["last_name"]}, {r["first_name"]}',
+                "dietary_restrictions": r["dietary_restrictions"],
+                "official_phone": r["official_phone"],
+                "first_night": r["first_day"].isoformat() if r["first_day"] else None,
+                "last_night": r["last_day"].isoformat() if r["last_day"] else None,
+                "response_status": r["response_status"],
+            })
+    blocks_out = [blocks[b] for b in order]
+    totals = {
+        "blocks": len(blocks_out),
+        "rooms_reserved": sum(b["room_count"] for b in blocks_out),
+        "occupants": sum(len(b["occupants"]) for b in blocks_out),
+    }
+    return {"tournament": {"id": t["id"], "name": t["name"]},
+            "blocks": blocks_out, "totals": totals}
+
+
 @router.get("/{tournament_id}/reports/officials")
 def officials_report(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
