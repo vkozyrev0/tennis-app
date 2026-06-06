@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **239** green, migrations through **0039**).
+review (full backend suite: **243** green, migrations through **0039**).
 
+- **Withdrawal → auto-suggest alternate** — recording a withdrawal now surfaces
+  an inline panel of alternates to promote (`GET
+  /api/tournaments/{id}/alternates?age_division=`): the withdrawing player's
+  **same division first, tagged "best match"** (FIFO order = next in line), then
+  other divisions under a separator. Each row has a one-click **↑ Promote to
+  selected** (reuses `POST /api/roster/{id}/promote`) + a 👤 Player-360 link.
 - **Bulk official invites** — a collapsible picker on the Assignments panel
   lists every not-yet-assigned official (filter + select-all-shown); `POST
   /api/tournaments/{id}/assignments/bulk` creates one **pending** assignment per

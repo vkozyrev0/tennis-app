@@ -100,6 +100,25 @@ def list_roster(tournament_id: int, conn=Depends(db_dep)):
         return cur.fetchall()
 
 
+@router.get("/api/tournaments/{tournament_id}/alternates",
+            response_model=list[RosterEntryOut])
+def list_alternates(tournament_id: int, age_division: str | None = None,
+                    conn=Depends(db_dep)):
+    """Alternates waiting for a slot — the promote-on-withdrawal helper. When
+    `age_division` is given (the withdrawing player's division), only same-division
+    alternates are returned, ordered FIFO by entry id (first added = next in line)
+    so the TD sees the best match to promote first."""
+    sql = _SELECT + " WHERE e.tournament_id = %s AND e.selection_status = 'alternate'"
+    params: list = [tournament_id]
+    if age_division:
+        sql += " AND e.age_division = %s"
+        params.append(age_division)
+    sql += " ORDER BY e.id"
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
 @router.post("/api/tournaments/{tournament_id}/players",
              response_model=RosterEntryOut, status_code=201)
 def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(db_dep)):

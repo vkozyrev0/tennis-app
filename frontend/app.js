@@ -4199,16 +4199,68 @@ onSubmit(wdForm, async (e) => {
   const b = expandPlayerRef(formObj(wdForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
-    await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
+    const wd = await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
     setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadInbox();
     await loadRoster();
-    // A slot just opened — nudge the TD to promote an alternate if any exist.
-    const alts = (rosterRows || []).filter((r) => r.selection_status === "alternate").length;
-    if (alts) toast(`${alts} alternate(s) available to promote`, true,
-      { label: "Open Roster", onClick: () => _dashGo("tournament", "panel-t-roster") });
+    // A slot just opened — auto-suggest the best-matching alternate(s) inline.
+    await _suggestAlternates(wd);
   } catch (err) { setMsg("withdrawal-msg", err.message, false); markInvalid(wdForm, err.message); }
 });
-wdForm.querySelector(".cancel").addEventListener("click", wdReset);
+wdForm.querySelector(".cancel").addEventListener("click", () => { wdReset(); _hideWdSuggest(); });
+
+function _hideWdSuggest() {
+  const box = document.getElementById("wd-suggest");
+  if (box) { box.hidden = true; box.innerHTML = ""; }
+}
+
+// After a withdrawal, surface alternates to promote — same division first (the
+// best match), then any other waiting alternates — each with one-click promote.
+async function _suggestAlternates(wd) {
+  const box = document.getElementById("wd-suggest");
+  if (!box || !active) return;
+  const div = wd && wd.age_division;
+  let sameDiv = [], others = [];
+  try {
+    if (div) sameDiv = await api(`/tournaments/${active.id}/alternates?age_division=${encodeURIComponent(div)}`);
+    const all = await api(`/tournaments/${active.id}/alternates`);
+    const sameIds = new Set(sameDiv.map((a) => a.id));
+    others = all.filter((a) => !sameIds.has(a.id));
+  } catch (_) { _hideWdSuggest(); return; }
+  if (!sameDiv.length && !others.length) {
+    box.hidden = false;
+    box.innerHTML = `<p class="wd-suggest-empty">No alternates waiting${div ? ` in <strong>${esc(div)}</strong> or any other division` : ""} — nothing to promote.</p>`;
+    return;
+  }
+  const who = wd ? `${esc(wd.last_name)}, ${esc(wd.first_name)}` : "a player";
+  const row = (a, best) =>
+    `<li class="wd-alt${best ? " is-best" : ""}">` +
+    `<span class="wd-alt-name">${esc(a.last_name)}, ${esc(a.first_name)}` +
+    (a.player_id ? ` <span class="p360-link" data-pid="${a.player_id}" title="Open player 360">👤</span>` : "") + `</span>` +
+    `<span class="wd-alt-div">${esc(a.age_division || "—")}${best ? ' <span class="wd-best-tag">best match</span>' : ""}</span>` +
+    `<button type="button" class="wd-promote" data-eid="${a.id}" data-name="${esc(a.last_name)}, ${esc(a.first_name)}">↑ Promote to selected</button>` +
+    `</li>`;
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="wd-suggest-head"><strong>${who}</strong> withdrew` +
+    (div ? ` from <strong>${esc(div)}</strong>` : "") +
+    ` — promote an alternate to fill the slot:</div>` +
+    `<ul class="wd-alt-list">` +
+    sameDiv.map((a) => row(a, true)).join("") +
+    (others.length
+      ? `<li class="wd-alt-sep">Other divisions</li>` + others.map((a) => row(a, false)).join("")
+      : "") +
+    `</ul>`;
+  box.querySelectorAll(".wd-promote").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/roster/${btn.dataset.eid}/promote`, { method: "POST" });
+      toast(`Promoted ${btn.dataset.name} to selected`, true);
+      btn.closest(".wd-alt").classList.add("wd-alt-done");
+      btn.replaceWith(Object.assign(document.createElement("span"), { className: "wd-alt-promoted", textContent: "✓ promoted" }));
+      await loadRoster();
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  }));
+}
 
 // Generic player-keyed Part B list (form + table + delete + file-from-email).
 function wirePlayerList(cfg) {
