@@ -1059,6 +1059,8 @@ td.toggle { white-space: nowrap; }
   border-radius: 6px;
 }
 .bulk-bar[hidden] { display: none; }
+.bulk-bar .primary { background: var(--accent); color: #fff; border: 0; font-weight: 600; }
+.bulk-bar .primary:hover { filter: brightness(1.08); }
 .bulk-count {
   font-weight: 700; color: var(--ink); white-space: nowrap;
 }

@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **279** green, migrations through **0039**).
+review (full backend suite: **282** green, migrations through **0039**).
 
+- **One-click "Triage all"** — a single inbox action (`POST
+  /api/emails/bulk/triage`) chains classify → detect-players → populate over the
+  selected emails in one request and returns a combined summary (classified /
+  matched / filed / left-for-manual). Reuses the three bulk handlers on one
+  connection so it can't drift from running them individually — the TD clears
+  the unfiled queue in one click instead of three.
 - **Bulk auto-classify inbox** — an **Auto-classify** action on the inbox bulk
   toolbar runs the local rule-based triage classifier (`POST
   /api/emails/bulk/classify`, no data leaves the building) over the selected

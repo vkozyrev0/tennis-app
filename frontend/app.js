@@ -4078,6 +4078,38 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
     btn.disabled = false;
   }
 });
+// One-click triage: classify → detect players → populate, in a single request.
+document.getElementById("inbox-bulk-triage").addEventListener("click", async (ev) => {
+  if (!_inboxSelected.size) return;
+  const btn = ev.currentTarget;
+  if (!(await confirmDialog(
+    `Triage ${_inboxSelected.size} selected email(s)?\n\nThis will, in one pass:\n` +
+    `  1. auto-classify the unclassified ones (local rules)\n` +
+    `  2. detect the player each is about\n` +
+    `  3. file the fileable ones into their lists\n\n` +
+    `Doubles / pairing emails and any without a detected player are left for manual filing.`,
+    "Triage all", "primary"))) return;
+  btn.disabled = true;
+  try {
+    const res = await api("/emails/bulk/triage", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    const skippedMsg = res.skipped.length
+      ? ` · ${res.skipped.length} left for manual filing`
+      : "";
+    const summary = `Triaged: classified ${res.classified}, matched ${res.detected}, filed ${res.filed}${skippedMsg}`;
+    setMsg("inbox-bulk-msg", summary, res.skipped.length === 0);
+    toast(summary, res.skipped.length === 0);
+    _inboxSelected.clear();
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) {
+    setMsg("inbox-bulk-msg", e.message, false);
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+});
 // Populate the tournament dropdown lazily — once when the panel opens.
 _inboxPopulateTournamentDropdown();
 let _inboxFilterInit = false;

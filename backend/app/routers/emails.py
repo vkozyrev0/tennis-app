@@ -755,3 +755,28 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
             except psycopg.Error as e:
                 skipped.append({"id": em["id"], "reason": str(e).splitlines()[0][:120]})
     return {"filed": filed_count, "skipped": skipped}
+
+
+@router.post("/bulk/triage")
+def bulk_triage(body: EmailBulkClassify, conn=Depends(db_dep)):
+    """One-click triage: run the whole chain over the selected emails in one
+    request — classify (local rules) → detect players → populate the target
+    lists — and return a combined summary so the TD clears the unfiled queue in
+    a single action. Reuses the three bulk handlers on the same connection, so it
+    can never drift from running them individually."""
+    ids = body.email_ids
+    if not ids:
+        return {"classified": 0, "detected": 0, "filed": 0,
+                "classify_counts": {}, "skipped": []}
+    classify_res = bulk_classify(
+        EmailBulkClassify(email_ids=ids, only_unclassified=body.only_unclassified), conn)
+    detect_res = bulk_detect_players(EmailBulkDetect(email_ids=ids), conn)
+    detected = sum(1 for d in detect_res if d.get("detected_player_id"))
+    populate_res = bulk_populate(EmailBulkPopulate(email_ids=ids), conn)
+    return {
+        "classified": classify_res["classified"],
+        "classify_counts": classify_res["counts"],
+        "detected": detected,
+        "filed": populate_res["filed"],
+        "skipped": populate_res["skipped"],
+    }
