@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **250** green, migrations through **0039**).
+review (full backend suite: **252** green, migrations through **0039**).
 
+- **Roster CSV import — discoverable** — the simple hand-typed roster importer
+  (USTA #, name, division, status, t-shirt, dietary) is now a first-class option
+  on the **Roster panel's ⬆ Import menu** (was buried on the global Import page
+  labelled "legacy"), relabelled "Roster (simple CSV)" with a clearer
+  description. The staged upload → review → merge flow and templates were
+  already in place; this surfaces them where the TD seeds the roster.
 - **Coverage gap → invite** — a fixable cell on the role-coverage grid (a day
   undercovered for a role while certified officials are free) is now **clickable**:
   a popover lists certified officials not already working that day (`GET

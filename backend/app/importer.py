@@ -922,9 +922,10 @@ TYPES = {
     # Legacy simple roster importer — predates B2. Still useful for quick
     # ad-hoc spreadsheets the TD types up by hand (4-5 columns). The Initial
     # USTA-dashboard flow (`roster_initial`) is the production path.
-    "roster": {"label": "Roster (simple — legacy)",
-               "desc": ("Players entered for the tournament (division, status, "
-                        "t-shirt, dietary). For the full USTA Excel export, use "
+    "roster": {"label": "Roster (simple CSV)",
+               "desc": ("Quick hand-typed roster: USTA #, name, age division, "
+                        "status (selected/alternate/withdrawn), t-shirt, dietary. "
+                        "For the full USTA dashboard Excel export, use "
                         "\"Roster — Initial (Full Player Data)\" instead."),
                "cols": _PLAYER + [Col("age_division", {"division", "div", "age"}),
                                   Col("events", {"event"}),
