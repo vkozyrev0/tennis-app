@@ -1202,6 +1202,15 @@ td.toggle { white-space: nowrap; }
 .dash-trow { cursor: pointer; }
 .dash-trow:hover td { background: var(--sel); }
 .dash-trow.is-active td { font-weight: 600; }
+.dash-deadlines {
+  margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
+  background: var(--warn-bg); border: 1px solid var(--warn-border);
+}
+.dash-dl-head { font-weight: 700; color: var(--warn-ink); font-size: 0.9rem; }
+.dash-dl-list { list-style: none; margin: 0.3rem 0 0; padding: 0; }
+.dash-dl-item { padding: 0.2rem 0.3rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+.dash-dl-item:hover, .dash-dl-item:focus-visible { background: rgba(0,0,0,0.05); outline: none; }
+.dash-deadlines .resp-bad { color: var(--bad); font-weight: 700; }
 
 /* Player 360 drawer */
 .p360-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }

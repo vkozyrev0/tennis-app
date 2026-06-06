@@ -4747,7 +4747,31 @@ function _dashGo(group, tab) {
   const el = document.querySelector(`.tab[data-target="${tab}"]`);
   if (el) el.click();
 }
+const _DEADLINE_LABEL = { registration: "Registration deadline", late_entry: "Late-entry deadline", play_start: "Play starts" };
+async function _renderDeadlines() {
+  const el = document.getElementById("dash-deadlines");
+  if (!el) return;
+  let data;
+  try { data = await api("/dashboard/deadlines"); } catch (_) { el.hidden = true; return; }
+  const items = data.deadlines || [];
+  if (!items.length) { el.hidden = true; el.innerHTML = ""; return; }
+  const urgency = (n) => n < 0 ? `<span class="resp-bad">${Math.abs(n)}d ago</span>`
+    : (n === 0 ? '<span class="resp-bad">today</span>'
+      : `<span class="${n <= 7 ? "warn" : "muted"}">in ${n}d</span>`);
+  el.hidden = false;
+  el.innerHTML = `<div class="dash-dl-head">⏰ ${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div>` +
+    `<ul class="dash-dl-list">` + items.map((x) =>
+      `<li class="dash-dl-item" data-tid="${x.tournament_id}" tabindex="0" role="button">` +
+      `<strong>${esc(x.tournament_name)}</strong> — ${esc(_DEADLINE_LABEL[x.kind] || x.kind)} ` +
+      `${esc(_fmtMDY(x.date))} · ${urgency(x.days_until)}</li>`).join("") + `</ul>`;
+  el.querySelectorAll(".dash-dl-item").forEach((li) => {
+    const go = () => setActive(Number(li.dataset.tid));
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
 async function loadDashboard() {
+  _renderDeadlines();  // cross-tournament approaching-deadline banner
   // Cross-tournament overview table.
   let tournaments = [];
   try { tournaments = await api("/tournaments"); } catch (_) {}

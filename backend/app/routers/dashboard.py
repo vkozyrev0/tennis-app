@@ -12,10 +12,42 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
 
-router = APIRouter(prefix="/api/tournaments", tags=["dashboard"])
+router = APIRouter(tags=["dashboard"])
 
 
-@router.get("/{tournament_id}/dashboard")
+@router.get("/api/dashboard/deadlines")
+def upcoming_deadlines(within_days: int = 14, conn=Depends(db_dep)):
+    """Approaching / just-passed key dates across all not-yet-finished
+    tournaments, so the TD sees what's due soon without opening each one.
+    Covers the registration + late-entry deadlines and the play-start date,
+    sorted by date. `days_until` is negative for an overdue date."""
+    within_days = max(1, min(within_days, 120))
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, play_start_date, registration_deadline, late_entry_deadline "
+            "FROM tournament WHERE play_end_date >= CURRENT_DATE "
+            "ORDER BY play_start_date"
+        )
+        rows = cur.fetchall()
+    today = date.today()
+    items = []
+    for t in rows:
+        for kind, dval in (("registration", t["registration_deadline"]),
+                           ("late_entry", t["late_entry_deadline"]),
+                           ("play_start", t["play_start_date"])):
+            if dval is None:
+                continue
+            n = (dval - today).days
+            # upcoming within the window, plus a few days of "just passed" so a
+            # missed deadline doesn't vanish the moment it lapses.
+            if -3 <= n <= within_days:
+                items.append({"tournament_id": t["id"], "tournament_name": t["name"],
+                              "kind": kind, "date": dval.isoformat(), "days_until": n})
+    items.sort(key=lambda x: (x["date"], x["kind"]))
+    return {"deadlines": items, "within_days": within_days}
+
+
+@router.get("/api/tournaments/{tournament_id}/dashboard")
 def dashboard(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
