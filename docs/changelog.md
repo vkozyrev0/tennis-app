@@ -7,8 +7,13 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **309** green, migrations through **0039**).
+review (full backend suite: **312** green, migrations through **0039**).
 
+- **Self-service availability — quick-select** — officials already set their own
+  available dates (`PUT /api/me/availability/{id}`, play-window validated) from
+  the self-service page; added the **bulk quick-select** (All / None / Weekdays /
+  Weekends) the admin editor already had, so officials declare faster than
+  clicking each day. (Pinned the existing endpoint with `test_zz_me_availability`.)
 - **Declined-assignment alert** — the dashboard now shows a **named** re-staffing
   alert (not just the count tile): `GET /api/tournaments/{id}/declined` lists who
   declined + the slot they vacated (site + days), most-recent first, and a

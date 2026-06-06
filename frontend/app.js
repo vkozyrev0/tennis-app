@@ -6811,6 +6811,22 @@ async function loadMyAvailability() {
   }
 }
 
+// Quick-select for the official's own availability grid (mirrors the admin
+// editor's bulk buttons): toggle the #me-dates checkboxes in place; the official
+// still reviews + clicks Save.
+document.querySelectorAll("#official-app .avail-bulk [data-mebulk]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.mebulk;
+    document.querySelectorAll("#me-dates input").forEach((cb) => {
+      const dow = _availDow(cb.value);  // 0=Sun … 6=Sat
+      if (mode === "all") cb.checked = true;
+      else if (mode === "none") cb.checked = false;
+      else if (mode === "weekdays") cb.checked = dow >= 1 && dow <= 5;
+      else if (mode === "weekends") cb.checked = dow === 0 || dow === 6;
+    });
+  });
+});
+
 // Audit F3: one-shot listener so a stray flood of expired-session 401s
 // doesn't trigger a toast storm.
 let _authExpiredFired = false;

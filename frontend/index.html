@@ -1234,6 +1234,13 @@
         <label>Hotel needed <input type="checkbox" id="me-hotel" /></label>
       </div>
       <p class="muted">Tick the dates you are available, then save.</p>
+      <div class="avail-bulk" role="group" aria-label="Quick select dates">
+        <span class="avail-bulk-label">Quick select:</span>
+        <button type="button" class="chip-toggle" data-mebulk="all">All days</button>
+        <button type="button" class="chip-toggle" data-mebulk="none">None</button>
+        <button type="button" class="chip-toggle" data-mebulk="weekdays">Weekdays</button>
+        <button type="button" class="chip-toggle" data-mebulk="weekends">Weekends</button>
+      </div>
       <div id="me-dates" class="days"></div>
       <div class="actions-row"><button type="button" id="me-avail-save">Save availability</button><span class="msg" id="me-avail-msg"></span></div>
     </section>
@@ -1305,6 +1312,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=130"></script>
+  <script type="module" src="/app.js?v=131"></script>
 </body>
 </html>
