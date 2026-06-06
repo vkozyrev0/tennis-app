@@ -2481,8 +2481,96 @@ async function loadAssignments() {
   // Stash the list + availability so the response-status filter can re-render
   // without re-fetching, and so the TD can jump straight to declines to re-staff.
   _asgState = { list, availByOfficial };
+  _renderBulkInvite(new Set(list.map((a) => a.official_id)), availByOfficial);
   _renderAsgList();
 }
+
+// Bulk invite: pick several not-yet-assigned officials and create a pending
+// assignment for each in one call (POST .../assignments/bulk), then offer a
+// single mailto to everyone who was just invited. Officials already on the
+// tournament are excluded from the picker (they're already in the response loop).
+function _renderBulkInvite(assignedIds, availByOfficial) {
+  const box = document.getElementById("asg-bulk-list");
+  if (!box) return;
+  const candidates = Object.values(officialsById)
+    .filter((o) => !assignedIds.has(o.id))
+    .sort((a, b) => officialLabel(a).localeCompare(officialLabel(b)));
+  const summary = document.querySelector("#asg-bulk > summary");
+  if (summary) summary.textContent = `＋ Invite several officials at once (${candidates.length} available)`;
+  if (!candidates.length) {
+    box.innerHTML = '<p class="muted">Every official is already assigned to this tournament.</p>';
+  } else {
+    box.innerHTML = candidates.map((o) => {
+      const n = (availByOfficial[o.id] || []).length;
+      const avail = n ? `${n} avail day(s)` : "no availability";
+      return `<label class="bulk-row"><input type="checkbox" class="bulk-cb" value="${o.id}" ` +
+        `data-label="${esc(officialLabel(o).toLowerCase())}" />` +
+        `<span class="bulk-name">${esc(officialLabel(o))}</span>` +
+        `<span class="bulk-meta">${esc(avail)}</span></label>`;
+    }).join("");
+  }
+  _bulkSyncCount();
+}
+
+function _bulkSyncCount() {
+  const sel = document.querySelectorAll("#asg-bulk-list .bulk-cb:checked").length;
+  const el = document.getElementById("asg-bulk-count");
+  if (el) el.textContent = `${sel} selected`;
+  const go = document.getElementById("asg-bulk-go");
+  if (go) go.disabled = sel === 0;
+}
+
+// --- Bulk-invite controls (wired once; list is repopulated per loadAssignments) ---
+(() => {
+  const list = document.getElementById("asg-bulk-list");
+  const filter = document.getElementById("asg-bulk-filter");
+  if (!list) return;
+  list.addEventListener("change", (e) => { if (e.target.classList.contains("bulk-cb")) _bulkSyncCount(); });
+  if (filter) filter.addEventListener("input", () => {
+    const q = filter.value.trim().toLowerCase();
+    list.querySelectorAll(".bulk-row").forEach((r) => {
+      const cb = r.querySelector(".bulk-cb");
+      r.hidden = q.length > 0 && !cb.dataset.label.includes(q);
+    });
+  });
+  document.getElementById("asg-bulk-all")?.addEventListener("click", () => {
+    list.querySelectorAll(".bulk-row:not([hidden]) .bulk-cb").forEach((cb) => { cb.checked = true; });
+    _bulkSyncCount();
+  });
+  document.getElementById("asg-bulk-none")?.addEventListener("click", () => {
+    list.querySelectorAll(".bulk-cb").forEach((cb) => { cb.checked = false; });
+    _bulkSyncCount();
+  });
+  document.getElementById("asg-bulk-go")?.addEventListener("click", async () => {
+    if (!active) return;
+    const ids = [...list.querySelectorAll(".bulk-cb:checked")].map((cb) => Number(cb.value));
+    if (!ids.length) return;
+    const go = document.getElementById("asg-bulk-go");
+    go.disabled = true;
+    try {
+      const r = await api(`/tournaments/${active.id}/assignments/bulk`, {
+        method: "POST", body: JSON.stringify({ official_ids: ids }),
+      });
+      let msg = `Invited ${r.created_count} official${r.created_count === 1 ? "" : "s"}`;
+      if (r.skipped_existing.length) msg += ` · ${r.skipped_existing.length} already assigned`;
+      // Offer a single mailto to everyone who was just invited and has an email.
+      if (r.invite_emails.length) {
+        const subj = encodeURIComponent(`Officiating assignment — ${active.name}`);
+        const bodyTxt = encodeURIComponent(`You've been assigned to ${active.name}. Please confirm (accept or decline) via your CourtOps self-service "My assignments" page. Thank you.`);
+        const href = `mailto:?bcc=${encodeURIComponent(r.invite_emails.join(","))}&subject=${subj}&body=${bodyTxt}`;
+        toast(msg, true, { label: `✉ Email ${r.invite_emails.length} invited`, onClick: () => window.open(href, "_blank") });
+      } else {
+        toast(msg, true);
+      }
+      document.getElementById("asg-bulk").open = false;
+      if (filter) filter.value = "";
+      loadAssignments();
+    } catch (e) {
+      setMsg("asg-bulk-msg", e.message, false);
+      go.disabled = false;
+    }
+  });
+})();
 
 // Response-status filter ('all' | 'pending' | 'accepted' | 'declined') + the
 // fetched assignment list, kept module-level so toggling a filter re-renders

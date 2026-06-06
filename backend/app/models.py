@@ -49,6 +49,7 @@ from ._models_setup import (  # noqa: F401
     TournamentOut,
 )
 from ._models_workspace import (  # noqa: F401
+    AssignmentBulkCreate,
     AssignmentCreate,
     AssignmentDayCreate,
     AssignmentResponse,

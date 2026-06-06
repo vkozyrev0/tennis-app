@@ -74,6 +74,14 @@ class AssignmentCreate(BaseModel):
     room_block_id: Optional[int] = None
 
 
+class AssignmentBulkCreate(BaseModel):
+    """Invite several officials to a tournament at once — one pending assignment
+    each. site_id/room_block_id are optional defaults applied to all."""
+    official_ids: list[int]
+    site_id: Optional[int] = None
+    room_block_id: Optional[int] = None
+
+
 class AssignmentDayCreate(BaseModel):
     work_date: date
     working_as: CertType

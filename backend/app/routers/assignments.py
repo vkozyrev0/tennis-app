@@ -16,7 +16,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import AssignmentCreate, AssignmentDayCreate
+from ..models import AssignmentBulkCreate, AssignmentCreate, AssignmentDayCreate
 
 router = APIRouter(tags=["assignments"])
 
@@ -380,6 +380,63 @@ def create_assignment(tournament_id: int, body: AssignmentCreate, conn=Depends(d
         raise HTTPException(status_code=409, detail="official already assigned to this tournament")
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(status_code=400, detail="official_id, site_id, or room_block_id invalid")
+
+
+@router.post("/api/tournaments/{tournament_id}/assignments/bulk", status_code=201)
+def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
+                            conn=Depends(db_dep)):
+    """Invite several officials at once — one pending assignment each. Officials
+    already on this tournament are skipped (not an error), so the TD can re-run
+    the action as the pool grows. Returns the created assignments plus the
+    skipped/invalid ids, and the contact list for the new invites (so the UI can
+    open a single mailto to everyone who was just invited)."""
+    ids = list(dict.fromkeys(body.official_ids))  # de-dupe, preserve order
+    if not ids:
+        raise HTTPException(status_code=400, detail="official_ids is required")
+    created, skipped_existing, invalid = [], [], []
+    with conn.cursor() as cur:
+        _check_room_capacity(cur, body.room_block_id)
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        # Which of these officials exist, and which are already assigned here?
+        cur.execute("SELECT id FROM official WHERE id = ANY(%s)", (ids,))
+        existing_ids = {r["id"] for r in cur.fetchall()}
+        cur.execute(
+            "SELECT official_id FROM assignment WHERE tournament_id = %s "
+            "AND official_id = ANY(%s)",
+            (tournament_id, ids),
+        )
+        already = {r["official_id"] for r in cur.fetchall()}
+        for oid in ids:
+            if oid not in existing_ids:
+                invalid.append(oid)
+                continue
+            if oid in already:
+                skipped_existing.append(oid)
+                continue
+            # Room capacity is re-checked per insert so a small block can't be
+            # over-filled by a single bulk call.
+            try:
+                _check_room_capacity(cur, body.room_block_id)
+            except HTTPException:
+                skipped_existing.append(oid)  # no room left → leave for later
+                continue
+            cur.execute(
+                "INSERT INTO assignment (tournament_id, official_id, site_id, room_block_id) "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (tournament_id, oid, body.site_id, body.room_block_id),
+            )
+            created.append(_persist_snapshot(cur, cur.fetchone()["id"]))
+    return {
+        "created": created,
+        "created_count": len(created),
+        "skipped_existing": skipped_existing,
+        "invalid": invalid,
+        # Emails of the freshly-invited officials who have one on file — the UI
+        # turns this into a single mailto: to "send" the response request.
+        "invite_emails": [c["official_email"] for c in created if c.get("official_email")],
+    }
 
 
 @router.put("/api/assignments/{assignment_id}")

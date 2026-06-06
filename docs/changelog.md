@@ -7,7 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **233** green, migrations through **0039**).
+review (full backend suite: **239** green, migrations through **0039**).
+
+- **Bulk official invites** — a collapsible picker on the Assignments panel
+  lists every not-yet-assigned official (filter + select-all-shown); `POST
+  /api/tournaments/{id}/assignments/bulk` creates one **pending** assignment per
+  selected official in one call (idempotent — already-assigned ids are skipped,
+  invalid ids reported), then offers a **single mailto** BCCing everyone just
+  invited. The dashboard officials response-mix tile is the status rollup.
 
 - **"Today" home dashboard** — a landing page (`GET
   /api/tournaments/{id}/dashboard`) aggregating the existing data: inbox
