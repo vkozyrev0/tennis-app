@@ -5091,6 +5091,7 @@ const _DIGEST_TASKS = [
   ["officials_pending", "pending", ["staffing", "panel-t-assignments"]],
   ["officials_declined", "declined", ["staffing", "panel-t-assignments"]],
   ["uncovered_days", "uncovered days", ["staffing", "panel-t-reports"]],
+  ["conflicts", "conflicts", ["staffing", "panel-t-reports"]],
   ["roster_incomplete", "roster gaps", ["tournament", "panel-t-roster"]],
 ];
 async function _renderDigest() {
@@ -5183,6 +5184,7 @@ async function loadDashboard() {
     tile("officials awaiting reply", d.officials.pending, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
     tile("declined — re-staff", d.officials.declined, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
     tile("uncovered day(s)", d.coverage.uncovered_days_count, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("staffing conflict(s)", d.conflicts ?? 0, { alert: true, go: ["staffing", "panel-t-reports"] }) +
     tile("rooms unused", d.rooms.unused, { alert: true, go: ["staffing", "panel-t-reports"] }) +
     tile("on roster", d.roster.selected, { go: ["tournament", "panel-t-roster"] }) +
     tile("alternates", d.roster.alternate, { go: ["tournament", "panel-t-roster"] }) +

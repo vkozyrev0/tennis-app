@@ -11,6 +11,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
+from .assignments import hard_conflict_counts
 
 router = APIRouter(tags=["dashboard"])
 
@@ -106,6 +107,9 @@ def digest(conn=Depends(db_dep)):
                 (ids,),
             )
             incomplete = {r["tournament_id"]: r["n"] for r in cur.fetchall()}
+            conflicts = hard_conflict_counts(cur, ids)
+        else:
+            conflicts = {}
 
     def _next_deadline(t):
         cands = []
@@ -131,6 +135,7 @@ def digest(conn=Depends(db_dep)):
             "officials_declined": declined.get(tid, 0),
             "uncovered_days": uncovered,
             "roster_incomplete": incomplete.get(tid, 0),
+            "conflicts": conflicts.get(tid, 0),
         }
         out.append({
             "tournament_id": tid, "tournament_name": t["name"],
@@ -149,7 +154,7 @@ def digest(conn=Depends(db_dep)):
 
     totals = {k: sum(r["tasks"][k] for r in out) for k in
               ("unfiled_inbox", "officials_pending", "officials_declined",
-               "uncovered_days", "roster_incomplete")}
+               "uncovered_days", "roster_incomplete", "conflicts")}
     totals["open_tasks"] = sum(r["open_tasks"] for r in out)
     totals["active_tournaments"] = len(out)
     return {"tournaments": out, "totals": totals}
@@ -228,6 +233,10 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
         rb = cur.fetchone()
         reserved, assigned = int(rb["reserved"]), int(rb["assigned"])
 
+        # Hard staffing conflicts (double-bookings + uncertified days) — the same
+        # cheap count the cross-tournament digest uses; full breakdown on Reports.
+        conflicts = hard_conflict_counts(cur, [tournament_id]).get(tournament_id, 0)
+
     return {
         "tournament": t,
         "inbox": inbox,
@@ -236,4 +245,5 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
         "coverage": {"uncovered_days": uncovered, "uncovered_days_count": len(uncovered)},
         "rooms": {"reserved": reserved, "assigned": assigned,
                   "unused": max(reserved - assigned, 0)},
+        "conflicts": conflicts,
     }

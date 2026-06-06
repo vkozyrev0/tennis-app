@@ -97,6 +97,21 @@ def test_incomplete_roster_counted_and_totals():
     assert dg["totals"]["active_tournaments"] >= 1
 
 
+def test_conflicts_in_digest_tasks_and_totals():
+    t = _future_tournament()
+    # official with no certs, assigned a day → uncertified hard conflict
+    o = _ok(client.post("/api/officials", json={
+        "first_name": "Dg", "last_name": "O" + uuid.uuid4().hex[:5]}))
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    day = _iso(date.today() + timedelta(days=20))  # within the play window
+    _ok(client.post(f"/api/assignments/{a['id']}/days",
+                    json={"work_date": day, "working_as": "chair_umpire"}))
+    dg = _digest()
+    row = _row(dg, t["id"])
+    assert row["tasks"]["conflicts"] == 1
+    assert dg["totals"]["conflicts"] >= 1
+
+
 def test_next_deadline_surfaced():
     t = _future_tournament(reg_in_days=5)
     row = _row(_digest(), t["id"])

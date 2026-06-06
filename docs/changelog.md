@@ -7,8 +7,14 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **273** green, migrations through **0039**).
+review (full backend suite: **275** green, migrations through **0039**).
 
+- **Conflict count on the dashboard + digest** — a cheap set-based
+  `hard_conflict_counts` helper (cross-tournament double-bookings + uncertified
+  worked days) now feeds a **staffing-conflict tile** on the per-tournament
+  status board and a **conflict chip** in the cross-tournament digest, both
+  jumping to the Reports conflict report. Conflicts are now visible from the
+  landing page, not just inside Reports.
 - **Cross-tournament digest** — the Today dashboard now leads with a digest
   (`GET /api/dashboard/digest`) rolling up **every active tournament** with its
   soonest key date and a tally of open tasks (unfiled inbox, pending/declined

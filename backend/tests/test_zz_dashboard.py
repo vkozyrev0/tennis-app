@@ -62,6 +62,18 @@ def test_empty_tournament_dashboard_is_zeroed():
     # a 3-day window with nobody assigned → all 3 days uncovered
     assert d["coverage"]["uncovered_days_count"] == 3
     assert d["rooms"] == {"reserved": 0, "assigned": 0, "unused": 0}
+    assert d["conflicts"] == 0
+
+
+def test_dashboard_conflicts_count_uncertified_day():
+    # An official with NO certs passes the add-day guard but the worked day is a
+    # hard conflict (uncertified) → surfaced as the dashboard conflict count.
+    t = _tournament()
+    o = _official()  # no certifications
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    _ok(client.post(f"/api/assignments/{a['id']}/days",
+                    json={"work_date": "2026-06-02", "working_as": "chair_umpire"}))
+    assert _dash(t["id"])["conflicts"] == 1
 
 
 def test_dashboard_rolls_up_real_activity():

@@ -367,6 +367,45 @@ def list_assignments(tournament_id: int, conn=Depends(db_dep)):
         return [_summary(cur, a) for a in rows]
 
 
+def hard_conflict_counts(cur, tournament_ids: list[int]) -> dict:
+    """Cheap, set-based count of HARD staffing conflicts per tournament — the two
+    that block a clean event: cross-tournament double-bookings (an official with
+    the same worked date in another assignment) + uncertified worked days (a role
+    the official holds no certification for). Used by the dashboard tile + the
+    cross-tournament digest. The full categorised breakdown (also availability /
+    play-window / hotel warnings) lives in the GET .../conflicts report."""
+    if not tournament_ids:
+        return {}
+    counts = {tid: 0 for tid in tournament_ids}
+    cur.execute(
+        "SELECT a.tournament_id, count(*) AS n "
+        "FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
+        "WHERE a.tournament_id = ANY(%s) AND EXISTS ("
+        "  SELECT 1 FROM assignment a2 JOIN assignment_day ad2 ON ad2.assignment_id = a2.id "
+        "  WHERE a2.official_id = a.official_id AND a2.id <> a.id AND ad2.work_date = ad.work_date) "
+        "GROUP BY a.tournament_id",
+        (tournament_ids,),
+    )
+    for r in cur.fetchall():
+        counts[r["tournament_id"]] = counts.get(r["tournament_id"], 0) + r["n"]
+    # Uncertified worked day: the official holds no certification for the role
+    # worked that day. Matches the conflict report's uncertified_days flag
+    # (an official with NO certs on file → every worked day counts).
+    cur.execute(
+        "SELECT a.tournament_id, count(*) AS n "
+        "FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
+        "WHERE a.tournament_id = ANY(%s) "
+        "  AND NOT EXISTS (SELECT 1 FROM certification c "
+        "                  WHERE c.official_id = a.official_id "
+        "                    AND c.cert_type::text = ad.working_as::text) "
+        "GROUP BY a.tournament_id",
+        (tournament_ids,),
+    )
+    for r in cur.fetchall():
+        counts[r["tournament_id"]] = counts.get(r["tournament_id"], 0) + r["n"]
+    return counts
+
+
 @router.get("/api/tournaments/{tournament_id}/conflicts")
 def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
     """All staffing conflicts for a tournament in one place, so the TD can resolve
