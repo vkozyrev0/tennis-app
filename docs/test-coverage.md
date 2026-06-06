@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 298 tests, all passing (migrations through 0039) — now deterministic
+**Status:** 299 tests, all passing (migrations through 0039) — now deterministic
 (3+ consecutive clean full runs) after fixing a login-throttle state leak.
 
 ## How the suite is wired
@@ -162,7 +162,7 @@ A single function that walks the API in the same order a TD does in the UI.
 *ordering* contract — each phase relies on artifacts from the prior
 phases. A breakage in phase 6 (assignments) could be caused by phase 3
 (roster) or phase 4 (availability), and we want a single failure to
-surface the chain. The 53 `test_smoke.py` tests cover each contract in
+surface the chain. The `test_smoke.py` tests cover each contract in
 isolation; this one proves they compose.
 
 ---
@@ -183,7 +183,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # all 54 tests
+python -m pytest -q                                    # the whole suite (298)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -236,4 +236,4 @@ players already in roster from Initial); B3 184 rows / 0 failures.
 Distribution after all three: 147 Hotel / 27 Local / 25 None lodging;
 127 selected / 54 alternate / 18 withdrawn statuses.
 
-Total suite count: **63 tests, all passing**.
+Total suite count: **298 tests, all passing** (see the status line at the top).

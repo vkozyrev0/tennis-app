@@ -118,6 +118,13 @@ def test_fill_duplicate_day_409():
     assert _fill(t["id"], o["id"], DAY, "chair_umpire").status_code == 409
 
 
+def test_candidates_bad_date_400():
+    t = _tournament()
+    assert client.get(
+        f"/api/tournaments/{t['id']}/coverage-candidates?role=chair_umpire&date=not-a-date"
+    ).status_code == 400
+
+
 def test_busy_elsewhere_flag():
     t1, t2 = _tournament(), _tournament()
     o = _official("chair_umpire")

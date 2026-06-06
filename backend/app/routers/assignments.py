@@ -574,10 +574,10 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
         raise HTTPException(status_code=400, detail="official_ids is required")
     created, skipped_existing, invalid = [], [], []
     with conn.cursor() as cur:
-        _check_room_capacity(cur, body.room_block_id)
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        _check_room_capacity(cur, body.room_block_id)
         # Which of these officials exist, and which are already assigned here?
         cur.execute("SELECT id FROM official WHERE id = ANY(%s)", (ids,))
         existing_ids = {r["id"] for r in cur.fetchall()}
@@ -789,6 +789,11 @@ def coverage_candidates(tournament_id: int, role: str, date: str, conn=Depends(d
     available that day), `assigned_here` (already on this tournament — fill just
     adds a day, no new invite), and `busy_elsewhere` (working that date in another
     tournament — a soft double-book warning). Best candidates sort first."""
+    from datetime import date as _date
+    try:
+        _date.fromisoformat(date)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="date must be ISO format (YYYY-MM-DD)")
     with conn.cursor() as cur:
         cur.execute(
             """
