@@ -6216,6 +6216,65 @@ async function exportRoomingList() {
   win.document.close();
 }
 document.getElementById("report-rooming-list").addEventListener("click", exportRoomingList);
+
+// Day-by-day schedule → print window: one table per play-day (official, role,
+// site) with an embedded CSV download — the day-of sheet to hand to sites.
+async function exportSchedule() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/schedule`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.days.length) { toast("No play-date window set", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export", false); return; }
+  const e = esc, t = d.tournament;
+  const csv = [["Date", "Official", "Role", "Site", "Response"]];
+  const sections = d.days.map((day) => {
+    const rows = day.entries.length ? day.entries.map((en) => {
+      csv.push([day.date, en.official_name, certLabel(en.working_as), en.site_label || "", en.response_status || ""]);
+      return `<tr><td>${e(en.official_name)}</td><td>${e(certLabel(en.working_as))}</td>` +
+        `<td>${e(en.site_label || "—")}</td><td>${e(en.response_status || "")}</td></tr>`;
+    }).join("") : `<tr><td colspan="4" class="muted">No officials assigned.</td></tr>`;
+    return `<h2>${e(_fmtMDY(day.date))} <span class="cnt">(${day.count} working)</span></h2>` +
+      `<table><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table>`;
+  }).join("");
+  const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Schedule — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      h2 .cnt { font-weight: 400; color: #556070; font-size: 11px; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Day-by-day schedule</h1>
+    <div class="sub">${e(t.name)} · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="noprint">
+      <button onclick="window.print()">Save as PDF / Print</button>
+      <button id="dl">⬇ CSV</button>
+      <button onclick="window.close()">Close</button>
+    </div>
+    <script>
+      document.getElementById("dl").addEventListener("click", function () {
+        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ${JSON.stringify("schedule-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
+        a.click();
+      });
+      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-schedule-export").addEventListener("click", exportSchedule);
 async function reportCsvExport() {
   if (!active) { toast("Select a tournament first", false); return; }
   await loadReports();

@@ -22,7 +22,9 @@ review (full backend suite: **312** green, migrations through **0039**).
 - **Day-by-day schedule** — the Reports tab now shows a day-of operational sheet
   (`GET /api/tournaments/{id}/schedule`): one block per play-window day listing
   who works (official, role, site) with a headcount and an empty-day flag.
-  Declined assignments are excluded (not actually staffed).
+  Declined assignments are excluded (not actually staffed). A **⬇ Schedule**
+  toolbar button opens a printable version with an embedded **⬇ CSV** download —
+  the day-of sheet to hand to sites.
 - **Hotel rooming-list export** — a **⬇ Rooming list** button on the Reports
   toolbar opens a printable per-hotel-block list to hand to the hotel (`GET
   /api/tournaments/{id}/rooming-list`): each official-comp block with its
