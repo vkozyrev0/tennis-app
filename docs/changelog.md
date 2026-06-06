@@ -9,6 +9,12 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 A question-driven round closing the top gaps from a TD-perspective UI/feature
 review (full backend suite: **263** green, migrations through **0039**).
 
+- **Export Player/Official 360** — both 360 drawers gained a **⬇ PDF** button
+  that opens a clean, self-contained one-page profile and auto-prints (TD saves
+  as PDF) — reusing the staffing-report print-window pattern, no PDF lib. The
+  player export carries entries + filed requests; the official export carries
+  certifications + the season assignment/pay table. The 👤 affordance is hidden
+  on paper.
 - **Assignment conflict report** — the Reports tab now leads with a consolidated,
   grouped list of every staffing clash to resolve before the event (`GET
   /api/tournaments/{id}/conflicts`): cross-tournament double-bookings (hard =

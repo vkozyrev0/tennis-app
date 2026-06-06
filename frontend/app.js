@@ -5137,6 +5137,7 @@ async function openPlayer360(playerId, tournamentId) {
     (reqHtml
       ? `<h4 class="p360-reqhead">Requests${d.tournament_id ? " (this tournament)" : ""}</h4>${reqHtml}`
       : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
+  _p360Export = { title: `${p.last_name}, ${p.first_name}`, subtitle: "Player profile", html: body.innerHTML };
 }
 
 // Official 360 — reuses the player drawer modal to show an official's certs +
@@ -5168,7 +5169,46 @@ async function openOfficial360(officialId) {
     `<p class="p360-id">Official${loc ? ` · ${esc(loc)}` : ""}</p>` +
     `<h4>Certifications</h4><p>${certs}</p>` +
     `<h4>Assignments &amp; pay</h4>${asg}`;
+  _p360Export = { title: `${o.last_name}, ${o.first_name}`, subtitle: "Official profile", html: body.innerHTML };
 }
+
+// Print/PDF the currently-open 360 drawer (player or official) — reuses the
+// staffing-report print-window pattern: a clean, self-contained doc that
+// auto-prints so the TD saves it as a one-page PDF. No PDF lib.
+let _p360Export = null;
+function exportP360() {
+  if (!_p360Export) { toast("Open a profile first", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  const { title, subtitle, html } = _p360Export;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(subtitle)} — ${esc(title)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.8rem; }
+      h4 { font-size: 13px; margin: 1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: 0.15rem; color: #2e6f40; }
+      table { border-collapse: collapse; width: 100%; margin: 0.3rem 0 0.7rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      th { background: #f4f6f8; font-weight: 700; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tr.totals td { font-weight: 700; background: #e7f1ea; }
+      .p360-id { color: #556070; font-size: 12px; }
+      ul { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
+      .badge { display: inline-block; padding: 1px 6px; border: 1px solid #ccd; border-radius: 5px; font-size: 10px; }
+      .p360-link { display: none; }  /* the 👤 affordance has no meaning on paper */
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>${esc(title)}</h1>
+    <div class="sub">${esc(subtitle)} · generated ${esc(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${html}
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("player360-print")?.addEventListener("click", exportP360);
 
 // --- Global search (top bar → players AND officials) ---
 (() => {
