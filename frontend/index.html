@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=38" />
+  <link rel="stylesheet" href="/styles.css?v=39" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -16,6 +16,13 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
       <!-- gear — Setup -->
+      <!-- house — Home/Dashboard -->
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 10.5 12 3l9 7.5"/>
+        <path d="M5 9.5V21h14V9.5"/>
+        <path d="M9 21v-6h6v6"/>
+      </symbol>
       <symbol id="i-setup" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
@@ -106,9 +113,13 @@
 
   <nav class="menu-l1" id="menu-groups" aria-label="Sections"></nav>
   <nav class="menu" id="menu" aria-label="Subsections">
-    <div class="menu-group group-active" data-group="setup">
+    <div class="menu-group group-active" data-group="home">
+      <span class="menu-label">Home</span>
+      <button class="tab active" data-target="panel-home">Dashboard</button>
+    </div>
+    <div class="menu-group" data-group="setup">
       <span class="menu-label">Setup</span>
-      <button class="tab active" data-target="panel-tournaments">Tournaments</button>
+      <button class="tab" data-target="panel-tournaments">Tournaments</button>
       <button class="tab" data-target="panel-sites">Sites</button>
       <button class="tab" data-target="panel-officials">Officials</button>
       <button class="tab" data-target="panel-players">Players</button>
@@ -171,10 +182,25 @@
   </nav>
 
   <main id="main-app" tabindex="-1" aria-label="Tournament director workspace">
+    <!-- ============ HOME / DASHBOARD ============ -->
+    <section class="panel active" id="panel-home" aria-label="Dashboard">
+      <div class="card">
+        <h2 id="dash-greeting">Today</h2>
+        <p class="muted" id="dash-sub">Pick a tournament in the bar above to see its status board.</p>
+        <div id="dash-tiles" class="dash-tiles" hidden></div>
+        <h3>All tournaments</h3>
+        <p class="muted">Upcoming &amp; recent — click a row to work on it.</p>
+        <table id="dash-overview-table" class="list-table">
+          <thead><tr><th>Tournament</th><th>Type</th><th>Play dates</th><th>Starts in</th><th>Reg. deadline</th><th>Late-entry deadline</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ============ SETUP ============ -->
 
     <!-- Tournaments (catalog CRUD) -->
-    <section class="panel active" id="panel-tournaments">
+    <section class="panel" id="panel-tournaments">
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar">
@@ -1227,6 +1253,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=102"></script>
+  <script type="module" src="/app.js?v=103"></script>
 </body>
 </html>

@@ -1186,3 +1186,19 @@ td.toggle { white-space: nowrap; }
 .inbox-summary .resp-ok { color: var(--ok); }
 .inbox-unmatched-toggle { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
 .origin-email { color: var(--accent); cursor: help; }
+
+/* Home dashboard tiles + overview */
+.dash-tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.6rem 0 1.2rem; }
+.dash-tile {
+  flex: 1 1 130px; min-width: 120px; display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--card); color: inherit; cursor: pointer; text-align: left;
+}
+.dash-tile:hover { border-color: var(--accent); }
+.dash-tile.alert { border-color: var(--warn-border); background: var(--warn-bg); }
+.dash-tile .dash-num { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.dash-tile.alert .dash-num { color: var(--bad); }
+.dash-tile .dash-label { font-size: 0.8rem; color: var(--muted); }
+.dash-trow { cursor: pointer; }
+.dash-trow:hover td { background: var(--sel); }
+.dash-trow.is-active td { font-weight: 600; }

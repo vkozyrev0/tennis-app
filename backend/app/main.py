@@ -14,6 +14,7 @@ from .routers import (
     auth,
     availability,
     certifications,
+    dashboard,
     distances,
     divisions,
     doubles,
@@ -57,7 +58,7 @@ app.include_router(me.router)
 # Admin-only: every TD/back-office router requires an admin session.
 _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
-          distances, divisions, roster, assignments, reports, certifications, availability,
+          distances, divisions, roster, assignments, reports, dashboard, certifications, availability,
           emails, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports, staff, retention, users):
     app.include_router(r.router, dependencies=_admin)

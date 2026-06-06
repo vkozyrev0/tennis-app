@@ -1051,6 +1051,7 @@ _menuEl.addEventListener("click", (e) => {
   // data. Built once and shared with updateActiveUI (audit M14).
   if (!Object.keys(_tournamentLoaders).length) _populateTournamentLoaders();
   if (active && _tournamentLoaders[tab.dataset.target]) _tournamentLoaders[tab.dataset.target]();
+  if (tab.dataset.target === "panel-home") loadDashboard();   // Home (no active needed)
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-import") buildImportPage();
@@ -1317,6 +1318,9 @@ function updateActiveUI() {
   } else {
     info.textContent = "";
   }
+  // Keep the Home dashboard in sync when the active tournament changes.
+  if (document.getElementById("panel-home")?.classList.contains("active")
+      && typeof loadDashboard === "function") loadDashboard();
 }
 // Loader map shared between the tab-switch click handler and updateActiveUI.
 // Populated lazily because schedList/divflexList/photelList are `const`s
@@ -4703,6 +4707,84 @@ onSubmit(doublesForm, async (e) => {
   } catch (err) { setMsg("doubles-msg", err.message, false); markInvalid(doublesForm, err.message); }
 });
 doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
+
+// --- Home / "Today" dashboard ---
+// Cross-tournament overview (always) + a status board for the active tournament,
+// aggregating the numbers that otherwise live behind Inbox/Assignments/Reports.
+function _daysUntil(iso) {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(iso + "T00:00:00") - today) / 86400000);
+}
+function _deadlineCell(iso) {
+  const n = _daysUntil(iso);
+  if (n === null) return '<span class="muted">—</span>';
+  if (n < 0) return `${esc(_fmtMDY(iso))} <span class="muted">(passed)</span>`;
+  if (n === 0) return `${esc(_fmtMDY(iso))} <span class="warn">(today)</span>`;
+  return `${esc(_fmtMDY(iso))} <span class="${n <= 7 ? "warn" : "muted"}">(in ${n}d)</span>`;
+}
+function _dashGo(group, tab) {
+  activateGroup(group);
+  const el = document.querySelector(`.tab[data-target="${tab}"]`);
+  if (el) el.click();
+}
+async function loadDashboard() {
+  // Cross-tournament overview table.
+  let tournaments = [];
+  try { tournaments = await api("/tournaments"); } catch (_) {}
+  const body = document.querySelector("#dash-overview-table tbody");
+  body.innerHTML = tournaments.length
+    ? tournaments.slice().sort((a, b) => String(a.play_start_date).localeCompare(String(b.play_start_date)))
+        .map((t) => {
+          const su = _daysUntil(t.play_start_date);
+          const startsIn = su === null ? "" : (su < 0 ? '<span class="muted">started / past</span>'
+            : (su === 0 ? '<span class="warn">today</span>' : `in ${su}d`));
+          const isActive = active && active.id === t.id;
+          return `<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button">` +
+            `<td>${esc(t.name)}${isActive ? ' <span class="badge badge-ok">active</span>' : ""}</td>` +
+            `<td>${esc(t.type)}</td>` +
+            `<td>${esc(_fmtMDY(t.play_start_date))} – ${esc(_fmtMDY(t.play_end_date))}</td>` +
+            `<td>${startsIn}</td><td>${_deadlineCell(t.registration_deadline)}</td>` +
+            `<td>${_deadlineCell(t.late_entry_deadline)}</td></tr>`;
+        }).join("")
+    : `<tr><td class="empty" colspan="6">No tournaments yet — add one in Setup → Tournaments.</td></tr>`;
+  body.querySelectorAll(".dash-trow").forEach((tr) => {
+    const pick = () => setActive(Number(tr.dataset.tid));
+    tr.addEventListener("click", pick);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+
+  // Active-tournament status board (tiles).
+  const tiles = document.getElementById("dash-tiles");
+  const sub = document.getElementById("dash-sub");
+  if (!active) {
+    tiles.hidden = true; tiles.innerHTML = "";
+    sub.textContent = "Pick a tournament below (or in the bar above) to see its status board.";
+    return;
+  }
+  sub.textContent = `Status board — ${active.name}`;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/dashboard`); }
+  catch (_) { tiles.hidden = true; return; }
+  const tile = (label, n, opts = {}) => {
+    const alert = opts.alert && n > 0;
+    return `<button type="button" class="dash-tile${alert ? " alert" : ""}" ` +
+      `data-go-group="${opts.go[0]}" data-go-tab="${opts.go[1]}">` +
+      `<span class="dash-num">${n}</span><span class="dash-label">${esc(label)}</span></button>`;
+  };
+  tiles.hidden = false;
+  tiles.innerHTML =
+    tile(`unfiled email${d.inbox.new === 1 ? "" : "s"}`, d.inbox.new, { alert: true, go: ["inbox", "panel-t-inbox"] }) +
+    tile("officials awaiting reply", d.officials.pending, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
+    tile("declined — re-staff", d.officials.declined, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
+    tile("uncovered day(s)", d.coverage.uncovered_days_count, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("rooms unused", d.rooms.unused, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("on roster", d.roster.selected, { go: ["tournament", "panel-t-roster"] }) +
+    tile("alternates", d.roster.alternate, { go: ["tournament", "panel-t-roster"] }) +
+    tile("withdrawn", d.roster.withdrawn, { go: ["requests", "panel-t-withdrawals"] });
+  tiles.querySelectorAll("[data-go-group]").forEach((b) =>
+    b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
+}
 
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
