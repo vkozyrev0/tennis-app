@@ -26,3 +26,6 @@ unpacked_raw/
 Tournament *.csv
 Tournament *.pdf
 .archive/
+
+# Claude scheduling runtime lock (transient)
+.claude/scheduled_tasks.lock
