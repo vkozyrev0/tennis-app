@@ -1146,6 +1146,19 @@ td.toggle { white-space: nowrap; }
 .respbar-summary .resp-bad { color: var(--bad); font-weight: 700; }
 .respbar-summary .chase-link { color: var(--accent); font-weight: 600; text-decoration: none; }
 .respbar-summary .chase-link:hover { text-decoration: underline; }
+/* Inbox aging callout */
+.inbox-aging { margin: 0.3rem 0 0.6rem; padding: 0.45rem 0.7rem; border-radius: 8px;
+  background: var(--warn-bg); border: 1px solid var(--warn-border, #d8a400); }
+.ia-head { font-weight: 700; font-size: 0.86rem; color: #8a6500; margin-bottom: 0.3rem; }
+:root[data-theme="dark"] .ia-head { color: #e8c779; }
+.ia-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.ia-item { font-size: 0.84rem; cursor: pointer; padding: 0.15rem 0.3rem; border-radius: 5px; }
+.ia-item:hover { background: rgba(0,0,0,0.05); }
+.ia-age { display: inline-block; min-width: 2.2rem; font-weight: 700; font-size: 0.72rem;
+  padding: 1px 5px; border-radius: 6px; background: var(--sel); color: var(--muted); text-align: center; }
+.ia-age.ia-old { background: #f6d4d4; color: #8a1f1f; }
+:root[data-theme="dark"] .ia-age.ia-old { background: #4a1d1d; color: #f0b0b0; }
+.ia-subj { font-weight: 600; }
 /* Officials-without-login banner (Assignments panel) */
 .asg-nologin { margin: 0.3rem 0 0.6rem; padding: 0.45rem 0.7rem; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid var(--warn-border, #d8a400);

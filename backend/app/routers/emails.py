@@ -146,6 +146,40 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
             "unmatched": unmatched, "total": new + filed + follow}
 
 
+@router.get("/aging")
+def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(db_dep)):
+    """Oldest UNFILED emails first, with how many days each has been waiting — an
+    SLA-style triage list so nothing languishes. Optionally scoped to one
+    tournament. Subject/sender only (the body stays encrypted); the inbox opens
+    the full email. `oldest_age_days` is the headline number."""
+    limit = max(1, min(limit, 100))
+    clauses = ["e.status = 'new'"]
+    params: list = []
+    if tournament_id is not None:
+        clauses.append("e.tournament_id = %s"); params.append(tournament_id)
+    where = " WHERE " + " AND ".join(clauses)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT e.id, e.tournament_id, e.subject, e.from_address, e.classification, "
+            "       e.received_at, "
+            "       GREATEST(0, EXTRACT(DAY FROM (now() - e.received_at)))::int AS age_days "
+            f"FROM email_message e{where} "
+            "ORDER BY e.received_at ASC NULLS FIRST "
+            "LIMIT %s",
+            params + [limit],
+        )
+        rows = cur.fetchall()
+    items = [{
+        "id": r["id"], "tournament_id": r["tournament_id"],
+        "subject": r["subject"], "from_address": r["from_address"],
+        "classification": r["classification"],
+        "received_at": r["received_at"].isoformat() if r["received_at"] else None,
+        "age_days": r["age_days"],
+    } for r in rows]
+    return {"items": items, "count": len(items),
+            "oldest_age_days": items[0]["age_days"] if items else 0}
+
+
 @router.post("", response_model=EmailOut, status_code=201)
 def create_email(body: EmailCreate, conn=Depends(db_dep)):
     try:

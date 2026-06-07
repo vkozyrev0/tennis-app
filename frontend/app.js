@@ -2726,8 +2726,14 @@ function renderAssignment(a, availDates) {
   card.className = "asg";
   // Structured header: name + actions on top; venue/hotel meta line; then
   // pay/mileage/total badges and any flags as colored chips (no run-on line).
+  // Mileage = $0 with a distance ON FILE is legitimate (the first 50 round-trip
+  // miles are free), but reads like a broken/missing calc — distinguish it from
+  // the genuine "no distance" state with a hint (E2E finding F1).
   const mileage = a.missing_distance ? '<span class="warn">no distance</span>'
-    : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
+    : (a.mileage == null ? "—"
+       : (a.mileage === 0 && a.one_way_miles != null
+          ? `$0.00 <span class="muted" title="${esc("Within the first 50 free round-trip miles (" + a.one_way_miles + " mi one-way) — no mileage owed.")}">(free band)</span>`
+          : "$" + a.mileage.toFixed(2)));
   // Cross-tournament double-booking (a warning, not a block — audit §3.4). A
   // different-site clash is impossible (badge-bad); same/no site is a soft
   // heads-up (badge-warn). Tooltip lists where else the official is booked.
@@ -4238,6 +4244,31 @@ async function _loadInboxStatusSummary() {
     _inboxUnmatchedOnly = true;
     loadInbox();
   });
+  _renderInboxAging();
+}
+
+// Oldest unfiled emails first, with days-waiting — so nothing languishes. Shown
+// only when the oldest has waited a while; clicking an item searches for it.
+async function _renderInboxAging() {
+  const box = document.getElementById("inbox-aging");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/emails/aging?tournament_id=${active.id}&limit=5`); }
+  catch (_) { box.hidden = true; return; }
+  // Only surface when there's a backlog worth nudging (oldest ≥ 2 days).
+  if (!d.count || d.oldest_age_days < 2) { box.hidden = true; box.innerHTML = ""; return; }
+  const age = (n) => `<span class="ia-age${n >= 7 ? " ia-old" : ""}">${n}d</span>`;
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="ia-head">⏳ Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div>` +
+    `<ul class="ia-list">` + d.items.map((i) =>
+      `<li class="ia-item" data-subj="${esc(i.subject || "")}">${age(i.age_days)} ` +
+      `<span class="ia-subj">${esc(i.subject || "(no subject)")}</span> ` +
+      `<span class="muted">${esc(i.from_address || "")}</span></li>`).join("") + `</ul>`;
+  box.querySelectorAll(".ia-item").forEach((li) => li.addEventListener("click", () => {
+    const search = document.getElementById("inbox-search");
+    if (search) { search.value = li.dataset.subj; loadInbox(); }
+  }));
 }
 // Debounced server-side inbox search (re-queries; no per-keystroke round-trip).
 let _inboxSearchTimer = null;
@@ -5519,7 +5550,7 @@ async function exportPayStatement(officialId) {
       `<td class="num">${money(x.rate_applied)}</td></tr>`).join("") ||
       `<tr><td colspan="3" class="muted">No worked days.</td></tr>`;
     const mileage = a.missing_distance ? "—  (no distance on file)"
-      : `${money(a.mileage)}${a.one_way_miles != null ? `  (${a.one_way_miles} mi one-way)` : ""}`;
+      : `${money(a.mileage)}${a.one_way_miles != null ? `  (${a.one_way_miles} mi one-way${a.mileage === 0 ? ", within free 50 mi" : ""})` : ""}`;
     return `<h2>${e(a.tournament_name)}${a.site_label ? ` · ${e(a.site_label)}` : ""}</h2>` +
       `<table><thead><tr><th>Date</th><th>Role</th><th class="num">Rate</th></tr></thead>` +
       `<tbody>${dayRows}</tbody></table>` +
@@ -6266,7 +6297,7 @@ async function exportPayStatementsBatch() {
       `<td class="num">${money(x.rate_applied)}</td></tr>`).join("")
       : `<tr><td colspan="3" class="muted">No worked days.</td></tr>`;
     const mileage = o.missing_distance ? "—  (no distance on file)"
-      : `${money(o.mileage)}${o.one_way_miles != null ? `  (${o.one_way_miles} mi one-way)` : ""}`;
+      : `${money(o.mileage)}${o.one_way_miles != null ? `  (${o.one_way_miles} mi one-way${o.mileage === 0 ? ", within free 50 mi" : ""})` : ""}`;
     return `<h2>${e(o.official_name)}${o.official_email ? ` · ${e(o.official_email)}` : ""}</h2>` +
       `<table><thead><tr><th>Date</th><th>Role</th><th class="num">Rate</th></tr></thead>` +
       `<tbody>${dayRows}</tbody></table>` +

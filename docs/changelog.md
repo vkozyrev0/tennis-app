@@ -7,8 +7,22 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
-review (full backend suite: **329** green, migrations through **0039**).
+review (full backend suite: **333** green, migrations through **0039**).
 
+- **End-to-end scenario driver** — `scripts/e2e_td_scenario.py`, a standalone
+  external HTTP client that simulates a TD's full workflow against a live server
+  and asserts each manufactured challenge (uncovered day, cross-tournament
+  double-booking, uncertified day, decline, withdrawal→alternate, missing
+  distance, no-login, dietary, lodging) surfaces in the right review surface.
+  **31/31 checks pass.** Findings + how-to in `docs/e2e-findings.md`.
+  - **F1 follow-up:** mileage of `$0.00` with a distance on file (legitimate —
+    the first 50 round-trip miles are free) now shows a *"(free band)"* hint on
+    the assignment card + pay statements, distinct from the "no distance" state,
+    so it doesn't read as a broken calc.
+- **Inbox aging** — the inbox surfaces the **oldest unfiled emails first** with
+  days-waiting (`GET /api/emails/aging`, optionally per tournament): a callout
+  (shown once the oldest has waited ≥2 days; ≥7 days flagged red) so nothing
+  languishes. Clicking an item searches the inbox for it.
 - **Missing-distance report** — the Reports tab now consolidates official↔site
   assignment pairs with no mileage on file (`GET
   /api/tournaments/{id}/missing-distances`) — mileage can't compute for them — as
