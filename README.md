@@ -66,5 +66,6 @@ checks each surfaces correctly. See [docs/e2e-findings.md](docs/e2e-findings.md)
 
 ## Docs
 
-Start at **[docs/README.md](docs/README.md)** — vision, data model, roadmap,
-changelog, test coverage, and the original TD audit.
+Start at **[docs/README.md](docs/README.md)**. For how it's built — architecture,
+patterns, domain rules, and a from-scratch rebuild order — see
+**[docs/design.md](docs/design.md)** (paired with `data-model.md` for the schema).

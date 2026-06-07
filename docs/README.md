@@ -16,6 +16,7 @@ master data) and a per-tournament workspace (scoped operations).
 
 | File | Purpose |
 |------|---------|
+| [design.md](design.md) | **Architecture & rebuild guide** — structure, patterns, and domain rules; enough to recreate the app. |
 | [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
 | [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
 | [roadmap.md](roadmap.md) | What's shipped, what's open. |
