@@ -19,6 +19,15 @@ review (full backend suite: **333** green, migrations through **0039**).
     the first 50 round-trip miles are free) now shows a *"(free band)"* hint on
     the assignment card + pay statements, distinct from the "no distance" state,
     so it doesn't read as a broken calc.
+- **Realistic demo data** — `backend/demo_seed.py` builds a believable *live*
+  Middle-Georgia junior event (Macon Junior Open 2026 + Rome Junior Classic): a
+  staffed 7-official crew with certs/logins/availability/mileage, the full
+  32-player roster, a hotel room block, an accept/decline/pending mix, a
+  cross-tournament double-booking, a missing-distance + no-login official, and a
+  live unfiled inbox — so every screen opens to lifelike activity. Fixed
+  `reset_demo.py` to **preserve the migration-seeded reference catalogs**
+  (division / event / certification-rate) that a blanket truncate would otherwise
+  leave empty.
 - **Inbox aging** — the inbox surfaces the **oldest unfiled emails first** with
   days-waiting (`GET /api/emails/aging`, optionally per tournament): a callout
   (shown once the oldest has waited ≥2 days; ≥7 days flagged red) so nothing
