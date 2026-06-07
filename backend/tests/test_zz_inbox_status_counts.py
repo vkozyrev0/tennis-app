@@ -65,7 +65,7 @@ def test_counts_partition_by_status():
 def test_counts_empty_tournament_is_all_zero():
     t = _tournament()
     c = _counts(t["id"])
-    assert c == {"new": 0, "filed": 0, "needs_followup": 0, "total": 0}
+    assert c == {"new": 0, "filed": 0, "needs_followup": 0, "unmatched": 0, "total": 0}
 
 
 def test_counts_scoped_to_tournament():

@@ -20,6 +20,66 @@ def list_officials(conn=Depends(db_dep)):
         return cur.fetchall()
 
 
+# NOTE: declared BEFORE GET /{official_id} so "/search" isn't parsed as an id.
+@router.get("/search")
+def search_officials(q: str, limit: int = 10, conn=Depends(db_dep)):
+    """Global official lookup by name, for the top-bar search → official overview.
+    Names are plaintext; returns a lightweight shape (no contact)."""
+    term = (q or "").strip()
+    if len(term) < 2:
+        return []
+    like = f"%{term}%"
+    limit = max(1, min(limit, 50))
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, first_name, last_name, city, state FROM official "
+            "WHERE first_name ILIKE %(l)s OR last_name ILIKE %(l)s "
+            "   OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %(l)s "
+            "   OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %(l)s "
+            "ORDER BY last_name, first_name LIMIT %(lim)s",
+            {"l": like, "lim": limit},
+        )
+        return cur.fetchall()
+
+
+# NOTE: declared BEFORE GET /{official_id} so "/workload" isn't parsed as an id.
+@router.get("/workload")
+def officials_workload(conn=Depends(db_dep)):
+    """Cross-tournament workload per official — total assignments, worked days, and
+    tournaments, plus the accept/decline mix — so the TD spots over-used officials
+    (carrying many days) and under-used ones (zero) when balancing staffing. Every
+    official is included (zero-load ones surface), busiest first."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT o.id, o.last_name, o.first_name, "
+            "       count(DISTINCT a.id) AS assignments, "
+            "       count(DISTINCT a.tournament_id) AS tournaments, "
+            "       count(ad.id) AS days, "
+            "       count(DISTINCT a.id) FILTER (WHERE a.response_status = 'accepted') AS accepted, "
+            "       count(DISTINCT a.id) FILTER (WHERE a.response_status = 'pending')  AS pending, "
+            "       count(DISTINCT a.id) FILTER (WHERE a.response_status = 'declined') AS declined "
+            "FROM official o "
+            "LEFT JOIN assignment a ON a.official_id = o.id "
+            "LEFT JOIN assignment_day ad ON ad.assignment_id = a.id "
+            "GROUP BY o.id, o.last_name, o.first_name "
+            "ORDER BY days DESC, assignments DESC, o.last_name, o.first_name"
+        )
+        rows = cur.fetchall()
+    officials = [{
+        "official_id": r["id"], "official_name": f'{r["last_name"]}, {r["first_name"]}',
+        "assignments": r["assignments"], "tournaments": r["tournaments"], "days": r["days"],
+        "accepted": r["accepted"], "pending": r["pending"], "declined": r["declined"],
+    } for r in rows]
+    totals = {
+        "officials": len(officials),
+        "assigned": sum(1 for o in officials if o["assignments"] > 0),
+        "unused": sum(1 for o in officials if o["assignments"] == 0),
+        "assignments": sum(o["assignments"] for o in officials),
+        "days": sum(o["days"] for o in officials),
+    }
+    return {"officials": officials, "totals": totals}
+
+
 @router.get("/{official_id}", response_model=OfficialOut)
 def get_official(official_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

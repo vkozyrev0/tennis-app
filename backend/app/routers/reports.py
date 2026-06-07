@@ -14,6 +14,229 @@ from .assignments import _ASG_SELECT, _summary
 router = APIRouter(prefix="/api/tournaments", tags=["reports"])
 
 
+@router.get("/{tournament_id}/missing-distances")
+def missing_distances(tournament_id: int, conn=Depends(db_dep)):
+    """Official↔site pairs with no mileage distance on file — for these the
+    reimbursement mileage can't be computed (it's left null). One row per affected
+    assignment (official + their venue + worked-day count), so the TD fills them
+    all from one place instead of card-by-card. Assignments with no site are
+    skipped (mileage needs a venue)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT a.id AS assignment_id, o.id AS official_id, "
+            "       o.first_name, o.last_name, a.site_id, "
+            "       COALESCE(s.code, s.name) AS site_label, "
+            "       (SELECT count(*) FROM assignment_day ad WHERE ad.assignment_id = a.id) AS days "
+            "FROM assignment a "
+            "JOIN official o ON o.id = a.official_id "
+            "JOIN site s ON s.id = a.site_id "
+            "WHERE a.tournament_id = %s AND a.site_id IS NOT NULL "
+            "  AND NOT EXISTS (SELECT 1 FROM official_site_distance d "
+            "                  WHERE d.official_id = a.official_id AND d.site_id = a.site_id) "
+            "ORDER BY s.code, s.name, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+    items = [{
+        "assignment_id": r["assignment_id"], "official_id": r["official_id"],
+        "official_name": f'{r["last_name"]}, {r["first_name"]}',
+        "site_id": r["site_id"], "site_label": r["site_label"], "days": r["days"],
+    } for r in rows]
+    return {"tournament_id": tournament_id, "items": items, "count": len(items)}
+
+
+@router.get("/{tournament_id}/officials-without-login")
+def officials_without_login(tournament_id: int, conn=Depends(db_dep)):
+    """Officials assigned to this tournament who have NO self-service account —
+    they can't accept/decline, so their assignments sit pending. Flag them so the
+    TD can create logins. Includes whether an email is on file (needed to send
+    credentials) and their current response status."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT DISTINCT o.id, o.first_name, o.last_name, o.email, "
+            "       a.response_status "
+            "FROM assignment a JOIN official o ON o.id = a.official_id "
+            "WHERE a.tournament_id = %s "
+            "  AND NOT EXISTS (SELECT 1 FROM user_account u "
+            "                  WHERE u.official_id = o.id AND u.role = 'official') "
+            "ORDER BY o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+    officials = [{
+        "official_id": r["id"], "official_name": f'{r["last_name"]}, {r["first_name"]}',
+        "email": r["email"], "has_email": bool(r["email"]),
+        "response_status": r["response_status"],
+    } for r in rows]
+    return {"tournament_id": tournament_id, "officials": officials, "count": len(officials)}
+
+
+@router.get("/{tournament_id}/dietary-summary")
+def dietary_summary(tournament_id: int, conn=Depends(db_dep)):
+    """Catering rollup: officials staffed on this tournament grouped by their
+    dietary restriction (free text, normalised case-insensitively), with a count +
+    the names for each, plus how many have none. Declined officials are excluded
+    (they aren't being fed). Hand the counts to catering."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM tournament WHERE id = %s", (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT DISTINCT o.id, o.first_name, o.last_name, o.dietary_restrictions "
+            "FROM assignment a JOIN official o ON o.id = a.official_id "
+            "WHERE a.tournament_id = %s AND a.response_status <> 'declined'",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    groups: dict = {}     # normalized key -> {label, people}
+    none_people: list = []
+    for r in rows:
+        name = f'{r["last_name"]}, {r["first_name"]}'
+        raw = (r["dietary_restrictions"] or "").strip()
+        if not raw:
+            none_people.append(name)
+            continue
+        key = raw.lower()
+        g = groups.setdefault(key, {"restriction": raw, "people": []})
+        g["people"].append(name)
+    items = sorted(
+        ({"restriction": g["restriction"], "count": len(g["people"]),
+          "people": sorted(g["people"])} for g in groups.values()),
+        key=lambda x: (-x["count"], x["restriction"].lower()),
+    )
+    total = len(rows)
+    return {
+        "tournament": {"id": t["id"], "name": t["name"]},
+        "items": items,
+        "with_restrictions": total - len(none_people),
+        "none_count": len(none_people),
+        "total_people": total,
+    }
+
+
+@router.get("/{tournament_id}/schedule")
+def day_schedule(tournament_id: int, conn=Depends(db_dep)):
+    """Day-by-day operational schedule: for each play-window day, who's working —
+    official, role, and site — so the TD has a day-of sheet. One entry per
+    (official, day) since an official works a single role per date. Declined
+    assignments are excluded (they're not actually staffed); a per-day headcount
+    is included so thin days stand out."""
+    from datetime import timedelta
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name, play_start_date, play_end_date FROM tournament WHERE id = %s",
+            (tournament_id,),
+        )
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT ad.work_date, ad.working_as, a.response_status, "
+            "       o.first_name, o.last_name, "
+            "       COALESCE(s.code, s.name) AS site_label "
+            "FROM assignment_day ad "
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN site s ON s.id = a.site_id "
+            "WHERE a.tournament_id = %s AND a.response_status <> 'declined' "
+            "ORDER BY ad.work_date, site_label NULLS FIRST, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    by_date: dict = {}
+    for r in rows:
+        by_date.setdefault(r["work_date"].isoformat(), []).append({
+            "official_name": f'{r["last_name"]}, {r["first_name"]}',
+            "working_as": r["working_as"],
+            "site_label": r["site_label"],
+            "response_status": r["response_status"],
+        })
+    days = []
+    start, end = t["play_start_date"], t["play_end_date"]
+    if start and end and start <= end:
+        d = start
+        while d <= end:
+            iso = d.isoformat()
+            ents = by_date.get(iso, [])
+            days.append({"date": iso, "entries": ents, "count": len(ents)})
+            d += timedelta(days=1)
+    return {"tournament": {"id": t["id"], "name": t["name"]}, "days": days}
+
+
+@router.get("/{tournament_id}/rooming-list")
+def rooming_list(tournament_id: int, conn=Depends(db_dep)):
+    """Per-hotel-block rooming list to hand to the hotel: each official-comp block
+    with its occupants (name, the nights they need = their worked-day span, and
+    dietary restrictions). Declined assignments are excluded (their room is freed).
+    Feeds the printable + CSV rooming-list export."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM tournament WHERE id = %s", (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT rb.id AS block_id, h.name AS hotel_name, rb.confirmation_number, "
+            "       rb.check_in, rb.check_out, rb.room_count, "
+            "       a.id AS assignment_id, a.response_status, "
+            "       o.first_name, o.last_name, o.dietary_restrictions, "
+            "       o.phone AS official_phone, "
+            "       ad.first_day, ad.last_day "
+            "FROM room_block rb "
+            "JOIN hotel h ON h.id = rb.hotel_id "
+            "LEFT JOIN assignment a "
+            "       ON a.room_block_id = rb.id AND a.response_status <> 'declined' "
+            "LEFT JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN (SELECT assignment_id, min(work_date) AS first_day, "
+            "                  max(work_date) AS last_day "
+            "           FROM assignment_day GROUP BY assignment_id) ad "
+            "       ON ad.assignment_id = a.id "
+            "WHERE rb.tournament_id = %s AND rb.kind = 'official' "
+            "ORDER BY h.name, rb.id, o.last_name, o.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    blocks: dict = {}
+    order: list = []
+    for r in rows:
+        bid = r["block_id"]
+        if bid not in blocks:
+            blocks[bid] = {
+                "block_id": bid, "hotel_name": r["hotel_name"],
+                "confirmation_number": r["confirmation_number"],
+                "check_in": r["check_in"].isoformat() if r["check_in"] else None,
+                "check_out": r["check_out"].isoformat() if r["check_out"] else None,
+                "room_count": r["room_count"], "occupants": [],
+            }
+            order.append(bid)
+        if r["assignment_id"] is not None:
+            blocks[bid]["occupants"].append({
+                "official_name": f'{r["last_name"]}, {r["first_name"]}',
+                "dietary_restrictions": r["dietary_restrictions"],
+                "official_phone": r["official_phone"],
+                "first_night": r["first_day"].isoformat() if r["first_day"] else None,
+                "last_night": r["last_day"].isoformat() if r["last_day"] else None,
+                "response_status": r["response_status"],
+            })
+    blocks_out = [blocks[b] for b in order]
+    totals = {
+        "blocks": len(blocks_out),
+        "rooms_reserved": sum(b["room_count"] for b in blocks_out),
+        "occupants": sum(len(b["occupants"]) for b in blocks_out),
+    }
+    return {"tournament": {"id": t["id"], "name": t["name"]},
+            "blocks": blocks_out, "totals": totals}
+
+
 @router.get("/{tournament_id}/reports/officials")
 def officials_report(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

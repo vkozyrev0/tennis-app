@@ -49,8 +49,10 @@ from ._models_setup import (  # noqa: F401
     TournamentOut,
 )
 from ._models_workspace import (  # noqa: F401
+    AssignmentBulkCreate,
     AssignmentCreate,
     AssignmentDayCreate,
+    CoverageFillCreate,
     AssignmentResponse,
     AvailabilityOut,
     AvailabilitySet,
@@ -74,6 +76,7 @@ from ._models_inbox import (  # noqa: F401
     DoublesRequestCreate,
     DoublesRequestOut,
     DoublesRequestUpdate,
+    EmailBulkClassify,
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,

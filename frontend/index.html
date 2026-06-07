@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=38" />
+  <link rel="stylesheet" href="/styles.css?v=62" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -16,6 +16,13 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
       <!-- gear — Setup -->
+      <!-- house — Home/Dashboard -->
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 10.5 12 3l9 7.5"/>
+        <path d="M5 9.5V21h14V9.5"/>
+        <path d="M9 21v-6h6v6"/>
+      </symbol>
       <symbol id="i-setup" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"/>
@@ -91,6 +98,11 @@
       <span class="ctx-label">Working on:</span>
       <select id="active-tournament" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
+      <span id="player-search-wrap">
+        <input type="search" id="player-search" placeholder="🔍 Find player or official…" autocomplete="off"
+               aria-label="Find a player or official by name" aria-expanded="false" aria-controls="player-search-results" />
+        <div id="player-search-results" class="ps-results" hidden role="listbox"></div>
+      </span>
     </div>
   </header>
 
@@ -106,9 +118,13 @@
 
   <nav class="menu-l1" id="menu-groups" aria-label="Sections"></nav>
   <nav class="menu" id="menu" aria-label="Subsections">
-    <div class="menu-group group-active" data-group="setup">
+    <div class="menu-group group-active" data-group="home">
+      <span class="menu-label">Home</span>
+      <button class="tab active" data-target="panel-home">Dashboard</button>
+    </div>
+    <div class="menu-group" data-group="setup">
       <span class="menu-label">Setup</span>
-      <button class="tab active" data-target="panel-tournaments">Tournaments</button>
+      <button class="tab" data-target="panel-tournaments">Tournaments</button>
       <button class="tab" data-target="panel-sites">Sites</button>
       <button class="tab" data-target="panel-officials">Officials</button>
       <button class="tab" data-target="panel-players">Players</button>
@@ -171,10 +187,32 @@
   </nav>
 
   <main id="main-app" tabindex="-1" aria-label="Tournament director workspace">
+    <!-- ============ HOME / DASHBOARD ============ -->
+    <section class="panel active" id="panel-home" aria-label="Dashboard">
+      <div class="card">
+        <h2 id="dash-greeting">Today</h2>
+        <p class="muted" id="dash-sub">Pick a tournament in the bar above to see its status board.</p>
+        <div id="dash-deadlines" class="dash-deadlines" hidden></div>
+        <div id="dash-digest" class="dash-digest" hidden></div>
+        <div id="dash-readiness" class="dash-readiness" hidden></div>
+        <div id="dash-declined" class="dash-declined" hidden></div>
+        <div id="dash-tiles" class="dash-tiles" hidden></div>
+        <h3>All tournaments</h3>
+        <p class="muted">Upcoming &amp; recent — click a row to work on it.</p>
+        <table id="dash-overview-table" class="list-table">
+          <thead><tr><th>Tournament</th><th>Type</th><th>Play dates</th><th>Starts in</th><th>Reg. deadline</th><th>Late-entry deadline</th></tr></thead>
+          <tbody></tbody>
+        </table>
+
+        <h3>Official workload <span class="h3-subtitle">(across all tournaments — balance staffing)</span></h3>
+        <div id="dash-workload"></div>
+      </div>
+    </section>
+
     <!-- ============ SETUP ============ -->
 
     <!-- Tournaments (catalog CRUD) -->
-    <section class="panel active" id="panel-tournaments">
+    <section class="panel" id="panel-tournaments">
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar">
@@ -502,11 +540,12 @@
     </section>
 
     <!-- T: Roster -->
-    <section class="panel tpanel" id="panel-t-roster" data-import-type="roster_initial,roster_correction">
+    <section class="panel tpanel" id="panel-t-roster" data-import-type="roster_initial,roster,roster_correction">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
         <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
         <p id="roster-counts" class="muted roster-counts" aria-live="polite"></p>
+        <div id="roster-completeness" class="roster-complete no-print"></div>
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
@@ -587,7 +626,24 @@
           </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="asg-msg"></span></div>
         </form>
+        <details id="asg-bulk" class="bulk-invite">
+          <summary>＋ Invite several officials at once</summary>
+          <div class="bulk-body">
+            <div class="bulk-toolbar">
+              <input type="search" id="asg-bulk-filter" placeholder="🔍 filter officials…" autocomplete="off" aria-label="Filter the official list" />
+              <button type="button" id="asg-bulk-all" class="btn-small">Select all shown</button>
+              <button type="button" id="asg-bulk-none" class="btn-small">Clear</button>
+              <span class="muted" id="asg-bulk-count">0 selected</span>
+            </div>
+            <div id="asg-bulk-list" class="bulk-list"></div>
+            <div class="actions-row">
+              <button type="button" id="asg-bulk-go">Invite selected</button>
+              <span class="msg" id="asg-bulk-msg"></span>
+            </div>
+          </div>
+        </details>
         <p id="asg-avail-nudge" class="avail-gap" hidden></p>
+        <div id="asg-nologin" class="asg-nologin" hidden></div>
         <div id="asg-respbar" class="respbar" hidden>
           <span class="respbar-summary" id="asg-resp-summary"></span>
           <span class="respbar-filters" role="group" aria-label="Filter by response">
@@ -596,6 +652,7 @@
             <button type="button" class="chip-toggle" data-resp="accepted">✓ Accepted</button>
             <button type="button" class="chip-toggle" data-resp="declined">✗ Declined</button>
           </span>
+          <button type="button" id="asg-invite-all" class="btn-small" title="Generate a personalised invite for every assigned official (copy all, or BCC those with an email)">✉ Invite all</button>
         </div>
         <div id="asg-list"></div>
       </div>
@@ -691,8 +748,10 @@
           <button type="button" id="avail-save">Save availability</button>
           <span class="msg" id="avail-msg"></span>
         </div>
-        <h4>All availability</h4>
+        <h4>Availability heatmap <span class="h3-subtitle">(who's free which day — green = available, ● = assigned)</span></h4>
         <p id="avail-gap" class="avail-gap" hidden></p>
+        <div id="avail-heatmap" class="avail-heatmap-wrap"></div>
+        <h4>All availability</h4>
         <table id="avail-table" class="list-table"><thead><tr><th>Official</th><th>Available dates</th><th>Hotel</th><th>Assigned</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
@@ -780,6 +839,7 @@
              creates the matching withdrawal/late_entry/etc. rows. -->
         <div id="inbox-bulk-toolbar" class="bulk-bar" hidden role="region" aria-label="Bulk actions for selected emails">
           <span id="inbox-bulk-count" class="bulk-count"></span>
+          <button type="button" id="inbox-bulk-classify" title="Run the local rule-based classifier over the selected unclassified emails (no data leaves the building)">Auto-classify</button>
           <button type="button" id="inbox-bulk-detect">Detect players</button>
           <!-- Reassign group: label + dropdown + Apply button visually bound
                together so it reads as one action, not three loose controls. -->
@@ -791,6 +851,7 @@
             <button type="button" id="inbox-bulk-reassign">Reassign</button>
           </span>
           <button type="button" id="inbox-bulk-populate" title="Create rows in the matching lists (withdrawals / late entries / scheduling / div-flex / hotel) using each email's classification + detected player">Populate lists →</button>
+          <button type="button" id="inbox-bulk-triage" class="primary" title="One click: classify → detect players → populate lists for all selected emails">⚡ Triage all →</button>
           <span class="msg" id="inbox-bulk-msg"></span>
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
@@ -800,6 +861,7 @@
           <span class="muted" id="inbox-search-note"></span>
         </div>
         <div id="inbox-status-summary" class="inbox-summary" hidden></div>
+        <div id="inbox-aging" class="inbox-aging" hidden></div>
         <table id="inbox-table" class="list-table">
           <thead><tr><th></th><th>Received</th><th>From</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
@@ -915,6 +977,7 @@
           </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="withdrawal-msg"></span></div>
         </form>
+        <div id="wd-suggest" class="wd-suggest" hidden></div>
         <table id="withdrawal-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Events</th><th>Alt?</th><th>Reason</th><th>Notes</th><th></th></tr></thead>
           <tbody></tbody>
@@ -1093,6 +1156,9 @@
           <button type="button" id="report-print">Print</button>
           <button type="button" id="report-pdf" title="Open a clean, self-contained report to save as PDF"><span aria-hidden="true">⬇</span> PDF</button>
           <button type="button" id="report-csv" title="Download the current staffing plan with all officials + days filled in"><span aria-hidden="true">⬇</span> CSV</button>
+          <button type="button" id="report-pay-statements" title="Open a printable pay statement for every assigned official (batch reimbursement)"><span aria-hidden="true">⬇</span> Pay statements</button>
+          <button type="button" id="report-rooming-list" title="Open a printable rooming list per hotel block to hand to the hotel"><span aria-hidden="true">⬇</span> Rooming list</button>
+          <button type="button" id="report-schedule-export" title="Open a printable day-by-day schedule (the day-of sheet) with a CSV download"><span aria-hidden="true">⬇</span> Schedule</button>
           <button type="button" id="report-template" title="Download an empty staffing-plan template (headers + day columns, no data)"><span aria-hidden="true">⬇</span> Template</button>
           <label class="cov-min-ctl" title="Highlight any day/site below this many officials">Min officials/day <input type="number" id="report-min-cov" min="0" step="1" /></label>
         </div>
@@ -1106,6 +1172,18 @@
           <tfoot><tr id="report-coverage"></tr><tr id="report-totals"></tr></tfoot>
         </table>
         <p id="report-coverage-note" class="avail-gap" hidden></p>
+
+        <h4>Staffing conflicts</h4>
+        <div id="report-conflicts"></div>
+
+        <h4>Day-by-day schedule <span class="h3-subtitle">(who works each day — the day-of sheet)</span></h4>
+        <div id="report-schedule"></div>
+
+        <h4>Dietary summary <span class="h3-subtitle">(officials' restrictions, for catering)</span></h4>
+        <div id="report-dietary"></div>
+
+        <h4>Missing distances <span class="h3-subtitle">(no mileage on file — reimbursement can't compute)</span></h4>
+        <div id="report-missing-dist"></div>
 
         <h4>Coverage by site &amp; day</h4>
         <table id="site-coverage-table" class="list-table">
@@ -1169,6 +1247,13 @@
         <label>Hotel needed <input type="checkbox" id="me-hotel" /></label>
       </div>
       <p class="muted">Tick the dates you are available, then save.</p>
+      <div class="avail-bulk" role="group" aria-label="Quick select dates">
+        <span class="avail-bulk-label">Quick select:</span>
+        <button type="button" class="chip-toggle" data-mebulk="all">All days</button>
+        <button type="button" class="chip-toggle" data-mebulk="none">None</button>
+        <button type="button" class="chip-toggle" data-mebulk="weekdays">Weekdays</button>
+        <button type="button" class="chip-toggle" data-mebulk="weekends">Weekends</button>
+      </div>
       <div id="me-dates" class="days"></div>
       <div class="actions-row"><button type="button" id="me-avail-save">Save availability</button><span class="msg" id="me-avail-msg"></span></div>
     </section>
@@ -1192,6 +1277,19 @@
         <button type="button" id="confirm-cancel" class="cancel">Cancel</button>
         <button type="button" id="confirm-ok" class="delete">Delete</button>
       </div>
+    </div>
+  </div>
+  <!-- Player 360 drawer: everything about one player across the Part B lists. -->
+  <div id="player360-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="player360-title">
+    <div class="modal-box modal-box--wide">
+      <div class="p360-head">
+        <h3 id="player360-title">Player</h3>
+        <span class="p360-head-actions">
+          <button type="button" id="player360-print" class="btn-small no-print" title="Print or save this profile as PDF"><span aria-hidden="true">⬇</span> PDF</button>
+          <button type="button" id="player360-close" class="btn-icon" title="Close" aria-label="Close">×</button>
+        </span>
+      </div>
+      <div id="player360-body"></div>
     </div>
   </div>
   <div id="change-pw-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="change-pw-title">
@@ -1227,6 +1325,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=102"></script>
+  <script type="module" src="/app.js?v=139"></script>
 </body>
 </html>

@@ -1051,6 +1051,7 @@ _menuEl.addEventListener("click", (e) => {
   // data. Built once and shared with updateActiveUI (audit M14).
   if (!Object.keys(_tournamentLoaders).length) _populateTournamentLoaders();
   if (active && _tournamentLoaders[tab.dataset.target]) _tournamentLoaders[tab.dataset.target]();
+  if (tab.dataset.target === "panel-home") loadDashboard();   // Home (no active needed)
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-import") buildImportPage();
@@ -1317,6 +1318,9 @@ function updateActiveUI() {
   } else {
     info.textContent = "";
   }
+  // Keep the Home dashboard in sync when the active tournament changes.
+  if (document.getElementById("panel-home")?.classList.contains("active")
+      && typeof loadDashboard === "function") loadDashboard();
 }
 // Loader map shared between the tab-switch click handler and updateActiveUI.
 // Populated lazily because schedList/divflexList/photelList are `const`s
@@ -1391,8 +1395,29 @@ requestAnimationFrame(() => {
 // Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
 const _playerCell = (cell) => {
   const d = cell.getData();
-  return esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+  const name = esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+  // Make the player name a 360 link wherever a player_id is on the row, so the
+  // TD can open the full player view from any Part B list (delegated handler).
+  if (!d.player_id) return name;
+  return `<span class="p360-link" data-pid="${d.player_id}" role="button" tabindex="0" title="View everything about this player (360)">${name}</span>`;
 };
+// One delegated handler opens the Player 360 from any .p360-link (Part B lists,
+// inbox, …). openPlayer360 is a hoisted function declaration defined later.
+document.addEventListener("click", (e) => {
+  const link = e.target.closest && e.target.closest(".p360-link[data-pid]");
+  if (!link) return;
+  // Capture phase + stop so the click doesn't also fire Tabulator's cell/row
+  // handlers underneath the link.
+  e.preventDefault(); e.stopPropagation();
+  openPlayer360(Number(link.dataset.pid), active ? active.id : null);
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const link = e.target.closest && e.target.closest(".p360-link[data-pid]");
+  if (!link) return;
+  e.preventDefault();
+  openPlayer360(Number(link.dataset.pid), active ? active.id : null);
+});
 // Shared backdrop for the master/detail edit overlay (one open at a time).
 const _detailBackdrop = document.createElement("div");
 _detailBackdrop.className = "detail-backdrop";
@@ -1835,6 +1860,54 @@ async function loadRoster() {
   if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
   applyRosterSel();
   _updateRosterCounts();
+  _renderRosterCompleteness();
+}
+
+// Roster completeness: surface active entries missing data the TD needs before
+// the event (division, gender, t-shirt, or an unpaid balance) so they can be
+// chased. Clicking a flagged player selects them in the grid for editing.
+const _COMPLETE_LABEL = {
+  missing_division: "no division", missing_gender: "no gender",
+  missing_shirt: "no t-shirt size", outstanding_balance: "balance due",
+};
+async function _renderRosterCompleteness() {
+  const box = document.getElementById("roster-completeness");
+  if (!box || !active) return;
+  let c;
+  try { c = await api(`/tournaments/${active.id}/roster-completeness`); }
+  catch (e) { box.innerHTML = ""; return; }
+  if (!c.counts.incomplete_entries) {
+    box.innerHTML = c.counts.total_active
+      ? '<p class="rc-clean">✓ All ' + c.counts.total_active + ' active roster entries are complete.</p>' : "";
+    return;
+  }
+  const k = c.counts;
+  const chips = [
+    k.missing_division ? `${k.missing_division} no division` : "",
+    k.missing_gender ? `${k.missing_gender} no gender` : "",
+    k.missing_shirt ? `${k.missing_shirt} no t-shirt` : "",
+    k.outstanding_balance ? `${k.outstanding_balance} balance due` : "",
+  ].filter(Boolean).join(" · ");
+  box.innerHTML =
+    `<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} active entr` +
+    `${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${esc(chips)})</span></summary>` +
+    `<ul class="rc-list">` +
+    c.entries.map((e) =>
+      `<li class="rc-row" data-eid="${e.entry_id}">` +
+      `<span class="rc-name">${esc(e.player_name)} <span class="muted">#${esc(e.usta_number || "—")}</span></span>` +
+      `<span class="rc-issues">${e.issues.map((i) =>
+        `<span class="rc-issue${i === "outstanding_balance" ? " rc-issue-pay" : ""}">${esc(_COMPLETE_LABEL[i] || i)}` +
+        (i === "outstanding_balance" && e.amount_outstanding != null ? ` ${money(e.amount_outstanding)}` : "") +
+        `</span>`).join(" ")}</span></li>`
+    ).join("") + `</ul></details>`;
+  box.querySelectorAll(".rc-row").forEach((row) => row.addEventListener("click", () => {
+    const id = Number(row.dataset.eid);
+    const r = (rosterRows || []).find((x) => x.id === id);
+    if (!r) return;
+    rosterSelect(r);          // select + load into the editor
+    rosterOpenModal();        // open the edit form so the TD can fill the gap
+    try { rosterGrid.scrollToRow(id, "center", false); } catch (_) {}
+  }));
 }
 // R-4: a one-line summary strip above the roster grid.
 function _updateRosterCounts() {
@@ -1896,12 +1969,15 @@ const rosterGrid = new Tabulator(rosterMount, {
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) => ((e.lodging_plan || e.lodging_plan_raw || "").toLowerCase().includes(String(term).toLowerCase())) },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 110, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 140, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         const e = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
         // Edit is the primary action; Withdraw + Remove fold into a ⋯ overflow
         // menu (design-crit R-2) so the destructive verbs don't sit on every row.
+        const v360 = document.createElement("button"); v360.type = "button"; v360.className = "btn-icon"; v360.textContent = "👤";
+        v360.title = "View everything about this player (360)"; v360.setAttribute("aria-label", v360.title);
+        v360.addEventListener("click", (ev) => { ev.stopPropagation(); openPlayer360(e.player_id, active ? active.id : null); });
         const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-icon"; ed.textContent = "✎";
         ed.title = "Edit roster entry"; ed.setAttribute("aria-label", ed.title);
         ed.addEventListener("click", (ev) => { ev.stopPropagation(); rosterSelect(e); rosterOpenModal(); });
@@ -1923,7 +1999,18 @@ const rosterGrid = new Tabulator(rosterMount, {
           try { await api(`/roster/${e.id}`, { method: "DELETE" }); if (rosterEditId === e.id) { rosterShowNew(); rosterCloseModal(); } await loadRoster(); }
           catch (err) { toast(err.message, false); }
         };
+        // Promote an alternate to selected (the move when a slot opens up).
+        const isAlt = e.selection_status === "alternate";
+        const doPromote = async () => {
+          try {
+            await api(`/roster/${e.id}/promote`, { method: "POST" });
+            toast(`Promoted ${rosterName(e)} to selected`, true);
+            await loadRoster();
+          } catch (err) { toast(err.message, false); }
+        };
         const items = [
+          ...(isAlt ? [{ label: "↑ Promote to selected",
+            title: "Move this alternate into a selected slot", onClick: doPromote }] : []),
           { label: withdrawn ? "Already withdrawn" : "Withdraw…",
             title: withdrawn ? "Player is already withdrawn" : "File a withdrawal for this player",
             onClick: doWithdraw },
@@ -1931,7 +2018,7 @@ const rosterGrid = new Tabulator(rosterMount, {
           { label: "Remove from roster", danger: true, onClick: doDelete },
         ];
         const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
-        wrap.append(ed, menu); return wrap;
+        wrap.append(v360, ed, menu); return wrap;
       } },
   ],
 });
@@ -2442,8 +2529,142 @@ async function loadAssignments() {
   // Stash the list + availability so the response-status filter can re-render
   // without re-fetching, and so the TD can jump straight to declines to re-staff.
   _asgState = { list, availByOfficial };
+  _renderBulkInvite(new Set(list.map((a) => a.official_id)), availByOfficial);
   _renderAsgList();
+  _renderNoLogin();
 }
+
+// Assigned officials with no self-service login can't accept/decline, so their
+// assignments sit pending forever — flag them with a jump to Officials setup
+// (where the TD creates the login).
+async function _renderNoLogin() {
+  const box = document.getElementById("asg-nologin");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/officials-without-login`); }
+  catch (_) { box.hidden = true; return; }
+  if (!d.count) { box.hidden = true; box.innerHTML = ""; return; }
+  const names = d.officials.map((o) =>
+    `${esc(o.official_name)}${o.has_email ? "" : ' <span class="muted">(no email)</span>'}`).join("; ");
+  box.hidden = false;
+  box.innerHTML =
+    `<span class="asg-nologin-text">🔑 ${d.count} assigned official${d.count === 1 ? "" : "s"} ` +
+    `can't accept/decline — no login: <strong>${names}</strong>.</span> ` +
+    `<button type="button" id="asg-nologin-go" class="btn-small">Set up logins →</button>`;
+  document.getElementById("asg-nologin-go")?.addEventListener("click", () =>
+    _dashGo("setup", "panel-officials"));
+}
+
+// Bulk invite: pick several not-yet-assigned officials and create a pending
+// assignment for each in one call (POST .../assignments/bulk), then offer a
+// single mailto to everyone who was just invited. Officials already on the
+// tournament are excluded from the picker (they're already in the response loop).
+function _renderBulkInvite(assignedIds, availByOfficial) {
+  const box = document.getElementById("asg-bulk-list");
+  if (!box) return;
+  const candidates = Object.values(officialsById)
+    .filter((o) => !assignedIds.has(o.id))
+    .sort((a, b) => officialLabel(a).localeCompare(officialLabel(b)));
+  const summary = document.querySelector("#asg-bulk > summary");
+  if (summary) summary.textContent = `＋ Invite several officials at once (${candidates.length} available)`;
+  if (!candidates.length) {
+    box.innerHTML = '<p class="muted">Every official is already assigned to this tournament.</p>';
+  } else {
+    box.innerHTML = candidates.map((o) => {
+      const n = (availByOfficial[o.id] || []).length;
+      const avail = n ? `${n} avail day(s)` : "no availability";
+      return `<label class="bulk-row"><input type="checkbox" class="bulk-cb" value="${o.id}" ` +
+        `data-label="${esc(officialLabel(o).toLowerCase())}" />` +
+        `<span class="bulk-name">${esc(officialLabel(o))}</span>` +
+        `<span class="bulk-meta">${esc(avail)}</span></label>`;
+    }).join("");
+  }
+  _bulkSyncCount();
+}
+
+function _bulkSyncCount() {
+  const sel = document.querySelectorAll("#asg-bulk-list .bulk-cb:checked").length;
+  const el = document.getElementById("asg-bulk-count");
+  if (el) el.textContent = `${sel} selected`;
+  const go = document.getElementById("asg-bulk-go");
+  if (go) go.disabled = sel === 0;
+}
+
+// "✉ Invite all": fetch a personalised invite for every assigned official, copy
+// the combined document to the clipboard, and (when emails are on file) offer a
+// BCC-all mailto for the whole panel.
+document.getElementById("asg-invite-all")?.addEventListener("click", async () => {
+  if (!active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/invite-texts`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.count) { toast("No officials assigned yet", false); return; }
+  const combined = d.invites.map((i) =>
+    `=== ${i.official_name}${i.official_email ? ` <${i.official_email}>` : " (no email on file)"} ===\n` +
+    `Subject: ${i.subject}\n\n${i.body}`).join("\n\n----------------------------------------\n\n");
+  try { await navigator.clipboard.writeText(combined); } catch (_) {}
+  const action = d.emails.length ? {
+    label: `BCC ${d.emails.length} →`,
+    onClick: () => {
+      const subj = encodeURIComponent(`Officiating assignment — ${active.name}`);
+      window.open(`mailto:?bcc=${encodeURIComponent(d.emails.join(","))}&subject=${subj}`, "_blank");
+    },
+  } : null;
+  toast(`Copied ${d.count} personalised invite${d.count === 1 ? "" : "s"} to the clipboard` +
+    (d.emails.length ? "" : " (no emails on file)"), true, action);
+});
+
+// --- Bulk-invite controls (wired once; list is repopulated per loadAssignments) ---
+(() => {
+  const list = document.getElementById("asg-bulk-list");
+  const filter = document.getElementById("asg-bulk-filter");
+  if (!list) return;
+  list.addEventListener("change", (e) => { if (e.target.classList.contains("bulk-cb")) _bulkSyncCount(); });
+  if (filter) filter.addEventListener("input", () => {
+    const q = filter.value.trim().toLowerCase();
+    list.querySelectorAll(".bulk-row").forEach((r) => {
+      const cb = r.querySelector(".bulk-cb");
+      r.hidden = q.length > 0 && !cb.dataset.label.includes(q);
+    });
+  });
+  document.getElementById("asg-bulk-all")?.addEventListener("click", () => {
+    list.querySelectorAll(".bulk-row:not([hidden]) .bulk-cb").forEach((cb) => { cb.checked = true; });
+    _bulkSyncCount();
+  });
+  document.getElementById("asg-bulk-none")?.addEventListener("click", () => {
+    list.querySelectorAll(".bulk-cb").forEach((cb) => { cb.checked = false; });
+    _bulkSyncCount();
+  });
+  document.getElementById("asg-bulk-go")?.addEventListener("click", async () => {
+    if (!active) return;
+    const ids = [...list.querySelectorAll(".bulk-cb:checked")].map((cb) => Number(cb.value));
+    if (!ids.length) return;
+    const go = document.getElementById("asg-bulk-go");
+    go.disabled = true;
+    try {
+      const r = await api(`/tournaments/${active.id}/assignments/bulk`, {
+        method: "POST", body: JSON.stringify({ official_ids: ids }),
+      });
+      let msg = `Invited ${r.created_count} official${r.created_count === 1 ? "" : "s"}`;
+      if (r.skipped_existing.length) msg += ` · ${r.skipped_existing.length} already assigned`;
+      // Offer a single mailto to everyone who was just invited and has an email.
+      if (r.invite_emails.length) {
+        const subj = encodeURIComponent(`Officiating assignment — ${active.name}`);
+        const bodyTxt = encodeURIComponent(`You've been assigned to ${active.name}. Please confirm (accept or decline) via your CourtOps self-service "My assignments" page. Thank you.`);
+        const href = `mailto:?bcc=${encodeURIComponent(r.invite_emails.join(","))}&subject=${subj}&body=${bodyTxt}`;
+        toast(msg, true, { label: `✉ Email ${r.invite_emails.length} invited`, onClick: () => window.open(href, "_blank") });
+      } else {
+        toast(msg, true);
+      }
+      document.getElementById("asg-bulk").open = false;
+      if (filter) filter.value = "";
+      loadAssignments();
+    } catch (e) {
+      setMsg("asg-bulk-msg", e.message, false);
+      go.disabled = false;
+    }
+  });
+})();
 
 // Response-status filter ('all' | 'pending' | 'accepted' | 'declined') + the
 // fetched assignment list, kept module-level so toggling a filter re-renders
@@ -2505,8 +2726,14 @@ function renderAssignment(a, availDates) {
   card.className = "asg";
   // Structured header: name + actions on top; venue/hotel meta line; then
   // pay/mileage/total badges and any flags as colored chips (no run-on line).
+  // Mileage = $0 with a distance ON FILE is legitimate (the first 50 round-trip
+  // miles are free), but reads like a broken/missing calc — distinguish it from
+  // the genuine "no distance" state with a hint (E2E finding F1).
   const mileage = a.missing_distance ? '<span class="warn">no distance</span>'
-    : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
+    : (a.mileage == null ? "—"
+       : (a.mileage === 0 && a.one_way_miles != null
+          ? `$0.00 <span class="muted" title="${esc("Within the first 50 free round-trip miles (" + a.one_way_miles + " mi one-way) — no mileage owed.")}">(free band)</span>`
+          : "$" + a.mileage.toFixed(2)));
   // Cross-tournament double-booking (a warning, not a block — audit §3.4). A
   // different-site clash is impossible (badge-bad); same/no site is a soft
   // heads-up (badge-warn). Tooltip lists where else the official is booked.
@@ -2593,7 +2820,27 @@ function renderAssignment(a, availDates) {
       asgForm.official_id.focus();
     });
   }
-  actions.append(ed, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
+  // ✉ Invite: compose a personalised assignment email (this official's days,
+  // role, site, pay) — copy it to the clipboard and, if an email is on file,
+  // offer to open a pre-filled message.
+  const inv = document.createElement("button");
+  inv.type = "button"; inv.className = "btn-link"; inv.textContent = "✉ Invite";
+  inv.title = "Copy a ready-to-paste assignment email for this official";
+  inv.addEventListener("click", async () => {
+    let t;
+    try { t = await api(`/assignments/${a.id}/invite-text`); }
+    catch (e) { toast(e.message, false); return; }
+    const full = `Subject: ${t.subject}\n\n${t.body}`;
+    try { await navigator.clipboard.writeText(full); } catch (_) {}
+    const action = t.official_email ? {
+      label: "Open email →",
+      onClick: () => window.open(
+        `mailto:${encodeURIComponent(t.official_email)}?subject=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(t.body)}`,
+        "_blank"),
+    } : null;
+    toast(`Invite for ${a.official_name} copied to clipboard${t.official_email ? "" : " (no email on file)"}`, true, action);
+  });
+  actions.append(ed, inv, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
 
   // Inline mileage fix: if the venue site has no distance on file, add it right
   // here instead of switching to the Distances tab.
@@ -2996,6 +3243,107 @@ async function loadAvailability() {
   renderAvailDates();
   renderAvailTable();
   renderAvailCerts(oid);
+  renderAvailHeatmap();
+}
+
+// Staffing heatmap: officials × play-window days. A cell is green when the
+// official declared available, carries a ● when they're actually assigned that
+// day, and the footer tallies available/assigned per day so thin days pop out.
+async function renderAvailHeatmap() {
+  const box = document.getElementById("avail-heatmap");
+  if (!box || !active) return;
+  let g;
+  try { g = await api(`/tournaments/${active.id}/availability/grid`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!g.days.length) { box.innerHTML = '<p class="muted">This tournament has no play-date window set.</p>'; return; }
+  if (!g.officials.length) { box.innerHTML = '<p class="muted">No availability declared and nobody assigned yet.</p>'; return; }
+  const head = `<th class="hm-name">Official</th>` +
+    g.days.map((d) => `<th class="hm-day">${esc(fmtDOW(d))}</th>`).join("");
+  const body = g.officials.map((o) => {
+    const avail = new Set(o.available), asg = new Set(o.assigned);
+    const cells = g.days.map((d) => {
+      const a = avail.has(d), s = asg.has(d);
+      // assigned-but-not-declared-available is worth flagging (amber ring).
+      const cls = ["hm-cell"];
+      if (a) cls.push("hm-avail");
+      if (s) cls.push("hm-asg");
+      if (s && !a) cls.push("hm-asg-only");
+      // Non-assigned cells are clickable to staff this official on this day.
+      const click = !s;
+      if (click) cls.push("hm-clickable");
+      const attrs = click ? ` data-oid="${o.official_id}" data-date="${esc(d)}" data-name="${esc(o.official_name)}"` : "";
+      const title = `${esc(o.official_name)} · ${esc(fmtDOW(d))}: ` +
+        (a ? "available" : "not declared") + (s ? ", assigned" : " — click to assign");
+      return `<td class="${cls.join(" ")}"${attrs} title="${title}">${s ? "●" : ""}</td>`;
+    }).join("");
+    const pid = `<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${esc(o.official_name)}` +
+      (o.hotel_needed ? ' <span class="hm-hotel-tag" title="needs hotel">🛏</span>' : "") + `</span>`;
+    return `<tr><th class="hm-name">${pid}</th>${cells}</tr>`;
+  }).join("");
+  const foot = `<th class="hm-name">Available / assigned</th>` +
+    g.per_day.map((p) => {
+      const thin = p.available_count === 0;
+      return `<td class="hm-tot${thin ? " hm-thin" : ""}" title="${p.available_count} available, ${p.assigned_count} assigned">` +
+        `${p.available_count}<span class="hm-sep">/</span>${p.assigned_count}</td>`;
+    }).join("");
+  box.innerHTML =
+    `<table class="avail-heatmap"><thead><tr>${head}</tr></thead>` +
+    `<tbody>${body}</tbody>` +
+    `<tfoot><tr>${foot}</tr></tfoot></table>`;
+}
+
+// Click a heatmap cell → assign that official on that day. The role isn't in the
+// heatmap, so a small popover offers the official's held certifications (or the
+// full role list when they hold none); picking one runs coverage-fill.
+let _hmPop = null;
+function _closeHmPop() { if (_hmPop) { _hmPop.remove(); _hmPop = null; } }
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest && e.target.closest("#avail-heatmap .hm-clickable");
+  if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeHmPop(); return; }
+  _openAssignCell(cell);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeHmPop(); });
+
+async function _openAssignCell(cell) {
+  _closeHmPop();
+  if (!active) return;
+  const oid = Number(cell.dataset.oid), date = cell.dataset.date, name = cell.dataset.name;
+  const pop = document.createElement("div");
+  pop.className = "cov-pop";
+  pop.innerHTML = `<div class="cov-pop-head">${esc(name)} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  document.body.appendChild(pop);
+  _hmPop = pop;
+  const r = cell.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + r.bottom + 4}px`;
+  pop.style.left = `${window.scrollX + Math.min(r.left, window.innerWidth - 280)}px`;
+  let held = [];
+  try { held = await api(`/officials/${oid}/certifications`); }
+  catch (_) {}
+  if (_hmPop !== pop) return;
+  // Offer the roles they're certified for; if none on file, the whole list (the
+  // backend cert guard allows any role when no certs are recorded).
+  const roles = held.length ? held.map((c) => c.cert_type) : CERTS.map(([v]) => v);
+  const note = held.length ? "Assign as:" : "No certifications on file — assign as:";
+  pop.innerHTML =
+    `<div class="cov-pop-head">Assign ${esc(name)} · ${esc(fmtDOW(date))}</div>` +
+    `<p class="cov-pop-note">${note}</p>` +
+    `<ul class="cov-cand-list">` +
+    roles.map((role) =>
+      `<li class="cov-cand"><span class="cov-cand-name">${esc(certLabel(role))}</span>` +
+      `<button type="button" class="cov-fill-btn" data-role="${esc(role)}">Assign</button></li>`
+    ).join("") + `</ul>`;
+  pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/tournaments/${active.id}/coverage-fill`, {
+        method: "POST",
+        body: JSON.stringify({ official_id: oid, work_date: date, working_as: btn.dataset.role }),
+      });
+      toast(`Assigned ${name} as ${certLabel(btn.dataset.role)} on ${fmtDOW(date)}`, true);
+      _closeHmPop();
+      loadAvailability();
+    } catch (err) { toast(err.message, false); btn.disabled = false; }
+  }));
 }
 document.getElementById("avail-official").addEventListener("change", () => {
   renderAvailDates();
@@ -3209,7 +3557,11 @@ const inboxGrid = makeReadGrid("inbox-table", [
         wrap.appendChild(btn);
         return wrap;
       }
-      return esc(m.detected_player_name) + matchHint(m.detected_match_kind);
+      // A matched player's name is a 360 link (open the full player view).
+      const nm = m.detected_player_id
+        ? `<span class="p360-link" data-pid="${m.detected_player_id}" role="button" tabindex="0" title="View everything about this player (360)">${esc(m.detected_player_name)}</span>`
+        : esc(m.detected_player_name);
+      return nm + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
@@ -3679,6 +4031,27 @@ document.getElementById("inbox-bulk-clear").addEventListener("click", () => {
   inboxGrid.grid.redraw();
   _inboxBulkRefreshUi();
 });
+document.getElementById("inbox-bulk-classify").addEventListener("click", async (ev) => {
+  if (!_inboxSelected.size) return;
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    const res = await api("/emails/bulk/classify", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    if (!res.classified) {
+      setMsg("inbox-bulk-msg", "Nothing to classify (already classified, or no rule matched).", false);
+    } else {
+      const parts = Object.entries(res.counts)
+        .map(([k, n]) => `${n} ${(EMAIL_CLASS_META[k] && EMAIL_CLASS_META[k].label) || k}`).join(", ");
+      setMsg("inbox-bulk-msg", `classified ${res.classified}: ${parts}`, true);
+      toast(`Auto-classified ${res.classified} email${res.classified === 1 ? "" : "s"} — review, then Detect players → Populate.`, true);
+    }
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+  finally { btn.disabled = false; }
+});
 document.getElementById("inbox-bulk-detect").addEventListener("click", async () => {
   if (!_inboxSelected.size) return;
   try {
@@ -3690,15 +4063,13 @@ document.getElementById("inbox-bulk-detect").addEventListener("click", async () 
     await loadInbox();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
-// "Unmatched only" toggle: a client-side data filter (combines with the status /
-// tournament header filters via AND) to show only emails with no matched player,
-// so the TD can work through the detection gaps. Persists across inbox reloads.
-const _inboxUnmatchedFilter = (data) => !data.detected_player_id;
+// "Unmatched only" drilldown: a SERVER-SIDE filter (unmatched=true) so it's
+// accurate across the whole inbox, not just the loaded page — the TD works
+// through every detection gap. Reloads on toggle; persists across reloads.
+let _inboxUnmatchedOnly = false;
 document.getElementById("inbox-unmatched-only")?.addEventListener("change", (e) => {
-  try {
-    if (e.target.checked) inboxGrid.grid.addFilter(_inboxUnmatchedFilter);
-    else inboxGrid.grid.removeFilter(_inboxUnmatchedFilter);
-  } catch (_) {}
+  _inboxUnmatchedOnly = e.target.checked;
+  loadInbox();
 });
 // One-click "Detect players" over the whole inbox: runs the detector on every
 // loaded email that has no matched player yet (and an assigned tournament — the
@@ -3777,6 +4148,38 @@ document.getElementById("inbox-bulk-populate").addEventListener("click", async (
     btn.disabled = false;
   }
 });
+// One-click triage: classify → detect players → populate, in a single request.
+document.getElementById("inbox-bulk-triage").addEventListener("click", async (ev) => {
+  if (!_inboxSelected.size) return;
+  const btn = ev.currentTarget;
+  if (!(await confirmDialog(
+    `Triage ${_inboxSelected.size} selected email(s)?\n\nThis will, in one pass:\n` +
+    `  1. auto-classify the unclassified ones (local rules)\n` +
+    `  2. detect the player each is about\n` +
+    `  3. file the fileable ones into their lists\n\n` +
+    `Doubles / pairing emails and any without a detected player are left for manual filing.`,
+    "Triage all", "primary"))) return;
+  btn.disabled = true;
+  try {
+    const res = await api("/emails/bulk/triage", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
+    });
+    const skippedMsg = res.skipped.length
+      ? ` · ${res.skipped.length} left for manual filing`
+      : "";
+    const summary = `Triaged: classified ${res.classified}, matched ${res.detected}, filed ${res.filed}${skippedMsg}`;
+    setMsg("inbox-bulk-msg", summary, res.skipped.length === 0);
+    toast(summary, res.skipped.length === 0);
+    _inboxSelected.clear();
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) {
+    setMsg("inbox-bulk-msg", e.message, false);
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+});
 // Populate the tournament dropdown lazily — once when the panel opens.
 _inboxPopulateTournamentDropdown();
 let _inboxFilterInit = false;
@@ -3790,6 +4193,7 @@ async function loadInbox() {
   const q = (document.getElementById("inbox-search")?.value || "").trim();
   const params = new URLSearchParams({ limit: String(_INBOX_PAGE) });
   if (q) params.set("q", q);
+  if (_inboxUnmatchedOnly) params.set("unmatched", "true");
   const rows = await api(`/emails?${params}`);
   inboxGrid.setData(rows);
   const note = document.getElementById("inbox-search-note");
@@ -3823,12 +4227,48 @@ async function _loadInboxStatusSummary() {
     `<a href="#" id="inbox-sum-new" class="${c.new ? "inbox-sum-todo" : ""}">${c.new} unfiled</a>` +
     ` · <span class="resp-ok">${c.filed} filed</span>` +
     (c.needs_followup ? ` · <span class="warn">${c.needs_followup} need follow-up</span>` : "") +
+    (c.unmatched ? ` · <a href="#" id="inbox-sum-unmatched" class="warn">${c.unmatched} unmatched</a>` : "") +
     ` · ${c.total} total`;
   const link = document.getElementById("inbox-sum-new");
   if (link) link.addEventListener("click", (e) => {
     e.preventDefault();
     try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
   });
+  // "N unmatched" → flip on the server-side unmatched-only drilldown (and sync
+  // the checkbox so the two controls agree).
+  const um = document.getElementById("inbox-sum-unmatched");
+  if (um) um.addEventListener("click", (e) => {
+    e.preventDefault();
+    const cb = document.getElementById("inbox-unmatched-only");
+    if (cb && !cb.checked) { cb.checked = true; }
+    _inboxUnmatchedOnly = true;
+    loadInbox();
+  });
+  _renderInboxAging();
+}
+
+// Oldest unfiled emails first, with days-waiting — so nothing languishes. Shown
+// only when the oldest has waited a while; clicking an item searches for it.
+async function _renderInboxAging() {
+  const box = document.getElementById("inbox-aging");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/emails/aging?tournament_id=${active.id}&limit=5`); }
+  catch (_) { box.hidden = true; return; }
+  // Only surface when there's a backlog worth nudging (oldest ≥ 2 days).
+  if (!d.count || d.oldest_age_days < 2) { box.hidden = true; box.innerHTML = ""; return; }
+  const age = (n) => `<span class="ia-age${n >= 7 ? " ia-old" : ""}">${n}d</span>`;
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="ia-head">⏳ Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div>` +
+    `<ul class="ia-list">` + d.items.map((i) =>
+      `<li class="ia-item" data-subj="${esc(i.subject || "")}">${age(i.age_days)} ` +
+      `<span class="ia-subj">${esc(i.subject || "(no subject)")}</span> ` +
+      `<span class="muted">${esc(i.from_address || "")}</span></li>`).join("") + `</ul>`;
+  box.querySelectorAll(".ia-item").forEach((li) => li.addEventListener("click", () => {
+    const search = document.getElementById("inbox-search");
+    if (search) { search.value = li.dataset.subj; loadInbox(); }
+  }));
 }
 // Debounced server-side inbox search (re-queries; no per-keystroke round-trip).
 let _inboxSearchTimer = null;
@@ -4068,11 +4508,68 @@ onSubmit(wdForm, async (e) => {
   const b = expandPlayerRef(formObj(wdForm));
   b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
   try {
-    await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
-    setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadRoster(); loadInbox();
+    const wd = await api(`/tournaments/${active.id}/withdrawals`, { method: "POST", body: JSON.stringify(b) });
+    setMsg("withdrawal-msg", "added", true); wdReset(); loadWithdrawals(); loadInbox();
+    await loadRoster();
+    // A slot just opened — auto-suggest the best-matching alternate(s) inline.
+    await _suggestAlternates(wd);
   } catch (err) { setMsg("withdrawal-msg", err.message, false); markInvalid(wdForm, err.message); }
 });
-wdForm.querySelector(".cancel").addEventListener("click", wdReset);
+wdForm.querySelector(".cancel").addEventListener("click", () => { wdReset(); _hideWdSuggest(); });
+
+function _hideWdSuggest() {
+  const box = document.getElementById("wd-suggest");
+  if (box) { box.hidden = true; box.innerHTML = ""; }
+}
+
+// After a withdrawal, surface alternates to promote — same division first (the
+// best match), then any other waiting alternates — each with one-click promote.
+async function _suggestAlternates(wd) {
+  const box = document.getElementById("wd-suggest");
+  if (!box || !active) return;
+  const div = wd && wd.age_division;
+  let sameDiv = [], others = [];
+  try {
+    if (div) sameDiv = await api(`/tournaments/${active.id}/alternates?age_division=${encodeURIComponent(div)}`);
+    const all = await api(`/tournaments/${active.id}/alternates`);
+    const sameIds = new Set(sameDiv.map((a) => a.id));
+    others = all.filter((a) => !sameIds.has(a.id));
+  } catch (_) { _hideWdSuggest(); return; }
+  if (!sameDiv.length && !others.length) {
+    box.hidden = false;
+    box.innerHTML = `<p class="wd-suggest-empty">No alternates waiting${div ? ` in <strong>${esc(div)}</strong> or any other division` : ""} — nothing to promote.</p>`;
+    return;
+  }
+  const who = wd ? `${esc(wd.last_name)}, ${esc(wd.first_name)}` : "a player";
+  const row = (a, best) =>
+    `<li class="wd-alt${best ? " is-best" : ""}">` +
+    `<span class="wd-alt-name">${esc(a.last_name)}, ${esc(a.first_name)}` +
+    (a.player_id ? ` <span class="p360-link" data-pid="${a.player_id}" title="Open player 360">👤</span>` : "") + `</span>` +
+    `<span class="wd-alt-div">${esc(a.age_division || "—")}${best ? ' <span class="wd-best-tag">best match</span>' : ""}</span>` +
+    `<button type="button" class="wd-promote" data-eid="${a.id}" data-name="${esc(a.last_name)}, ${esc(a.first_name)}">↑ Promote to selected</button>` +
+    `</li>`;
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="wd-suggest-head"><strong>${who}</strong> withdrew` +
+    (div ? ` from <strong>${esc(div)}</strong>` : "") +
+    ` — promote an alternate to fill the slot:</div>` +
+    `<ul class="wd-alt-list">` +
+    sameDiv.map((a) => row(a, true)).join("") +
+    (others.length
+      ? `<li class="wd-alt-sep">Other divisions</li>` + others.map((a) => row(a, false)).join("")
+      : "") +
+    `</ul>`;
+  box.querySelectorAll(".wd-promote").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/roster/${btn.dataset.eid}/promote`, { method: "POST" });
+      toast(`Promoted ${btn.dataset.name} to selected`, true);
+      btn.closest(".wd-alt").classList.add("wd-alt-done");
+      btn.replaceWith(Object.assign(document.createElement("span"), { className: "wd-alt-promoted", textContent: "✓ promoted" }));
+      await loadRoster();
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  }));
+}
 
 // Generic player-keyed Part B list (form + table + delete + file-from-email).
 function wirePlayerList(cfg) {
@@ -4704,6 +5201,478 @@ onSubmit(doublesForm, async (e) => {
 });
 doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
 
+// --- Home / "Today" dashboard ---
+// Cross-tournament overview (always) + a status board for the active tournament,
+// aggregating the numbers that otherwise live behind Inbox/Assignments/Reports.
+function _daysUntil(iso) {
+  if (!iso) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(iso + "T00:00:00") - today) / 86400000);
+}
+function _deadlineCell(iso) {
+  const n = _daysUntil(iso);
+  if (n === null) return '<span class="muted">—</span>';
+  if (n < 0) return `${esc(_fmtMDY(iso))} <span class="muted">(passed)</span>`;
+  if (n === 0) return `${esc(_fmtMDY(iso))} <span class="warn">(today)</span>`;
+  return `${esc(_fmtMDY(iso))} <span class="${n <= 7 ? "warn" : "muted"}">(in ${n}d)</span>`;
+}
+function _dashGo(group, tab) {
+  activateGroup(group);
+  const el = document.querySelector(`.tab[data-target="${tab}"]`);
+  if (el) el.click();
+}
+const _DEADLINE_LABEL = { registration: "Registration deadline", late_entry: "Late-entry deadline", play_start: "Play starts" };
+async function _renderDeadlines() {
+  const el = document.getElementById("dash-deadlines");
+  if (!el) return;
+  let data;
+  try { data = await api("/dashboard/deadlines"); } catch (_) { el.hidden = true; return; }
+  const items = data.deadlines || [];
+  if (!items.length) { el.hidden = true; el.innerHTML = ""; return; }
+  const urgency = (n) => n < 0 ? `<span class="resp-bad">${Math.abs(n)}d ago</span>`
+    : (n === 0 ? '<span class="resp-bad">today</span>'
+      : `<span class="${n <= 7 ? "warn" : "muted"}">in ${n}d</span>`);
+  el.hidden = false;
+  el.innerHTML = `<div class="dash-dl-head">⏰ ${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div>` +
+    `<ul class="dash-dl-list">` + items.map((x) =>
+      `<li class="dash-dl-item" data-tid="${x.tournament_id}" tabindex="0" role="button">` +
+      `<strong>${esc(x.tournament_name)}</strong> — ${esc(_DEADLINE_LABEL[x.kind] || x.kind)} ` +
+      `${esc(_fmtMDY(x.date))} · ${urgency(x.days_until)}</li>`).join("") + `</ul>`;
+  el.querySelectorAll(".dash-dl-item").forEach((li) => {
+    const go = () => setActive(Number(li.dataset.tid));
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
+// Cross-tournament digest: every active event's open-task tally + soonest key
+// date, most-urgent first, so the TD triages across all tournaments at once.
+const _DIGEST_TASKS = [
+  ["unfiled_inbox", "unfiled", ["inbox", "panel-t-inbox"]],
+  ["officials_pending", "pending", ["staffing", "panel-t-assignments"]],
+  ["officials_declined", "declined", ["staffing", "panel-t-assignments"]],
+  ["uncovered_days", "uncovered days", ["staffing", "panel-t-reports"]],
+  ["conflicts", "conflicts", ["staffing", "panel-t-reports"]],
+  ["roster_incomplete", "roster gaps", ["tournament", "panel-t-roster"]],
+];
+async function _renderDigest() {
+  const el = document.getElementById("dash-digest");
+  if (!el) return;
+  let dg;
+  try { dg = await api("/dashboard/digest"); } catch (_) { el.hidden = true; return; }
+  const rows = dg.tournaments || [];
+  if (!rows.length) { el.hidden = true; el.innerHTML = ""; return; }
+  const due = (nd) => {
+    if (!nd) return "";
+    const n = nd.days_until;
+    const when = n < 0 ? `${Math.abs(n)}d ago` : (n === 0 ? "today" : `in ${n}d`);
+    const cls = n <= 0 ? "resp-bad" : (n <= 7 ? "warn" : "muted");
+    return ` · <span class="${cls}">${esc(_DEADLINE_LABEL[nd.kind] || nd.kind)} ${when}</span>`;
+  };
+  const t = dg.totals;
+  el.hidden = false;
+  el.innerHTML =
+    `<div class="dash-dg-head">📋 ${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div>` +
+    `<ul class="dash-dg-list">` + rows.map((r) => {
+      const chips = _DIGEST_TASKS.filter(([k]) => r.tasks[k] > 0).map(([k, label, go]) =>
+        `<button type="button" class="dash-dg-chip" data-go-group="${go[0]}" data-go-tab="${go[1]}" data-tid="${r.tournament_id}">` +
+        `${r.tasks[k]} ${esc(label)}</button>`).join("");
+      const clean = r.open_tasks === 0 ? '<span class="dash-dg-clean">✓ all clear</span>' : "";
+      return `<li class="dash-dg-row"><span class="dash-dg-name" data-tid="${r.tournament_id}" tabindex="0" role="button">` +
+        `<strong>${esc(r.tournament_name)}</strong>${due(r.next_deadline)}</span>` +
+        `<span class="dash-dg-chips">${chips}${clean}</span></li>`;
+    }).join("") + `</ul>`;
+  // chip → set that tournament active AND jump to the relevant tab.
+  el.querySelectorAll(".dash-dg-chip").forEach((b) => b.addEventListener("click", () => {
+    setActive(Number(b.dataset.tid));
+    _dashGo(b.dataset.goGroup, b.dataset.goTab);
+  }));
+  el.querySelectorAll(".dash-dg-name").forEach((n) => {
+    const go = () => setActive(Number(n.dataset.tid));
+    n.addEventListener("click", go);
+    n.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+}
+// Official workload (cross-tournament): days/assignments per official, busiest
+// first, with zero-load officials flagged — so the TD balances staffing. Links to
+// each official's 360. No active tournament needed.
+async function _renderWorkload() {
+  const box = document.getElementById("dash-workload");
+  if (!box) return;
+  let w;
+  try { w = await api("/officials/workload"); } catch (_) { box.innerHTML = ""; return; }
+  if (!w.officials.length) { box.innerHTML = '<p class="muted">No officials yet.</p>'; return; }
+  const t = w.totals;
+  const maxDays = Math.max(1, ...w.officials.map((o) => o.days));
+  const rows = w.officials.map((o) => {
+    const cls = o.assignments === 0 ? "wl-zero" : "";
+    const bar = `<span class="wl-bar" style="width:${Math.round((o.days / maxDays) * 100)}%"></span>`;
+    const mix = o.assignments
+      ? `<span class="muted">${o.accepted}✓ ${o.pending}⏳ ${o.declined}✗</span>` : "";
+    return `<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${esc(o.official_name)}</span></td>` +
+      `<td class="num">${o.days}</td><td class="num">${o.assignments}</td>` +
+      `<td class="num">${o.tournaments}</td><td class="wl-barcell">${bar}</td><td>${mix}</td></tr>`;
+  }).join("");
+  box.innerHTML =
+    `<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)` +
+    `${t.unused ? ` · <span class="warn">${t.unused} unused</span>` : ""}.</p>` +
+    `<table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th>` +
+    `<th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+  box.querySelectorAll(".wl-off-link[data-oid]").forEach((el) =>
+    el.addEventListener("click", () => openOfficial360(Number(el.dataset.oid))));
+}
+
+async function loadDashboard() {
+  _renderDeadlines();  // cross-tournament approaching-deadline banner
+  _renderDigest();     // cross-tournament open-task digest
+  _renderWorkload();   // cross-tournament official workload balance
+  // Cross-tournament overview table.
+  let tournaments = [];
+  try { tournaments = await api("/tournaments"); } catch (_) {}
+  const body = document.querySelector("#dash-overview-table tbody");
+  body.innerHTML = tournaments.length
+    ? tournaments.slice().sort((a, b) => String(a.play_start_date).localeCompare(String(b.play_start_date)))
+        .map((t) => {
+          const su = _daysUntil(t.play_start_date);
+          const startsIn = su === null ? "" : (su < 0 ? '<span class="muted">started / past</span>'
+            : (su === 0 ? '<span class="warn">today</span>' : `in ${su}d`));
+          const isActive = active && active.id === t.id;
+          return `<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button">` +
+            `<td>${esc(t.name)}${isActive ? ' <span class="badge badge-ok">active</span>' : ""}</td>` +
+            `<td>${esc(t.type)}</td>` +
+            `<td>${esc(_fmtMDY(t.play_start_date))} – ${esc(_fmtMDY(t.play_end_date))}</td>` +
+            `<td>${startsIn}</td><td>${_deadlineCell(t.registration_deadline)}</td>` +
+            `<td>${_deadlineCell(t.late_entry_deadline)}</td></tr>`;
+        }).join("")
+    : `<tr><td class="empty" colspan="6">No tournaments yet — add one in Setup → Tournaments.</td></tr>`;
+  body.querySelectorAll(".dash-trow").forEach((tr) => {
+    const pick = () => setActive(Number(tr.dataset.tid));
+    tr.addEventListener("click", pick);
+    tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+
+  // Active-tournament status board (tiles).
+  const tiles = document.getElementById("dash-tiles");
+  const sub = document.getElementById("dash-sub");
+  if (!active) {
+    tiles.hidden = true; tiles.innerHTML = "";
+    sub.textContent = "Pick a tournament below (or in the bar above) to see its status board.";
+    return;
+  }
+  sub.textContent = `Status board — ${active.name}`;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/dashboard`); }
+  catch (_) { tiles.hidden = true; return; }
+  const tile = (label, n, opts = {}) => {
+    const alert = opts.alert && n > 0;
+    return `<button type="button" class="dash-tile${alert ? " alert" : ""}" ` +
+      `data-go-group="${opts.go[0]}" data-go-tab="${opts.go[1]}">` +
+      `<span class="dash-num">${n}</span><span class="dash-label">${esc(label)}</span></button>`;
+  };
+  tiles.hidden = false;
+  tiles.innerHTML =
+    tile(`unfiled email${d.inbox.new === 1 ? "" : "s"}`, d.inbox.new, { alert: true, go: ["inbox", "panel-t-inbox"] }) +
+    tile("officials awaiting reply", d.officials.pending, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
+    tile("declined — re-staff", d.officials.declined, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
+    tile("uncovered day(s)", d.coverage.uncovered_days_count, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("staffing conflict(s)", d.conflicts ?? 0, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("rooms unused", d.rooms.unused, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+    tile("on roster", d.roster.selected, { go: ["tournament", "panel-t-roster"] }) +
+    tile("alternates", d.roster.alternate, { go: ["tournament", "panel-t-roster"] }) +
+    tile("withdrawn", d.roster.withdrawn, { go: ["requests", "panel-t-withdrawals"] });
+  tiles.querySelectorAll("[data-go-group]").forEach((b) =>
+    b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
+  _renderDeclinedAlert(d.officials.declined);
+  _renderReadiness();
+}
+
+// Pre-tournament readiness scorecard: one pass/warn/fail row per area, with an
+// overall "ready / N blockers" headline. Each row deep-links to where it's fixed.
+const _READY_GO = {
+  coverage: ["staffing", "panel-t-reports"], conflicts: ["staffing", "panel-t-reports"],
+  declined: ["staffing", "panel-t-assignments"], responses: ["staffing", "panel-t-assignments"],
+  roster: ["tournament", "panel-t-roster"], rooms: ["staffing", "panel-t-reports"],
+  inbox: ["inbox", "panel-t-inbox"],
+};
+const _READY_ICON = { pass: "✓", warn: "▲", fail: "✗" };
+async function _renderReadiness() {
+  const box = document.getElementById("dash-readiness");
+  if (!box || !active) return;
+  let r;
+  try { r = await api(`/tournaments/${active.id}/readiness`); }
+  catch (_) { box.hidden = true; return; }
+  const s = r.summary;
+  const headClass = s.fail ? "rdy-fail" : (s.warn ? "rdy-warn" : "rdy-pass");
+  const headText = s.fail
+    ? `✗ Not ready — ${s.fail} blocker${s.fail === 1 ? "" : "s"}${s.warn ? `, ${s.warn} warning${s.warn === 1 ? "" : "s"}` : ""}`
+    : (s.warn ? `▲ Ready with ${s.warn} warning${s.warn === 1 ? "" : "s"}` : "✓ Ready — all checks pass");
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="rdy-head ${headClass}">${headText}</div>` +
+    `<ul class="rdy-list">` + r.checks.map((c) =>
+      `<li class="rdy-row rdy-${c.status}" data-key="${c.key}" tabindex="0" role="button">` +
+      `<span class="rdy-icon">${_READY_ICON[c.status]}</span>` +
+      `<span class="rdy-label">${esc(c.label)}</span>` +
+      `<span class="rdy-detail">${esc(c.detail)}</span></li>`).join("") + `</ul>`;
+  box.querySelectorAll(".rdy-row").forEach((row) => {
+    const go = _READY_GO[row.dataset.key];
+    if (!go) return;
+    const jump = () => _dashGo(go[0], go[1]);
+    row.addEventListener("click", jump);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jump(); } });
+  });
+}
+
+// Named declined-assignment alert: when officials have declined, show WHO (+ the
+// slot they vacated) right on the dashboard, each with a one-click jump to the
+// Assignments tab filtered to declined for re-staffing. (The tile shows only the
+// count; this is the actionable list.)
+async function _renderDeclinedAlert(declinedCount) {
+  const box = document.getElementById("dash-declined");
+  if (!box || !active) return;
+  if (!declinedCount) { box.hidden = true; box.innerHTML = ""; return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/declined`); }
+  catch (_) { box.hidden = true; return; }
+  if (!d.count) { box.hidden = true; return; }
+  const item = (r) => {
+    const slot = [r.site_label, r.day_count ? `${r.day_count} day${r.day_count === 1 ? "" : "s"}` : ""]
+      .filter(Boolean).join(" · ");
+    return `<li class="dash-dec-item"><span class="dash-dec-name">${esc(r.official_name)}</span>` +
+      (slot ? ` <span class="dash-dec-slot">${esc(slot)}</span>` : "") + `</li>`;
+  };
+  box.hidden = false;
+  box.innerHTML =
+    `<div class="dash-dec-head">✗ ${d.count} declined — needs re-staffing</div>` +
+    `<ul class="dash-dec-list">${d.declined.map(item).join("")}</ul>` +
+    `<button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments →</button>`;
+  document.getElementById("dash-dec-go")?.addEventListener("click", () => {
+    _dashGo("staffing", "panel-t-assignments");
+    // pre-filter the assignments list to declined so the TD lands on the work.
+    setTimeout(() => { try { _asgRespFilter = "declined"; _renderAsgList(); } catch (_) {} }, 300);
+  });
+}
+
+// --- Player 360 drawer: everything about one player, unified by USTA # ---
+const _p360Modal = document.getElementById("player360-modal");
+function _closePlayer360() { if (_p360Modal) _p360Modal.hidden = true; }
+document.getElementById("player360-close")?.addEventListener("click", _closePlayer360);
+_p360Modal?.addEventListener("click", (e) => { if (e.target.id === "player360-modal") _closePlayer360(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && _p360Modal && !_p360Modal.hidden) _closePlayer360(); });
+async function openPlayer360(playerId, tournamentId) {
+  const body = document.getElementById("player360-body");
+  document.getElementById("player360-title").textContent = "Player";
+  body.innerHTML = '<p class="muted">Loading…</p>';
+  _p360Modal.hidden = false;
+  let d;
+  try {
+    const q = tournamentId ? `?tournament_id=${tournamentId}` : "";
+    d = await api(`/players/${playerId}/overview${q}`);
+  } catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  const p = d.player;
+  document.getElementById("player360-title").textContent = `${p.last_name}, ${p.first_name}`;
+  const loc = [p.city, p.state].filter(Boolean).join(", ");
+  const entriesHtml = d.entries.length
+    ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Status</th><th>Div</th><th>T-shirt</th><th>Lodging</th></tr></thead><tbody>` +
+      d.entries.map((e) => `<tr><td>${esc(e.tournament_name)}</td><td>${chip(e.selection_status)}</td>` +
+        `<td>${esc(e.age_division || "")}</td><td>${esc(e.t_shirt_size || "")}</td><td>${esc(e.lodging_plan || "")}</td></tr>`).join("") +
+      `</tbody></table>`
+    : '<p class="muted">Not on any roster.</p>';
+  const r = d.requests;
+  const sec = (title, rows, fmt) => rows.length
+    ? `<div class="p360-sec"><h4>${esc(title)} (${rows.length})</h4><ul>${rows.map((x) => `<li>${fmt(x)}</li>`).join("")}</ul></div>` : "";
+  const reqHtml =
+    sec("Late entries", r.late_entries, (x) => `${esc(x.age_division || "")} ${esc(x.events || "")}${x.request_date ? ` · ${esc(x.request_date)}` : ""}`) +
+    sec("Withdrawals", r.withdrawals, (x) => `${esc(x.events || "")} — ${esc(x.reason || "(alternate, no reason)")}${x.was_alternate ? " · was alternate" : ""}`) +
+    sec("Scheduling avoidances", r.scheduling, (x) => `avoid ${esc(x.avoid_day || "")} ${esc(x.avoid_time_range || "")}`) +
+    sec("Division flexibility", r.division_flex, (x) => `${esc(x.home_division || "")} → ${esc(x.willing_divisions || "")}`) +
+    sec("Player hotels", r.hotels, (x) => `${esc(x.hotel_name || "")} ${esc(x.lodging_plan || "")}`) +
+    sec("Doubles", r.doubles, (x) => `${esc(x.age_division || "")} · ${x.wants_random ? "random" : "partner " + esc(x.partner_usta || "?")} · ${esc(x.status || "")}`) +
+    sec("Pairing avoidances", r.pairing, (x) => `${esc(x.age_division || "")} ${esc(x.relationship || "")}`);
+  body.innerHTML =
+    `<p class="p360-id">USTA #${esc(p.usta_number || "—")}${p.gender ? ` · ${esc(p.gender)}` : ""}${loc ? ` · ${esc(loc)}` : ""}</p>` +
+    `<h4>Tournament entries</h4>${entriesHtml}` +
+    (reqHtml
+      ? `<h4 class="p360-reqhead">Requests${d.tournament_id ? " (this tournament)" : ""}</h4>${reqHtml}`
+      : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
+  _p360Export = { title: `${p.last_name}, ${p.first_name}`, subtitle: "Player profile", html: body.innerHTML };
+}
+
+// Official 360 — reuses the player drawer modal to show an official's certs +
+// season assignments/pay (the search lands here for an official result).
+async function openOfficial360(officialId) {
+  const body = document.getElementById("player360-body");
+  document.getElementById("player360-title").textContent = "Official";
+  body.innerHTML = '<p class="muted">Loading…</p>';
+  _p360Modal.hidden = false;
+  let d;
+  try { d = await api(`/officials/${officialId}/overview`); }
+  catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  const o = d.official;
+  document.getElementById("player360-title").textContent = `${o.last_name}, ${o.first_name} · official`;
+  const loc = [o.city, o.state].filter(Boolean).join(", ");
+  const certs = d.certs.length
+    ? d.certs.map((c) => `<span class="badge badge-info">${esc(certLabel(c))}</span>`).join(" ")
+    : '<span class="muted">no certifications on file</span>';
+  const tt = d.pay.totals;
+  const asg = d.pay.tournaments.length
+    ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Days</th><th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th><th>Response</th></tr></thead><tbody>` +
+      d.pay.tournaments.map((t) => `<tr><td>${esc(t.tournament_name)}</td><td>${t.days}</td>` +
+        `<td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td>` +
+        `<td>${_respChip(t.response_status)}</td></tr>`).join("") +
+      `<tr class="totals"><td>Season totals (${tt.assignments} assignment${tt.assignments === 1 ? "" : "s"})</td><td>${tt.days}</td>` +
+      `<td class="num">${money(tt.pay)}</td><td class="num">${money(tt.mileage)}</td><td class="num">${money(tt.total)}</td><td></td></tr></tbody></table>`
+    : '<p class="muted">No assignments yet.</p>';
+  const payBtn = tt.assignments
+    ? `<p><button type="button" id="off-pay-statement" class="btn-small" data-oid="${officialId}" data-name="${esc(o.last_name)}, ${esc(o.first_name)}">⬇ Pay statement (PDF)</button></p>`
+    : "";
+  body.innerHTML =
+    `<p class="p360-id">Official${loc ? ` · ${esc(loc)}` : ""}</p>` +
+    `<h4>Certifications</h4><p>${certs}</p>` +
+    `<h4>Assignments &amp; pay</h4>${asg}${payBtn}`;
+  _p360Export = { title: `${o.last_name}, ${o.first_name}`, subtitle: "Official profile", html: body.innerHTML };
+  document.getElementById("off-pay-statement")?.addEventListener("click", (e) =>
+    exportPayStatement(Number(e.currentTarget.dataset.oid)));
+}
+
+// Reimbursement pay statement → print window (day-level rates + mileage), reusing
+// the report print-window pattern. No PDF lib.
+async function exportPayStatement(officialId) {
+  let d;
+  try { d = await api(`/officials/${officialId}/pay-statement`); }
+  catch (e) { toast(e.message, false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  const e = esc, off = d.official, tt = d.totals;
+  const sections = d.assignments.length ? d.assignments.map((a) => {
+    const dayRows = a.days.map((x) =>
+      `<tr><td>${e(_fmtMDY(x.work_date))}</td><td>${e(certLabel(x.working_as))}</td>` +
+      `<td class="num">${money(x.rate_applied)}</td></tr>`).join("") ||
+      `<tr><td colspan="3" class="muted">No worked days.</td></tr>`;
+    const mileage = a.missing_distance ? "—  (no distance on file)"
+      : `${money(a.mileage)}${a.one_way_miles != null ? `  (${a.one_way_miles} mi one-way${a.mileage === 0 ? ", within free 50 mi" : ""})` : ""}`;
+    return `<h2>${e(a.tournament_name)}${a.site_label ? ` · ${e(a.site_label)}` : ""}</h2>` +
+      `<table><thead><tr><th>Date</th><th>Role</th><th class="num">Rate</th></tr></thead>` +
+      `<tbody>${dayRows}</tbody></table>` +
+      `<p class="line">Pay: <strong>${money(a.pay)}</strong> · Mileage: <strong>${mileage}</strong>` +
+      ` · Assignment total: <strong>${money(a.total)}</strong></p>`;
+  }).join("") : `<p class="muted">No assignments on file.</p>`;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Pay statement — ${e(off.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Officiating pay statement</h1>
+    <div class="sub">${e(off.name)}${off.location ? ` · ${e(off.location)}` : ""}` +
+      `${off.email ? ` · ${e(off.email)}` : ""}${off.phone ? ` · ${e(off.phone)}` : ""}` +
+      ` · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="grand"><strong>Grand total: ${money(tt.total)}</strong> ` +
+      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.assignments} assignment(s)</div>
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
+  </body></html>`);
+  win.document.close();
+}
+
+// Print/PDF the currently-open 360 drawer (player or official) — reuses the
+// staffing-report print-window pattern: a clean, self-contained doc that
+// auto-prints so the TD saves it as a one-page PDF. No PDF lib.
+let _p360Export = null;
+function exportP360() {
+  if (!_p360Export) { toast("Open a profile first", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  const { title, subtitle, html } = _p360Export;
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(subtitle)} — ${esc(title)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.8rem; }
+      h4 { font-size: 13px; margin: 1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: 0.15rem; color: #2e6f40; }
+      table { border-collapse: collapse; width: 100%; margin: 0.3rem 0 0.7rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      th { background: #f4f6f8; font-weight: 700; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tr.totals td { font-weight: 700; background: #e7f1ea; }
+      .p360-id { color: #556070; font-size: 12px; }
+      ul { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
+      .badge { display: inline-block; padding: 1px 6px; border: 1px solid #ccd; border-radius: 5px; font-size: 10px; }
+      .p360-link { display: none; }  /* the 👤 affordance has no meaning on paper */
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>${esc(title)}</h1>
+    <div class="sub">${esc(subtitle)} · generated ${esc(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${html}
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("player360-print")?.addEventListener("click", exportP360);
+
+// --- Global search (top bar → players AND officials) ---
+(() => {
+  const input = document.getElementById("player-search");
+  const box = document.getElementById("player-search-results");
+  if (!input || !box) return;
+  let timer = null;
+  const close = () => { box.hidden = true; box.innerHTML = ""; input.setAttribute("aria-expanded", "false"); };
+  const render = (rows, q) => {
+    if (!rows.length) {
+      box.innerHTML = `<div class="ps-empty">No players or officials match “${esc(q)}”.</div>`;
+    } else {
+      box.innerHTML = rows.map((r) =>
+        `<button type="button" class="ps-item" role="option" data-type="${r.type}" data-id="${r.id}">` +
+        `<span class="ps-name">${esc(r.name)} <span class="ps-tag ps-tag-${r.type}">${r.type === "official" ? "Official" : "Player"}</span></span>` +
+        `<span class="ps-meta">${esc(r.meta)}</span></button>`).join("");
+      box.querySelectorAll(".ps-item").forEach((b) => b.addEventListener("click", () => {
+        if (b.dataset.type === "official") openOfficial360(Number(b.dataset.id));
+        else openPlayer360(Number(b.dataset.id), active ? active.id : null);
+        input.value = ""; close();
+      }));
+    }
+    box.hidden = false; input.setAttribute("aria-expanded", "true");
+  };
+  input.addEventListener("input", () => {
+    const q = input.value.trim();
+    clearTimeout(timer);
+    if (q.length < 2) { close(); return; }
+    timer = setTimeout(async () => {
+      try {
+        const [players, officials] = await Promise.all([
+          api(`/players/search?q=${encodeURIComponent(q)}`).catch(() => []),
+          api(`/officials/search?q=${encodeURIComponent(q)}`).catch(() => []),
+        ]);
+        const loc = (x) => [x.city, x.state].filter(Boolean).join(", ");
+        const rows = [
+          ...players.map((p) => ({ type: "player", id: p.id,
+            name: [p.last_name, p.first_name].filter(Boolean).join(", "),
+            meta: `USTA #${p.usta_number || "—"}${loc(p) ? " · " + loc(p) : ""}` })),
+          ...officials.map((o) => ({ type: "official", id: o.id,
+            name: [o.last_name, o.first_name].filter(Boolean).join(", "),
+            meta: loc(o) || "official" })),
+        ];
+        render(rows, q);
+      } catch (_) { close(); }
+    }, 200);
+  });
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; close(); } });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#player-search-wrap")) close(); });
+})();
+
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
 function money(n) { return n == null ? "—" : "$" + Number(n).toFixed(2); }
@@ -4767,16 +5736,211 @@ function _renderCoverage() {
           const n = b.officials;
           const cls = _covClass(n);
           // Cert-pool gap: a day undercovered for this role while MORE certified
-          // officials are available is a *fixable* gap — flag it with a ⚑.
+          // officials are available is a *fixable* gap — flag it with a ⚑ and make
+          // the cell clickable to pick a certified official and fill it on the spot.
           const below = n === 0 || n < _coverageMin;
           const fixable = below && holders > n;
           const flag = fixable
-            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — you can staff more`)}">⚑</span>` : "";
-          return `<td class="daycol${cls ? " " + cls : ""}" title="${esc(`${n} staffed · ${holders} certified`)}">${n}${flag}</td>`;
+            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — click to fill`)}">⚑</span>` : "";
+          const attrs = fixable ? ` data-cov-role="${esc(r.role)}" data-cov-date="${esc(b.date)}"` : "";
+          return `<td class="daycol${cls ? " " + cls : ""}${fixable ? " cov-fixable" : ""}"${attrs} ` +
+            `title="${esc(`${n} staffed · ${holders} certified${fixable ? " — click to fill" : ""}`)}">${n}${flag}</td>`;
         }).join("");
         return `<tr><td>${esc(certLabel(r.role))} <span class="muted">(${holders} certified)</span></td>${cells}</tr>`;
       }).join("")
     : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
+}
+
+// Coverage gap → invite: clicking a fixable role/day cell opens a popover of
+// certified officials who could fill it, each with a one-click "Fill" that
+// assigns them (if needed) + adds the day in the right role, then refreshes.
+let _covPop = null;
+function _closeCovPop() { if (_covPop) { _covPop.remove(); _covPop = null; } }
+document.addEventListener("click", (e) => {
+  const cell = e.target.closest && e.target.closest("#role-coverage-table .cov-fixable");
+  if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeCovPop(); return; }
+  _openCovGap(cell);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeCovPop(); });
+
+async function _openCovGap(cell) {
+  _closeCovPop();
+  if (!active) return;
+  const role = cell.dataset.covRole, date = cell.dataset.covDate;
+  const pop = document.createElement("div");
+  pop.className = "cov-pop";
+  pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  document.body.appendChild(pop);
+  _covPop = pop;
+  // Anchor below the cell, clamped to the viewport.
+  const r = cell.getBoundingClientRect();
+  pop.style.top = `${window.scrollY + r.bottom + 4}px`;
+  pop.style.left = `${window.scrollX + Math.min(r.left, window.innerWidth - 300)}px`;
+  let cands;
+  try {
+    cands = await api(`/tournaments/${active.id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${encodeURIComponent(date)}`);
+  } catch (err) { pop.innerHTML = `<p class="msg bad">${esc(err.message)}</p>`; return; }
+  if (_covPop !== pop) return;  // closed while loading
+  if (!cands.length) {
+    pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
+      `<p class="cov-pop-empty">No un-booked official holds this certification. Add a certification or a new official first.</p>`;
+    return;
+  }
+  const tag = (c) => {
+    const t = [];
+    if (c.available) t.push('<span class="cov-tag cov-tag-ok">available</span>');
+    if (c.assigned_here) t.push('<span class="cov-tag">already on event</span>');
+    if (c.busy_elsewhere) t.push('<span class="cov-tag cov-tag-warn">busy elsewhere</span>');
+    return t.join(" ");
+  };
+  pop.innerHTML =
+    `<div class="cov-pop-head">Fill ${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
+    `<ul class="cov-cand-list">` +
+    cands.map((c) =>
+      `<li class="cov-cand"><span class="cov-cand-name">${esc(c.official_name)} ${tag(c)}</span>` +
+      `<button type="button" class="cov-fill-btn" data-oid="${c.official_id}" data-name="${esc(c.official_name)}">Fill</button></li>`
+    ).join("") + `</ul>`;
+  pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      await api(`/tournaments/${active.id}/coverage-fill`, {
+        method: "POST",
+        body: JSON.stringify({ official_id: Number(btn.dataset.oid), work_date: date, working_as: role }),
+      });
+      toast(`Assigned ${btn.dataset.name} as ${certLabel(role)} on ${fmtDOW(date)}`, true);
+      _closeCovPop();
+      loadReports();
+    } catch (err) { toast(err.message, false); btn.disabled = false; }
+  }));
+}
+
+// Staffing-conflict report: one consolidated, grouped list of every clash the
+// TD must resolve (double-bookings, uncertified days, off-availability/off-window
+// days, hotel-date mismatches). Officials link to their 360 for quick triage.
+async function _renderConflicts() {
+  const box = document.getElementById("report-conflicts");
+  if (!box || !active) return;
+  let rep;
+  try { rep = await api(`/tournaments/${active.id}/conflicts`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!rep.counts.total) {
+    box.innerHTML = '<p class="conflict-clean">✓ No staffing conflicts — every assignment is clean.</p>';
+    return;
+  }
+  const name = (c) => `<strong>${esc(c.official_name)}</strong>`;
+  const groups = [];
+  if (rep.double_bookings.length) {
+    groups.push(`<div class="conflict-group"><h5>⛔ Double-booked (${rep.double_bookings.length}` +
+      (rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : "") + `)</h5><ul>` +
+      rep.double_bookings.map((c) =>
+        `<li class="${c.different_site ? "conflict-hard" : ""}">${name(c)} on <strong>${esc(fmtDOW(c.work_date))}</strong> — also at ` +
+        `${esc(c.other_tournament || "another event")}${c.other_site ? ` (${esc(c.other_site)})` : ""}` +
+        `${c.different_site ? ' <span class="conflict-badge">different site — impossible</span>' : ' <span class="conflict-badge soft">same/again — verify</span>'}</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.uncertified.length) {
+    groups.push(`<div class="conflict-group"><h5>⚠ Uncertified for the role (${rep.uncertified.length})</h5><ul>` +
+      rep.uncertified.map((c) =>
+        `<li>${name(c)} works <strong>${esc(certLabel(c.working_as))}</strong> on ${esc(fmtDOW(c.work_date))} without that certification</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.outside_availability.length) {
+    groups.push(`<div class="conflict-group"><h5>📅 Worked outside declared availability (${rep.outside_availability.length})</h5><ul>` +
+      rep.outside_availability.map((c) =>
+        `<li>${name(c)} is assigned <strong>${esc(fmtDOW(c.work_date))}</strong> but didn't declare it available</li>`
+      ).join("") + `</ul></div>`);
+  }
+  if (rep.out_of_window.length) {
+    groups.push(`<div class="conflict-group"><h5>🗓 Day outside the play window (${rep.out_of_window.length})</h5><ul>` +
+      rep.out_of_window.map((c) => `<li>${name(c)} has a worked day outside the tournament dates</li>`).join("") +
+      `</ul></div>`);
+  }
+  if (rep.hotel_mismatch.length) {
+    groups.push(`<div class="conflict-group"><h5>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h5><ul>` +
+      rep.hotel_mismatch.map((c) => `<li>${name(c)} works days outside their room-block check-in/out</li>`).join("") +
+      `</ul></div>`);
+  }
+  box.innerHTML = `<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>` + groups.join("");
+}
+
+// Day-by-day schedule: one block per play-day listing who works (official, role,
+// site), with a headcount and an empty-day flag — the TD's day-of sheet. Officials
+// link to their 360. Built from the lightweight /schedule aggregate.
+async function _renderSchedule() {
+  const box = document.getElementById("report-schedule");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/schedule`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.days.length) { box.innerHTML = '<p class="muted">No play-date window set.</p>'; return; }
+  box.innerHTML = d.days.map((day) => {
+    const head = `<div class="sched-day-head">${esc(fmtDOW(day.date))} ` +
+      `<span class="sched-count${day.count === 0 ? " sched-empty" : ""}">${day.count} working</span></div>`;
+    if (!day.count) return `<div class="sched-day">${head}<p class="sched-none">— no officials assigned —</p></div>`;
+    const rows = day.entries.map((e) =>
+      `<tr><td>${esc(e.official_name)}</td><td>${esc(certLabel(e.working_as))}</td>` +
+      `<td>${esc(e.site_label || "—")}</td><td>${_respChip(e.response_status)}</td></tr>`).join("");
+    return `<div class="sched-day">${head}` +
+      `<table class="list-table sched-table"><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table></div>`;
+  }).join("");
+}
+
+// Dietary summary: assigned officials grouped by restriction (most common first),
+// each with a count + the names, plus a none-count — a catering-ready rollup.
+async function _renderDietary() {
+  const box = document.getElementById("report-dietary");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/dietary-summary`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.total_people) { box.innerHTML = '<p class="muted">No officials staffed yet.</p>'; return; }
+  if (!d.items.length) {
+    box.innerHTML = `<p class="muted">No dietary restrictions on file (${d.total_people} official(s) staffed).</p>`;
+    return;
+  }
+  const rows = d.items.map((i) =>
+    `<tr><td><strong>${esc(i.restriction)}</strong></td><td class="num">${i.count}</td>` +
+    `<td>${esc(i.people.join("; "))}</td></tr>`).join("");
+  box.innerHTML =
+    `<p class="diet-sub">${d.with_restrictions} of ${d.total_people} staffed official(s) have a dietary restriction` +
+    `${d.none_count ? ` · ${d.none_count} none` : ""}.</p>` +
+    `<table class="list-table diet-table"><thead><tr><th>Restriction</th><th class="num">Count</th><th>Officials</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+}
+
+// Missing distances: official↔site pairs with no mileage on file (mileage stays
+// null). Each row has an inline miles input + Save (POST /distances) so the TD
+// fills them all here; saving refreshes the list.
+async function _renderMissingDistances() {
+  const box = document.getElementById("report-missing-dist");
+  if (!box || !active) return;
+  let d;
+  try { d = await api(`/tournaments/${active.id}/missing-distances`); }
+  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  if (!d.count) { box.innerHTML = '<p class="muted">✓ Every assigned official has a distance to their site.</p>'; return; }
+  const rows = d.items.map((i) =>
+    `<tr data-oid="${i.official_id}" data-sid="${i.site_id}"><td>${esc(i.official_name)}</td>` +
+    `<td>${esc(i.site_label || "—")}</td><td class="num">${i.days}</td>` +
+    `<td><input type="number" class="md-miles" min="0" step="0.1" placeholder="miles" style="width:6rem" /> ` +
+    `<button type="button" class="md-save btn-small">Save</button></td></tr>`).join("");
+  box.innerHTML =
+    `<p class="muted md-sub">${d.count} official↔site pair(s) need a one-way distance for mileage.</p>` +
+    `<table class="list-table md-table"><thead><tr><th>Official</th><th>Site</th><th class="num">Days</th><th>One-way miles</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+  box.querySelectorAll(".md-save").forEach((btn) => btn.addEventListener("click", async () => {
+    const tr = btn.closest("tr");
+    const miles = parseFloat(tr.querySelector(".md-miles").value);
+    if (!(miles >= 0)) { toast("Enter a valid mileage", false); return; }
+    btn.disabled = true;
+    try {
+      await api("/distances", { method: "POST", body: JSON.stringify({
+        official_id: Number(tr.dataset.oid), site_id: Number(tr.dataset.sid),
+        one_way_miles: miles, source: "manual" }) });
+      toast("Distance saved", true);
+      loadReports();  // re-render: the pair clears + mileage recomputes
+    } catch (e) { toast(e.message, false); btn.disabled = false; }
+  }));
 }
 
 async function loadReports() {
@@ -4837,6 +6001,10 @@ async function loadReports() {
     `<th class="num">${money(totals.pay)}</th><th class="num">${money(totals.mileage)}</th>`;
 
   _renderCoverage();
+  _renderConflicts();
+  _renderSchedule();
+  _renderDietary();
+  _renderMissingDistances();
 
   // Officials needing accommodation: those with a hotel assignment, with the
   // span of days they work (the nights they need a room).
@@ -5110,6 +6278,184 @@ function exportReportPdf() {
   win.document.close();
 }
 document.getElementById("report-pdf").addEventListener("click", exportReportPdf);
+
+// Batch pay statements: one printable section per assigned official (worked days
+// + rate, mileage, total) + a tournament grand total — the reimbursement packet
+// the TD hands to finance. Reuses the report print-window pattern (no PDF lib).
+async function exportPayStatementsBatch() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/pay-statements`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.officials.length) { toast("No officials assigned yet", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
+  const e = esc, t = d.tournament, tt = d.totals;
+  const sections = d.officials.map((o) => {
+    const dayRows = o.days.length ? o.days.map((x) =>
+      `<tr><td>${e(_fmtMDY(x.work_date))}</td><td>${e(certLabel(x.working_as))}</td>` +
+      `<td class="num">${money(x.rate_applied)}</td></tr>`).join("")
+      : `<tr><td colspan="3" class="muted">No worked days.</td></tr>`;
+    const mileage = o.missing_distance ? "—  (no distance on file)"
+      : `${money(o.mileage)}${o.one_way_miles != null ? `  (${o.one_way_miles} mi one-way${o.mileage === 0 ? ", within free 50 mi" : ""})` : ""}`;
+    return `<h2>${e(o.official_name)}${o.official_email ? ` · ${e(o.official_email)}` : ""}</h2>` +
+      `<table><thead><tr><th>Date</th><th>Role</th><th class="num">Rate</th></tr></thead>` +
+      `<tbody>${dayRows}</tbody></table>` +
+      `<p class="line">Pay: <strong>${money(o.pay)}</strong> · Mileage: <strong>${mileage}</strong>` +
+      ` · Total: <strong>${money(o.total)}</strong></p>`;
+  }).join("");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Pay statements — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Officiating pay statements</h1>
+    <div class="sub">${e(t.name)} · ${e(t.play_start_date)} → ${e(t.play_end_date)} · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="grand"><strong>Tournament total: ${money(tt.total)}</strong> ` +
+      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.officials} official(s)</div>
+    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
+    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-pay-statements").addEventListener("click", exportPayStatementsBatch);
+
+// Rooming list → print window: one table per hotel block (official, nights they
+// need, dietary) for the TD to hand to the hotel. A ⬇ CSV button is embedded in
+// the print window for hotels that want a spreadsheet. Reuses the print pattern.
+async function exportRoomingList() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/rooming-list`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.blocks.length) { toast("No official room blocks for this tournament", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export", false); return; }
+  const e = esc, t = d.tournament, tt = d.totals;
+  // CSV rows for the embedded download (flat: one row per occupant).
+  const csv = [["Hotel", "Confirmation", "Official", "First night", "Last night", "Dietary", "Phone"]];
+  const sections = d.blocks.map((b) => {
+    const span = (b.check_in && b.check_out)
+      ? `${e(_fmtMDY(b.check_in))} – ${e(_fmtMDY(b.check_out))}` : "dates TBD";
+    const rows = b.occupants.length ? b.occupants.map((o) => {
+      csv.push([b.hotel_name, b.confirmation_number || "", o.official_name,
+                o.first_night || "", o.last_night || "", o.dietary_restrictions || "", o.official_phone || ""]);
+      const nights = (o.first_night && o.last_night)
+        ? `${e(_fmtMDY(o.first_night))} – ${e(_fmtMDY(o.last_night))}` : "—";
+      return `<tr><td>${e(o.official_name)}</td><td>${nights}</td>` +
+        `<td>${e(o.dietary_restrictions || "")}</td><td>${e(o.official_phone || "")}</td></tr>`;
+    }).join("") : `<tr><td colspan="4" class="muted">No officials assigned to this block.</td></tr>`;
+    return `<h2>${e(b.hotel_name)}${b.confirmation_number ? ` · conf. ${e(b.confirmation_number)}` : ""}</h2>` +
+      `<p class="line">Block dates: ${span} · ${b.occupants.length}/${b.room_count} room(s) used</p>` +
+      `<table><thead><tr><th>Official</th><th>Nights needed</th><th>Dietary</th><th>Phone</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table>`;
+  }).join("");
+  const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Rooming list — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      .line { font-size: 11px; color: #556070; margin: 0.1rem 0 0.4rem; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Hotel rooming list</h1>
+    <div class="sub">${e(t.name)} · ${tt.blocks} block(s) · ${tt.occupants} room night-guest(s) · ${tt.rooms_reserved} room(s) reserved · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="noprint">
+      <button onclick="window.print()">Save as PDF / Print</button>
+      <button id="dl">⬇ CSV</button>
+      <button onclick="window.close()">Close</button>
+    </div>
+    <script>
+      document.getElementById("dl").addEventListener("click", function () {
+        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ${JSON.stringify("rooming-list-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
+        a.click();
+      });
+      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-rooming-list").addEventListener("click", exportRoomingList);
+
+// Day-by-day schedule → print window: one table per play-day (official, role,
+// site) with an embedded CSV download — the day-of sheet to hand to sites.
+async function exportSchedule() {
+  if (!active) { toast("Select a tournament first", false); return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/schedule`); }
+  catch (e) { toast(e.message, false); return; }
+  if (!d.days.length) { toast("No play-date window set", false); return; }
+  const win = window.open("", "_blank");
+  if (!win) { toast("Allow pop-ups to export", false); return; }
+  const e = esc, t = d.tournament;
+  const csv = [["Date", "Official", "Role", "Site", "Response"]];
+  const sections = d.days.map((day) => {
+    const rows = day.entries.length ? day.entries.map((en) => {
+      csv.push([day.date, en.official_name, certLabel(en.working_as), en.site_label || "", en.response_status || ""]);
+      return `<tr><td>${e(en.official_name)}</td><td>${e(certLabel(en.working_as))}</td>` +
+        `<td>${e(en.site_label || "—")}</td><td>${e(en.response_status || "")}</td></tr>`;
+    }).join("") : `<tr><td colspan="4" class="muted">No officials assigned.</td></tr>`;
+    return `<h2>${e(_fmtMDY(day.date))} <span class="cnt">(${day.count} working)</span></h2>` +
+      `<table><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
+      `<tbody>${rows}</tbody></table>`;
+  }).join("");
+  const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Schedule — ${e(t.name)}</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      h2 .cnt { font-weight: 400; color: #556070; font-size: 11px; }
+      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      .muted { color: #556070; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
+    </style></head><body>
+    <h1>Day-by-day schedule</h1>
+    <div class="sub">${e(t.name)} · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
+    ${sections}
+    <div class="noprint">
+      <button onclick="window.print()">Save as PDF / Print</button>
+      <button id="dl">⬇ CSV</button>
+      <button onclick="window.close()">Close</button>
+    </div>
+    <script>
+      document.getElementById("dl").addEventListener("click", function () {
+        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ${JSON.stringify("schedule-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
+        a.click();
+      });
+      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+}
+document.getElementById("report-schedule-export").addEventListener("click", exportSchedule);
 async function reportCsvExport() {
   if (!active) { toast("Select a tournament first", false); return; }
   await loadReports();
@@ -5704,6 +7050,22 @@ async function loadMyAvailability() {
     box.appendChild(lbl);
   }
 }
+
+// Quick-select for the official's own availability grid (mirrors the admin
+// editor's bulk buttons): toggle the #me-dates checkboxes in place; the official
+// still reviews + clicks Save.
+document.querySelectorAll("#official-app .avail-bulk [data-mebulk]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.mebulk;
+    document.querySelectorAll("#me-dates input").forEach((cb) => {
+      const dow = _availDow(cb.value);  // 0=Sun … 6=Sat
+      if (mode === "all") cb.checked = true;
+      else if (mode === "none") cb.checked = false;
+      else if (mode === "weekdays") cb.checked = dow >= 1 && dow <= 5;
+      else if (mode === "weekends") cb.checked = dow === 0 || dow === 6;
+    });
+  });
+});
 
 // Audit F3: one-shot listener so a stray flood of expired-session 401s
 // doesn't trigger a toast storm.

@@ -87,6 +87,15 @@ class EmailBulkDetect(BaseModel):
     email_ids: list[int]
 
 
+class EmailBulkClassify(BaseModel):
+    """Run the local rule-based triage classifier over selected emails and write
+    each one's suggested classification."""
+    email_ids: list[int]
+    # When True (default) only emails still 'unclassified' are touched, so a TD's
+    # manual classification is never clobbered. False re-classifies all selected.
+    only_unclassified: bool = True
+
+
 class EmailBulkPopulate(BaseModel):
     """Take selected (classification, detected_player) emails and create the
     matching row in the per-classification table (withdrawal / late_entry /

@@ -1,17 +1,18 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 207 tests, all passing (migrations through 0039).
+**Status:** 333 tests, all passing (migrations through 0039) — now deterministic
+(3+ consecutive clean full runs) after fixing a login-throttle state leak.
 
 ## How the suite is wired
 
 | File | Purpose |
 |------|---------|
-| `tests/conftest.py` | Sets `PGDATABASE=courtops_test` *before* `app.config` reads env, then runs migrate + seed once per session. All tests run against a sibling DB that never touches the dev/demo `courtops` DB. |
+| `tests/conftest.py` | Sets `PGDATABASE=courtops_test` *before* `app.config` reads env, then runs migrate + seed once per session. All tests run against a sibling DB that never touches the dev/demo `courtops` DB. Also an **autouse `_reset_login_throttle`** fixture that clears `app.routers.auth`'s process-global failed-attempt / lockout dicts before each test — those leaked across tests (the shared test-client IP + tests that POST wrong `admin` passwords could lock the account and 429 a *later* test's autouse login, the old intermittent flake). |
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
-| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`. |
+| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`. |
 
 **Frontend unit check (JS):** the one piece of pure frontend logic that's
 risky to verify only through the live grid — seeding the roster add-form from an
@@ -161,7 +162,7 @@ A single function that walks the API in the same order a TD does in the UI.
 *ordering* contract — each phase relies on artifacts from the prior
 phases. A breakage in phase 6 (assignments) could be caused by phase 3
 (roster) or phase 4 (availability), and we want a single failure to
-surface the chain. The 53 `test_smoke.py` tests cover each contract in
+surface the chain. The `test_smoke.py` tests cover each contract in
 isolation; this one proves they compose.
 
 ---
@@ -182,7 +183,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # all 54 tests
+python -m pytest -q                                    # the whole suite (298)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -235,4 +236,4 @@ players already in roster from Initial); B3 184 rows / 0 failures.
 Distribution after all three: 147 Hotel / 27 Local / 25 None lodging;
 127 selected / 54 alternate / 18 withdrawn statuses.
 
-Total suite count: **63 tests, all passing**.
+Total suite count: **298 tests, all passing** (see the status line at the top).

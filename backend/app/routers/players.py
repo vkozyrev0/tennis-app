@@ -73,6 +73,29 @@ def list_players(conn=Depends(db_dep)):
         return [_decrypt_contact(r) for r in cur.fetchall()]
 
 
+# NOTE: declared BEFORE GET /{player_id} so "/search" isn't swallowed as an id.
+@router.get("/search")
+def search_players(q: str, limit: int = 10, conn=Depends(db_dep)):
+    """Global player lookup by name or USTA #, for the top-bar search → Player 360.
+    Name + USTA # are plaintext (only contact/birthdate are encrypted), so a plain
+    ILIKE works. Returns a lightweight shape (no decrypted contact)."""
+    term = (q or "").strip()
+    if len(term) < 2:
+        return []
+    like = f"%{term}%"
+    limit = max(1, min(limit, 50))
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, usta_number, first_name, last_name, city, state FROM player "
+            "WHERE usta_number ILIKE %(l)s OR first_name ILIKE %(l)s OR last_name ILIKE %(l)s "
+            "   OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %(l)s "
+            "   OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %(l)s "
+            "ORDER BY last_name, first_name LIMIT %(lim)s",
+            {"l": like, "lim": limit},
+        )
+        return cur.fetchall()
+
+
 @router.get("/{player_id}", response_model=PlayerOut)
 def get_player(player_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
@@ -81,6 +104,68 @@ def get_player(player_id: int, conn=Depends(db_dep)):
     if row is None:
         raise HTTPException(status_code=404, detail="player not found")
     return _decrypt_contact(row)
+
+
+@router.get("/{player_id}/overview")
+def player_overview(player_id: int, tournament_id: int | None = None, conn=Depends(db_dep)):
+    """Player 360 — everything the TD needs about one player in one place: their
+    core identity, every tournament they're entered in (status + division), and —
+    scoped to `tournament_id` when given — their filed requests across all the
+    Part B lists. Siloed-by-tab data unified by USTA #."""
+    def _tclause():
+        return (" AND tournament_id = %s", [player_id, tournament_id]) if tournament_id \
+            else ("", [player_id])
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, usta_number, first_name, last_name, gender, city, state "
+            "FROM player WHERE id = %s",
+            (player_id,),
+        )
+        player = cur.fetchone()
+        if player is None:
+            raise HTTPException(status_code=404, detail="player not found")
+
+        # Every tournament this player is entered in (cross-tournament context).
+        cur.execute(
+            "SELECT e.tournament_id, t.name AS tournament_name, e.selection_status, "
+            "       e.age_division, e.t_shirt_size, e.dietary_preference, e.lodging_plan "
+            "FROM tournament_entry e JOIN tournament t ON t.id = e.tournament_id "
+            "WHERE e.player_id = %s ORDER BY t.play_start_date DESC",
+            (player_id,),
+        )
+        entries = cur.fetchall()
+
+        clause, params = _tclause()
+        reqs: dict = {}
+        for key, sql in (
+            ("late_entries", "SELECT id, tournament_id, age_division, events, request_date FROM late_entry WHERE player_id = %s" + clause),
+            ("withdrawals", "SELECT id, tournament_id, events, reason, was_alternate FROM withdrawal WHERE player_id = %s" + clause),
+            ("scheduling", "SELECT id, tournament_id, avoid_day, avoid_time_range FROM scheduling_avoidance WHERE player_id = %s" + clause),
+            ("division_flex", "SELECT id, tournament_id, home_division, willing_divisions FROM division_flexibility WHERE player_id = %s" + clause),
+            ("hotels", "SELECT id, tournament_id, hotel_name, lodging_plan FROM player_hotel_stay WHERE player_id = %s" + clause),
+            ("doubles", "SELECT id, tournament_id, age_division, partner_usta, wants_random, status FROM doubles_request WHERE player_id = %s" + clause),
+        ):
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            for r in rows:
+                if r.get("request_date"):
+                    r["request_date"] = r["request_date"].isoformat()
+            reqs[key] = rows
+
+        # Pairing avoidances are group-based — find groups this player is a member of.
+        pclause, pparams = (" AND pa.tournament_id = %s", [player_id, tournament_id]) if tournament_id \
+            else ("", [player_id])
+        cur.execute(
+            "SELECT pa.id, pa.tournament_id, pa.age_division, pa.relationship "
+            "FROM pairing_avoidance pa "
+            "JOIN pairing_avoidance_member m ON m.pairing_avoidance_id = pa.id "
+            "WHERE m.player_id = %s" + pclause,
+            pparams,
+        )
+        reqs["pairing"] = cur.fetchall()
+
+    return {"player": player, "tournament_id": tournament_id,
+            "entries": entries, "requests": reqs}
 
 
 @router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])

@@ -5,6 +5,19 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 [vision-summary.md](vision-summary.md) · [audit.md](audit.md) ·
 [data-model.md](data-model.md).
 
+> **Status (2026-06-06):** Phases 0–4 are functionally shipped; Phase 5 is polish
+> and deploy-time hardening (see *On hold* for the two externally-blocked items).
+> The latest **TD-review build-out** (a question-driven round from a TD's
+> perspective) closed the remaining workflow gaps — a "Today" dashboard +
+> cross-tournament digest, a pre-event **readiness scorecard**, coverage-gap →
+> one-click fill, conflict / declined / missing-distance / no-login reports,
+> bulk-invite + personalised invite text, inbox **triage** (classify → detect →
+> populate) with aging + unmatched drilldowns, Player/Official 360 + exports,
+> rooming list, day-by-day schedule, pay statements, dietary + workload rollups,
+> and self-service availability. Full list in [changelog.md](changelog.md);
+> end-to-end validation in [e2e-findings.md](e2e-findings.md). Suite: **333**
+> green and deterministic.
+
 ---
 
 ## Guiding principles

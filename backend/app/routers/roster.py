@@ -100,6 +100,80 @@ def list_roster(tournament_id: int, conn=Depends(db_dep)):
         return cur.fetchall()
 
 
+@router.get("/api/tournaments/{tournament_id}/roster-completeness")
+def roster_completeness(tournament_id: int, conn=Depends(db_dep)):
+    """Flag roster entries missing data the TD needs before the event, so they
+    can be chased. Checks ACTIVE entries (selected/alternate — withdrawn players
+    are skipped) for: a missing age division, missing player gender (blocks
+    division validation), missing t-shirt size (can't be ordered), and an
+    outstanding balance. Returns one row per incomplete entry + per-issue counts."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT e.id, e.player_id, e.age_division, e.selection_status, "
+            "       e.t_shirt_size, e.amount_outstanding, "
+            "       p.usta_number, p.first_name, p.last_name, p.gender "
+            "FROM tournament_entry e JOIN player p ON p.id = e.player_id "
+            "WHERE e.tournament_id = %s AND e.selection_status IN ('selected','alternate') "
+            "ORDER BY p.last_name, p.first_name",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+
+    def _blank(v):
+        return v is None or (isinstance(v, str) and not v.strip())
+
+    counts = {"total_active": len(rows), "incomplete_entries": 0,
+              "missing_division": 0, "missing_gender": 0, "missing_shirt": 0,
+              "outstanding_balance": 0}
+    entries = []
+    for r in rows:
+        issues = []
+        if _blank(r["age_division"]):
+            issues.append("missing_division"); counts["missing_division"] += 1
+        if _blank(r["gender"]):
+            issues.append("missing_gender"); counts["missing_gender"] += 1
+        if _blank(r["t_shirt_size"]):
+            issues.append("missing_shirt"); counts["missing_shirt"] += 1
+        out = r["amount_outstanding"]
+        if out is not None and out > 0:
+            issues.append("outstanding_balance"); counts["outstanding_balance"] += 1
+        if not issues:
+            continue
+        counts["incomplete_entries"] += 1
+        entries.append({
+            "entry_id": r["id"], "player_id": r["player_id"],
+            "player_name": f'{r["last_name"]}, {r["first_name"]}',
+            "usta_number": r["usta_number"],
+            "selection_status": r["selection_status"],
+            "age_division": r["age_division"],
+            "amount_outstanding": float(out) if out is not None else None,
+            "issues": issues,
+        })
+    return {"tournament_id": tournament_id, "counts": counts, "entries": entries}
+
+
+@router.get("/api/tournaments/{tournament_id}/alternates",
+            response_model=list[RosterEntryOut])
+def list_alternates(tournament_id: int, age_division: str | None = None,
+                    conn=Depends(db_dep)):
+    """Alternates waiting for a slot — the promote-on-withdrawal helper. When
+    `age_division` is given (the withdrawing player's division), only same-division
+    alternates are returned, ordered FIFO by entry id (first added = next in line)
+    so the TD sees the best match to promote first."""
+    sql = _SELECT + " WHERE e.tournament_id = %s AND e.selection_status = 'alternate'"
+    params: list = [tournament_id]
+    if age_division:
+        sql += " AND e.age_division = %s"
+        params.append(age_division)
+    sql += " ORDER BY e.id"
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
 @router.post("/api/tournaments/{tournament_id}/players",
              response_model=RosterEntryOut, status_code=201)
 def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(db_dep)):
@@ -173,3 +247,27 @@ def delete_roster_entry(entry_id: int, conn=Depends(db_dep)):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="roster entry not found")
     return Response(status_code=204)
+
+
+@router.post("/api/roster/{entry_id}/promote", response_model=RosterEntryOut)
+def promote_alternate(entry_id: int, conn=Depends(db_dep)):
+    """Promote an alternate to selected (the standard move when a selected player
+    withdraws and a slot opens). Only an *alternate* can be promoted — promoting a
+    selected entry is a no-op error, and a withdrawn one is rejected so a
+    withdrawal isn't silently reversed."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT selection_status FROM tournament_entry WHERE id = %s", (entry_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="roster entry not found")
+        if row["selection_status"] != "alternate":
+            raise HTTPException(
+                status_code=400,
+                detail=f"only an alternate can be promoted (this entry is {row['selection_status']})",
+            )
+        cur.execute(
+            "UPDATE tournament_entry SET selection_status = 'selected' WHERE id = %s",
+            (entry_id,),
+        )
+        cur.execute(_SELECT + " WHERE e.id = %s", (entry_id,))
+        return cur.fetchone()

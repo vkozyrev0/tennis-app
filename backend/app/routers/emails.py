@@ -14,6 +14,7 @@ from ..email_targets import (
 )
 from ..models import (
     EmailAmend,
+    EmailBulkClassify,
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,
@@ -50,6 +51,7 @@ _FROM = ("FROM email_message e "
 @router.get("", response_model=list[EmailOut])
 def list_emails(response: Response, tournament_id: int | None = None,
                 status: str | None = None, q: str | None = None,
+                unmatched: bool | None = None,
                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
     """Server-side filtered/paged inbox. `q` searches subject + from_address +
     the player's USTA # (matched player's number AND the USTA # parsed from the
@@ -61,6 +63,9 @@ def list_emails(response: Response, tournament_id: int | None = None,
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
     if status is not None:
         clauses.append("e.status = %s"); params.append(status)
+    if unmatched:
+        # Detection gap: no roster player matched. Feeds the unmatched drilldown.
+        clauses.append("e.detected_player_id IS NULL")
     if q:
         # USTA # search hits the matched player's number (p.usta_number) and the
         # number parsed from the email (e.detected_usta_text, persisted so it's
@@ -127,11 +132,52 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
             params,
         )
         by = {r["status"]: r["n"] for r in cur.fetchall()}
+        # Detection gaps: still-unfiled emails on a tournament that no roster
+        # player matched — the actionable drilldown the TD resolves before triage.
+        gap_clauses = clauses + ["status = 'new'", "detected_player_id IS NULL",
+                                 "tournament_id IS NOT NULL"]
+        gap_where = " WHERE " + " AND ".join(gap_clauses)
+        cur.execute(f"SELECT count(*) AS n FROM email_message{gap_where}", params)
+        unmatched = cur.fetchone()["n"]
     new = by.get("new", 0)
     filed = by.get("filed", 0)
     follow = by.get("needs_followup", 0)
     return {"new": new, "filed": filed, "needs_followup": follow,
-            "total": new + filed + follow}
+            "unmatched": unmatched, "total": new + filed + follow}
+
+
+@router.get("/aging")
+def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(db_dep)):
+    """Oldest UNFILED emails first, with how many days each has been waiting — an
+    SLA-style triage list so nothing languishes. Optionally scoped to one
+    tournament. Subject/sender only (the body stays encrypted); the inbox opens
+    the full email. `oldest_age_days` is the headline number."""
+    limit = max(1, min(limit, 100))
+    clauses = ["e.status = 'new'"]
+    params: list = []
+    if tournament_id is not None:
+        clauses.append("e.tournament_id = %s"); params.append(tournament_id)
+    where = " WHERE " + " AND ".join(clauses)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT e.id, e.tournament_id, e.subject, e.from_address, e.classification, "
+            "       e.received_at, "
+            "       GREATEST(0, EXTRACT(DAY FROM (now() - e.received_at)))::int AS age_days "
+            f"FROM email_message e{where} "
+            "ORDER BY e.received_at ASC NULLS FIRST "
+            "LIMIT %s",
+            params + [limit],
+        )
+        rows = cur.fetchall()
+    items = [{
+        "id": r["id"], "tournament_id": r["tournament_id"],
+        "subject": r["subject"], "from_address": r["from_address"],
+        "classification": r["classification"],
+        "received_at": r["received_at"].isoformat() if r["received_at"] else None,
+        "age_days": r["age_days"],
+    } for r in rows]
+    return {"items": items, "count": len(items),
+            "oldest_age_days": items[0]["age_days"] if items else 0}
 
 
 @router.post("", response_model=EmailOut, status_code=201)
@@ -670,6 +716,38 @@ def list_targets():
 # them through the form; the bulk action reports them with a clear reason.
 
 
+@router.post("/bulk/classify")
+def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
+    """Run the local rule-based triage classifier over the selected emails and
+    write each one's suggested classification. By default only 'unclassified'
+    emails are touched (a TD's manual classification is never clobbered). Returns
+    the new classification per changed email + a count, so the inbox can then run
+    detect-players + populate to file them — the full bulk-triage chain."""
+    if not body.email_ids:
+        return {"classified": 0, "changed": [], "counts": {}}
+    changed: list[dict] = []
+    counts: dict = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, subject, body, classification FROM email_message WHERE id = ANY(%s)",
+            (body.email_ids,),
+        )
+        rows = cur.fetchall()
+        for em in rows:
+            if body.only_unclassified and em["classification"] != "unclassified":
+                continue
+            cls = classify(em["subject"], _dec_body(em.get("body")))
+            if cls == em["classification"]:
+                continue
+            cur.execute(
+                "UPDATE email_message SET classification = %s WHERE id = %s",
+                (cls, em["id"]),
+            )
+            changed.append({"id": em["id"], "classification": cls})
+            counts[cls] = counts.get(cls, 0) + 1
+    return {"classified": len(changed), "changed": changed, "counts": counts}
+
+
 @router.post("/bulk/populate")
 def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
     """For each selected email, INSERT a row in the per-classification target
@@ -722,3 +800,28 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
             except psycopg.Error as e:
                 skipped.append({"id": em["id"], "reason": str(e).splitlines()[0][:120]})
     return {"filed": filed_count, "skipped": skipped}
+
+
+@router.post("/bulk/triage")
+def bulk_triage(body: EmailBulkClassify, conn=Depends(db_dep)):
+    """One-click triage: run the whole chain over the selected emails in one
+    request — classify (local rules) → detect players → populate the target
+    lists — and return a combined summary so the TD clears the unfiled queue in
+    a single action. Reuses the three bulk handlers on the same connection, so it
+    can never drift from running them individually."""
+    ids = body.email_ids
+    if not ids:
+        return {"classified": 0, "detected": 0, "filed": 0,
+                "classify_counts": {}, "skipped": []}
+    classify_res = bulk_classify(
+        EmailBulkClassify(email_ids=ids, only_unclassified=body.only_unclassified), conn)
+    detect_res = bulk_detect_players(EmailBulkDetect(email_ids=ids), conn)
+    detected = sum(1 for d in detect_res if d.get("detected_player_id"))
+    populate_res = bulk_populate(EmailBulkPopulate(email_ids=ids), conn)
+    return {
+        "classified": classify_res["classified"],
+        "classify_counts": classify_res["counts"],
+        "detected": detected,
+        "filed": populate_res["filed"],
+        "skipped": populate_res["skipped"],
+    }
