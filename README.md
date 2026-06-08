@@ -32,13 +32,14 @@ docker run --rm -p 8000:8000 courtops
 # open http://localhost:8000 — sign in as admin / admin
 ```
 
-The container boots Postgres, applies migrations, loads the realistic demo
-(Macon Junior Open 2026), then serves the API + site on :8000. Useful env vars:
-`SEED_SCRIPT=seed.py` for the lean baseline instead of the demo, `DEMO_RESEED=1`
-to reload the demo on restart, `PORT` to change the port. Data lives in an
-ephemeral volume; mount one at `/var/lib/postgresql/data` to persist it. This
-bundles the DB into the app image for demo convenience — not a production
-topology (see [docs/design.md](docs/design.md) §11).
+The realistic demo (Macon Junior Open 2026) is **seeded at build time and baked
+into the image's database**, so it's there the instant the container starts —
+the container just boots Postgres and serves the API + site on :8000. Useful env
+vars: `DEMO_RESEED=1` regenerates the demo on start (fresh, today-relative
+dates), `SEED_SCRIPT=seed.py` uses the lean baseline, `PORT` changes the port.
+The baked DB lives at `/opt/courtops/pgdata`; mount a volume there to persist
+changes across runs. This bundles the DB + data into the app image for demo
+convenience — not a production topology (see [docs/design.md](docs/design.md) §11).
 
 ## Local dev (without Docker)
 
