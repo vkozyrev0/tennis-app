@@ -41,20 +41,26 @@ keep the container on plain HTTP (`:8000`). A browser-trusted cert needs a domai
 ## 3. Host it (config files in the repo root)
 
 ### Fly.io — `fly.toml` (persistent DB, scale-to-zero)
+
+`fly.toml` is set to **build from the Dockerfile on Fly's remote builder**, so you
+don't need to push to ghcr first (skip Part 1). The first build takes a few minutes
+because it bakes the demo DB.
+
 ```bash
 fly auth login
 fly launch --no-deploy --copy-config --name courtops-poc   # registers the app
 fly volume create courtops_data --size 1 --region iad      # persistent DB (1 GB)
 fly secrets set ADMIN_PASSWORD='choose-a-strong-one'       # harden the login
-fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest     # pull from ghcr + run
+fly deploy                                                 # builds from Dockerfile + runs
 fly open                                                   # -> https://courtops-poc.fly.dev
 ```
-HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. If the ghcr package is
-private, authorize the pull once: `fly secrets set` won't help here — instead make
-the package public, or use `fly deploy` from a machine already `docker login`'d to
-ghcr (Fly uses your local Docker to push to its registry). The `ADMIN_PASSWORD`
-secret is applied when the fresh volume seeds on first boot, and re-applied on
-every boot thereafter.
+HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. The `ADMIN_PASSWORD`
+secret is applied when the fresh volume seeds on first boot, and re-applied on every
+boot thereafter.
+
+To deploy a **prebuilt ghcr image** instead (Route A), do Part 1, swap the
+`[build]` block in `fly.toml` to `image = "ghcr.io/vkozyrev0/tennis-app:latest"`
+(make the package public so Fly can pull it), and `fly deploy --image …`.
 
 ### Render — `render.yaml`
 Point a Blueprint at the repo, or deploy the prebuilt image directly. Automatic

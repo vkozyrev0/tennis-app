@@ -3,7 +3,15 @@
 #
 #   fly launch --no-deploy --copy-config --name courtops-poc   # or edit `app` below
 #   fly volume create courtops_data --size 1 --region iad      # persistent DB
-#   fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest
+#   fly deploy                                                 # builds from Dockerfile
+#
+# This builds the image from ./Dockerfile on Fly's remote builder (no ghcr/registry
+# push needed). The first build takes a few minutes (it bakes the demo DB).
+#
+# To use a prebuilt ghcr image instead, swap the [build] block for:
+#   [build]
+#     image = "ghcr.io/vkozyrev0/tennis-app:latest"
+# and deploy with `fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest`.
 #
 # The volume mounts over the image's baked /opt/courtops/pgdata. A FRESH volume is
 # empty, so the entrypoint re-seeds the demo into it on first boot, then your edits
@@ -13,7 +21,7 @@ app = "courtops-poc"
 primary_region = "iad"
 
 [build]
-  image = "ghcr.io/vkozyrev0/tennis-app:latest"
+  dockerfile = "Dockerfile"
 
 [env]
   PORT = "8000"
