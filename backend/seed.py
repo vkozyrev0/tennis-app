@@ -1,4 +1,6 @@
 """Seed a little demo data (idempotent). Run from backend/:  python seed.py"""
+import os
+
 from app.db import get_conn
 from app.security import hash_pw
 
@@ -179,12 +181,23 @@ def main() -> None:
             except Exception:  # leave the db alone on any unexpected schema diff
                 cur.execute("ROLLBACK TO SAVEPOINT cleanup_test_players")
 
-            # POC admin login (admin / admin) — see roadmap §Stack security note.
-            cur.execute(
-                "INSERT INTO user_account (username, password_hash, role) "
-                "VALUES (%s, %s, 'admin') ON CONFLICT (username) DO NOTHING",
-                ("admin", hash_pw("admin")),
-            )
+            # Admin login. Defaults to admin/admin for the POC; set ADMIN_PASSWORD
+            # to harden a real deployment (it overwrites any existing admin pw so a
+            # redeploy actually rotates it). See roadmap §Stack security note.
+            admin_pw = os.environ.get("ADMIN_PASSWORD")
+            if admin_pw:
+                cur.execute(
+                    "INSERT INTO user_account (username, password_hash, role) "
+                    "VALUES ('admin', %s, 'admin') "
+                    "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
+                    (hash_pw(admin_pw),),
+                )
+            else:
+                cur.execute(
+                    "INSERT INTO user_account (username, password_hash, role) "
+                    "VALUES ('admin', %s, 'admin') ON CONFLICT (username) DO NOTHING",
+                    (hash_pw("admin"),),
+                )
         conn.commit()
         print("seed complete")
     finally:

@@ -19,6 +19,9 @@ primary_region = "iad"
   PORT = "8000"
   # ENV=dev is the image default; the prod boot-guard requires TLS/non-default DB
   # settings that don't fit the bundled-Postgres POC, so keep dev for the demo.
+  # Harden the admin login (don't ship admin/admin publicly) with a Fly secret:
+  #   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'
+  # It's applied on first boot (fresh volume seeds) and re-applied every boot.
 
 [[mounts]]
   source = "courtops_data"
@@ -31,8 +34,7 @@ primary_region = "iad"
   auto_start_machines = true
   min_machines_running = 0
 
-  [http_service.http_options.response]
-    # the bundled Postgres needs a few seconds on a cold start
+  # The bundled Postgres needs a few seconds on a cold start, hence grace_period.
   [[http_service.checks]]
     method = "get"
     path = "/api/health"

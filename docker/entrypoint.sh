@@ -38,6 +38,31 @@ else
   echo "[entrypoint] existing data found — skipping seed (set DEMO_RESEED=1 to reload)"
 fi
 
+# Harden the admin login: when ADMIN_PASSWORD is set, (re)apply it on every boot
+# so it works even on the baked image where seeding is skipped, and so a redeploy
+# rotates it. Unset => the POC default (admin/admin) stays as seeded.
+if [ -n "${ADMIN_PASSWORD:-}" ]; then
+  echo "[entrypoint] applying ADMIN_PASSWORD to the admin account ..."
+  python - <<'PY'
+import os
+from app.db import get_conn
+from app.security import hash_pw
+
+conn = get_conn()
+try:
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO user_account (username, password_hash, role) "
+            "VALUES ('admin', %s, 'admin') "
+            "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
+            (hash_pw(os.environ["ADMIN_PASSWORD"]),),
+        )
+    conn.commit()
+finally:
+    conn.close()
+PY
+fi
+
 echo "[entrypoint] serving API + frontend on 0.0.0.0:$PORT  (sign in: admin / admin)"
 # uvicorn becomes PID 1 so it gets SIGTERM directly on `docker stop`. The bundled
 # Postgres is killed with the container; it crash-recovers on next start (fine for

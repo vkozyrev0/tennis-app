@@ -42,11 +42,19 @@ keep the container on plain HTTP (`:8000`). A browser-trusted cert needs a domai
 
 ### Fly.io — `fly.toml` (persistent DB, scale-to-zero)
 ```bash
-fly launch --no-deploy --copy-config --name courtops-poc
-fly volume create courtops_data --size 1 --region iad
-fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest
-# -> https://courtops-poc.fly.dev  (valid cert, 443)
+fly auth login
+fly launch --no-deploy --copy-config --name courtops-poc   # registers the app
+fly volume create courtops_data --size 1 --region iad      # persistent DB (1 GB)
+fly secrets set ADMIN_PASSWORD='choose-a-strong-one'       # harden the login
+fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest     # pull from ghcr + run
+fly open                                                   # -> https://courtops-poc.fly.dev
 ```
+HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. If the ghcr package is
+private, authorize the pull once: `fly secrets set` won't help here — instead make
+the package public, or use `fly deploy` from a machine already `docker login`'d to
+ghcr (Fly uses your local Docker to push to its registry). The `ADMIN_PASSWORD`
+secret is applied when the fresh volume seeds on first boot, and re-applied on
+every boot thereafter.
 
 ### Render — `render.yaml`
 Point a Blueprint at the repo, or deploy the prebuilt image directly. Automatic
@@ -76,6 +84,12 @@ lean baseline instead of the rich demo.
 
 ## 5. Before exposing it publicly
 
-It ships with `admin / admin` and a bundled single-container DB — POC only. Change
-the admin password, keep deployments short-lived/unlisted, and for anything real
-split out a managed Postgres (point the `PG*` env vars at it) per `design.md` §11.
+It ships with `admin / admin` and a bundled single-container DB — POC only.
+
+- **Harden the admin login** with the `ADMIN_PASSWORD` env var / secret. When set,
+  it overwrites the admin password (so a redeploy rotates it) and is applied on
+  first-boot seeding *and* re-applied on every boot — so it works on the baked
+  image too, not just a fresh volume. Unset keeps the `admin/admin` POC default.
+- Keep deployments short-lived/unlisted while it's a demo.
+- For anything real, split out a managed Postgres (point the `PG*` env vars at it)
+  per `design.md` §11 rather than relying on the bundled DB.
