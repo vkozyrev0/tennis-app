@@ -16,3 +16,6 @@ Tournament *.csv
 Tournament *.pdf
 Dockerfile
 .dockerignore
+fly.toml
+render.yaml
+Caddyfile
