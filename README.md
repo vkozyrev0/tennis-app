@@ -22,7 +22,25 @@ surface for officials.
 HTML/CSS/JS** frontend (no build step; Tabulator vendored). POC auth defaults to
 `admin / admin` — harden before any shared deployment.
 
-## Quickstart
+## Run it in one container (Postgres + server + website)
+
+The whole POC — database, API, and frontend — runs from a single image:
+
+```bash
+docker build -t courtops .
+docker run --rm -p 8000:8000 courtops
+# open http://localhost:8000 — sign in as admin / admin
+```
+
+The container boots Postgres, applies migrations, loads the realistic demo
+(Macon Junior Open 2026), then serves the API + site on :8000. Useful env vars:
+`SEED_SCRIPT=seed.py` for the lean baseline instead of the demo, `DEMO_RESEED=1`
+to reload the demo on restart, `PORT` to change the port. Data lives in an
+ephemeral volume; mount one at `/var/lib/postgresql/data` to persist it. This
+bundles the DB into the app image for demo convenience — not a production
+topology (see [docs/design.md](docs/design.md) §11).
+
+## Local dev (without Docker)
 
 ```bash
 cd backend
