@@ -628,7 +628,10 @@ function makeMenuButton(triggerHtml, items, opts = {}) {
     pop.style.left = "auto";
     pop.style.right = `${Math.round(window.innerWidth - r.right)}px`;
   }
-  function open() {
+  const menuItems = () => [...pop.querySelectorAll(".menu-btn-item:not([disabled])")];
+  function focusItem(i) { const it = menuItems(); if (it.length) it[(i + it.length) % it.length].focus(); }
+  // focusIdx: 0 = first item, -1 = last, null = leave focus on the trigger (mouse open).
+  function open(focusIdx = null) {
     if (anchored) { document.body.appendChild(pop); position(); }
     pop.hidden = false; btn.setAttribute("aria-expanded", "true");
     document.addEventListener("click", onDoc, true);
@@ -637,6 +640,7 @@ function makeMenuButton(triggerHtml, items, opts = {}) {
       window.addEventListener("scroll", close, true);
       window.addEventListener("resize", close);
     }
+    if (focusIdx != null) requestAnimationFrame(() => focusItem(focusIdx));
   }
   function close() {
     pop.hidden = true; btn.setAttribute("aria-expanded", "false");
@@ -649,8 +653,23 @@ function makeMenuButton(triggerHtml, items, opts = {}) {
     }
   }
   function onDoc(e) { if (!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
-  function onKey(e) { if (e.key === "Escape") { close(); btn.focus(); } }
-  btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open() : close(); });
+  function onKey(e) {
+    if (e.key === "Escape") { close(); btn.focus(); return; }
+    if (e.key === "Tab") { close(); return; }          // let focus leave the menu naturally
+    const it = menuItems(); if (!it.length) return;
+    const cur = it.indexOf(document.activeElement);
+    if (e.key === "ArrowDown") { e.preventDefault(); focusItem(cur < 0 ? 0 : cur + 1); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); focusItem(cur < 0 ? -1 : cur - 1); }
+    else if (e.key === "Home") { e.preventDefault(); focusItem(0); }
+    else if (e.key === "End") { e.preventDefault(); focusItem(-1); }
+  }
+  // Keyboard-activated click (Enter/Space) reports detail 0 → move focus into the
+  // menu; a mouse click (detail>0) opens without stealing focus.
+  btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open(e.detail === 0 ? 0 : null) : close(); });
+  // ArrowDown/Up on the closed trigger opens the menu and moves focus into it.
+  btn.addEventListener("keydown", (e) => {
+    if (pop.hidden && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); open(e.key === "ArrowDown" ? 0 : -1); }
+  });
   wrap.append(btn, pop);
   return wrap;
 }
