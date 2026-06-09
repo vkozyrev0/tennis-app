@@ -76,8 +76,11 @@
 }
 .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 
-/* Confirm modal */
-.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1500; }
+/* Confirm modal. z-index sits ABOVE the edit overlay layers (.detail-backdrop
+   1550, .detail-pane 1600, .combo-list 1700) because a confirm dialog can be
+   raised from inside an open edit overlay (e.g. its Delete button) — at a lower
+   z-index it would render hidden behind that overlay. */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1800; }
 .modal[hidden] { display: none; }
 .modal-box { background: var(--card); border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
 .modal-box p { margin: 0 0 0.5rem; }
