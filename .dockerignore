@@ -1,6 +1,7 @@
 # Keep the build context small — only backend/, frontend/, and docker/ are copied.
 .git
 .gitignore
+.github/
 .archive/
 .claude/
 **/__pycache__/

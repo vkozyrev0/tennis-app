@@ -7,7 +7,17 @@ This is a single-TD POC topology, not production (see `design.md` §11).
 
 ## 1. Publish the image to GitHub Container Registry (ghcr.io)
 
-The repo's `gh` token needs the `write:packages` scope (the default scopes don't
+**CI does this automatically.** `.github/workflows/docker.yml` builds the image on
+every push/PR and **pushes `ghcr.io/<owner>/tennis-app:latest` (+ a `sha-` tag) on
+every push to `main` and on `v*` tags** — using the built-in `GITHUB_TOKEN`, so no
+PAT or `docker login` is needed. After the first successful run, make the package
+public if you want hosts to pull it without a token (GitHub → your profile →
+**Packages** → `tennis-app` → **Package settings** → *Change visibility* → Public).
+
+The manual steps below are only needed to push an image **from your laptop** (e.g.
+before CI is set up, or to publish an off-`main` build).
+
+The local `gh` token needs the `write:packages` scope (the default scopes don't
 include it). Grant it once — this opens a browser/device-code flow:
 
 ```bash
