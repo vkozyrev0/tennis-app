@@ -1,5 +1,7 @@
 # CourtOps Tennis
 
+[![docker](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml/badge.svg)](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml)
+
 Back-office tooling for a USTA **Tournament Director (TD)**. Two loosely-coupled
 halves:
 

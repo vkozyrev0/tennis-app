@@ -6867,6 +6867,20 @@ function _hoistDetailPanes() {
 }
 function _setBackgroundInert(on) {
   if (on) _hoistDetailPanes();
+  // Lock background scroll while a dialog is open so wheel/touch over the
+  // backdrop doesn't bleed through and scroll the page behind it. Compensate for
+  // the now-hidden scrollbar's width so the inert content doesn't shift.
+  if (on) {
+    // The viewport scrollbar is owned by the root (<html>), so lock overflow
+    // there — locking <body> alone is unreliable. Pad for the hidden scrollbar's
+    // width so the inert content doesn't shift.
+    const sbw = window.innerWidth - document.documentElement.clientWidth;
+    if (sbw > 0) document.body.style.paddingRight = sbw + "px";
+    document.documentElement.style.overflow = "hidden";
+  } else {
+    document.documentElement.style.overflow = "";
+    document.body.style.paddingRight = "";
+  }
   for (const el of [document.querySelector("header"),
                     document.querySelector("nav.menu-l1"),
                     document.querySelector("nav.menu"),
