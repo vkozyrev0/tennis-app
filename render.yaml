@@ -1,0 +1,28 @@
+# Render Blueprint for the all-in-one CourtOps POC image (Postgres + API +
+# frontend in one container). Render serves it over HTTPS on 443 automatically,
+# on a free *.onrender.com subdomain (valid cert) — no domain or cert work.
+#
+#   New + > Blueprint  ->  point at this repo, or
+#   deploy the prebuilt image:  ghcr.io/vkozyrev0/tennis-app:latest
+#
+# NOTE: the `disk` below (persistent DB) requires a paid instance type. On the
+# free tier, drop the `disk:` block — the DB then resets to the baked demo on
+# each restart, which is fine for a throwaway demo. A fresh disk is empty, so the
+# entrypoint seeds the demo into it on first boot, then your edits persist.
+
+services:
+  - type: web
+    name: courtops-poc
+    runtime: image
+    image:
+      url: ghcr.io/vkozyrev0/tennis-app:latest
+    plan: starter            # 'starter' (paid) is needed for a persistent disk
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "8000"
+      # ENV=dev is the image default; see fly.toml note on the prod boot-guard.
+    disk:
+      name: courtops-data
+      mountPath: /opt/courtops/pgdata
+      sizeGB: 1

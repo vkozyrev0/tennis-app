@@ -1,0 +1,23 @@
+# Caddy reverse proxy for self-hosting the all-in-one CourtOps POC image on your
+# own VM (DigitalOcean droplet, EC2, etc.). Caddy listens on 443, auto-obtains
+# and auto-renews a Let's Encrypt cert, and proxies to the app container, which
+# keeps serving plain HTTP on :8000.
+#
+# Prereqs on the VM:
+#   - a domain's A-record pointing at the VM's public IP
+#   - ports 80 (ACME challenge) and 443 open
+#
+# Run the app with a NAMED VOLUME so the embedded DB persists across restarts.
+# A fresh volume is empty, so the entrypoint seeds the demo into it on first boot:
+#   docker volume create courtops_data
+#   docker run -d --name courtops --restart unless-stopped \
+#       -v courtops_data:/opt/courtops/pgdata \
+#       -p 127.0.0.1:8000:8000 ghcr.io/vkozyrev0/tennis-app:latest
+#
+# Then run Caddy (host install, or the official caddy image) with this file.
+# Replace courtops.example.com with your domain — that's all Caddy needs to get
+# a valid cert.
+
+courtops.example.com {
+	reverse_proxy 127.0.0.1:8000
+}

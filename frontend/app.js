@@ -759,7 +759,12 @@ function enhanceSelect(sel) {
   const list = document.createElement("div");
   list.className = "combo-list"; list.hidden = true; list.id = listId;
   list.setAttribute("role", "listbox");
-  wrap.append(input, list);
+  // The list is portaled to <body> (not kept inside `wrap`) so it can never be
+  // clipped by a scrolling/transformed ancestor — e.g. the .detail-pane modal,
+  // which is position:fixed + transform + overflow:auto and would otherwise trap
+  // an absolutely-positioned dropdown inside its own scroll area.
+  wrap.append(input);
+  document.body.appendChild(list);
   let shown = [], hi = -1;
 
   function syncDisplay() {
@@ -795,11 +800,38 @@ function enhanceSelect(sel) {
     if (cur) { cur.scrollIntoView({ block: "nearest" }); input.setAttribute("aria-activedescendant", cur.id); }
     else input.removeAttribute("aria-activedescendant");
   }
-  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; input.setAttribute("aria-expanded", "true"); }
+  // Position the portaled list (position:fixed) under—or above—the input, using
+  // the input's viewport rect. Flips up when there isn't room below, and caps the
+  // height to the available space so it always scrolls internally rather than
+  // pushing the page. Recomputed on open and on any scroll/resize while open.
+  function positionList() {
+    const r = input.getBoundingClientRect();
+    const margin = 8, maxH = 240;
+    const below = window.innerHeight - r.bottom - margin;
+    const above = r.top - margin;
+    const up = below < Math.min(maxH, list.scrollHeight) && above > below;
+    list.style.position = "fixed";
+    list.style.left = r.left + "px";
+    list.style.width = r.width + "px";
+    list.style.right = "auto";
+    if (up) {
+      list.style.top = "auto";
+      list.style.bottom = (window.innerHeight - r.top + 2) + "px";
+      list.style.maxHeight = Math.max(80, Math.min(maxH, above)) + "px";
+    } else {
+      list.style.bottom = "auto";
+      list.style.top = (r.bottom + 2) + "px";
+      list.style.maxHeight = Math.max(80, Math.min(maxH, below)) + "px";
+    }
+  }
+  const reposition = () => { if (!list.hidden) positionList(); };
+  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; positionList(); window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition); input.setAttribute("aria-expanded", "true"); }
   // commit=true: if the text was cleared, clear the selection (for optional fields
   // that have a blank "" option). Otherwise just restore the displayed value.
   function close(commit) {
     list.hidden = true; hi = -1;
+    window.removeEventListener("scroll", reposition, true);
+    window.removeEventListener("resize", reposition);
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
     if (commit && input.value.trim() === "" && sel.value !== "" && [...sel.options].some((o) => o.value === "")) {
@@ -812,14 +844,14 @@ function enhanceSelect(sel) {
   // Select existing text on focus so the first keystroke overtypes a prior choice.
   input.addEventListener("focus", () => { open(); input.select(); });
   input.addEventListener("click", open);
-  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
+  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; positionList(); input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
     else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } else { e.preventDefault(); close(true); } }
     else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(false); } }
   });
-  document.addEventListener("click", (e) => { if (!wrap.contains(e.target)) close(true); });
+  document.addEventListener("click", (e) => { if (!wrap.contains(e.target) && !list.contains(e.target)) close(true); });
 
   // Keep the visible text in sync when options/value/disabled change in code.
   new MutationObserver(() => requestAnimationFrame(syncDisplay))

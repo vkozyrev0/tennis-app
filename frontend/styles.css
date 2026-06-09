@@ -446,8 +446,11 @@ input, select, textarea {
 }
 .combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
 .combo-list {
-  position: absolute; top: 100%; left: 0; right: 0; z-index: 60;
-  margin-top: 2px; max-height: 240px; overflow-y: auto;
+  /* position:fixed coordinates are set inline by positionList() at open time;
+     the list is portaled to <body>, so this z-index must clear the modal layers
+     (.detail-backdrop 1550, .detail-pane 1600, .modal 1500). */
+  position: fixed; z-index: 1700;
+  max-height: 240px; overflow-y: auto;
   background: var(--elev); color: var(--ink);
   border: 1px solid var(--border); border-radius: 6px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);

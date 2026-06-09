@@ -1,0 +1,22 @@
+# Keep the build context small — only backend/, frontend/, and docker/ are copied.
+.git
+.gitignore
+.github/
+.archive/
+.claude/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+backend/.venv/
+backend/.env
+**/.DS_Store
+docs/
+scripts/
+*.md
+Tournament *.csv
+Tournament *.pdf
+Dockerfile
+.dockerignore
+fly.toml
+render.yaml
+Caddyfile

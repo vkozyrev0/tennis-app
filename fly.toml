@@ -1,0 +1,55 @@
+# Fly.io deploy for the all-in-one CourtOps POC image (Postgres + API + frontend
+# in one container). Gives HTTPS on 443 automatically via *.fly.dev (valid cert).
+#
+#   fly launch --no-deploy --copy-config --name courtops-poc   # or edit `app` below
+#   fly volume create courtops_data --size 1 --region iad      # persistent DB
+#   fly deploy                                                 # builds from Dockerfile
+#
+# This builds the image from ./Dockerfile on Fly's remote builder (no ghcr/registry
+# push needed). The first build takes a few minutes (it bakes the demo DB).
+#
+# To use a prebuilt ghcr image instead, swap the [build] block for:
+#   [build]
+#     image = "ghcr.io/vkozyrev0/tennis-app:latest"
+# and deploy with `fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest`.
+#
+# The volume mounts over the image's baked /opt/courtops/pgdata. A FRESH volume is
+# empty, so the entrypoint re-seeds the demo into it on first boot, then your edits
+# persist across restarts/redeploys. (Fly volumes do not copy image contents.)
+
+app = "courtops-poc"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  # ENV=dev is the image default; the prod boot-guard requires TLS/non-default DB
+  # settings that don't fit the bundled-Postgres POC, so keep dev for the demo.
+  # Harden the admin login (don't ship admin/admin publicly) with a Fly secret:
+  #   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'
+  # It's applied on first boot (fresh volume seeds) and re-applied every boot.
+
+[[mounts]]
+  source = "courtops_data"
+  destination = "/opt/courtops/pgdata"
+
+[http_service]
+  internal_port = 8000
+  force_https = true          # 443 -> redirects http; cert is auto-managed
+  auto_stop_machines = "stop" # scale to zero when idle (volume keeps the data)
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # The bundled Postgres needs a few seconds on a cold start, hence grace_period.
+  [[http_service.checks]]
+    method = "get"
+    path = "/api/health"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
