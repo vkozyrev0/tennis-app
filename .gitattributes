@@ -1,0 +1,15 @@
+# Keep line endings sane across OSes. Shell scripts MUST stay LF even on Windows
+# checkouts (core.autocrlf=true would otherwise give them CRLF), because the
+# Docker image runs them under bash and a CRLF shebang fails to start.
+*.sh            text eol=lf
+docker/entrypoint.sh text eol=lf
+
+# Let Git normalize other text files to LF in the repo; the working tree follows
+# the platform. Binary assets are left untouched.
+* text=auto
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.xlsx binary

@@ -32,7 +32,11 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY backend  backend
 COPY frontend frontend
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Normalize line endings: a Windows checkout (autocrlf) can give the script CRLF,
+# which breaks the `#!/usr/bin/env bash` shebang inside the container. Strip CRs
+# so the image is correct regardless of the build host. (.gitattributes also
+# pins *.sh to LF, but this keeps the image robust on its own.)
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
 
 # POC defaults — these match backend/app/config.py, so nothing extra is needed.
 # ENV=dev keeps the production boot-guard a no-op. PGDATA is a NON-volume path so
