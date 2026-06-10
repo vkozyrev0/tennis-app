@@ -757,6 +757,15 @@ function fillSelect(el, items, labelFn, none = true) {
 // (value/required/submit/listeners all unchanged) — we just overlay a text input.
 function enhanceSelect(sel) {
   if (!sel || sel.dataset.combo) return;
+  // One shared outside-click closer for ALL combos (plan P1 #7).
+  if (!enhanceSelect._open) {
+    enhanceSelect._open = new Set();
+    document.addEventListener("click", (e) => {
+      for (const c of [...enhanceSelect._open]) {
+        if (!c.wrap.contains(e.target) && !c.list.contains(e.target)) c.close(true);
+      }
+    });
+  }
   // Multi-selects (events, willing_divisions) stay as the native
   // `<select multiple size="N">` control — the type-in combo wrapper is a
   // single-value picker that wouldn't handle multi-selection.
@@ -851,13 +860,18 @@ function enhanceSelect(sel) {
     }
   }
   const reposition = () => { if (!list.hidden) positionList(); };
-  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; positionList(); window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition); input.setAttribute("aria-expanded", "true"); }
+  // Outside-click close goes through ONE shared document listener (plan P1 #7)
+  // instead of one standing listener per combo (~46 on a loaded page). Open
+  // combos register in a set; the shared handler iterates 0-or-1 entries.
+  const _openEntry = { wrap, list, close: (c) => close(c) };
+  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; positionList(); window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition); enhanceSelect._open.add(_openEntry); input.setAttribute("aria-expanded", "true"); }
   // commit=true: if the text was cleared, clear the selection (for optional fields
   // that have a blank "" option). Otherwise just restore the displayed value.
   function close(commit) {
     list.hidden = true; hi = -1;
     window.removeEventListener("scroll", reposition, true);
     window.removeEventListener("resize", reposition);
+    enhanceSelect._open.delete(_openEntry);
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
     if (commit && input.value.trim() === "" && sel.value !== "" && [...sel.options].some((o) => o.value === "")) {
@@ -870,15 +884,13 @@ function enhanceSelect(sel) {
   // Select existing text on focus so the first keystroke overtypes a prior choice.
   input.addEventListener("focus", () => { open(); input.select(); });
   input.addEventListener("click", open);
-  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; positionList(); input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
+  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; positionList(); enhanceSelect._open.add(_openEntry); input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
     else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } else { e.preventDefault(); close(true); } }
     else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(false); } }
   });
-  document.addEventListener("click", (e) => { if (!wrap.contains(e.target) && !list.contains(e.target)) close(true); });
-
   // Keep the visible text in sync when options/value/disabled change in code.
   new MutationObserver(() => requestAnimationFrame(syncDisplay))
     .observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
@@ -1025,6 +1037,33 @@ function activateGroup(key) {
     if (first) first.click();
   }
   sizeLists();
+}
+
+// Prerequisite callout (plan P1 #1): when a workspace page depends on an EMPTY
+// Setup catalog (no officials / players / hotels yet), say so up top with a
+// jump link — instead of presenting a silently empty picker the TD has to
+// puzzle over. The note removes itself once the catalog has rows.
+function prereqCallout(panelId, show, msg, setupTabId) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  let note = panel.querySelector(":scope > .prereq-note");
+  if (!show) { if (note) note.remove(); return; }
+  if (!note) {
+    note = document.createElement("div");
+    note.className = "prereq-note";
+    note.setAttribute("role", "note");
+    panel.prepend(note);
+  }
+  note.innerHTML = "";
+  const span = document.createElement("span"); span.textContent = msg + " ";
+  const a = document.createElement("a"); a.href = "#"; a.className = "btn-link";
+  a.textContent = "Open Setup →";
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    activateGroup("setup");
+    const t = document.getElementById(setupTabId); if (t) t.click();
+  });
+  note.append(span, a);
 }
 _groups.forEach((g) => {
   const b = document.createElement("button");
@@ -1641,6 +1680,17 @@ function wireEntity(cfg) {
   table.on("cellEdited", async (cell) => {
     const data = cell.getRow().getData();
     if (cell.getValue() === cell.getOldValue()) return;  // no-op
+    // Cell-local save feedback (plan P1 #3): the global progress bar alone is
+    // easy to miss during rapid in-grid edits. Mark the cell while the PUT is
+    // in flight; flash saved/error on settle (refresh() may replace the row's
+    // DOM node, so the flash lands on the re-fetched cell when possible).
+    const el = cell.getElement();
+    el.classList.add("cell-saving");
+    const flash = (cls) => {
+      const node = table.getRow(data.id)?.getCell(cell.getField())?.getElement() || el;
+      node.classList.add(cls);
+      setTimeout(() => node.classList.remove(cls), cls === "cell-error" ? 1500 : 700);
+    };
     try {
       let body = { ...data }; delete body._act;
       if (cfg.transform) body = cfg.transform(body);
@@ -1654,10 +1704,14 @@ function wireEntity(cfg) {
       await refresh();
       if (cfg.afterChange) cfg.afterChange();
       if (selectedId === data.id) fillForm(table.getRow(data.id)?.getData() || data);
+      flash("cell-saved");
     } catch (err) {
       setMsg(cfg.msgId, err.message, false);
       try { cell.restoreOldValue(); } catch (_) {}
       await refresh();
+      flash("cell-error");
+    } finally {
+      el.classList.remove("cell-saving");
     }
   });
 
@@ -1942,6 +1996,9 @@ function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _det
 rosterCloseBtn.addEventListener("click", rosterCloseModal);
 async function loadRoster() {
   if (!active) return;
+  prereqCallout("panel-t-roster", !Object.keys(playersById).length,
+    "The players catalog is empty — register players first, then add them to this roster (or use Import).",
+    "tab-panel-players");
   rosterRows = await api(`/tournaments/${active.id}/players`);  // kept for the sign-in export
   if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
   applyRosterSel();
@@ -2545,6 +2602,9 @@ function _outOfWindow(d) {
 }
 async function loadAssignments() {
   if (!active) return;
+  prereqCallout("panel-t-assignments", !Object.keys(officialsById).length,
+    "No officials in the catalog yet — add them (with certifications) before assigning.",
+    "tab-panel-officials");
   // Mileage site must be one of THIS tournament's sites (audit §3 — not any site).
   // Audit M15 + N14: fire all four fetches in parallel; allSettled so one
   // failure doesn't blank the whole panel.
@@ -3128,6 +3188,9 @@ const trbGrid = makeListGrid("trb-table", [
   });
 async function loadRoomBlocks() {
   if (!active) return;
+  prereqCallout("panel-t-roomblocks", !Object.keys(hotelsById).length,
+    "No hotels in the catalog yet — add them before creating room blocks.",
+    "tab-panel-hotels");
   trbGrid.setData(await api(`/room-blocks?tournament_id=${active.id}`));
 }
 function trbReset() { trbEditId = null; trbForm.reset(); trbForm.querySelector('button[type="submit"]').textContent = "Add block"; }

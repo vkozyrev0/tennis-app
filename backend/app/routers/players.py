@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from ..crypto import decrypt as _dec_pii
 from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
+from ..query_helpers import paged_select
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -85,13 +86,11 @@ def list_players(response: Response, q: str | None = None,
         params += [like] * 5
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT count(*) AS n FROM player{where}", params)
-        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
-        page, page_params = "", list(params)
-        if limit is not None:
-            page = " LIMIT %s OFFSET %s"; page_params += [max(0, limit), max(0, offset)]
-        cur.execute(f"SELECT {_COLS} FROM player{where} ORDER BY last_name, first_name{page}", page_params)
-        return [_decrypt_contact(r) for r in cur.fetchall()]
+        rows = paged_select(cur, response, cols=_COLS, from_sql="FROM player",
+                            where=where, params=params,
+                            order_by=" ORDER BY last_name, first_name",
+                            limit=limit, offset=offset)
+        return [_decrypt_contact(r) for r in rows]
 
 
 # NOTE: declared BEFORE GET /{player_id} so "/search" isn't swallowed as an id.

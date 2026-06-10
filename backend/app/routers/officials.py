@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..ical import build_schedule_ics
+from ..query_helpers import paged_select
 from ..models import AccountCreate, OfficialCreate, OfficialOut
 from ..security import hash_pw
 
@@ -31,13 +32,10 @@ def list_officials(response: Response, q: str | None = None,
         params += [like] * 5
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT count(*) AS n FROM official{where}", params)
-        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
-        page, page_params = "", list(params)
-        if limit is not None:
-            page = " LIMIT %s OFFSET %s"; page_params += [max(0, limit), max(0, offset)]
-        cur.execute(f"SELECT {_COLS} FROM official{where} ORDER BY last_name, first_name{page}", page_params)
-        return cur.fetchall()
+        return paged_select(cur, response, cols=_COLS, from_sql="FROM official",
+                            where=where, params=params,
+                            order_by=" ORDER BY last_name, first_name",
+                            limit=limit, offset=offset)
 
 
 # NOTE: declared BEFORE GET /{official_id} so "/search" isn't parsed as an id.

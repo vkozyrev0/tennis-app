@@ -23,6 +23,8 @@ from ..models import (
     EmailOut,
     EmailUpdate,
 )
+from ..playerops import mark_email_filed
+from ..query_helpers import paged_select
 from ..triage import classify
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
@@ -76,13 +78,10 @@ def list_emails(response: Response, tournament_id: int | None = None,
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
         # Count uses the same FROM (joins to player) so a USTA-# `q` resolves.
-        cur.execute(f"SELECT count(*) AS n {_FROM}{where}", params)
-        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
-        page, page_params = "", list(params)
-        if limit is not None:
-            page = " LIMIT %s OFFSET %s"; page_params += [limit, offset]
-        cur.execute(f"SELECT {_COLS} {_FROM}{where} ORDER BY e.received_at DESC{page}", page_params)
-        rows = cur.fetchall()
+        rows = paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+                            where=where, params=params,
+                            order_by=" ORDER BY e.received_at DESC",
+                            limit=limit, offset=offset)
         # Post-process inside the cursor so we can lazily backfill the persisted
         # USTA # for pre-0039 rows (their column is NULL): compute from the
         # decrypted body once, store it, and it becomes searchable next time.
@@ -300,7 +299,9 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
                 status_code=404,
                 detail="the amended email has no filed row yet — file it normally first",
             )
-        cur.execute("UPDATE email_message SET status = 'filed' WHERE id = %s", (em["id"],))
+        # Through the shared helper (not an inline UPDATE) so the "filed" rule
+        # can't drift between single-file, amend, and bulk paths (plan P1 #6).
+        mark_email_filed(cur, em["id"], em["classification"])
         return {"updated_row_id": row["id"], "list": em["classification"]}
 
 
@@ -794,7 +795,7 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
                 cur.execute(target["sql"], (tid, pid, em["id"], *extras))
                 if cur.rowcount > 0:
                     filed_count += 1
-                    cur.execute("UPDATE email_message SET status='filed' WHERE id=%s", (em["id"],))
+                    mark_email_filed(cur, em["id"], em["classification"])
                 else:
                     skipped.append({"id": em["id"], "reason": f"{target['label']} already exists"})
             except psycopg.Error as e:

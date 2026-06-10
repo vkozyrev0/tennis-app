@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=62" />
+  <link rel="stylesheet" href="/styles.css?v=63" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -309,6 +309,8 @@
 
     <!-- Players -->
     <section class="panel" id="panel-players">
+      <p class="muted panel-subtitle">The durable <strong>players catalog</strong> — registered once, reusable
+        across tournaments. To enter players in a specific event, use that tournament's <strong>Roster</strong> page.</p>
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" aria-label="Filter players" /><button type="button" class="new-btn">+ New</button></div>
@@ -543,7 +545,7 @@
     <section class="panel tpanel" id="panel-t-roster" data-import-type="roster_initial,roster,roster_correction">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
-        <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(import on the Data → Import page)</span></h3>
+        <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(players entered in <em>this</em> tournament — drawn from the Setup players catalog; import on the Data → Import page)</span></h3>
         <p id="roster-counts" class="muted roster-counts" aria-live="polite"></p>
         <div id="roster-completeness" class="roster-complete no-print"></div>
         <div class="master-detail">
@@ -622,7 +624,7 @@
           <div class="row">
             <label>Official <select name="official_id" id="asg-official" required></select></label>
             <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
-            <label>Hotel assignment <select name="room_block_id" id="asg-room-block"></select></label>
+            <label>Room block (hotel) <select name="room_block_id" id="asg-room-block"></select></label>
           </div>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="asg-msg"></span></div>
         </form>
@@ -1327,6 +1329,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=139"></script>
+  <script type="module" src="/app.js?v=140"></script>
 </body>
 </html>

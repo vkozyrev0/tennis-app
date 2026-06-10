@@ -40,6 +40,7 @@ from .routers import (
     withdrawals,
 )
 from .config import settings
+from .db_errors import install as install_db_error_handlers
 from .security import require_admin
 
 # PII hardening H1: refuse to start a shared/hosted deployment that still carries
@@ -48,6 +49,11 @@ from .security import require_admin
 settings.validate()
 
 app = FastAPI(title="CourtOps Tennis API", version="0.4.0")
+
+# Safety net: any UNCAUGHT psycopg constraint violation maps to 409/400 with a
+# readable detail instead of a bare 500. Routers with tailored messages keep
+# them (their try/except runs first). See app/db_errors.py.
+install_db_error_handlers(app)
 
 # Open endpoints: health + auth (login) + the official self-service surface
 # (which checks the session itself).
