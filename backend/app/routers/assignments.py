@@ -25,6 +25,7 @@ from ..assignment_calc import (  # noqa: F401  (RULE_VERSION used by writers)
     RULE_VERSION,
     compute_summary,
 )
+from ..bulk_ops import savepoint
 from ..db import db_dep
 from ..models import (
     AssignmentBulkCreate,
@@ -529,12 +530,19 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
             except HTTPException:
                 skipped_existing.append(oid)  # no room left → leave for later
                 continue
-            cur.execute(
-                "INSERT INTO assignment (tournament_id, official_id, site_id, room_block_id) "
-                "VALUES (%s, %s, %s, %s) RETURNING id",
-                (tournament_id, oid, body.site_id, body.room_block_id),
-            )
-            created.append(_persist_snapshot(cur, cur.fetchone()["id"]))
+            # Per-official SAVEPOINT (P2 #10): a concurrent invite landing
+            # between the `already` pre-check and this INSERT hits the UNIQUE
+            # and would otherwise abort the WHOLE batch — skip just that one.
+            try:
+                with savepoint(cur):
+                    cur.execute(
+                        "INSERT INTO assignment (tournament_id, official_id, site_id, room_block_id) "
+                        "VALUES (%s, %s, %s, %s) RETURNING id",
+                        (tournament_id, oid, body.site_id, body.room_block_id),
+                    )
+                    created.append(_persist_snapshot(cur, cur.fetchone()["id"]))
+            except psycopg.errors.UniqueViolation:
+                skipped_existing.append(oid)
     return {
         "created": created,
         "created_count": len(created),

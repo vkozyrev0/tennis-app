@@ -35,6 +35,7 @@ from ..models import (
     EmailOut,
     EmailUpdate,
 )
+from ..bulk_ops import savepoint
 from ..playerops import mark_email_filed
 from ..query_helpers import like_escape, paged_select
 from ..triage import classify
@@ -667,16 +668,22 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
                 skipped.append({"id": em["id"], "reason": "no tournament"})
                 continue
             try:
-                # Append each target's locally-parsed extras (reason / division /
-                # events) after the core params, in the registry's declared order,
-                # so bulk fills the same fields single-file does (no LLM).
-                extras = [_EXTRACTORS[name](em) for name in target.get("extract", [])]
-                cur.execute(target["sql"], (tid, pid, em["id"], *extras))
-                if cur.rowcount > 0:
-                    filed_count += 1
-                    mark_email_filed(cur, em["id"], em["classification"])
-                else:
-                    skipped.append({"id": em["id"], "reason": f"{target['label']} already exists"})
+                # Per-row SAVEPOINT (P2 #10): without it the first SQL error
+                # aborts the whole transaction — every later row would fail
+                # with InFailedSqlTransaction and the request-end COMMIT would
+                # silently roll back the rows already "filed".
+                with savepoint(cur):
+                    # Append each target's locally-parsed extras (reason /
+                    # division / events) after the core params, in the
+                    # registry's declared order, so bulk fills the same fields
+                    # single-file does (no LLM).
+                    extras = [_EXTRACTORS[name](em) for name in target.get("extract", [])]
+                    cur.execute(target["sql"], (tid, pid, em["id"], *extras))
+                    if cur.rowcount > 0:
+                        filed_count += 1
+                        mark_email_filed(cur, em["id"], em["classification"])
+                    else:
+                        skipped.append({"id": em["id"], "reason": f"{target['label']} already exists"})
             except psycopg.Error as e:
                 skipped.append({"id": em["id"], "reason": str(e).splitlines()[0][:120]})
     return {"filed": filed_count, "skipped": skipped}
