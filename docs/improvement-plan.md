@@ -73,12 +73,12 @@ adult_lists) one endpoint at a time.
 
 ## P2 — Structural (do before the next feature wave)
 
-8. **Extract the assignment summary into a testable module** (M) — `_summary()`
-   (assignments.py:54–234) is the single source of truth for pay / mileage /
-   conflict / availability flags, ~180 lines, exercised only through API tests
-   from 6+ call sites. Move the calculation to `backend/app/assignment_calc.py`
-   with direct unit tests; routers keep the DB load + serialization. *This is
-   the highest-leverage backend item* — money logic deserves unit tests.
+8. ✅ **SHIPPED (2026-06-10, b21ca10) — Extract the assignment summary into a
+   testable module** — `app/assignment_calc.py` now holds the pure calc
+   (`mileage_for` / `pay_for` / `compute_summary`); the router keeps only its
+   five queries. 15 direct unit tests pin the formula edges (free band, cap
+   boundary, missing-distance, soft/hard conflicts, availability semantics).
+   Move-only: suite 365 green with the API money tests unchanged.
 
 9. **Split `emails.py` (745 lines) by concern** (M→L) — inbox list/search,
    triage, bulk ops, amendments, and the regex extractors live in one file.
