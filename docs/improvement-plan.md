@@ -13,7 +13,15 @@ single-TD, single-instance POC, and listed so the trigger condition is explicit.
 
 ---
 
-## P1 — Quick wins (ship piecemeal)
+## P1 — Quick wins (ship piecemeal) — ✅ ALL SHIPPED (2026-06-10, commit 367868d)
+
+All seven landed in one round: suite 350 green, CI published. Notes from
+implementation: the "eight catch-less routers" from the review turned out to be
+internally guarded (dedupes / 404 pre-checks / ON DELETE CASCADE), so item 4 is
+a safety net for FUTURE constraints rather than a live-bug fix; and item 5's
+helper (`query_helpers.paged_select`) is now the adoption path for the
+remaining lists (roster, late_entries, withdrawals, doubles, player_hotels,
+adult_lists) one endpoint at a time.
 
 1. **Empty-state guidance with prerequisite links** (S) — workspace panels
    assume the Setup catalogs are populated. When `officialsById`/`playersById`
