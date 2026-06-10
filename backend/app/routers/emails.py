@@ -24,7 +24,7 @@ from ..models import (
     EmailUpdate,
 )
 from ..playerops import mark_email_filed
-from ..query_helpers import paged_select
+from ..query_helpers import like_escape, paged_select
 from ..triage import classify
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
@@ -74,7 +74,8 @@ def list_emails(response: Response, tournament_id: int | None = None,
         # SQL-searchable even though the body is encrypted).
         clauses.append("(e.subject ILIKE %s OR e.from_address ILIKE %s "
                        "OR p.usta_number ILIKE %s OR e.detected_usta_text ILIKE %s)")
-        params += [f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"]
+        eq = like_escape(q)
+        params += [f"%{eq}%", f"%{eq}%", f"%{eq}%", f"%{eq}%"]
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
         # Count uses the same FROM (joins to player) so a USTA-# `q` resolves.

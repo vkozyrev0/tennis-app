@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..ical import build_schedule_ics
-from ..query_helpers import paged_select
+from ..query_helpers import like_escape, paged_select
 from ..models import AccountCreate, OfficialCreate, OfficialOut
 from ..security import hash_pw
 
@@ -24,7 +24,7 @@ def list_officials(response: Response, q: str | None = None,
     params the whole list is returned, so existing callers are unchanged."""
     clauses, params = [], []
     if q:
-        like = f"%{q.strip()}%"
+        like = f"%{like_escape(q.strip())}%"
         clauses.append(
             "(first_name ILIKE %s OR last_name ILIKE %s OR city ILIKE %s "
             "OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %s "
@@ -46,7 +46,7 @@ def search_officials(q: str, limit: int = 10, conn=Depends(db_dep)):
     term = (q or "").strip()
     if len(term) < 2:
         return []
-    like = f"%{term}%"
+    like = f"%{like_escape(term)}%"
     limit = max(1, min(limit, 50))
     with conn.cursor() as cur:
         cur.execute(

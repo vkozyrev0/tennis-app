@@ -7,6 +7,13 @@ header name, clamping, or clause order.
 """
 
 
+def like_escape(term: str) -> str:
+    """Escape LIKE/ILIKE wildcards in USER input so a search for "%" or "_"
+    matches those literal characters instead of everything / any-one-char
+    (investigation 2026-06-10). Postgres' default LIKE escape is backslash."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def paged_select(cur, response, *, cols: str, from_sql: str, where: str = "",
                  params=(), order_by: str, limit: int | None = None,
                  offset: int = 0):

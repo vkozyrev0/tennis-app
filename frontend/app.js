@@ -2021,7 +2021,7 @@ async function _renderRosterCompleteness() {
   catch (e) { box.innerHTML = ""; return; }
   if (!c.counts.incomplete_entries) {
     box.innerHTML = c.counts.total_active
-      ? '<p class="rc-clean">✓ All ' + c.counts.total_active + ' active roster entries are complete.</p>' : "";
+      ? '<p class="rc-clean">✓ All ' + esc(c.counts.total_active) + ' active roster entries are complete.</p>' : "";
     return;
   }
   const k = c.counts;
@@ -2400,7 +2400,7 @@ function _renderBatch(el, body) {
   el.innerHTML = `<div class="muted">Staged ${body.total}: <strong>${body.valid} valid</strong>, ${body.invalid} invalid.</div>`;
   if (body.errors && body.errors.length) {
     el.innerHTML += '<ul class="import-errors">' +
-      body.errors.map((e) => `<li>row ${e.row}: ${esc(e.error)}</li>`).join("") + "</ul>";
+      body.errors.map((e) => `<li>row ${esc(e.row)}: ${esc(e.error)}</li>`).join("") + "</ul>";
   }
   const merge = document.createElement("button");
   merge.type = "button"; merge.className = "export-btn"; merge.disabled = !body.valid;
@@ -2415,11 +2415,11 @@ function _renderBatch(el, body) {
       if (nConf) {
         html += `<div class="warn" style="margin-top:0.2rem">⚠ ${nConf} conflict(s) — merged anyway:</div>` +
           '<ul class="import-errors" style="color:var(--warn-ink,#8a6d1b)">' +
-          r.conflicts.map((c) => `<li>row ${c.row}: ${esc(c.detail)}</li>`).join("") + "</ul>";
+          r.conflicts.map((c) => `<li>row ${esc(c.row)}: ${esc(c.detail)}</li>`).join("") + "</ul>";
       }
       if (r.errors && r.errors.length) {
         html += '<ul class="import-errors"><li>' +
-          r.errors.map((e) => `row ${e.row}: ${esc(e.error)}`).join("</li><li>") + "</li></ul>";
+          r.errors.map((e) => `row ${esc(e.row)}: ${esc(e.error)}`).join("</li><li>") + "</li></ul>";
       }
       el.innerHTML = html;
       _importRefresh();

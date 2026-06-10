@@ -75,6 +75,17 @@ def test_no_params_returns_all(trio):
     assert r.headers["X-Total-Count"] == str(len(rows))
 
 
+def test_q_wildcards_are_literal(trio):
+    """A user typing % or _ searches for those CHARACTERS — ILIKE wildcards in
+    `q` are escaped, so "%" no longer matches every row (investigation
+    2026-06-10). No player has % or _ in their name/USTA #, so both match 0."""
+    r = client.get("/api/players?q=%25")          # url-encoded "%"
+    assert _ok(r, 200) == []
+    assert r.headers["X-Total-Count"] == "0"
+    r = client.get("/api/players?q=_____")        # five any-char wildcards
+    assert _ok(r, 200) == []
+
+
 def test_q_combined_name_form(trio):
     """`Last, First` and `First Last` forms both match (combined-column ILIKE)."""
     tag, ids = trio

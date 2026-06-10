@@ -47,9 +47,13 @@ def _rate_for(cur, cert_type, work_date) -> float:
     )
     row = cur.fetchone()
     if row is None:
+        # No rate was effective ON the work date (work logged before the rate
+        # catalog starts). Fall back to the EARLIEST known rate — the one
+        # nearest to that early work date — not the latest (which would pay
+        # old work at the newest rate; investigation 2026-06-10).
         cur.execute(
             "SELECT rate_per_day FROM certification_rate WHERE cert_type = %s "
-            "ORDER BY effective_from DESC LIMIT 1",
+            "ORDER BY effective_from ASC LIMIT 1",
             (cert_type,),
         )
         row = cur.fetchone()

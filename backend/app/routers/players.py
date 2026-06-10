@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from ..crypto import decrypt as _dec_pii
 from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
-from ..query_helpers import paged_select
+from ..query_helpers import like_escape, paged_select
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -78,7 +78,7 @@ def list_players(response: Response, q: str | None = None,
     existing callers (pickers, caches, import flows) are unchanged."""
     clauses, params = [], []
     if q:
-        like = f"%{q.strip()}%"
+        like = f"%{like_escape(q.strip())}%"
         clauses.append(
             "(usta_number ILIKE %s OR first_name ILIKE %s OR last_name ILIKE %s "
             "OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %s "
@@ -102,7 +102,7 @@ def search_players(q: str, limit: int = 10, conn=Depends(db_dep)):
     term = (q or "").strip()
     if len(term) < 2:
         return []
-    like = f"%{term}%"
+    like = f"%{like_escape(term)}%"
     limit = max(1, min(limit, 50))
     with conn.cursor() as cur:
         cur.execute(
