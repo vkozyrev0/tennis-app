@@ -92,12 +92,15 @@ adult_lists) one endpoint at a time.
    their own module if emails.py (now 707 lines) still feels heavy; same
    medicine later for `assignments.py` and `reports.py`.
 
-10. **Savepoint discipline for bulk writes** (M) — imports.py and roster.py
-    isolate per-row failures with SAVEPOINTs; bulk-invite / coverage-fill /
-    bulk-populate fail-fast instead, so one bad row aborts the batch with no
-    partial-success report. Extract the savepoint loop into
-    `backend/app/bulk_ops.py` and apply it to every bulk endpoint; tests assert
-    "10 rows, 2 bad → 8 succeed + 2 reported."
+10. ✅ **SHIPPED (2026-06-10, cf21d0e) — Savepoint discipline for bulk writes**
+    — and it surfaced a REAL silent-data-loss bug: bulk_populate's per-row
+    catch-and-continue ran without a savepoint, so one bad row poisoned the
+    transaction (later rows "skipped" with InFailedSqlTransaction noise) and
+    the request-end COMMIT silently rolled back the rows already filed while
+    reporting `filed: N`. New `app/bulk_ops.savepoint()` applied to
+    bulk_populate + bulk-invite (per-official race isolation); coverage_fill
+    is single-row and was fine. Tests document the poisoned-tx failure mode
+    and prove survivors commit. Suite 380 green.
 
 11. **app.js decomposition, next slices** (M each, L total) — at ~7.5k lines
     with ~40 module-level mutable globals, the monolith is the main frontend
