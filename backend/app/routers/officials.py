@@ -2,6 +2,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..ical import build_schedule_ics
 from ..models import AccountCreate, OfficialCreate, OfficialOut
 from ..security import hash_pw
 
@@ -14,9 +15,28 @@ _COLS = (
 
 
 @router.get("", response_model=list[OfficialOut])
-def list_officials(conn=Depends(db_dep)):
+def list_officials(response: Response, q: str | None = None,
+                   limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    """Optionally server-side searched/paged (the GET /api/players pattern):
+    `q` ILIKE-matches name (both combined forms) and city, `limit`/`offset`
+    page the ordered result, full match count in `X-Total-Count`. With no
+    params the whole list is returned, so existing callers are unchanged."""
+    clauses, params = [], []
+    if q:
+        like = f"%{q.strip()}%"
+        clauses.append(
+            "(first_name ILIKE %s OR last_name ILIKE %s OR city ILIKE %s "
+            "OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %s "
+            "OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %s)")
+        params += [like] * 5
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM official ORDER BY last_name, first_name")
+        cur.execute(f"SELECT count(*) AS n FROM official{where}", params)
+        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
+        page, page_params = "", list(params)
+        if limit is not None:
+            page = " LIMIT %s OFFSET %s"; page_params += [max(0, limit), max(0, offset)]
+        cur.execute(f"SELECT {_COLS} FROM official{where} ORDER BY last_name, first_name{page}", page_params)
         return cur.fetchall()
 
 
@@ -79,6 +99,20 @@ def officials_workload(conn=Depends(db_dep)):
     }
     return {"officials": officials, "totals": totals}
 
+
+# iCal download of one official's assignment days (admin side; officials get
+# their own at GET /api/me/schedule.ics).
+@router.get("/{official_id}/schedule.ics")
+def official_schedule_ics(official_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT last_name FROM official WHERE id = %s", (official_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="official not found")
+        body = build_schedule_ics(cur, official_id)
+    return Response(content=body, media_type="text/calendar",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="schedule-{row["last_name"]}.ics"'})
 
 @router.get("/{official_id}", response_model=OfficialOut)
 def get_official(official_id: int, conn=Depends(db_dep)):

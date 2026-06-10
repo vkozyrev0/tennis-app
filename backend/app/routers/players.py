@@ -67,9 +67,30 @@ _COLS = (
 
 
 @router.get("", response_model=list[PlayerOut])
-def list_players(conn=Depends(db_dep)):
+def list_players(response: Response, q: str | None = None,
+                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    """Optionally server-side searched/paged — the GET /api/emails pattern
+    extended to the next big list (UI backlog). `q` ILIKE-matches USTA # and
+    name (plaintext columns only — contact/birthdate are encrypted at rest),
+    `limit`/`offset` page the ordered result, and the full match count comes
+    back in `X-Total-Count`. With no params the whole list is returned, so
+    existing callers (pickers, caches, import flows) are unchanged."""
+    clauses, params = [], []
+    if q:
+        like = f"%{q.strip()}%"
+        clauses.append(
+            "(usta_number ILIKE %s OR first_name ILIKE %s OR last_name ILIKE %s "
+            "OR (COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) ILIKE %s "
+            "OR (COALESCE(last_name,'')  || ', ' || COALESCE(first_name,'')) ILIKE %s)")
+        params += [like] * 5
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM player ORDER BY last_name, first_name")
+        cur.execute(f"SELECT count(*) AS n FROM player{where}", params)
+        response.headers["X-Total-Count"] = str(cur.fetchone()["n"])
+        page, page_params = "", list(params)
+        if limit is not None:
+            page = " LIMIT %s OFFSET %s"; page_params += [max(0, limit), max(0, offset)]
+        cur.execute(f"SELECT {_COLS} FROM player{where} ORDER BY last_name, first_name{page}", page_params)
         return [_decrypt_contact(r) for r in cur.fetchall()]
 
 

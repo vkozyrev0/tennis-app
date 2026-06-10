@@ -1,8 +1,9 @@
 """Official self-service surface (/api/me/*) — the logged-in official's own
 profile and availability. Officials never touch the admin routers."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
 from ..security import get_current_user
 from .assignments import _ASG_SELECT, _summary, pay_summary
@@ -90,6 +91,18 @@ def my_assignments(user=Depends(get_current_user), conn=Depends(db_dep)):
         )
         rows = cur.fetchall()
         return [_summary(cur, a) for a in rows]
+
+
+@router.get("/schedule.ics")
+def my_schedule_ics(user=Depends(get_current_user), conn=Depends(db_dep)):
+    """The logged-in official's assignment days as an iCalendar download, so
+    the schedule drops straight into a phone/desktop calendar. Declined
+    assignments are skipped; pending ones are TENTATIVE, accepted CONFIRMED."""
+    oid = _my_official_id(user)
+    with conn.cursor() as cur:
+        body = build_schedule_ics(cur, oid)
+    return Response(content=body, media_type="text/calendar",
+                    headers={"Content-Disposition": 'attachment; filename="my-schedule.ics"'})
 
 
 @router.get("/pay-summary")

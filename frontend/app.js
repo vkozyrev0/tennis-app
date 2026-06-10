@@ -243,12 +243,19 @@ function markInvalid(form, errorText) {
   const t = String(errorText).toLowerCase();
   // candidates: input/select/textarea with a name
   const fields = [...form.elements].filter((e) => e.name);
-  // word-boundary search: the field name (or its dash/space variants) appears in the error
-  const hit = fields.find((e) => {
+  // word-boundary search: the field name (or its dash/space variants) appears in
+  // the error. When several fields match (cross-field errors name both, e.g.
+  // "play_end_date must be on or after play_start_date"), flag the one mentioned
+  // FIRST in the message — the server leads with the offender — not the first in
+  // DOM order.
+  let hit = null, hitPos = Infinity;
+  for (const e of fields) {
     const n = e.name.toLowerCase();
-    const words = [n, n.replace(/_/g, " "), n.replace(/_/g, "-")];
-    return words.some((w) => new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(t));
-  });
+    for (const w of [n, n.replace(/_/g, " "), n.replace(/_/g, "-")]) {
+      const m = new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").exec(t);
+      if (m && m.index < hitPos) { hit = e; hitPos = m.index; }
+    }
+  }
   if (hit) {
     hit.setAttribute("aria-invalid", "true"); hit.classList.add("field-error");
     try { hit.focus(); } catch (_) {}
@@ -1495,6 +1502,14 @@ function wireEntity(cfg) {
   csvBtn.type = "button"; csvBtn.className = "export-btn no-print"; csvBtn.textContent = "⬇ CSV";
   csvBtn.title = "Download as CSV";
   newBtn.parentNode.insertBefore(csvBtn, newBtn.nextSibling);
+  // Server-search mode (cfg.serverSearch) gets a page-status note in the toolbar.
+  let pageNote = null;
+  if (cfg.serverSearch) {
+    pageNote = document.createElement("span");
+    pageNote.className = "muted"; pageNote.style.fontSize = "0.72rem";
+    pageNote.setAttribute("aria-live", "polite");
+    newBtn.parentNode.insertBefore(pageNote, csvBtn);
+  }
   const title = panel.querySelector(".detail-title");
   const detailPane = panel.querySelector(".detail-pane");
   const submitBtn = form.querySelector('button[type="submit"]');
@@ -1733,8 +1748,24 @@ function wireEntity(cfg) {
     // here and back — it threw and the surrounding try/catch in adminInit
     // swallowed the error, leaving every Setup grid blank. Reverted: just
     // call setData.
-    items = await api(cfg.path);
-    if (cfg.onLoad) cfg.onLoad(items);
+    let q = "";
+    if (cfg.serverSearch) {
+      // Server-side search + capped page (the inbox pattern, extended): the
+      // toolbar filter becomes a SQL `q`, and only the first pageSize rows
+      // load. The note tells the user to refine when the page is full.
+      q = filterInput.value.trim();
+      const params = new URLSearchParams({ limit: String(cfg.serverSearch.pageSize) });
+      if (q) params.set("q", q);
+      items = await api(`${cfg.path}?${params}`);
+      if (pageNote) {
+        pageNote.textContent = items.length >= cfg.serverSearch.pageSize
+          ? `showing the first ${cfg.serverSearch.pageSize} — refine the search to narrow`
+          : (q ? `${items.length} match(es)` : "");
+      }
+    } else {
+      items = await api(cfg.path);
+    }
+    if (cfg.onLoad) cfg.onLoad(items, { q });
     if (built) await table.setData(items);
     else pending = items;
     applySelection();
@@ -1770,6 +1801,10 @@ function wireEntity(cfg) {
   let _filterTimer = 0;
   filterInput.addEventListener("input", () => {
     clearTimeout(_filterTimer);
+    // Server-search mode: the filter box re-queries the API (SQL ILIKE) instead
+    // of filtering the loaded page — otherwise a capped page would silently hide
+    // matches that never loaded. Longer debounce since each keystroke is a fetch.
+    if (cfg.serverSearch) { _filterTimer = setTimeout(() => refresh(), 250); return; }
     _filterTimer = setTimeout(() => { if (built) table.setFilter(matchesFilter); }, 120);
   });
   showNew();
@@ -2891,7 +2926,14 @@ function renderAssignment(a, availDates) {
     } : null;
     toast(`Invite for ${a.official_name} copied to clipboard${t.official_email ? "" : " (no email on file)"}`, true, action);
   });
-  actions.append(ed, inv, ...(ra ? [ra] : []), dl); head.appendChild(actions); card.appendChild(head);
+  // 📅 .ics: download this official's full schedule (all tournaments) as an
+  // iCalendar file the TD can forward — same feed the official sees in the portal.
+  const ics = document.createElement("a");
+  ics.className = "btn-link"; ics.textContent = "📅 .ics";
+  ics.href = `/api/officials/${a.official_id}/schedule.ics`;
+  ics.setAttribute("download", "");
+  ics.title = "Download this official's assignment days as an iCalendar (.ics) file";
+  actions.append(ed, inv, ...(ra ? [ra] : []), ics, dl); head.appendChild(actions); card.appendChild(head);
 
   // Inline mileage fix: if the venue site has no distance on file, add it right
   // here instead of switching to the Distances tab.
@@ -4140,6 +4182,30 @@ document.getElementById("inbox-detect-all").addEventListener("click", async () =
     await loadInbox();
   } catch (e) { setMsg("inbox-import-pdf-msg", e.message, false); }
 });
+// Retention sweep (PII hardening H3 / COPPA §312.10): redact body/subject/sender
+// of FILED emails past the threshold via POST /api/emails/purge. The provenance
+// row survives (classification, player link, status) so the audit trail holds;
+// 'new' (unprocessed) mail is never touched. UI for the existing endpoint.
+{
+  const purge = (days) => async () => {
+    if (!(await confirmDialog(
+      `Redact the text (body / subject / sender) of all FILED emails older than ${days} days, across all tournaments?\n` +
+      "The rows stay (classification, matched player, status) — only the free-text PII is erased. This cannot be undone.",
+      "Purge", "danger"))) return;
+    try {
+      const res = await api(`/emails/purge?older_than_days=${days}`, { method: "POST" });
+      toast(`Retention sweep: ${res.purged} filed email(s) redacted`, true);
+      await loadInbox();
+    } catch (e) { toast(e.message, false); }
+  };
+  const menu = makeMenuButton(`<span aria-hidden="true">🗑</span> Retention`, [
+    { label: "Purge filed older than 30 days…", onClick: purge(30), danger: true },
+    { label: "Purge filed older than 90 days…", onClick: purge(90), danger: true },
+    { label: "Purge filed older than 1 year…", onClick: purge(365), danger: true },
+  ], { className: "export-btn no-print", title: "PII retention: redact the free text of old FILED emails (rows + audit trail survive)" });
+  const anchor = document.getElementById("inbox-detect-all");
+  anchor.parentNode.insertBefore(menu, anchor.nextSibling);
+}
 document.getElementById("inbox-bulk-reassign").addEventListener("click", async () => {
   if (!_inboxSelected.size) return;
   const sel = document.getElementById("inbox-bulk-tournament");
@@ -6612,7 +6678,13 @@ const officialsCrud = wireEntity({
     { header: "dietary_restrictions", key: "dietary_restrictions" },
     { header: "lat", key: "lat" }, { header: "lng", key: "lng" },
   ],
-  onLoad: (rows) => { for (const k in officialsById) delete officialsById[k]; rows.forEach((o) => (officialsById[o.id] = o)); refreshAllSelects(); },
+  // Server-side search + capped page (same as Players; UI backlog).
+  serverSearch: { pageSize: 500 },
+  onLoad: (rows, info) => {
+    // Keep the picker cache full — don't rebuild it from a search-narrowed page.
+    if (info && info.q) return;
+    for (const k in officialsById) delete officialsById[k]; rows.forEach((o) => (officialsById[o.id] = o)); refreshAllSelects();
+  },
   onSelect: (o) => {
     loadCerts(o.id);
     document.getElementById("official-account").hidden = false;
@@ -6658,7 +6730,17 @@ const playersCrud = wireEntity({
     { header: "gender", key: "gender" }, { header: "birthdate", key: "birthdate" },
     { header: "city", key: "city" }, { header: "state", key: "state" },
   ],
-  onLoad: (rows) => { for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects(); },
+  // Server-side search + capped page (the inbox pattern; UI backlog). 500 covers
+  // any realistic single-TD roster pool; past that the grid stays fast and the
+  // note says to refine. q/limit/offset + X-Total-Count live on GET /api/players.
+  serverSearch: { pageSize: 500 },
+  onLoad: (rows, info) => {
+    // Don't rebuild the picker cache from a SEARCH-narrowed page — pickers
+    // (roster add, Part B player refs) need the full roster, and a stale-but-
+    // complete cache beats a fresh-but-filtered one.
+    if (info && info.q) return;
+    for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects();
+  },
   onSelect: (p) => loadPlayerHistory(p.id),
   onNew: () => { document.getElementById("player-history").hidden = true; },
 });
