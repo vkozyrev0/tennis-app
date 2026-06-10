@@ -1,8 +1,17 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 333 tests, all passing (migrations through 0039) — now deterministic
-(3+ consecutive clean full runs) after fixing a login-throttle state leak.
+**Status:** 365 tests, all passing (migrations through 0039) — deterministic
+(login-throttle state leak fixed). CI runs the suite against a Postgres 16
+service on every push/PR and gates the Docker image build on it
+(`.github/workflows/docker.yml`).
+
+Recent additions (2026-06-09 → 06-10): `test_zz_players_paging` /
+`test_zz_officials_paging` (server q/limit/offset + X-Total-Count),
+`test_zz_ical` (RFC 5545 schedule export), `test_zz_db_errors` (global
+constraint-violation → 409/400 mapping), and `test_zz_assignment_calc`
+(15 pure unit tests pinning the pay/mileage formula and flag semantics —
+the first no-DB unit layer over the money path).
 
 ## How the suite is wired
 

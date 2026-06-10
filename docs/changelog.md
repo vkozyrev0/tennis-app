@@ -5,6 +5,29 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Improvement-plan execution: P1 round 1 + the money-calc extraction (2026-06-10)
+Executing [improvement-plan.md](improvement-plan.md) (suite: **365** green).
+
+- **P1 round 1 — all seven quick wins** (commit `367868d`): empty-Setup-catalog
+  callouts with jump links (Assignments/Roster/Room-blocks); terminology pass
+  ("Room block (hotel)" label; players-catalog vs roster subtitles); cell-local
+  in-grid save feedback (saving-dim + green/red inset flash); global
+  constraint-violation handlers (`app/db_errors.py`: uncaught unique→409,
+  FK/check→400, +4 tests); `app/query_helpers.paged_select()` shared by
+  players/officials/emails; filed-email updates unified through
+  `mark_email_filed`; ONE shared outside-click closer for all comboboxes.
+- **P2 #8 — assignment money/flag calc extracted** (commit `b21ca10`):
+  `app/assignment_calc.py` holds the pure `mileage_for`/`pay_for`/
+  `compute_summary`; the router keeps only its queries. 15 direct unit tests
+  pin the free band, the $100 cap boundary, missing-distance semantics,
+  soft/hard conflicts, and availability rules. Move-only (API money tests
+  unchanged).
+- Verification note: a preview-harness CDP click-delivery quirk was bisected
+  against the committed build and proven NOT an app regression (the cell-editor
+  binding works; confirmed via pointer-event sequence on both builds).
+
+---
+
 ## Packaging, hardening & list-scaling round (2026-06-08 → 06-10)
 Docker/all-in-one packaging, CI, a verified bug-hunt pass, and the next slice
 of features (suite: **346** green).
@@ -32,7 +55,7 @@ of features (suite: **346** green).
   boot; **menu-button keyboard nav** (Arrow/Home/End roving, focus-on-open,
   Esc restores focus).
 
-**In the working tree (held for commit):**
+**Feature slice (shipped in commit `8254c8a`):**
 - **Server-side search/paging** for Players AND Officials — `q`/`limit`/`offset`
   + `X-Total-Count` on the APIs; `wireEntity` gains an opt-in `serverSearch`
   mode (capped page + "refine" note; the `*ById` picker caches are guarded
@@ -46,7 +69,8 @@ of features (suite: **346** green).
 - **`markInvalid` offender-first** — cross-field 422s now flag the field named
   first in the error text, not the first match in DOM order.
 - Roadmap UI-backlog refreshed (10 stale bullets marked ✅ done);
-  `docs/improvement-plan.md` added (design + UI/UX review synthesis).
+  `docs/improvement-plan.md` added (design + UI/UX review synthesis,
+  commit `676854c`).
 
 ---
 

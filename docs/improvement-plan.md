@@ -6,6 +6,11 @@ time: **346 green**). Items the [roadmap](roadmap.md) already tracks (blocked
 table, Part B phases) are not repeated here. Effort: S ≈ hours, M ≈ a day or
 two, L ≈ multi-day.
 
+> **Update (investigation round, later 2026-06-10):** a second pass — gap
+> analysis vs the vision, a code-level issue hunt, live API probing, and the
+> standalone E2E driver (31/31, zero discoveries) — appended two sections at
+> the bottom: **Issues found & fixed** and **P4 — Missing features**.
+
 **How to read this:** P1 are cheap, high-confidence wins that can ship one at a
 time in any order. P2 are structural investments that pay off before the next
 feature wave. P3 are at-scale items — correct to defer while this is a
@@ -155,3 +160,65 @@ adult_lists) one endpoint at a time.
 4. **Round 4:** items 11–12 (frontend decomposition + templates), then 13
    (soft-delete) as the first feature built on the cleaner base.
 5. P3 stays parked until its trigger column fires.
+
+---
+
+# Investigation round (2026-06-10, second pass)
+
+Method: a missing-features gap analysis against [vision-summary](vision-summary.md)/
+[audit](audit.md)/the route+UI surface, a code-level issue hunt, live API edge
+probing against the running container, and the standalone E2E driver
+(`scripts/e2e_td_scenario.py` — **31/31 checks, zero discoveries**).
+
+## Issues found & fixed (same day)
+
+| # | Issue | Severity | Fix |
+|---|---|---|---|
+| I-1 | **ILIKE wildcard leak** — a user searching for `%` or `_` matched *every* row (the SQL wildcards passed through `q` unescaped) on players/officials/emails lists AND both `/search` endpoints | med | `query_helpers.like_escape()` applied at all six sites; tests assert `%`/`_____` match 0 |
+| I-2 | **`_rate_for` future-rate fallback** — work logged on a date BEFORE any rate's `effective_from` was paid at the *newest* rate ever created; now falls back to the *earliest* known rate (nearest to that early work date) | high (edge) | `ORDER BY effective_from ASC` in the fallback + `test_zz_rate_fallback.py` (rolled-back txn) |
+| I-3 | **`esc()` hygiene** — four innerHTML sites interpolated `e.row`/`c.row`/`total_active` unescaped (numbers today; defense-in-depth) | low | wrapped in `esc()` |
+
+Probes that came back clean: unauthenticated access to players/ics endpoints
+(401s), negative/huge `limit`/`offset` (clamped; `X-Total-Count` correct),
+room-capacity TOCTOU (serialized per-request txn), parameterized ILIKE
+(no injection), float money rounding (2dp by design).
+
+## False-positive ledger (round 2)
+
+Claims from the gap analysis verified ALREADY BUILT — listed so they don't
+resurface: roster-completeness report (`/roster-completeness` + UI), one-click
+alternate promotion (`POST /api/roster/{id}/promote` + sorted alternates list),
+t-shirt counts by site (`/tshirts-by-site` + UI, B1 shipped), sign-in sheet
+(print + CSV exports exist; only the in-app check-in toggle is missing — see
+P4-2), room-block pickup/attrition report (reserved vs assigned vs unused).
+From the issue hunt: emails-list ILIKE was already parameterized (the wildcard
+leak was real but injection was not).
+
+## P4 — Missing features (verified gaps, by value to a live event)
+
+Day-of-tournament operations is the one genuinely unbuilt AREA — everything
+before (planning/staffing) and after (reports/statements) an event is covered,
+but the app has no live-operations surface:
+
+1. **Official day-of status** (M) — no-show / early-departure / reassigned on an
+   assignment day; feeds payroll truth and a live staffing view. The records
+   exist; only planned-vs-actual is missing.
+2. **Player check-in** (S) — `signed_in` column exists (0028) and sign-in sheets
+   print, but there's no in-app toggle or no-show report.
+3. **Incident log** (M) — day-of operational memory (weather, injury, dispute);
+   no table/UI today. Pairs naturally with 1.
+4. **Payroll finalization** (M) — an approved/paid state over the existing pay
+   statements + a payroll CSV batch export; today statements print but nothing
+   records that they were settled.
+5. **Assignment change audit** (M) — pay_audit freezes amounts, but who/why for
+   assignment edits isn't recorded (dispute resolution).
+6. **Official self-service dietary/lodging** (S) — portal lets officials set
+   availability but not update dietary/lodging; the TD re-keys those.
+7. **Per-site coordinator role** (L) — D8 deferred multi-user; becomes relevant
+   with 3+ venue events.
+8. **Configurable mileage/cert catalogs** (M, low value now) — constants are
+   fine for a single TD; revisit if other organizations adopt the tool.
+
+Known blockers (unchanged, tracked in the roadmap): mail send/ingest infra,
+Maps API key, LLM-triage privacy decision, PII H2 at deploy, USTA draw API
+(intentionally out of scope, D7).
