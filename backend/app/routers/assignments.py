@@ -15,6 +15,16 @@ import json
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+# The calculation itself is pure and lives in assignment_calc (unit-tested
+# directly — plan P2 #8); this router owns the queries + HTTP. The constants
+# are re-exported here because writers below (and older imports) use them.
+from ..assignment_calc import (  # noqa: F401  (RULE_VERSION used by writers)
+    FREE_MILES,
+    MILEAGE_CAP,
+    MILEAGE_RATE,
+    RULE_VERSION,
+    compute_summary,
+)
 from ..db import db_dep
 from ..models import (
     AssignmentBulkCreate,
@@ -24,11 +34,6 @@ from ..models import (
 )
 
 router = APIRouter(tags=["assignments"])
-
-MILEAGE_RATE = 0.65
-FREE_MILES = 50
-MILEAGE_CAP = 100.0
-RULE_VERSION = "v1: pay=sum(per-day cert rate); mileage=clamp((2*oneway-50)*0.65,0,100)"
 
 
 def _rate_for(cur, cert_type, work_date) -> float:
@@ -52,38 +57,25 @@ def _rate_for(cur, cert_type, work_date) -> float:
 
 
 def _summary(cur, a: dict) -> dict:
-    """Build a rich assignment object with days + computed pay/mileage/flags."""
+    """Build a rich assignment object with days + computed pay/mileage/flags.
+
+    This side owns the QUERIES; the calculation is pure and lives in
+    app/assignment_calc.compute_summary (unit-tested directly, plan P2 #8)."""
     cur.execute(
         "SELECT id, work_date, working_as, rate_applied FROM assignment_day "
         "WHERE assignment_id = %s ORDER BY work_date",
         (a["id"],),
     )
     days = cur.fetchall()
-    for d in days:
-        d["rate_applied"] = float(d["rate_applied"])
-        d["work_date"] = d["work_date"].isoformat()
 
-    # Certification check: a day whose role the official doesn't hold a cert for
-    # is flagged (never blocked — the picker filters at assign time, but manual /
-    # edit / pre-existing rows can carry an uncertified role). Mirrors the
-    # availability / off-window flag policy.
     cur.execute(
         "SELECT cert_type FROM certification WHERE official_id = %s",
         (a["official_id"],),
     )
     held_certs = {r["cert_type"] for r in cur.fetchall()}
-    uncertified_days: list[dict] = []
-    for d in days:
-        bad = d["working_as"] not in held_certs
-        d["uncertified"] = bad
-        if bad:
-            uncertified_days.append({"work_date": d["work_date"], "working_as": d["working_as"]})
 
-    pay = round(sum(d["rate_applied"] for d in days), 2)
-
-    mileage = None
-    missing_distance = False
     one_way_miles = None  # the mileage calc input (snapshotted for audit §5.3)
+    missing_distance = False
     if a["site_id"] is not None:
         cur.execute(
             "SELECT one_way_miles FROM official_site_distance "
@@ -95,32 +87,11 @@ def _summary(cur, a: dict) -> dict:
             missing_distance = True
         else:
             one_way_miles = float(dist["one_way_miles"])
-            reimbursable = max(2 * one_way_miles - FREE_MILES, 0.0)
-            mileage = round(min(reimbursable * MILEAGE_RATE, MILEAGE_CAP), 2)
 
-    check_in = a["hotel_check_in"].isoformat() if a.get("hotel_check_in") else None
-    check_out = a["hotel_check_out"].isoformat() if a.get("hotel_check_out") else None
-    hotel_date_mismatch = False
-    if a["room_block_id"] is not None and days and check_in and check_out:
-        wd = [d["work_date"] for d in days]
-        hotel_date_mismatch = any(d < check_in or d > check_out for d in wd)
-
-    # A worked day outside the tournament's play window is surfaced as a flag, not
-    # a block (consistent with the hotel-date-mismatch policy, audit §3.4).
-    work_date_out_of_window = False
-    if days and a.get("play_start_date") and a.get("play_end_date"):
-        ps, pe = a["play_start_date"].isoformat(), a["play_end_date"].isoformat()
-        work_date_out_of_window = any(d["work_date"] < ps or d["work_date"] > pe for d in days)
-
-    # Double-booking: the same official worked on a date in ANOTHER assignment.
-    # (Within one tournament an official has a single assignment with one role
-    # per date — UNIQUE(assignment_id, work_date) — so a same-day clash can only
-    # be cross-tournament.) Surfaced as a flag, not a block (audit §3.4): the TD
-    # may legitimately double-book one venue, but two sites on one day is
-    # impossible, so we also note whether the other booking is a different site.
-    # Every date this official works in ANOTHER assignment — used both for the
-    # conflict flags (dates that overlap THIS assignment's days) and the add-day
-    # pre-check (warn before booking a date they already work elsewhere).
+    # Every date this official works in ANOTHER assignment — feeds both the
+    # conflict flags and the add-day pre-check. (Within one tournament an
+    # official has one assignment with one role per date — UNIQUE(assignment_id,
+    # work_date) — so a same-day clash can only be cross-tournament.)
     cur.execute(
         "SELECT ad.work_date, a2.tournament_id AS other_tournament_id, "
         "       t2.name AS other_tournament, COALESCE(s2.code, s2.name) AS other_site, "
@@ -133,105 +104,17 @@ def _summary(cur, a: dict) -> dict:
         "ORDER BY ad.work_date",
         (a["official_id"], a["id"]),
     )
-    this_dates = {d["work_date"] for d in days}
-    official_other_dates: list[dict] = []
-    conflicts: list[dict] = []
-    for r in cur.fetchall():
-        wd = r["work_date"].isoformat()
-        info = {
-            "work_date": wd,
-            "other_tournament_id": r["other_tournament_id"],
-            "other_tournament": r["other_tournament"],
-            "other_site": r["other_site"],
-            # a different site on the same day is physically impossible (hard
-            # conflict); same/no site may be a legitimate shared venue (soft).
-            "different_site": r["other_site_id"] is not None
-            and r["other_site_id"] != a["site_id"],
-        }
-        official_other_dates.append(info)
-        if wd in this_dates:
-            conflicts.append(info)
-    conflict_dates = {c["work_date"] for c in conflicts}
-    for d in days:
-        d["conflict"] = d["work_date"] in conflict_dates
+    other_bookings = cur.fetchall()
 
-    # Availability check (audit §Availability): the TD collects each official's
-    # available dates per tournament, but assignment did not enforce them. We
-    # surface — never block — any worked day the official did NOT declare
-    # available, but ONLY when they declared SOMETHING (absence of data is not a
-    # decline). Mirrors the work_date_out_of_window / hotel-date policy.
     cur.execute(
         "SELECT available_date FROM availability "
         "WHERE official_id = %s AND tournament_id = %s",
         (a["official_id"], a["tournament_id"]),
     )
     avail_rows = cur.fetchall()
-    has_availability = bool(avail_rows)
-    avail_dates = {r["available_date"].isoformat() for r in avail_rows}
-    days_outside_availability: list[str] = []
-    if has_availability:
-        days_outside_availability = [
-            d["work_date"] for d in days if d["work_date"] not in avail_dates
-        ]
-    for d in days:
-        d["outside_availability"] = (
-            has_availability and d["work_date"] not in avail_dates
-        )
 
-    return {
-        "id": a["id"],
-        "tournament_id": a["tournament_id"],
-        "tournament_name": a.get("tournament_name"),
-        "official_id": a["official_id"],
-        "official_name": f'{a["last_name"]}, {a["first_name"]}',
-        # Contact info (plaintext for officials) — feeds the "chase pending
-        # responders" helper so the TD can email/call non-responders.
-        "official_email": a.get("official_email"),
-        "official_phone": a.get("official_phone"),
-        "dietary_restrictions": a.get("dietary_restrictions"),
-        "site_id": a["site_id"],
-        "site_label": a["site_label"],
-        "room_block_id": a["room_block_id"],
-        "hotel_name": a["hotel_name"],
-        "check_in": check_in,
-        "check_out": check_out,
-        "days": days,
-        "pay": pay,
-        "mileage": mileage,
-        "missing_distance": missing_distance,
-        "hotel_date_mismatch": hotel_date_mismatch,
-        "work_date_out_of_window": work_date_out_of_window,
-        # Availability mismatch (audit §Availability — a warning, not a block).
-        # has_availability_data=False means the official never declared dates, so
-        # days_outside_availability is empty and no warning is shown.
-        "has_availability_data": has_availability,
-        "days_outside_availability": days_outside_availability,
-        # Declared available dates — feeds the add-day pre-check (warn before
-        # booking a date the official did not mark available).
-        "available_dates": sorted(avail_dates),
-        # Roles the official is certified for (feeds the add-day cert pre-check)
-        # + the days that carry a role they don't hold.
-        "held_certs": sorted(held_certs),
-        "uncertified_days": uncertified_days,
-        "has_uncertified": bool(uncertified_days),
-        # Cross-tournament double-booking (audit §3.4 — a warning, not a block).
-        "has_conflict": bool(conflicts),
-        "has_hard_conflict": any(c["different_site"] for c in conflicts),
-        "conflicts": conflicts,
-        # All dates this official works elsewhere — feeds the add-day pre-check.
-        "official_other_dates": official_other_dates,
-        "total": round(pay + (mileage or 0.0), 2),
-        "one_way_miles": one_way_miles,  # mileage input (live)
-        "rule_version": a.get("rule_version"),
-        "snapshot_at": a["snapshot_at"].isoformat() if a.get("snapshot_at") else None,
-        # Frozen money audit (inputs + rule constants) from the last snapshot,
-        # so a reimbursement is reproducible even if the distance/rate later
-        # changes (audit §5.3). Null until first snapshot.
-        "pay_audit": a.get("pay_audit"),
-        # Official's accept/decline (self-service); 'pending' until they respond.
-        "response_status": a.get("response_status"),
-        "responded_at": a["responded_at"].isoformat() if a.get("responded_at") else None,
-    }
+    return compute_summary(a, days, held_certs, one_way_miles, missing_distance,
+                           other_bookings, avail_rows)
 
 
 _ASG_SELECT = """
