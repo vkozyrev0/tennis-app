@@ -5,6 +5,51 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Packaging, hardening & list-scaling round (2026-06-08 → 06-10)
+Docker/all-in-one packaging, CI, a verified bug-hunt pass, and the next slice
+of features (suite: **346** green).
+
+**Shipped to `main`:**
+- **All-in-one Docker image** — `postgres:16-bookworm` + venv + app in one
+  container; the realistic demo DB is **baked at build time** into a non-volume
+  `PGDATA` so the image starts pre-populated. `docker/entrypoint.sh` boots
+  Postgres, migrates, seeds only a fresh cluster (`DEMO_RESEED=1` to force).
+- **Hosting configs** — `fly.toml` (volume-backed, builds from the Dockerfile on
+  Fly's builder), `render.yaml`, `Caddyfile`, and `docs/deploy.md` (ghcr push,
+  TLS-at-the-edge, persistence semantics).
+- **`ADMIN_PASSWORD` hardening** — env/secret overwrites the admin password at
+  seed time AND on every boot (covers the baked image); unset keeps the POC
+  `admin/admin`.
+- **CI** (`.github/workflows/docker.yml`) — pytest against a Postgres service
+  gates the image build on every push/PR; pushes to `main` publish
+  `ghcr.io/<owner>/tennis-app:latest`. README badge added.
+- **Bug-hunt fixes** (each verified live in the running container):
+  searchable-combo dropdowns **portaled to `<body>`** so modal
+  `transform`/`overflow` can't clip them (the "1–2 items visible + scrolling
+  moves the overlay" bug); background **scroll-lock** while a dialog is open;
+  confirm-dialog **z-index** raised above the edit overlay; **CRLF-safe**
+  entrypoint (`.gitattributes` + Dockerfile `sed`) so Windows-built images
+  boot; **menu-button keyboard nav** (Arrow/Home/End roving, focus-on-open,
+  Esc restores focus).
+
+**In the working tree (held for commit):**
+- **Server-side search/paging** for Players AND Officials — `q`/`limit`/`offset`
+  + `X-Total-Count` on the APIs; `wireEntity` gains an opt-in `serverSearch`
+  mode (capped page + "refine" note; the `*ById` picker caches are guarded
+  against search-narrowed loads). +9 tests.
+- **Retention purge UI** — 🗑 Retention menu in the Inbox (30/90/365-day
+  presets behind a danger-confirm) over the existing `POST /api/emails/purge`.
+- **iCal schedule export** — `app/ical.py` (RFC 5545); per-official `.ics` from
+  the admin assignment cards and `GET /api/me/schedule.ics` ("Add to my
+  calendar") in the official portal. Declined skipped; pending=TENTATIVE,
+  accepted=CONFIRMED. +4 tests.
+- **`markInvalid` offender-first** — cross-field 422s now flag the field named
+  first in the error text, not the first match in DOM order.
+- Roadmap UI-backlog refreshed (10 stale bullets marked ✅ done);
+  `docs/improvement-plan.md` added (design + UI/UX review synthesis).
+
+---
+
 ## TD-review build-out (2026-06-05 → 06-06) — applied
 A question-driven round closing the top gaps from a TD-perspective UI/feature
 review (full backend suite: **333** green, migrations through **0039**).

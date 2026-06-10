@@ -67,6 +67,7 @@ backend/
     shirtops.py        # t-shirt size normalization
     geocode.py         # great-circle mileage estimate (+ seam for a real provider)
     retention.py       # PII retention sweep helpers (H3)
+    ical.py            # RFC 5545 builder: an official's schedule as .ics (admin + portal)
     models.py          # re-exports the Pydantic models from the _models_* files
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
@@ -87,6 +88,11 @@ frontend/
 scripts/
   e2e_td_scenario.py   # standalone black-box end-to-end driver (external HTTP client)
 docs/                  # this file + the others
+Dockerfile             # all-in-one POC image (Postgres + API + frontend, demo baked at build)
+docker/entrypoint.sh   # boots bundled Postgres, migrates, seeds-if-fresh, ADMIN_PASSWORD, uvicorn
+fly.toml / render.yaml / Caddyfile   # hosting configs (see docs/deploy.md)
+.github/workflows/docker.yml         # CI: pytest (Postgres service) gates image build;
+                                     # pushes ghcr.io/<owner>/tennis-app:latest on main
 ```
 
 ---
@@ -152,7 +158,7 @@ workspace vs Part B vs reporting:
 
 - **Auth/session:** `auth` (login/logout/change-password, login throttle),
   `users` (admin user management), `me` (official self-service: my assignments,
-  my availability, my pay).
+  my availability, my pay, my schedule as an `.ics` download).
 - **Setup catalog:** `sites`, `hotels`, `room_blocks`, `rates` (certification
   rates), `divisions` (+ events catalog), `certifications` (per-official),
   `distances` (official↔site mileage, manual + `geocode` auto), `tournaments`,
@@ -256,6 +262,14 @@ workspace pages → Setup entity configs → CSV/print exporters → Player/Offi
   lib); CSV exports build a Blob.
 - **Player/Official 360** is a shared modal opened from anywhere a name appears
   (a `_playerCell` formatter + a capture-phase delegated click handler).
+- **Server-side search/paging** on the big lists (inbox, players, officials):
+  `q`/`limit`/`offset` + an `X-Total-Count` header on the API; Setup grids opt in
+  via `wireEntity`'s `serverSearch` (capped page + "refine" note; the
+  `*ById` picker caches are guarded against search-narrowed loads).
+- **Floating layers** (searchable-combo lists, anchored row menus) are portaled
+  to `<body>` and positioned `fixed` from the trigger's rect so modal
+  `transform`/`overflow` can never clip them; background scroll locks while any
+  dialog is open.
 
 ---
 
@@ -297,6 +311,9 @@ workspace pages → Setup entity configs → CSV/print exporters → Player/Offi
   from pytest): an external HTTP client that builds a realistic scenario + the
   challenges a TD hits and asserts each surfaces. Prefers `httpx`, retries only
   idempotent GETs.
+- **CI** (`.github/workflows/docker.yml`): every push/PR runs the suite against a
+  Postgres 16 service container; the Docker image build is gated on it
+  (`build needs: test`), and pushes to `main` publish the image to ghcr.
 
 ---
 

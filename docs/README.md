@@ -20,6 +20,8 @@ master data) and a per-tournament workspace (scoped operations).
 | [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
 | [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
 | [roadmap.md](roadmap.md) | What's shipped, what's open. |
+| [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale), with sequencing. |
+| [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
 | [changelog.md](changelog.md) | Chronological log of shipped work. |
 | [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |

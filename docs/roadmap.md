@@ -397,28 +397,36 @@ Critical review of the running POC UI. Ordered by impact.
   `play_start`/after `play_end`, false inside.
 
 ### 🟢 UX / polish
-- **Inline mileage fix**: when an assignment shows "no distance", offer an inline
-  "add distance" action instead of making the TD switch to the Distances tab.
-- **Assignment card** is a dense run-on line → use a small structured layout
-  (name; pay/mileage/total badges; flags as colored chips); label the add-day date
-  field.
-- **Two ways to pick a tournament** (Setup list "Work on this" + context-bar
-  selector) — keep, but make the Setup-list row offer "Work on" directly.
-- **Naming consistency**: Setup forms say *New/Create/Save*; workspace sub-forms say
-  *Add/Clear* — unify.
-- **Feedback**: success/error messages auto-clear in 4s and can be missed; consider
-  a persistent toast for errors. No loading indicators.
-- **Required-field affordance** and clearer validation styling on inputs.
-- **Accessibility**: tabs are plain buttons (no `role="tablist"`/arrow-key nav);
-  add ARIA + keyboard support. Status colors already pair with text (good).
-- **Mobile**: the two-group menu wraps to several rows; consider a compact/scrolling
-  nav. (master-detail already stacks.)
-- **Server-side filtering/pagination** — ✅ **started (inbox)**: `GET /api/emails`
-  gains `q` (SQL `ILIKE` on subject/sender — body is encrypted so it's metadata
-  search), `limit`/`offset`, and an `X-Total-Count` header; the inbox loads a
-  capped page with a debounced server-side search box. Other big lists (players)
-  still client-filter — the same params are the pattern to extend (players needs
-  decoupling its grid from the full `playersById` the pickers rely on first).
+- **✅ DONE — Inline mileage fix**: assignment cards with `missing_distance` show
+  an inline "No mileage on file — [one-way miles] add distance" action that POSTs
+  `/api/distances` (source=`manual`) and reloads, no trip to the Distances tab.
+- **✅ DONE — Assignment card**: structured layout — header with actions menu,
+  pay/mileage/total badges, per-day chips with ⚠ flags (out-of-window,
+  double-booked, outside-availability, uncertified).
+- **✅ DONE — Setup-list "Work on" action** (audit M33): each tournament row has
+  an "Open ▸" rowAction that sets the active tournament and jumps into its
+  workspace directly.
+- **✅ DONE — Naming consistency**: every CRUD form submit is **Save** (the
+  modal triggers are "＋ Add …"); only auth flows keep specific labels
+  (Sign in / Add admin / Update password).
+- **✅ DONE — Feedback**: error toasts persist with a close button (WCAG 2.2.1);
+  success toasts auto-fade; top progress bar shows in-flight requests; server
+  errors flag the responsible input (aria-invalid + focus).
+- **✅ DONE — Required-field affordance**: `.req` markers + `:user-invalid`
+  styling (red border/tint only after interaction, incl. combo inputs).
+- **✅ DONE — Accessibility (tabs)**: `.menu-group`s are `role="tablist"`, tabs get
+  `role="tab"`/`aria-selected`/`aria-controls`, roving tabindex, and
+  ArrowLeft/Right/Home/End with automatic activation.
+- **✅ DONE — Mobile nav**: at the narrow breakpoint the two menu bars become a
+  single-row horizontally-scrolling strip (`overflow-x: auto; flex-wrap: nowrap`).
+- **✅ DONE — Server-side filtering/pagination (inbox + players)**: `GET
+  /api/emails` AND `GET /api/players` take `q` (SQL `ILIKE` on plaintext
+  metadata only — encrypted PII isn't searched), `limit`/`offset`, and return
+  `X-Total-Count`. The inbox loads a capped page with a debounced server search;
+  the Players grid does the same via `wireEntity`'s opt-in `serverSearch` mode
+  (capped at 500 + "refine" note), with the picker cache (`playersById`) guarded
+  against search-narrowed loads so roster/Part-B pickers keep the full roster.
+  Other big lists can now opt in one line at a time.
 
 ### Notes
 - These are captured from the UI as built; they do **not** change earlier
