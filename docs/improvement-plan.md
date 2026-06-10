@@ -85,11 +85,12 @@ adult_lists) one endpoint at a time.
    boundary, missing-distance, soft/hard conflicts, availability semantics).
    Move-only: suite 365 green with the API money tests unchanged.
 
-9. **Split `emails.py` (745 lines) by concern** (M→L) — inbox list/search,
-   triage, bulk ops, amendments, and the regex extractors live in one file.
-   Extractors → `email_extract.py` first (pure functions, instantly
-   unit-testable), then bulk ops if it still feels heavy. Same medicine later
-   for `assignments.py` (825) and `reports.py` (404).
+9. **Split `emails.py` by concern** (M→L) — ✅ **phase 1 SHIPPED** (2026-06-10,
+   055d7c5): the six pure text extractors live in `app/email_extract.py` with
+   11 direct unit tests (suite 378 green; `_USTA_RE` shared with the roster
+   detector, which stays in the router). Remaining (optional): bulk ops →
+   their own module if emails.py (now 707 lines) still feels heavy; same
+   medicine later for `assignments.py` and `reports.py`.
 
 10. **Savepoint discipline for bulk writes** (M) — imports.py and roster.py
     isolate per-row failures with SAVEPOINTs; bulk-invite / coverage-fill /
