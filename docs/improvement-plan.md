@@ -123,10 +123,11 @@ adult_lists) one endpoint at a time.
     it, relabel the UI "Archive", add an archived view with restore. Aligns
     with the existing provenance/audit philosophy (pay_audit, player_history).
 
-14. **Response-shape + query-count tests** (S→M) — two cheap test layers that
-    harden the API contract: validate key responses against their Pydantic
-    models (catches float-vs-string drift), and assert a query-count ceiling on
-    the hot list endpoints (catches accidental N+1 in `_summary`-style code).
+14. ✅ **SHIPPED (2026-06-10) — Response-shape + query-count tests** —
+    `test_zz_contracts.py`: shape assertions on the no-response_model endpoints
+    (assignment summary, pay-statements, officials report) and query-count
+    ceilings via a CountingCursor (assignments 24 / players 5 / emails 6 —
+    raise deliberately, with a comment). Suite 386 green.
 
 ---
 
