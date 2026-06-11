@@ -205,11 +205,13 @@ Day-of-tournament operations is the one genuinely unbuilt AREA — everything
 before (planning/staffing) and after (reports/statements) an event is covered,
 but the app has no live-operations surface:
 
-1. **Official day-of status** (M) — no-show / early-departure / reassigned on an
-   assignment day; feeds payroll truth and a live staffing view. The records
-   exist; only planned-vs-actual is missing.
-2. **Player check-in** (S) — `signed_in` column exists (0028) and sign-in sheets
-   print, but there's no in-app toggle or no-show report.
+1. ✅ **SHIPPED (2026-06-10, dce0c33) — Official day-of status** — migration
+   0040 `assignment_day.actual_status` (planned/worked/no_show/early_departure);
+   no_show days drop out of pay AND the .ics feed; the frozen pay_audit carries
+   the status; day chips get a status menu + the card a no-show badge.
+2. ✅ **SHIPPED (2026-06-10, dce0c33) — Player check-in** — `PUT
+   /api/roster/{id}/signin`; click-to-toggle "In" roster column (filterable),
+   counts line shows "checked in X/Y selected".
 3. **Incident log** (M) — day-of operational memory (weather, injury, dispute);
    no table/UI today. Pairs naturally with 1.
 4. **Payroll finalization** (M) — an approved/paid state over the existing pay
