@@ -87,6 +87,16 @@ class AssignmentDayCreate(BaseModel):
     working_as: CertType
 
 
+class AssignmentDayStatus(BaseModel):
+    """Day-of truth for one worked day (P4-1): what actually happened."""
+    actual_status: Literal["planned", "worked", "no_show", "early_departure"]
+
+
+class RosterSignIn(BaseModel):
+    """Player check-in toggle (P4-2)."""
+    signed_in: bool
+
+
 class CoverageFillCreate(BaseModel):
     """Fill a coverage gap: assign `official_id` to the tournament (if not already)
     and add this (work_date, working_as) day in one call."""

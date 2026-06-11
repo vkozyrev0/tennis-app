@@ -972,6 +972,13 @@ td.toggle { white-space: nowrap; }
   font-size: 0.8rem;
 }
 .chip-x { border: 0; background: transparent; color: var(--bad); cursor: pointer; font-size: 0.9rem; padding: 0 0 0 0.1rem; }
+
+/* Day-of truth on assignment day chips (P4-1). */
+.chip.st-no_show { text-decoration: line-through; border-color: var(--bad); color: var(--bad); }
+.chip.st-worked { border-color: var(--ok); }
+.chip.st-early_departure { border-style: dashed; }
+.chip .chip-status { font-size: 0.75rem; padding: 0 0.15rem; margin-left: 0.15rem; }
+.chip .menu-btn-wrap { display: inline-block; }
 .add-day { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.45rem; padding-top: 0.45rem; border-top: 1px dashed var(--border); }
 .add-day input, .add-day select { padding: 0.3rem 0.4rem; }
 .add-day-label { color: var(--muted); font-size: 0.8rem; }

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 
 from .. import importer
 from ..db import db_dep
-from ..models import RosterEntryCreate, RosterEntryOut
+from ..models import RosterEntryCreate, RosterEntryOut, RosterSignIn
 from ..playerops import upsert_player
 from ..shirtops import norm_shirt as _norm_shirt
 
@@ -247,6 +247,22 @@ def delete_roster_entry(entry_id: int, conn=Depends(db_dep)):
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="roster entry not found")
     return Response(status_code=204)
+
+
+@router.put("/api/roster/{entry_id}/signin", response_model=RosterEntryOut)
+def set_signed_in(entry_id: int, body: RosterSignIn, conn=Depends(db_dep)):
+    """Player check-in toggle (P4-2): day-of roster verification. The sign-in
+    SHEET exports already existed; this records the result in-app so the
+    no-show list is queryable."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE tournament_entry SET signed_in = %s WHERE id = %s RETURNING id",
+            (body.signed_in, entry_id),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="roster entry not found")
+        cur.execute(_SELECT + " WHERE e.id = %s", (entry_id,))
+        return cur.fetchone()
 
 
 @router.post("/api/roster/{entry_id}/promote", response_model=RosterEntryOut)

@@ -2059,8 +2059,11 @@ function _updateRosterCounts() {
   const rows = rosterRows || [];
   const n = (s) => rows.filter((r) => r.selection_status === s).length;
   if (!rows.length) { el.textContent = ""; return; }
+  const sel = rows.filter((r) => r.selection_status === "selected");
+  const inN = sel.filter((r) => r.signed_in).length;
   el.textContent =
-    `${rows.length} on roster · ${n("selected")} selected · ${n("alternate")} alternate · ${n("withdrawn")} withdrawn`;
+    `${rows.length} on roster · ${n("selected")} selected · ${n("alternate")} alternate · ${n("withdrawn")} withdrawn` +
+    (sel.length ? ` · checked in ${inN}/${sel.length}` : "");
 }
 const rosterName = (e) => [e.last_name, e.first_name].filter(Boolean).join(", ") || e.usta_number;
 
@@ -2089,6 +2092,25 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
       headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
       formatter: (cell) => chip(cell.getData().selection_status) },
+    // Day-of check-in (P4-2): click toggles. The sign-in SHEET exports still
+    // exist for the clipboard; this records the result so no-shows are queryable.
+    { title: "In", field: "signed_in", width: 56, widthGrow: 0, hozAlign: "center",
+      headerTooltip: "Day-of check-in — click to toggle",
+      formatter: (cell) => cell.getValue()
+        ? '<span class="ok" title="Checked in — click to undo">✓</span>'
+        : '<span class="muted" title="Not checked in — click to check in">—</span>',
+      headerFilter: "list",
+      headerFilterParams: { values: { "": "all", "true": "checked in", "false": "not in" }, clearable: true },
+      headerFilterFunc: (term, v) => String(!!v) === String(term),
+      cellClick: async (ev, cell) => {
+        ev.stopPropagation();
+        const e = cell.getData();
+        try {
+          await api(`/roster/${e.id}/signin`, { method: "PUT", body: JSON.stringify({ signed_in: !e.signed_in }) });
+          toast(`${rosterName(e)}: ${e.signed_in ? "check-in undone" : "checked in"}`, true);
+          await loadRoster();
+        } catch (err) { toast(err.message, false); }
+      } },
     { title: "Shirt", field: "t_shirt_size", cssClass: "editable-cell",
       // Audit M28: source from the canonical list defined alongside _SHIRT_LABEL
       // so the roster grid editor and the t-shirt order page can't drift.
@@ -2895,6 +2917,8 @@ function renderAssignment(a, availDates) {
     (a.uncertified_days && a.uncertified_days.length)
       ? `<span class="badge badge-bad" title="${esc("Assigned a role the official isn't certified for: " + a.uncertified_days.map((u) => certLabel(u.working_as) + " on " + u.work_date).join("; "))}">⚠ not certified</span>` : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
+    // Day-of truth (P4-1): pay already excludes these days; the badge says why.
+    a.no_show_days ? `<span class="badge badge-bad" title="No-show day(s) are excluded from pay">✗ ${a.no_show_days} no-show</span>` : "",
   ].filter(Boolean).join(" ");
   // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
   // inputs (miles + rule constants) so the TD can see how a figure was reached.
@@ -3023,12 +3047,32 @@ function renderAssignment(a, availDates) {
   const days = document.createElement("div"); days.className = "days";
   for (const d of a.days) {
     const chip = document.createElement("span"); chip.className = "chip";
+    // Day-of truth (P4-1): the chip wears the actual status — no_show struck
+    // through (and excluded from pay server-side), worked green, early dashed.
+    const st = d.actual_status || "planned";
+    if (st !== "planned") chip.classList.add("st-" + st);
     const oow = _outOfWindow(d.work_date);
     chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
       `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
       `${d.outside_availability ? '<span class="warn" title="official did not declare this day available">⚠ </span>' : ""}` +
       `${d.uncertified ? '<span class="warn" title="official is not certified for this role">⚠ </span>' : ""}` +
       `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
+    const setSt = async (status) => {
+      try {
+        await api(`/assignment-days/${d.id}/status`, { method: "PUT", body: JSON.stringify({ actual_status: status }) });
+        toast(`${fmtDOW(d.work_date)}: ${status.replace("_", " ")}`, true);
+        loadAssignments();
+      } catch (e) { setMsg("asg-msg", e.message, false); }
+    };
+    const stGlyph = { planned: "○", worked: "✓", no_show: "✗", early_departure: "◔" }[st];
+    const stMenu = makeMenuButton(stGlyph, [
+      { label: "Worked ✓", title: "Showed and worked the day", onClick: () => setSt("worked") },
+      { label: "Early departure ◔", title: "Worked part of the day", onClick: () => setSt("early_departure") },
+      { label: "No-show ✗ (drops from pay)", danger: true, onClick: () => setSt("no_show") },
+      { separator: true },
+      { label: "Reset to planned ○", onClick: () => setSt("planned") },
+    ], { className: "btn-icon chip-status", title: `Day-of status: ${st.replace("_", " ")}`, anchor: true, noCaret: true });
+    chip.appendChild(stMenu);
     const x = document.createElement("button"); x.type = "button"; x.className = "chip-x"; x.textContent = "×";
     x.setAttribute("aria-label", `Remove ${fmtDOW(d.work_date)}`);
     x.addEventListener("click", async () => { try { await api(`/assignment-days/${d.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); } });

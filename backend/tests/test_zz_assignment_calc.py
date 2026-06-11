@@ -48,6 +48,14 @@ def test_pay_sums_per_day_rates():
     assert pay_for([]) == 0.0
 
 
+def test_pay_excludes_no_show_days():
+    days = [{"rate_applied": 250.0, "actual_status": "no_show"},
+            {"rate_applied": 175.5, "actual_status": "worked"},
+            {"rate_applied": 100.0, "actual_status": "planned"},
+            {"rate_applied": 50.0}]                       # legacy row, no status
+    assert pay_for(days) == 325.5                         # only the no_show drops
+
+
 # --------------------------------------------------------- compute_summary ----
 def _asg(**over):
     """A minimal assignment row as the router's _ASG_SELECT produces it."""

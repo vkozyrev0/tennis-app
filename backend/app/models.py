@@ -50,6 +50,8 @@ from ._models_setup import (  # noqa: F401
 )
 from ._models_workspace import (  # noqa: F401
     AssignmentBulkCreate,
+    AssignmentDayStatus,
+    RosterSignIn,
     AssignmentCreate,
     AssignmentDayCreate,
     CoverageFillCreate,

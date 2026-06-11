@@ -18,6 +18,7 @@ JOIN assignment a ON a.id = ad.assignment_id
 JOIN tournament t ON t.id = a.tournament_id
 LEFT JOIN site s ON s.id = a.site_id
 WHERE a.official_id = %s AND a.response_status <> 'declined'
+  AND ad.actual_status <> 'no_show'  -- day-of truth: didn't happen
 ORDER BY ad.work_date, t.name
 """
 

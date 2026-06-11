@@ -29,8 +29,11 @@ def mileage_for(one_way_miles: float | None) -> float | None:
 
 
 def pay_for(days: list[dict]) -> float:
-    """Σ rate_applied over the worked days (rates already floats)."""
-    return round(sum(d["rate_applied"] for d in days), 2)
+    """Σ rate_applied over the days — EXCLUDING no_show days (P4-1 day-of
+    truth: an official who didn't show isn't paid for that day). Days without
+    an actual_status count (planned/worked/early_departure all pay)."""
+    return round(sum(d["rate_applied"] for d in days
+                     if d.get("actual_status") != "no_show"), 2)
 
 
 def compute_summary(a: dict, days: list[dict], held_certs: set[str],
@@ -151,6 +154,8 @@ def compute_summary(a: dict, days: list[dict], held_certs: set[str],
         "has_conflict": bool(conflicts),
         "has_hard_conflict": any(c["different_site"] for c in conflicts),
         "conflicts": conflicts,
+        # Day-of truth rollup (P4-1): how many days didn't happen as planned.
+        "no_show_days": sum(1 for d in days if d.get("actual_status") == "no_show"),
         "official_other_dates": official_other_dates,
         "total": round(pay + (mileage or 0.0), 2),
         "one_way_miles": one_way_miles,

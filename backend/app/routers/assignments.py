@@ -31,6 +31,7 @@ from ..models import (
     AssignmentBulkCreate,
     AssignmentCreate,
     AssignmentDayCreate,
+    AssignmentDayStatus,
     CoverageFillCreate,
 )
 
@@ -67,7 +68,7 @@ def _summary(cur, a: dict) -> dict:
     This side owns the QUERIES; the calculation is pure and lives in
     app/assignment_calc.compute_summary (unit-tested directly, plan P2 #8)."""
     cur.execute(
-        "SELECT id, work_date, working_as, rate_applied FROM assignment_day "
+        "SELECT id, work_date, working_as, rate_applied, actual_status FROM assignment_day "
         "WHERE assignment_id = %s ORDER BY work_date",
         (a["id"],),
     )
@@ -176,7 +177,8 @@ def _persist_snapshot(cur, assignment_id: int) -> dict:
                       "mileage_cap": MILEAGE_CAP},
         "one_way_miles": s["one_way_miles"],
         "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
-                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+                  "rate_applied": d["rate_applied"],
+                  "actual_status": d.get("actual_status", "planned")} for d in s["days"]],
         "pay": s["pay"], "mileage": s["mileage"], "total": s["total"],
     }
     cur.execute(
@@ -248,7 +250,8 @@ def official_pay_statement(official_id: int, conn=Depends(db_dep)):
         "tournament_id": s["tournament_id"], "tournament_name": s["tournament_name"],
         "site_label": s["site_label"],
         "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
-                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+                  "rate_applied": d["rate_applied"],
+                  "actual_status": d.get("actual_status", "planned")} for d in s["days"]],
         "pay": s["pay"], "mileage": s["mileage"], "one_way_miles": s["one_way_miles"],
         "missing_distance": s["missing_distance"], "total": s["total"],
         "response_status": s["response_status"],
@@ -363,7 +366,8 @@ def tournament_pay_statements(tournament_id: int, conn=Depends(db_dep)):
         "assignment_id": s["id"], "official_name": s["official_name"],
         "official_email": s.get("official_email"),
         "days": [{"work_date": d["work_date"], "working_as": d["working_as"],
-                  "rate_applied": d["rate_applied"]} for d in s["days"]],
+                  "rate_applied": d["rate_applied"],
+                  "actual_status": d.get("actual_status", "planned")} for d in s["days"]],
         "pay": s["pay"], "mileage": s["mileage"], "one_way_miles": s["one_way_miles"],
         "missing_distance": s["missing_distance"], "total": s["total"],
         "response_status": s["response_status"],
@@ -702,6 +706,23 @@ def add_day(assignment_id: int, body: AssignmentDayCreate, conn=Depends(db_dep))
             raise HTTPException(status_code=404, detail="assignment not found")
         _insert_day(cur, assignment_id, asg["official_id"], body.work_date, body.working_as)
         return _persist_snapshot(cur, assignment_id)
+
+
+@router.put("/api/assignment-days/{day_id}/status")
+def set_day_status(day_id: int, body: AssignmentDayStatus, conn=Depends(db_dep)):
+    """Day-of truth (P4-1): record what actually happened on one worked day.
+    no_show days drop out of pay, so the snapshot is refrozen; the response is
+    the fresh assignment summary the card re-renders from."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE assignment_day SET actual_status = %s WHERE id = %s "
+            "RETURNING assignment_id",
+            (body.actual_status, day_id),
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="assignment day not found")
+        return _persist_snapshot(cur, row["assignment_id"])
 
 
 @router.delete("/api/assignment-days/{day_id}", status_code=204)
