@@ -102,3 +102,38 @@ def test_usta_number_before_name_pattern():
         "21059234", "21043871"]
     # a bare 8-digit run with NO adjacent name does not qualify
     assert extract_ustas("", "ref 20260609 says hello") == []
+
+
+def test_name_usta_pairs_real_corpus_shapes():
+    """(name, USTA#) pair extraction across every shape in the real PDF corpus:
+    bullets, parenthesized labels, bare parens, prose, and number-first."""
+    from app.email_extract import extract_name_usta_pairs as pairs
+    # the TD's reported pattern: bulleted name-then-USTA# lines
+    assert pairs("", "* Kate Hampton USTA# 2018840232\n* Cooper Rutledge USTA# 2017193466") == [
+        {"name": "Kate Hampton", "usta": "2018840232"},
+        {"name": "Cooper Rutledge", "usta": "2017193466"}]
+    # parenthesized label / bare parens
+    assert pairs("", "Alexandra Dimitrov (USTA 2018522196) and Casey Davis (USTA 2018389707)") == [
+        {"name": "Alexandra Dimitrov", "usta": "2018522196"},
+        {"name": "Casey Davis", "usta": "2018389707"}]
+    assert pairs("", "Kai Hosch (2019209285) and Gabriel Zingman (2019461037) would like to pair") == [
+        {"name": "Kai Hosch", "usta": "2019209285"},
+        {"name": "Gabriel Zingman", "usta": "2019461037"}]
+    # sentence leakage is trimmed ("Macon. Ava Wright" / trailing possessive)
+    assert pairs("", "doubles together in Macon. Ava Wright (USTA #2018460819).") == [
+        {"name": "Ava Wright", "usta": "2018460819"}]
+    # number-first still works
+    assert pairs("", "21043871 Ethan Carter with 21059234 Liam Anderson") == [
+        {"name": "Ethan Carter", "usta": "21043871"},
+        {"name": "Liam Anderson", "usta": "21059234"}]
+    # no numbers -> no pairs
+    assert pairs("", "Everly and Zaria would love to partner") == []
+
+
+def test_name_first_eight_digit_unlabeled_qualifies():
+    """'Kate Hampton 20188402' — 8 digits, no label, name BEFORE the number:
+    the name adjacency admits it as a candidate (a bare 8-digit run without a
+    name still doesn't)."""
+    from app.email_extract import usta_candidates
+    assert usta_candidates("", "Kate Hampton 20188402 wants doubles") == ["20188402"]
+    assert usta_candidates("", "ref 20260609 says nothing") == []

@@ -3553,6 +3553,13 @@ const inboxGrid = makeReadGrid("inbox-table", [
   { title: "Player", field: "detected_player_name", width: 160,
     formatter: (cell) => {
       const m = cell.getData(); const row = cell.getRow();
+      // Doubles/pairing whose players aren't rostered: the email itself names
+      // them — show the parsed (name, USTA#) pairs with the ✉ mark instead of
+      // a bare Detect link.
+      if (!m.detected_player_name && (m.detected_name_pairs || []).length) {
+        const names = m.detected_name_pairs.map((p) => esc(p.name)).join(" + ");
+        return `${names} <span class="muted" title="parsed from the email; not matched to the roster yet">✉</span>`;
+      }
       // I-4: empty cell offers an inline "Detect" link instead of a dead "—".
       if (!m.detected_player_name) {
         const wrap = document.createElement("span");

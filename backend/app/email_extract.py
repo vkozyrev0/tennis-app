@@ -8,12 +8,27 @@ The DB-coupled player DETECTOR (_detect_player_for) stays in the router.
 import re
 
 _USTA_RE = re.compile(r"\b(\d{9,11})\b")
-# Real-world structure (per the TD): the USTA # usually comes right BEFORE the
-# player's name — "21043871 Ethan Carter" — in the subject or body. A digit run
-# immediately followed by a capitalized First Last is a high-confidence USTA #
-# even when unlabeled and only 8 digits.
+# Real-world structure (per the TD): the USTA # sometimes comes right BEFORE
+# the player's name — "21043871 Ethan Carter" — in the subject or body. A digit
+# run immediately followed by a capitalized First Last is a high-confidence
+# USTA # even when unlabeled and only 8 digits.
 _USTA_NAME_RE = re.compile(
     r"\b(\d{8,11})\b\s*[-–:,]?\s+([A-Z][\w'\-]+\s+[A-Z][\w'\-]+)")
+# …and at least as often AFTER it (every doubles email in the real corpus):
+#   "Alexandra Dimitrov (USTA 2018522196)"   "Kai Hosch (2019209285)"
+#   "* Kate Hampton USTA# 2018840232"        "Ava Wright (USTA #2018460819)"
+# Name = 2–3 capitalized tokens (quoted nicknames allowed), then a short
+# bridge (open paren / comma / possessive / USTA label), then the digits.
+# (?!USTA\b) keeps the label itself from being eaten as a name token; hyphens
+# only join letter groups so a dangling "Hello-" doesn't qualify.
+_NAME_TOKEN = (r"(?:(?!USTA\b)[A-Z][\w'’.]*(?:-[A-Z][\w'’.]*)*"
+               r'|["“][A-Z]' + r"[\w'’.]*" + r'["”])')
+_NAME_USTA_AFTER_RE = re.compile(
+    r"(" + _NAME_TOKEN + r"(?:\s+" + _NAME_TOKEN + r"){1,2})"      # the name
+    r"(?:'s|’s)?[\s,*\-–—:]{0,3}"                                  # bridge
+    # the label is case-insensitive (scoped) — name tokens must stay [A-Z]
+    r"\(?\s*(?i:usta\s*(?:member(?:ship)?\s*)?(?:#|no\.?|number|id)?\s*(?:is\s*)?[:#]?\s*)?"
+    r"#?\s*(\d{8,11})\b\)?")
 # A USTA # explicitly labeled in the text ("USTA #: 1234567890", "membership
 # number 1234567890"). Higher confidence than a bare run of digits, so it wins.
 _USTA_LABELED_RE = re.compile(
@@ -40,20 +55,66 @@ def usta_candidates(subject: str | None, body: str | None) -> list[str]:
     """Plausible USTA #s in ORDER OF APPEARANCE (the email's order is the
     players' order — for doubles the requester usually comes first). A number
     qualifies if it is (a) labeled ("USTA # 21043871", 8–11 digits),
-    (b) immediately followed by a capitalized name ("21043871 Ethan Carter" —
-    the TD's real-world format), or (c) a bare 9–11 digit run. Phone numbers
-    usually survive as formatted strings (dots/dashes), so bare runs are a
-    fair signal; bare EIGHT-digit runs only count with an adjacent name."""
+    (b) adjacent to a capitalized name in EITHER direction ("21043871 Ethan
+    Carter" / "Kate Hampton USTA# 2018840232"), or (c) a bare 9–11 digit run.
+    Phone numbers usually survive as formatted strings (dots/dashes), so bare
+    runs are a fair signal; bare EIGHT-digit runs only count with an adjacent
+    name."""
     text = f"{subject or ''}\n{body or ''}"
     hits: list[tuple[int, str]] = []
     for rx in (_USTA_LABELED_RE, _USTA_NAME_RE, _USTA_RE):
         for m in rx.finditer(text):
             hits.append((m.start(1), m.group(1)))
+    for m in _NAME_USTA_AFTER_RE.finditer(text):      # name-first adjacency
+        hits.append((m.start(2), m.group(2)))
     out: list[str] = []
     for _pos, n in sorted(hits):
         if n not in out:
             out.append(n)
     return out
+
+
+def extract_name_usta_pairs(subject: str | None, body: str | None,
+                            limit: int = 4) -> list[dict]:
+    """Ordered (name, usta) PAIRS parsed from the text — both directions
+    ("Kate Hampton USTA# 2018840232" and "2018840232 Kate Hampton"). This is
+    what the inbox shows for a doubles email whose players aren't (yet) on
+    the roster: the email itself says who the numbers belong to. Deduped by
+    number, first mention wins."""
+    text = f"{subject or ''}\n{body or ''}"
+    hits: list[tuple[int, str, str]] = []
+    for m in _NAME_USTA_AFTER_RE.finditer(text):
+        hits.append((m.start(1), m.group(1), m.group(2)))
+    for m in _USTA_NAME_RE.finditer(text):
+        hits.append((m.start(1), m.group(2), m.group(1)))
+    out: list[dict] = []
+    seen: set[str] = set()
+    for _pos, name, num in sorted(hits):
+        if num in seen:
+            continue
+        cleaned = _clean_name(name)
+        if not cleaned:
+            continue
+        seen.add(num)
+        out.append({"name": cleaned, "usta": num})
+    return out[:limit]
+
+
+_NAME_STOPWORDS = {"His", "Her", "Their", "The", "He", "She", "Hello", "Hi"}
+
+
+def _clean_name(raw: str) -> str | None:
+    """Trim sentence leakage off a captured name: a leading token that ends a
+    previous sentence ("Macon. Ava Wright"), a trailing pronoun ("… Bondo. His"),
+    or a trailing possessive ("Declan Finley. Declan's"). Needs 2+ tokens left."""
+    tokens = raw.replace('"', " ").replace("“", " ").replace("”", " ").split()
+    while tokens and (tokens[0].endswith(".") or tokens[0] in _NAME_STOPWORDS):
+        tokens.pop(0)
+    while tokens and (tokens[-1] in _NAME_STOPWORDS
+                      or tokens[-1].endswith(("'s", "’s"))):
+        tokens.pop()
+    tokens = [t.rstrip(".") for t in tokens]
+    return " ".join(tokens) if len(tokens) >= 2 else None
 
 
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:

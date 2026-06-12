@@ -11,6 +11,7 @@ from ..db import db_dep
 # here both for use and for back-compat re-export (importer.py + tests
 # import them from this module).
 from ..email_extract import (
+    extract_name_usta_pairs,
     usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
     extract_avoid_day,
@@ -134,6 +135,12 @@ def list_emails(response: Response, tournament_id: int | None = None,
                         (computed, r["id"]),
                     )
                 r["detected_usta_text"] = computed
+            # (name, USTA#) pairs parsed from the text — for doubles/pairing
+            # emails whose players aren't (yet) rostered, the email itself says
+            # who the numbers belong to; the grid falls back to these.
+            r["detected_name_pairs"] = (
+                extract_name_usta_pairs(r.get("subject"), r.get("body"))
+                if r.get("classification") in ("doubles", "pairing_avoidance") else None)
             # Day/time only make sense for scheduling-avoidance emails (a weekday in
             # a withdrawal email isn't an "avoid day"), so scope them to that class.
             is_sched = r.get("classification") == "scheduling_avoidance"

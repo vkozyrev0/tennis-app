@@ -56,6 +56,9 @@ class EmailOut(BaseModel):
     # Pairing avoidance: ALL detected players (primary first) + their names.
     detected_member_ids: Optional[list[int]] = None
     detected_member_names: Optional[list[str]] = None
+    # (name, usta) pairs PARSED FROM THE TEXT (doubles/pairing): the grid's
+    # fallback when the named players aren't on the roster yet.
+    detected_name_pairs: Optional[list[dict]] = None
     # Name of the tournament this email is filed under (LEFT JOIN; null when
     # the email hasn't been assigned to a tournament yet).
     tournament_name: Optional[str] = None
