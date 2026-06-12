@@ -212,8 +212,10 @@ but the app has no live-operations surface:
 2. ✅ **SHIPPED (2026-06-10, dce0c33) — Player check-in** — `PUT
    /api/roster/{id}/signin`; click-to-toggle "In" roster column (filterable),
    counts line shows "checked in X/Y selected".
-3. **Incident log** (M) — day-of operational memory (weather, injury, dispute);
-   no table/UI today. Pairs naturally with 1.
+3. ✅ **SHIPPED (2026-06-11) — Incident log** — migration 0043
+   `tournament_incident`; Tournament → Incidents tab with a quick-log form and
+   a resolve-by-typing-the-resolution grid; demo seeds a resolved rain delay +
+   an open facility issue.
 4. **Payroll finalization** (M) — an approved/paid state over the existing pay
    statements + a payroll CSV batch export; today statements print but nothing
    records that they were settled.
