@@ -102,14 +102,15 @@ adult_lists) one endpoint at a time.
     is single-row and was fine. Tests document the poisoned-tx failure mode
     and prove survivors commit. Suite 380 green.
 
-11. **app.js decomposition, next slices** (M each, L total) — at ~7.5k lines
-    with ~40 module-level mutable globals, the monolith is the main frontend
-    risk. Don't big-bang it; continue the proven extraction pattern
-    (util/shirts/roster_prefill already split): next candidates in value order —
-    (a) `grids.js` (wireEntity + list/read grid factories, the largest
-    cohesive chunk), (b) `auth.js` (login/session/role-view), (c) an explicit
-    `state.js` event for "active tournament changed" so the cascade of reloads
-    is declared in one place instead of implicit calls.
+11. **app.js decomposition, next slices** (M each, L total) — ✅ **slice (a)
+    SHIPPED** (2026-06-12): `app/grids.js` holds wireEntity + makeListGrid +
+    makeReadGrid + _autoHeaderFilters (~445 lines) behind a
+    createGridFactories(ctx) seam — factory bodies moved unchanged; the
+    module boundary surfaced (and fixed) one hoisting dependency. Remaining
+    slices in value order: (b) `auth.js` (login/session/role-view), (c) an
+    explicit `state.js` event for "active tournament changed" so the cascade
+    of reloads is declared in one place; wirePlayerList (Part-B-coupled)
+    rides a later slice.
 
 12. **Render-template helper for the big card builders** (M) — renderAssignment
     (~250 lines) and friends are string-concat + createElement mixes. A tiny
