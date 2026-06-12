@@ -224,8 +224,11 @@ but the app has no live-operations surface:
    identity); every mutating endpoint records actor + action + detail (the
    portal's accept/decline under the OFFICIAL's login); History modal on each
    assignment card.
-6. **Official self-service dietary/lodging** (S) — portal lets officials set
-   availability but not update dietary/lodging; the TD re-keys those.
+6. ~~Official self-service dietary/lodging~~ — **FALSE POSITIVE (verified
+   2026-06-12)**: already built. `PUT /api/me/profile` covers dietary +
+   contact (portal "My profile" form has the field), and per-tournament
+   hotel-needed rides the portal availability flow (`MyAvailabilitySet`).
+   Verified end-to-end: official self-updates both; admin sees them.
 7. **Per-site coordinator role** (L) — D8 deferred multi-user; becomes relevant
    with 3+ venue events.
 8. **Configurable mileage/cert catalogs** (M, low value now) — constants are
