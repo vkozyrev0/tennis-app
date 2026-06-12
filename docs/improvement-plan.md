@@ -219,8 +219,11 @@ but the app has no live-operations surface:
 4. **Payroll finalization** (M) — an approved/paid state over the existing pay
    statements + a payroll CSV batch export; today statements print but nothing
    records that they were settled.
-5. **Assignment change audit** (M) — pay_audit freezes amounts, but who/why for
-   assignment edits isn't recorded (dispute resolution).
+5. ✅ **SHIPPED (2026-06-12) — Assignment change audit** — migration 0044
+   `assignment_audit` (append-only, survives deletion via denormalized
+   identity); every mutating endpoint records actor + action + detail (the
+   portal's accept/decline under the OFFICIAL's login); History modal on each
+   assignment card.
 6. **Official self-service dietary/lodging** (S) — portal lets officials set
    availability but not update dietary/lodging; the TD re-keys those.
 7. **Per-site coordinator role** (L) — D8 deferred multi-user; becomes relevant
