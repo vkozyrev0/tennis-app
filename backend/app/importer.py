@@ -781,8 +781,13 @@ def _merge_email_pdf(cur, tid, d):
         return "already in inbox — skipped"
     cls = classify(subj, body)  # classify on plaintext, before encrypting at rest
     from .crypto import encrypt as _enc_body  # PII H2
-    from .routers.emails import extract_usta  # parse the USTA # from the plaintext
-    usta_text = extract_usta(subj, body)
+    # Parse the USTA #(s) from the plaintext: multi-player classes (doubles /
+    # pairing) keep every plausible number — an email may carry one per player.
+    from .routers.emails import extract_usta, extract_ustas
+    if cls in ("doubles", "pairing_avoidance"):
+        usta_text = ", ".join(extract_ustas(subj, body)) or None
+    else:
+        usta_text = extract_usta(subj, body)
     cur.execute(
         "INSERT INTO email_message (tournament_id, from_address, subject, body, classification, detected_usta_text) "
         "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",

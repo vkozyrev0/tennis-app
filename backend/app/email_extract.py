@@ -30,6 +30,24 @@ def extract_usta(subject: str | None, body: str | None) -> str | None:
     return next(iter(nums)) if len(nums) == 1 else None
 
 
+def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
+    """ALL plausible USTA #s, for the classifications that name several players
+    (doubles / pairing avoidance) — emails may carry a number for one player,
+    both, or neither. Labeled numbers first (highest confidence), then bare
+    9–11 digit runs in order of appearance, deduped, capped at `limit` (a wall
+    of digits is noise, not a roster). Phone numbers usually survive as
+    formatted strings (dots/dashes/spaces), so a bare run is a fair signal."""
+    text = f"{subject or ''}\n{body or ''}"
+    out: list[str] = []
+    for m in _USTA_LABELED_RE.finditer(text):
+        if m.group(1) not in out:
+            out.append(m.group(1))
+    for n in _USTA_RE.findall(text):
+        if n not in out:
+            out.append(n)
+    return out[:limit]
+
+
 # Withdrawal-reason extraction, ranked most→least reliable based on the real
 # email corpus:
 #   1. explicit "Reason: <X>" field (forwarded forms: "Player Name… Reason: Injury

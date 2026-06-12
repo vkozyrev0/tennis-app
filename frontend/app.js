@@ -3936,14 +3936,15 @@ const inboxGrid = makeReadGrid("inbox-table", [
   { title: "USTA #", field: "detected_usta_text", width: 130,
     formatter: (c) => {
       const m = c.getData();
-      const num = m.detected_usta || m.detected_usta_text;
-      if (!num) return '<span class="muted">—</span>';
-      const emailOnly = !m.detected_usta && m.detected_usta_text;
-      let out = esc(num) + (emailOnly
-        ? ' <span class="muted" title="parsed from the email; no roster player matched yet">✉</span>' : "");
-      // Doubles: the partner's USTA # (from THEIR roster record) on a second line.
-      if (m.detected_partner_usta) out += `<br>${esc(m.detected_partner_usta)}`;
-      return out;
+      // Matched players' numbers come from their ROSTER records; numbers parsed
+      // from the email text that didn't match anyone render with ✉. Emails may
+      // carry a USTA # for one player, both, or neither.
+      const matched = [m.detected_usta, m.detected_partner_usta].filter(Boolean);
+      const fromText = (m.detected_usta_text || "").split(",").map((s) => s.trim())
+        .filter((n) => n && !matched.includes(n));
+      if (!matched.length && !fromText.length) return '<span class="muted">—</span>';
+      const mark = ' <span class="muted" title="parsed from the email; no roster player matched yet">✉</span>';
+      return [...matched.map(esc), ...fromText.map((n) => esc(n) + mark)].join("<br>");
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>

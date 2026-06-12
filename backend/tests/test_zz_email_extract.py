@@ -71,3 +71,18 @@ def test_avoid_time_clause_beats_daypart():
     assert extract_avoid_time("", "not before 10:30 AM mornings") == "before 10:30 am"
     assert extract_avoid_time("", "prefers mornings") == "mornings"
     assert extract_avoid_time("", "whenever") is None
+
+
+def test_extract_ustas_multiple_numbers():
+    from app.email_extract import extract_ustas
+    # both players' numbers in one doubles email
+    assert extract_ustas("", "Pair Ava (USTA 2104387100) with Mia, USTA # 2105923400") == [
+        "2104387100", "2105923400"]
+    # bare runs kept in order, deduped
+    assert extract_ustas("", "ids 2104387100 and 2105923400 and 2104387100") == [
+        "2104387100", "2105923400"]
+    # formatted phone numbers don't qualify as bare runs
+    assert extract_ustas("", "call 732.429.0529 or 404-555-1234") == []
+    # capped — a wall of digits is noise
+    assert len(extract_ustas("", " ".join(str(2104387100 + i) for i in range(9)))) == 3
+    assert extract_ustas("", "no numbers") == []

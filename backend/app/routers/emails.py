@@ -11,12 +11,14 @@ from ..db import db_dep
 # here both for use and for back-compat re-export (importer.py + tests
 # import them from this module).
 from ..email_extract import (
-    _USTA_RE,  # shared with the roster detector below (L1: USTA-# match)
+    _USTA_LABELED_RE,  # shared with the roster detector below (L1: USTA-# match)
+    _USTA_RE,
     extract_age_division,
     extract_avoid_day,
     extract_avoid_time,
     extract_events,
     extract_usta,
+    extract_ustas,
     extract_withdrawal_reason,
 )
 from ..email_targets import (
@@ -118,10 +120,15 @@ def list_emails(response: Response, tournament_id: int | None = None,
             # null when nothing recognizable is present.
             r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
             r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
-            # USTA # parsed from the email text — shown even when no roster player
-            # is matched. Prefer the persisted column; backfill it if missing.
+            # USTA #(s) parsed from the email text — shown even when no roster
+            # player is matched. Prefer the persisted column; backfill if
+            # missing. Multi-player classes may carry a number for one player,
+            # both, or neither — keep every plausible one (comma-joined).
             if not r.get("detected_usta_text"):
-                computed = extract_usta(r.get("subject"), r.get("body"))
+                if r.get("classification") in ("doubles", "pairing_avoidance"):
+                    computed = ", ".join(extract_ustas(r.get("subject"), r.get("body"))) or None
+                else:
+                    computed = extract_usta(r.get("subject"), r.get("body"))
                 if computed:
                     cur.execute(
                         "UPDATE email_message SET detected_usta_text = %s WHERE id = %s",
@@ -460,7 +467,9 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
         return f"{f} {l}" in hay_low or f"{l}, {f}" in hay_low
 
     # L1 — explicit USTA # anywhere in the email matched to a roster player.
-    ustas = set(_USTA_RE.findall(text))
+    # Candidates: labeled numbers (8-11 digits — "USTA 21274891") AND bare
+    # 9-11 digit runs; emails may carry a number for one player, both, or none.
+    ustas = set(_USTA_RE.findall(text)) | {m.group(1) for m in _USTA_LABELED_RE.finditer(text)}
     if ustas:
         for r in roster:
             if r["usta_number"] and r["usta_number"] in ustas:
@@ -597,9 +606,20 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="email not found")
         if em["tournament_id"] is None:
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
+        body_txt = _dec_body(em["body"])
         d, partner, member_ids = _detect_pair_for(cur, em["tournament_id"], em["subject"],
-                                                   _dec_body(em["body"]), em["from_address"],
+                                                   body_txt, em["from_address"],
                                                    em["classification"])
+        # Re-evaluate the parsed USTA #(s) too — the classification may have
+        # changed since import (e.g. now doubles -> keep BOTH numbers).
+        if em["classification"] in ("doubles", "pairing_avoidance"):
+            usta_text = ", ".join(extract_ustas(em["subject"], body_txt)) or None
+        else:
+            usta_text = extract_usta(em["subject"], body_txt)
+        cur.execute(
+            "UPDATE email_message SET detected_usta_text = %s WHERE id = %s",
+            (usta_text, email_id),
+        )
         cur.execute(
             "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
             "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s "

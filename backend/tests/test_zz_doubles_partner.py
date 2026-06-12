@@ -167,3 +167,40 @@ def test_reclassifying_away_from_pairing_clears_members(trio_roster):
         "tournament_id": t["id"], "classification": "withdrawal",
         "status": "new", "detected_player_id": p1["id"]}), 200)
     assert upd["detected_member_ids"] is None
+
+
+# ---- USTA numbers in the email text (may cover one player, both, or neither) --
+
+def test_doubles_pair_matches_by_usta_numbers_alone(duo):
+    """Both numbers, NO names — the pair resolves entirely via USTA match."""
+    t, (p1, p2) = duo
+    em = _email(t, f"Please pair {p1['usta_number']} with {p2['usta_number']} for doubles.")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_partner_id"] == p2["id"]
+    assert det["detected_partner_usta"] == p2["usta_number"]
+
+
+def test_doubles_text_keeps_both_numbers_when_unmatched(duo):
+    """Two numbers for players NOT on the roster: nobody matches, but BOTH
+    numbers surface in detected_usta_text (the old single-number extractor
+    gave up on multiple bare numbers)."""
+    t, _players = duo
+    em = _email(t, "New pair: 2188800001 with 2188800002, both registering for doubles.")
+    rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
+    row = next(r for r in rows if r["id"] == em["id"])
+    assert row["detected_player_id"] is None
+    assert row["detected_usta_text"] == "2188800001, 2188800002"
+
+
+def test_doubles_mixed_one_matched_one_text_only(duo):
+    """A number for the rostered player + a number for an unknown partner: the
+    rostered one matches; the stranger's number still surfaces in the text."""
+    t, (p1, _p2) = duo
+    em = _email(t, f"Pair {p1['usta_number']} with 2188800003 please (doubles).")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_partner_id"] is None        # stranger isn't rostered
+    rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
+    row = next(r for r in rows if r["id"] == em["id"])
+    assert "2188800003" in (row["detected_usta_text"] or "")
