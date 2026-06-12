@@ -3933,18 +3933,22 @@ const inboxGrid = makeReadGrid("inbox-table", [
   // number parsed straight from the email text (PDF import etc.). The ✉ glyph
   // marks an email-only number (no roster player matched yet), so the TD can add
   // the player. Filterable by digits.
-  { title: "USTA #", field: "detected_usta_text", width: 118,
+  { title: "USTA #", field: "detected_usta_text", width: 130,
     formatter: (c) => {
       const m = c.getData();
       const num = m.detected_usta || m.detected_usta_text;
       if (!num) return '<span class="muted">—</span>';
       const emailOnly = !m.detected_usta && m.detected_usta_text;
-      return esc(num) + (emailOnly
+      let out = esc(num) + (emailOnly
         ? ' <span class="muted" title="parsed from the email; no roster player matched yet">✉</span>' : "");
+      // Doubles: the partner's USTA # (from THEIR roster record) on a second line.
+      if (m.detected_partner_usta) out += `<br>${esc(m.detected_partner_usta)}`;
+      return out;
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
-      String(e.detected_usta || e.detected_usta_text || "").includes(String(term).trim()) },
+      ((e.detected_usta || e.detected_usta_text || "") + " " + (e.detected_partner_usta || ""))
+        .includes(String(term).trim()) },
   { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
     formatter: (c) => classChip(c.getValue()),
     editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },

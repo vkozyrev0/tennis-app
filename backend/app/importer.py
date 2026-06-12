@@ -794,13 +794,14 @@ def _merge_email_pdf(cur, tid, d):
     # per-row "Detect" click. Best-effort: a no-match just leaves the row blank,
     # exactly as before. Lazy import avoids a module-load cycle (emails router
     # doesn't import importer).
-    from .routers.emails import _detect_player_for
-    det = _detect_player_for(cur, tid, subj, body, from_addr)
+    from .routers.emails import _detect_pair_for
+    det, partner, member_ids = _detect_pair_for(cur, tid, subj, body, from_addr, cls)
     if det.get("detected_player_id"):
         cur.execute(
-            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s "
-            "WHERE id = %s",
-            (det["detected_player_id"], det["match_kind"], new_id),
+            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
+            "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s",
+            (det["detected_player_id"], det["match_kind"],
+             partner["detected_partner_id"], member_ids, new_id),
         )
     return None
 

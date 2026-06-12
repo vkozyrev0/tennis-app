@@ -51,7 +51,8 @@ _COLS = (
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
-    "e.detected_partner_id, e.detected_member_ids, "
+    "e.detected_partner_id, pp.usta_number AS detected_partner_usta, "
+    "e.detected_member_ids, "
     "(SELECT array_agg(TRIM(COALESCE(m.first_name,'') || ' ' || COALESCE(m.last_name,'')) "
     "                  ORDER BY array_position(e.detected_member_ids, m.id)) "
     " FROM player m WHERE m.id = ANY(e.detected_member_ids)) AS detected_member_names, "
@@ -545,7 +546,7 @@ def _detect_pair_for(cur, tournament_id, subject, body, from_address, classifica
     Other classifications keep both slots NULL."""
     d = _detect_player_for(cur, tournament_id, subject, body, from_address)
     partner = {"detected_partner_id": None, "detected_partner_name": None,
-               "partner_match_kind": None}
+               "detected_partner_usta": None, "partner_match_kind": None}
     member_ids = None
     if classification == "doubles" and d["detected_player_id"]:
         p = _detect_player_for(cur, tournament_id, subject, body, from_address,
@@ -553,6 +554,7 @@ def _detect_pair_for(cur, tournament_id, subject, body, from_address, classifica
         if p["detected_player_id"]:
             partner = {"detected_partner_id": p["detected_player_id"],
                        "detected_partner_name": p["detected_player_name"],
+                       "detected_partner_usta": p["detected_usta"],
                        "partner_match_kind": p["match_kind"]}
     elif classification == "pairing_avoidance" and d["detected_player_id"]:
         found = [d["detected_player_id"]]
