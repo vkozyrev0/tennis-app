@@ -3751,11 +3751,15 @@ const inboxGrid = makeReadGrid("inbox-table", [
               detected_match_kind: det.match_kind,
               detected_partner_id: det.detected_partner_id,
               detected_partner_name: det.detected_partner_name,
+              detected_member_ids: det.detected_member_ids,
+              detected_member_names: det.detected_member_names,
             });
             row.reformat();
-            const who = det.detected_player_name
-              ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
-              : null;
+            const who = (det.detected_member_names && det.detected_member_names.length > 1)
+              ? det.detected_member_names.join(" + ")
+              : det.detected_player_name
+                ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+                : null;
             toast(who ? `Detected: ${who}` : "No player match", !!who);
           } catch (e) { toast(e.message, false); }
         });
@@ -3769,6 +3773,12 @@ const inboxGrid = makeReadGrid("inbox-table", [
       let nm = link(m.detected_player_id, m.detected_player_name);
       // Doubles name TWO players — show the detected partner alongside.
       if (m.detected_partner_name) nm += " + " + link(m.detected_partner_id, m.detected_partner_name);
+      // Pairing-avoidance groups name 2+ — show the whole detected group
+      // (ids/names are parallel arrays, primary first; skip slot 0 = primary).
+      else if (m.detected_member_names && m.detected_member_names.length > 1) {
+        nm = m.detected_member_names
+          .map((n, i) => link((m.detected_member_ids || [])[i], n)).join(" + ");
+      }
       return nm + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
@@ -3826,13 +3836,17 @@ const inboxGrid = makeReadGrid("inbox-table", [
             detected_match_kind: det.match_kind,
             detected_partner_id: det.detected_partner_id,
             detected_partner_name: det.detected_partner_name,
+            detected_member_ids: det.detected_member_ids,
+            detected_member_names: det.detected_member_names,
           });
           row.reformat();
           const clsLabel = (EMAIL_CLASS_META[res.classification] || {}).label || res.classification;
-          const who = det.detected_player_name
-            ? ` · player: ${det.detected_player_name}` +
-              (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
-            : " · no player match";
+          const who = (det.detected_member_names && det.detected_member_names.length > 1)
+            ? ` · players: ${det.detected_member_names.join(" + ")}`
+            : det.detected_player_name
+              ? ` · player: ${det.detected_player_name}` +
+                (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+              : " · no player match";
           toast(`Suggested: ${clsLabel}${who}`, true);
         } catch (e) { toast(e.message, false); }
       };
@@ -3877,6 +3891,21 @@ const inboxGrid = makeReadGrid("inbox-table", [
             && playersById[m.detected_partner_id]) {
           t.form.partner_ref.value = String(m.detected_partner_id);
           if (typeof t.form.partner_ref._comboSync === "function") t.form.partner_ref._comboSync();
+        }
+        // Pairing-avoidance names a GROUP — build one member row per detected
+        // player (still editable; the TD can add/remove rows before saving).
+        if (m.classification === "pairing_avoidance"
+            && (m.detected_member_ids || []).length >= 2 && t.form.id === "pairing-form") {
+          pairingMembersBox.innerHTML = "";
+          for (const pid of m.detected_member_ids) {
+            pairingMemberRow();
+            const sel = pairingMembersBox.lastElementChild.querySelector(".pm-player");
+            if (sel && playersById[pid]) {
+              sel.value = String(pid);
+              if (typeof sel._comboSync === "function") sel._comboSync();
+            }
+          }
+          while (pairingMembersBox.children.length < 2) pairingMemberRow();
         }
         // Carry the auto-detected withdrawal reason into the form so the TD
         // doesn't retype it (still editable before saving).

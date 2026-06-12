@@ -108,3 +108,62 @@ def test_bulk_detect_fills_partner(duo):
                           json={"email_ids": [em["id"]]}), 200)
     assert out[0]["detected_player_id"] == p1["id"]
     assert out[0]["detected_partner_id"] == p2["id"]
+
+
+# ---- pairing-avoidance groups (migration 0042) -------------------------------
+
+@pytest.fixture()
+def trio_roster():
+    tag = uuid.uuid4().hex[:6]
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "PG " + tag, "type": "junior",
+        "play_start_date": "2026-10-10", "play_end_date": "2026-10-12"}))
+    players = []
+    for first, last in (("Lena", f"Okafor{tag}"), ("Ruth", f"Castellanos{tag}"),
+                        ("Ines", f"Marchetti{tag}")):
+        p = _ok(client.post("/api/players", json={
+            "usta_number": str(uuid.uuid4().int)[:10],
+            "first_name": first, "last_name": last, "gender": "female"}))
+        _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+            "player_id": p["id"], "selection_status": "selected"}))
+        players.append(p)
+    return t, players
+
+
+def test_pairing_email_detects_the_whole_group(trio_roster):
+    t, (p1, p2, p3) = trio_roster
+    em = _email(t, f"Please avoid pairing {p1['first_name']} {p1['last_name']} with "
+                   f"{p2['first_name']} {p2['last_name']} or "
+                   f"{p3['first_name']} {p3['last_name']} — same club.",
+                classification="pairing_avoidance")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_member_ids"] == [p1["id"], p2["id"], p3["id"]]
+    assert det["detected_member_names"] == [
+        f"{p['first_name']} {p['last_name']}" for p in (p1, p2, p3)]
+    rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
+    row = next(r for r in rows if r["id"] == em["id"])
+    assert row["detected_member_ids"] == [p1["id"], p2["id"], p3["id"]]
+    assert len(row["detected_member_names"]) == 3
+
+
+def test_single_name_pairing_email_keeps_members_null(trio_roster):
+    t, (p1, _p2, _p3) = trio_roster
+    em = _email(t, f"{p1['first_name']} {p1['last_name']} asked about pairing rules.",
+                classification="pairing_avoidance")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_member_ids"] is None
+
+
+def test_reclassifying_away_from_pairing_clears_members(trio_roster):
+    t, (p1, p2, _p3) = trio_roster
+    em = _email(t, f"avoid pairing {p1['first_name']} {p1['last_name']} with "
+                   f"{p2['first_name']} {p2['last_name']}",
+                classification="pairing_avoidance")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_member_ids"] == [p1["id"], p2["id"]]
+    upd = _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": p1["id"]}), 200)
+    assert upd["detected_member_ids"] is None

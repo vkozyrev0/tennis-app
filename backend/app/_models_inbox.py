@@ -52,6 +52,9 @@ class EmailOut(BaseModel):
     # every other classification.
     detected_partner_id: Optional[int] = None
     detected_partner_name: Optional[str] = None
+    # Pairing avoidance: ALL detected players (primary first) + their names.
+    detected_member_ids: Optional[list[int]] = None
+    detected_member_names: Optional[list[str]] = None
     # Name of the tournament this email is filed under (LEFT JOIN; null when
     # the email hasn't been assigned to a tournament yet).
     tournament_name: Optional[str] = None
@@ -117,6 +120,9 @@ class EmailDetectResult(BaseModel):
     detected_partner_id: Optional[int] = None
     detected_partner_name: Optional[str] = None
     partner_match_kind: Optional[str] = None
+    # Pairing avoidance: the whole detected group (primary first).
+    detected_member_ids: Optional[list[int]] = None
+    detected_member_names: Optional[list[str]] = None
 
 
 # ---------- Late entry ----------

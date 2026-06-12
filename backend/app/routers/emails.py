@@ -51,7 +51,10 @@ _COLS = (
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
-    "e.detected_partner_id, "
+    "e.detected_partner_id, e.detected_member_ids, "
+    "(SELECT array_agg(TRIM(COALESCE(m.first_name,'') || ' ' || COALESCE(m.last_name,'')) "
+    "                  ORDER BY array_position(e.detected_member_ids, m.id)) "
+    " FROM player m WHERE m.id = ANY(e.detected_member_ids)) AS detected_member_names, "
     "NULLIF(TRIM(COALESCE(pp.first_name,'') || ' ' || COALESCE(pp.last_name,'')), '') "
     "  AS detected_partner_name, "
     "tn.name AS tournament_name, "
@@ -244,7 +247,11 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
                 detected_partner_id = CASE
                     WHEN %(classification)s <> 'doubles' THEN NULL
                     WHEN %(detected_player_id)s::int IS NULL THEN NULL
-                    ELSE detected_partner_id END
+                    ELSE detected_partner_id END,
+                detected_member_ids = CASE
+                    WHEN %(classification)s <> 'pairing_avoidance' THEN NULL
+                    WHEN %(detected_player_id)s::int IS NULL THEN NULL
+                    ELSE detected_member_ids END
             WHERE id = %(id)s RETURNING id
             """,
             {**body.model_dump(), "id": email_id},
@@ -529,13 +536,17 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
 
 
 def _detect_pair_for(cur, tournament_id, subject, body, from_address, classification):
-    """Doubles emails name TWO players (requester + partner). Detect the primary,
-    then — for doubles-classified emails only — re-run the layered match with the
-    primary excluded so the second name resolves to the partner. Other
-    classifications keep a NULL partner."""
+    """Multi-player detection for the classifications that name several players.
+
+    - doubles: requester + ONE partner -> second pass with the primary excluded.
+    - pairing_avoidance: a GROUP ("don't pair A with B and C") -> keep re-running
+      the layered match, excluding everyone found so far, until it comes up dry
+      (capped at 6 - beyond that it's matching noise, not a group).
+    Other classifications keep both slots NULL."""
     d = _detect_player_for(cur, tournament_id, subject, body, from_address)
     partner = {"detected_partner_id": None, "detected_partner_name": None,
                "partner_match_kind": None}
+    member_ids = None
     if classification == "doubles" and d["detected_player_id"]:
         p = _detect_player_for(cur, tournament_id, subject, body, from_address,
                                exclude_ids=frozenset({d["detected_player_id"]}))
@@ -543,7 +554,17 @@ def _detect_pair_for(cur, tournament_id, subject, body, from_address, classifica
             partner = {"detected_partner_id": p["detected_player_id"],
                        "detected_partner_name": p["detected_player_name"],
                        "partner_match_kind": p["match_kind"]}
-    return d, partner
+    elif classification == "pairing_avoidance" and d["detected_player_id"]:
+        found = [d["detected_player_id"]]
+        while len(found) < 6:
+            nxt = _detect_player_for(cur, tournament_id, subject, body, from_address,
+                                     exclude_ids=frozenset(found))
+            if not nxt["detected_player_id"]:
+                break
+            found.append(nxt["detected_player_id"])
+        if len(found) >= 2:          # one name isn't a group - leave NULL
+            member_ids = found
+    return d, partner, member_ids
 
 
 # Maps the `extract` field names declared on POPULATE_TARGETS (email_targets.py)
@@ -574,16 +595,21 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="email not found")
         if em["tournament_id"] is None:
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
-        d, partner = _detect_pair_for(cur, em["tournament_id"], em["subject"],
-                                      _dec_body(em["body"]), em["from_address"],
-                                      em["classification"])
+        d, partner, member_ids = _detect_pair_for(cur, em["tournament_id"], em["subject"],
+                                                   _dec_body(em["body"]), em["from_address"],
+                                                   em["classification"])
         cur.execute(
             "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
-            "detected_partner_id = %s WHERE id = %s",
+            "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s "
+            "RETURNING (SELECT array_agg(TRIM(COALESCE(m.first_name,'') || ' ' || COALESCE(m.last_name,'')) "
+            "                            ORDER BY array_position(detected_member_ids, m.id)) "
+            "           FROM player m WHERE m.id = ANY(detected_member_ids)) AS member_names",
             (d["detected_player_id"], d["match_kind"],
-             partner["detected_partner_id"], email_id),
+             partner["detected_partner_id"], member_ids, email_id),
         )
-        return {"email_id": email_id, **d, **partner}
+        names = cur.fetchone()["member_names"]
+        return {"email_id": email_id, **d, **partner,
+                "detected_member_ids": member_ids, "detected_member_names": names}
 
 
 @router.post("/bulk/detect-players", response_model=list[EmailDetectResult])
@@ -603,16 +629,17 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                             "detected_usta": None, "detected_player_name": None,
                             "match_kind": None})
                 continue
-            d, partner = _detect_pair_for(cur, em["tournament_id"], em["subject"],
-                                          _dec_body(em["body"]), em["from_address"],
-                                          em["classification"])
+            d, partner, member_ids = _detect_pair_for(cur, em["tournament_id"], em["subject"],
+                                                       _dec_body(em["body"]), em["from_address"],
+                                                       em["classification"])
             cur.execute(
                 "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
-                "detected_partner_id = %s WHERE id = %s",
+                "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s",
                 (d["detected_player_id"], d["match_kind"],
-                 partner["detected_partner_id"], em["id"]),
+                 partner["detected_partner_id"], member_ids, em["id"]),
             )
-            out.append({"email_id": em["id"], **d, **partner})
+            out.append({"email_id": em["id"], **d, **partner,
+                        "detected_member_ids": member_ids})
     return out
 
 

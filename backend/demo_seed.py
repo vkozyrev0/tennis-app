@@ -204,18 +204,20 @@ def main():
 
             # ---- inbox: unfiled parent emails (some days old) --------------
             def email(subject, sender, body, days_ago, classification=None, usta=None,
-                      partner_usta=None):
+                      partner_usta=None, member_ustas=None):
                 pid = by_usta[usta]["id"] if usta and usta in by_usta else None
                 partner_id = (by_usta[partner_usta]["id"]
                               if partner_usta and partner_usta in by_usta else None)
+                member_ids = ([by_usta[u]["id"] for u in member_ustas if u in by_usta]
+                              if member_ustas else None) or None
                 cur.execute(
                     "INSERT INTO email_message (tournament_id,from_address,subject,body,"
                     "classification,status,detected_player_id,detected_match_kind,"
-                    "detected_partner_id,detected_usta_text,received_at) "
-                    "VALUES (%s,%s,%s,%s,%s,'new',%s,%s,%s,%s,"
+                    "detected_partner_id,detected_member_ids,detected_usta_text,received_at) "
+                    "VALUES (%s,%s,%s,%s,%s,'new',%s,%s,%s,%s,%s,"
                     "now() - make_interval(days => %s))",
                     (t1, sender, subject, _enc_body(body), classification or "unclassified",
-                     pid, "usta" if pid else None, partner_id, usta, days_ago))
+                     pid, "usta" if pid else None, partner_id, member_ids, usta, days_ago))
 
             email("Withdrawal — Sophia Chen", "rebecca.chen@example.com",
                   "Hi, unfortunately Sophia Chen (USTA 21215067) has to withdraw from the Macon "
@@ -227,6 +229,11 @@ def main():
             email("Doubles partner for Mia?", "linda.nguyen@example.com",
                   "Mia Nguyen (USTA 21268106) is hoping to find a doubles partner for the event "
                   "if anyone is still looking.", 1, "doubles", "21268106")
+            email("Please don't pair the Johnson cousins", "kjohnson@example.com",
+                  "Ava Johnson and Isabella Kim are cousins and travel together — please "
+                  "avoid pairing them with each other in doubles if possible.", 2,
+                  "pairing_avoidance", "21246158",
+                  member_ustas=["21246158", "21257423"])
             email("Doubles — Olivia & Emma", "tmitchell@example.com",
                   "Olivia Mitchell would like to play girls' doubles with Emma Rodriguez "
                   "if the draw allows it. Both girls are entered already.", 1, "doubles",
