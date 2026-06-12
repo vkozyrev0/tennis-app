@@ -51,6 +51,9 @@ _COLS = (
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
+    "e.detected_partner_id, "
+    "NULLIF(TRIM(COALESCE(pp.first_name,'') || ' ' || COALESCE(pp.last_name,'')), '') "
+    "  AS detected_partner_name, "
     "tn.name AS tournament_name, "
     # Amendment lineage: what this email corrects (am.subject) and whether a
     # later email corrects THIS one (superseded → the filed row may be stale).
@@ -59,6 +62,7 @@ _COLS = (
 )
 _FROM = ("FROM email_message e "
          "LEFT JOIN player p ON p.id = e.detected_player_id "
+         "LEFT JOIN player pp ON pp.id = e.detected_partner_id "
          "LEFT JOIN tournament tn ON tn.id = e.tournament_id "
          "LEFT JOIN email_message am ON am.id = e.amends_email_id")
 
@@ -234,7 +238,13 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
                     -- same player (e.g. a classification-only edit) → keep the
                     -- existing kind so an auto "usta" hit isn't relabelled
                     ELSE detected_match_kind END,
-                detected_player_id = %(detected_player_id)s
+                detected_player_id = %(detected_player_id)s,
+                -- partner only makes sense on doubles emails; a re-classification
+                -- away from doubles (or clearing the player) drops it
+                detected_partner_id = CASE
+                    WHEN %(classification)s <> 'doubles' THEN NULL
+                    WHEN %(detected_player_id)s::int IS NULL THEN NULL
+                    ELSE detected_partner_id END
             WHERE id = %(id)s RETURNING id
             """,
             {**body.model_dump(), "id": email_id},
@@ -400,7 +410,7 @@ _USTA_SUBJECT_RE = re.compile(
 
 
 def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
-                       from_address: str = "") -> dict:
+                       from_address: str = "", exclude_ids: frozenset = frozenset()) -> dict:
     """Best-effort "which player is this email about" detector.
 
     Layered from most to least reliable; the FIRST layer that yields an
@@ -428,7 +438,7 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
         "WHERE e.tournament_id = %s",
         (tournament_id,),
     )
-    roster = cur.fetchall()
+    roster = [r for r in cur.fetchall() if r["id"] not in exclude_ids]
 
     def ret(r, kind):
         return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
@@ -508,7 +518,7 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             "FROM player WHERE usta_number = ANY(%s)",
             (list(ustas),),
         )
-        offs = cur.fetchall()
+        offs = [r for r in cur.fetchall() if r["id"] not in exclude_ids]
         if len(offs) == 1:
             r = offs[0]
             return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
@@ -516,6 +526,24 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
 
     return {"detected_player_id": None, "detected_usta": None,
             "detected_player_name": None, "match_kind": None}
+
+
+def _detect_pair_for(cur, tournament_id, subject, body, from_address, classification):
+    """Doubles emails name TWO players (requester + partner). Detect the primary,
+    then — for doubles-classified emails only — re-run the layered match with the
+    primary excluded so the second name resolves to the partner. Other
+    classifications keep a NULL partner."""
+    d = _detect_player_for(cur, tournament_id, subject, body, from_address)
+    partner = {"detected_partner_id": None, "detected_partner_name": None,
+               "partner_match_kind": None}
+    if classification == "doubles" and d["detected_player_id"]:
+        p = _detect_player_for(cur, tournament_id, subject, body, from_address,
+                               exclude_ids=frozenset({d["detected_player_id"]}))
+        if p["detected_player_id"]:
+            partner = {"detected_partner_id": p["detected_player_id"],
+                       "detected_partner_name": p["detected_player_name"],
+                       "partner_match_kind": p["match_kind"]}
+    return d, partner
 
 
 # Maps the `extract` field names declared on POPULATE_TARGETS (email_targets.py)
@@ -537,7 +565,8 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
     persist the result (overwrites any previous detected_player_id)."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, subject, body, from_address FROM email_message WHERE id = %s",
+            "SELECT id, tournament_id, subject, body, from_address, classification "
+            "FROM email_message WHERE id = %s",
             (email_id,),
         )
         em = cur.fetchone()
@@ -545,13 +574,16 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="email not found")
         if em["tournament_id"] is None:
             raise HTTPException(status_code=400, detail="email has no tournament; assign one first")
-        d = _detect_player_for(cur, em["tournament_id"], em["subject"],
-                               _dec_body(em["body"]), em["from_address"])
+        d, partner = _detect_pair_for(cur, em["tournament_id"], em["subject"],
+                                      _dec_body(em["body"]), em["from_address"],
+                                      em["classification"])
         cur.execute(
-            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
-            (d["detected_player_id"], d["match_kind"], email_id),
+            "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
+            "detected_partner_id = %s WHERE id = %s",
+            (d["detected_player_id"], d["match_kind"],
+             partner["detected_partner_id"], email_id),
         )
-        return {"email_id": email_id, **d}
+        return {"email_id": email_id, **d, **partner}
 
 
 @router.post("/bulk/detect-players", response_model=list[EmailDetectResult])
@@ -561,7 +593,8 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
         return out
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, subject, body, from_address FROM email_message WHERE id = ANY(%s)",
+            "SELECT id, tournament_id, subject, body, from_address, classification "
+            "FROM email_message WHERE id = ANY(%s)",
             (body.email_ids,),
         )
         for em in cur.fetchall():
@@ -570,13 +603,16 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                             "detected_usta": None, "detected_player_name": None,
                             "match_kind": None})
                 continue
-            d = _detect_player_for(cur, em["tournament_id"], em["subject"],
-                                   _dec_body(em["body"]), em["from_address"])
+            d, partner = _detect_pair_for(cur, em["tournament_id"], em["subject"],
+                                          _dec_body(em["body"]), em["from_address"],
+                                          em["classification"])
             cur.execute(
-                "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s WHERE id = %s",
-                (d["detected_player_id"], d["match_kind"], em["id"]),
+                "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
+                "detected_partner_id = %s WHERE id = %s",
+                (d["detected_player_id"], d["match_kind"],
+                 partner["detected_partner_id"], em["id"]),
             )
-            out.append({"email_id": em["id"], **d})
+            out.append({"email_id": em["id"], **d, **partner})
     return out
 
 

@@ -3749,23 +3749,32 @@ const inboxGrid = makeReadGrid("inbox-table", [
               detected_usta: det.detected_usta,
               detected_player_name: det.detected_player_name,
               detected_match_kind: det.match_kind,
+              detected_partner_id: det.detected_partner_id,
+              detected_partner_name: det.detected_partner_name,
             });
             row.reformat();
-            toast(det.detected_player_name ? `Detected: ${det.detected_player_name}` : "No player match", !!det.detected_player_name);
+            const who = det.detected_player_name
+              ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+              : null;
+            toast(who ? `Detected: ${who}` : "No player match", !!who);
           } catch (e) { toast(e.message, false); }
         });
         wrap.appendChild(btn);
         return wrap;
       }
       // A matched player's name is a 360 link (open the full player view).
-      const nm = m.detected_player_id
-        ? `<span class="p360-link" data-pid="${m.detected_player_id}" role="button" tabindex="0" title="View everything about this player (360)">${esc(m.detected_player_name)}</span>`
-        : esc(m.detected_player_name);
+      const link = (pid, name) => pid
+        ? `<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${esc(name)}</span>`
+        : esc(name);
+      let nm = link(m.detected_player_id, m.detected_player_name);
+      // Doubles name TWO players — show the detected partner alongside.
+      if (m.detected_partner_name) nm += " + " + link(m.detected_partner_id, m.detected_partner_name);
       return nm + matchHint(m.detected_match_kind);
     },
     headerFilter: "input",
     headerFilterFunc: (term, _v, e) =>
-      ((e.detected_player_name || "") + " " + (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
+      ((e.detected_player_name || "") + " " + (e.detected_partner_name || "") + " " +
+       (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
   // USTA # — the matched player's number when a player is detected, otherwise the
   // number parsed straight from the email text (PDF import etc.). The ✉ glyph
   // marks an email-only number (no roster player matched yet), so the TD can add
@@ -3815,10 +3824,15 @@ const inboxGrid = makeReadGrid("inbox-table", [
             detected_usta: det.detected_usta,
             detected_player_name: det.detected_player_name,
             detected_match_kind: det.match_kind,
+            detected_partner_id: det.detected_partner_id,
+            detected_partner_name: det.detected_partner_name,
           });
           row.reformat();
           const clsLabel = (EMAIL_CLASS_META[res.classification] || {}).label || res.classification;
-          const who = det.detected_player_name ? ` · player: ${det.detected_player_name}` : " · no player match";
+          const who = det.detected_player_name
+            ? ` · player: ${det.detected_player_name}` +
+              (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+            : " · no player match";
           toast(`Suggested: ${clsLabel}${who}`, true);
         } catch (e) { toast(e.message, false); }
       };
@@ -3856,6 +3870,13 @@ const inboxGrid = makeReadGrid("inbox-table", [
           // select to blank when the combo's text input is still empty. Filling
           // the display now means the input is non-empty by the time that fires.
           if (typeof t.form.player_ref._comboSync === "function") t.form.player_ref._comboSync();
+        }
+        // Doubles names TWO players — carry the detected partner into the
+        // partner picker the same way (still editable before saving).
+        if (m.classification === "doubles" && t.form.partner_ref && m.detected_partner_id
+            && playersById[m.detected_partner_id]) {
+          t.form.partner_ref.value = String(m.detected_partner_id);
+          if (typeof t.form.partner_ref._comboSync === "function") t.form.partner_ref._comboSync();
         }
         // Carry the auto-detected withdrawal reason into the form so the TD
         // doesn't retype it (still editable before saving).

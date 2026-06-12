@@ -48,6 +48,10 @@ class EmailOut(BaseModel):
     # Why the player was matched (usta / fullname_subject / withdraw_template /
     # … / manual) — drives the confidence hint in the inbox Player column.
     detected_match_kind: Optional[str] = None
+    # Doubles: the detected PARTNER (second player named in the email). NULL for
+    # every other classification.
+    detected_partner_id: Optional[int] = None
+    detected_partner_name: Optional[str] = None
     # Name of the tournament this email is filed under (LEFT JOIN; null when
     # the email hasn't been assigned to a tournament yet).
     tournament_name: Optional[str] = None
@@ -109,6 +113,10 @@ class EmailDetectResult(BaseModel):
     detected_usta: Optional[str] = None
     detected_player_name: Optional[str] = None
     match_kind: Optional[str] = None  # 'usta' / 'fullname' / 'lastname' / None
+    # Doubles only: the second player named in the email (partner slot).
+    detected_partner_id: Optional[int] = None
+    detected_partner_name: Optional[str] = None
+    partner_match_kind: Optional[str] = None
 
 
 # ---------- Late entry ----------
