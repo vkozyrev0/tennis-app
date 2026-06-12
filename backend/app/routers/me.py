@@ -6,7 +6,7 @@ from ..db import db_dep
 from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
 from ..security import get_current_user
-from .assignments import _ASG_SELECT, _summary, pay_summary
+from .assignments import _ASG_SELECT, _audit, _summary, pay_summary
 
 # Belt-and-suspenders: every endpoint also takes `Depends(get_current_user)` to
 # get `user`, but mounting the dep on the router means nothing here can ever be
@@ -131,6 +131,7 @@ def respond_to_assignment(assignment_id: int, body: AssignmentResponse,
             "WHERE id = %s",
             (body.status, body.status, assignment_id),
         )
+        _audit(cur, assignment_id, "response", {"status": body.status}, user["username"])
         cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
         return _summary(cur, cur.fetchone())
 

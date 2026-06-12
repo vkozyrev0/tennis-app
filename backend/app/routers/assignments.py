@@ -27,6 +27,7 @@ from ..assignment_calc import (  # noqa: F401  (RULE_VERSION used by writers)
 )
 from ..bulk_ops import savepoint
 from ..db import db_dep
+from ..security import require_admin
 from ..models import (
     AssignmentBulkCreate,
     AssignmentCreate,
@@ -474,8 +475,36 @@ def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
             "hotel_mismatch": hotel_mismatch}
 
 
+def _audit(cur, assignment_id, action, detail, username):
+    """Append-only WHO/WHEN/WHAT trail (P4-5). Identity is denormalized so the
+    trail survives the assignment being deleted (FK goes NULL)."""
+    cur.execute(
+        "INSERT INTO assignment_audit "
+        "  (assignment_id, tournament_id, official_id, official_name, changed_by, action, detail) "
+        "SELECT a.id, a.tournament_id, a.official_id, "
+        "       o.last_name || ', ' || o.first_name, %s, %s, %s::jsonb "
+        "FROM assignment a JOIN official o ON o.id = a.official_id WHERE a.id = %s",
+        (username, action, json.dumps(detail) if detail else None, assignment_id),
+    )
+
+
+@router.get("/api/assignments/{assignment_id}/audit")
+def assignment_audit_trail(assignment_id: int, conn=Depends(db_dep)):
+    """The change history for one assignment, newest first. (Rows for DELETED
+    assignments keep their denormalized identity and remain queryable by
+    tournament_id directly in the table.)"""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, changed_at, changed_by, action, detail "
+            "FROM assignment_audit WHERE assignment_id = %s ORDER BY changed_at DESC, id DESC",
+            (assignment_id,),
+        )
+        return cur.fetchall()
+
+
 @router.post("/api/tournaments/{tournament_id}/assignments", status_code=201)
-def create_assignment(tournament_id: int, body: AssignmentCreate, conn=Depends(db_dep)):
+def create_assignment(tournament_id: int, body: AssignmentCreate,
+                      user=Depends(require_admin), conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             _check_room_capacity(cur, body.room_block_id)
@@ -487,6 +516,9 @@ def create_assignment(tournament_id: int, body: AssignmentCreate, conn=Depends(d
                 (tournament_id, body.official_id, body.site_id, body.room_block_id),
             )
             new_id = cur.fetchone()["id"]
+            _audit(cur, new_id, "created",
+                   {"site_id": body.site_id, "room_block_id": body.room_block_id},
+                   user["username"])
             return _persist_snapshot(cur, new_id)
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="official already assigned to this tournament")
@@ -496,7 +528,7 @@ def create_assignment(tournament_id: int, body: AssignmentCreate, conn=Depends(d
 
 @router.post("/api/tournaments/{tournament_id}/assignments/bulk", status_code=201)
 def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
-                            conn=Depends(db_dep)):
+                            user=Depends(require_admin), conn=Depends(db_dep)):
     """Invite several officials at once — one pending assignment each. Officials
     already on this tournament are skipped (not an error), so the TD can re-run
     the action as the pool grows. Returns the created assignments plus the
@@ -544,7 +576,9 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
                         "VALUES (%s, %s, %s, %s) RETURNING id",
                         (tournament_id, oid, body.site_id, body.room_block_id),
                     )
-                    created.append(_persist_snapshot(cur, cur.fetchone()["id"]))
+                    _bid = cur.fetchone()["id"]
+                    _audit(cur, _bid, "created", {"via": "bulk-invite"}, user["username"])
+                    created.append(_persist_snapshot(cur, _bid))
             except psycopg.errors.UniqueViolation:
                 skipped_existing.append(oid)
     return {
@@ -643,7 +677,8 @@ def tournament_invite_texts(tournament_id: int, conn=Depends(db_dep)):
 
 
 @router.put("/api/assignments/{assignment_id}")
-def update_assignment(assignment_id: int, body: AssignmentCreate, conn=Depends(db_dep)):
+def update_assignment(assignment_id: int, body: AssignmentCreate,
+                      user=Depends(require_admin), conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             _check_room_capacity(cur, body.room_block_id, exclude_id=assignment_id)
@@ -654,6 +689,9 @@ def update_assignment(assignment_id: int, body: AssignmentCreate, conn=Depends(d
             )
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="assignment not found")
+            _audit(cur, assignment_id, "updated",
+                   {"official_id": body.official_id, "site_id": body.site_id,
+                    "room_block_id": body.room_block_id}, user["username"])
             return _persist_snapshot(cur, assignment_id)
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="official already assigned to this tournament")
@@ -662,8 +700,9 @@ def update_assignment(assignment_id: int, body: AssignmentCreate, conn=Depends(d
 
 
 @router.delete("/api/assignments/{assignment_id}", status_code=204)
-def delete_assignment(assignment_id: int, conn=Depends(db_dep)):
+def delete_assignment(assignment_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
+        _audit(cur, assignment_id, "deleted", None, user["username"])
         cur.execute("DELETE FROM assignment WHERE id = %s", (assignment_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="assignment not found")
@@ -698,42 +737,52 @@ def _insert_day(cur, assignment_id: int, official_id: int, work_date, working_as
 
 
 @router.post("/api/assignments/{assignment_id}/days", status_code=201)
-def add_day(assignment_id: int, body: AssignmentDayCreate, conn=Depends(db_dep)):
+def add_day(assignment_id: int, body: AssignmentDayCreate,
+            user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute("SELECT official_id FROM assignment WHERE id = %s", (assignment_id,))
         asg = cur.fetchone()
         if asg is None:
             raise HTTPException(status_code=404, detail="assignment not found")
         _insert_day(cur, assignment_id, asg["official_id"], body.work_date, body.working_as)
+        _audit(cur, assignment_id, "day_added",
+               {"work_date": str(body.work_date), "working_as": body.working_as},
+               user["username"])
         return _persist_snapshot(cur, assignment_id)
 
 
 @router.put("/api/assignment-days/{day_id}/status")
-def set_day_status(day_id: int, body: AssignmentDayStatus, conn=Depends(db_dep)):
+def set_day_status(day_id: int, body: AssignmentDayStatus,
+                   user=Depends(require_admin), conn=Depends(db_dep)):
     """Day-of truth (P4-1): record what actually happened on one worked day.
     no_show days drop out of pay, so the snapshot is refrozen; the response is
     the fresh assignment summary the card re-renders from."""
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE assignment_day SET actual_status = %s WHERE id = %s "
-            "RETURNING assignment_id",
+            "RETURNING assignment_id, work_date",
             (body.actual_status, day_id),
         )
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="assignment day not found")
+        _audit(cur, row["assignment_id"], "day_status",
+               {"work_date": str(row["work_date"]), "actual_status": body.actual_status},
+               user["username"])
         return _persist_snapshot(cur, row["assignment_id"])
 
 
 @router.delete("/api/assignment-days/{day_id}", status_code=204)
-def delete_day(day_id: int, conn=Depends(db_dep)):
+def delete_day(day_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
-        cur.execute("SELECT assignment_id FROM assignment_day WHERE id = %s", (day_id,))
+        cur.execute("SELECT assignment_id, work_date FROM assignment_day WHERE id = %s", (day_id,))
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="assignment day not found")
         assignment_id = row["assignment_id"]
         cur.execute("DELETE FROM assignment_day WHERE id = %s", (day_id,))
+        _audit(cur, assignment_id, "day_removed",
+               {"work_date": str(row["work_date"])}, user["username"])
         _persist_snapshot(cur, assignment_id)
     return Response(status_code=204)
 
@@ -788,7 +837,8 @@ def coverage_candidates(tournament_id: int, role: str, date: str, conn=Depends(d
 
 
 @router.post("/api/tournaments/{tournament_id}/coverage-fill", status_code=201)
-def coverage_fill(tournament_id: int, body: CoverageFillCreate, conn=Depends(db_dep)):
+def coverage_fill(tournament_id: int, body: CoverageFillCreate,
+                  user=Depends(require_admin), conn=Depends(db_dep)):
     """Fill a coverage gap in one click: ensure the official has an assignment on
     this tournament (create a pending one if needed), then add the (date, role)
     day. Reuses the cert guard + pay snapshot. 409 if they already work that day."""
@@ -807,7 +857,11 @@ def coverage_fill(tournament_id: int, body: CoverageFillCreate, conn=Depends(db_
                     (tournament_id, body.official_id),
                 )
                 aid = cur.fetchone()["id"]
+                _audit(cur, aid, "created", {"via": "coverage-fill"}, user["username"])
             _insert_day(cur, aid, body.official_id, body.work_date, body.working_as)
+            _audit(cur, aid, "day_added",
+                   {"work_date": str(body.work_date), "working_as": body.working_as,
+                    "via": "coverage-fill"}, user["username"])
             return _persist_snapshot(cur, aid)
     except psycopg.errors.ForeignKeyViolation:
         raise HTTPException(status_code=400, detail="tournament_id or official_id invalid")
