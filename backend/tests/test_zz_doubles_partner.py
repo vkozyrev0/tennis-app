@@ -204,3 +204,17 @@ def test_doubles_mixed_one_matched_one_text_only(duo):
     rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
     row = next(r for r in rows if r["id"] == em["id"])
     assert "2188800003" in (row["detected_usta_text"] or "")
+
+
+def test_first_mentioned_number_is_primary(duo):
+    """The TD's real format: '<usta> <name>' twice — the FIRST-mentioned pair is
+    the requester (primary), the second is the partner; roster iteration order
+    must not decide."""
+    t, (p1, p2) = duo
+    # mention p2 FIRST (number-before-name, unlabeled) -> p2 must be primary
+    em = _email(t, f"{p2['usta_number']} {p2['first_name']} {p2['last_name']} "
+                   f"requests doubles with {p1['usta_number']} "
+                   f"{p1['first_name']} {p1['last_name']}")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p2["id"]
+    assert det["detected_partner_id"] == p1["id"]

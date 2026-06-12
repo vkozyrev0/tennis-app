@@ -11,8 +11,7 @@ from ..db import db_dep
 # here both for use and for back-compat re-export (importer.py + tests
 # import them from this module).
 from ..email_extract import (
-    _USTA_LABELED_RE,  # shared with the roster detector below (L1: USTA-# match)
-    _USTA_RE,
+    usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
     extract_avoid_day,
     extract_avoid_time,
@@ -467,13 +466,15 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
         return f"{f} {l}" in hay_low or f"{l}, {f}" in hay_low
 
     # L1 — explicit USTA # anywhere in the email matched to a roster player.
-    # Candidates: labeled numbers (8-11 digits — "USTA 21274891") AND bare
-    # 9-11 digit runs; emails may carry a number for one player, both, or none.
-    ustas = set(_USTA_RE.findall(text)) | {m.group(1) for m in _USTA_LABELED_RE.finditer(text)}
+    # Candidates (labeled / number-before-name / bare runs) come back in ORDER
+    # OF APPEARANCE — for doubles the email lists the requester FIRST, so the
+    # first matching number decides the primary (not roster iteration order).
+    ustas = usta_candidates(subject, f"{body}\n{from_address}")
     if ustas:
-        for r in roster:
-            if r["usta_number"] and r["usta_number"] in ustas:
-                return ret(r, "usta")
+        by_usta = {r["usta_number"]: r for r in roster if r["usta_number"]}
+        for num in ustas:
+            if num in by_usta:
+                return ret(by_usta[num], "usta")
 
     # L2 — full name in the SUBJECT (subjects are deliberate → high precision).
     for r in roster:
@@ -533,7 +534,7 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             "SELECT id, usta_number, "
             "TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name "
             "FROM player WHERE usta_number = ANY(%s)",
-            (list(ustas),),
+            (ustas,),
         )
         offs = [r for r in cur.fetchall() if r["id"] not in exclude_ids]
         if len(offs) == 1:

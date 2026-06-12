@@ -86,3 +86,19 @@ def test_extract_ustas_multiple_numbers():
     # capped — a wall of digits is noise
     assert len(extract_ustas("", " ".join(str(2104387100 + i) for i in range(9)))) == 3
     assert extract_ustas("", "no numbers") == []
+
+
+def test_usta_number_before_name_pattern():
+    """The TD's real-world format: USTA # immediately BEFORE the player's name
+    (subject or body) — unlabeled 8-digit numbers qualify via the adjacency."""
+    from app.email_extract import extract_ustas, usta_candidates
+    # two unlabeled 8-digit numbers, each before a name (the doubles shape)
+    assert extract_ustas("Doubles request",
+                         "21043871 Ethan Carter with 21059234 Liam Anderson") == [
+        "21043871", "21059234"]
+    # subject works too, and order of appearance is preserved across both
+    assert usta_candidates("21059234 Liam Anderson doubles",
+                           "partnering 21043871 Ethan Carter") == [
+        "21059234", "21043871"]
+    # a bare 8-digit run with NO adjacent name does not qualify
+    assert extract_ustas("", "ref 20260609 says hello") == []

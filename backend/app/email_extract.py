@@ -8,6 +8,12 @@ The DB-coupled player DETECTOR (_detect_player_for) stays in the router.
 import re
 
 _USTA_RE = re.compile(r"\b(\d{9,11})\b")
+# Real-world structure (per the TD): the USTA # usually comes right BEFORE the
+# player's name — "21043871 Ethan Carter" — in the subject or body. A digit run
+# immediately followed by a capitalized First Last is a high-confidence USTA #
+# even when unlabeled and only 8 digits.
+_USTA_NAME_RE = re.compile(
+    r"\b(\d{8,11})\b\s*[-–:,]?\s+([A-Z][\w'\-]+\s+[A-Z][\w'\-]+)")
 # A USTA # explicitly labeled in the text ("USTA #: 1234567890", "membership
 # number 1234567890"). Higher confidence than a bare run of digits, so it wins.
 _USTA_LABELED_RE = re.compile(
@@ -30,22 +36,32 @@ def extract_usta(subject: str | None, body: str | None) -> str | None:
     return next(iter(nums)) if len(nums) == 1 else None
 
 
-def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
-    """ALL plausible USTA #s, for the classifications that name several players
-    (doubles / pairing avoidance) — emails may carry a number for one player,
-    both, or neither. Labeled numbers first (highest confidence), then bare
-    9–11 digit runs in order of appearance, deduped, capped at `limit` (a wall
-    of digits is noise, not a roster). Phone numbers usually survive as
-    formatted strings (dots/dashes/spaces), so a bare run is a fair signal."""
+def usta_candidates(subject: str | None, body: str | None) -> list[str]:
+    """Plausible USTA #s in ORDER OF APPEARANCE (the email's order is the
+    players' order — for doubles the requester usually comes first). A number
+    qualifies if it is (a) labeled ("USTA # 21043871", 8–11 digits),
+    (b) immediately followed by a capitalized name ("21043871 Ethan Carter" —
+    the TD's real-world format), or (c) a bare 9–11 digit run. Phone numbers
+    usually survive as formatted strings (dots/dashes), so bare runs are a
+    fair signal; bare EIGHT-digit runs only count with an adjacent name."""
     text = f"{subject or ''}\n{body or ''}"
+    hits: list[tuple[int, str]] = []
+    for rx in (_USTA_LABELED_RE, _USTA_NAME_RE, _USTA_RE):
+        for m in rx.finditer(text):
+            hits.append((m.start(1), m.group(1)))
     out: list[str] = []
-    for m in _USTA_LABELED_RE.finditer(text):
-        if m.group(1) not in out:
-            out.append(m.group(1))
-    for n in _USTA_RE.findall(text):
+    for _pos, n in sorted(hits):
         if n not in out:
             out.append(n)
-    return out[:limit]
+    return out
+
+
+def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
+    """ALL plausible USTA #s for the multi-player classifications (doubles /
+    pairing avoidance) — emails may carry a number for one player, both, or
+    neither. Position-ordered (see usta_candidates), deduped, capped at
+    `limit` (a wall of digits is noise, not a roster)."""
+    return usta_candidates(subject, body)[:limit]
 
 
 # Withdrawal-reason extraction, ranked most→least reliable based on the real
