@@ -202,6 +202,18 @@ def main():
             cur.execute("INSERT INTO assignment_day (assignment_id,work_date,working_as,rate_applied) "
                         "VALUES (%s,%s,'chair_umpire',%s)", (a_carr2, T2_DAYS[0], rate["chair_umpire"]))
 
+            # ---- day-of incident log (P4-3): one resolved, one open --------
+            cur.execute(
+                "INSERT INTO tournament_incident "
+                "  (tournament_id, site_id, occurred_at, category, severity, description, "
+                "   resolved, resolution) VALUES "
+                "  (%s, %s, %s + interval '11 hours', 'weather', 'minor', "
+                "   'Rain delay — courts 1-3 suspended at 11:05.', true, "
+                "   'Courts dried; play resumed 12:40, schedule pushed 95 min.'), "
+                "  (%s, %s, %s + interval '15 hours', 'facility', 'info', "
+                "   'Water cooler at court 5 empty — ops notified.', false, NULL)",
+                (t1, jds, T1_DAYS[0], t1, jds, T1_DAYS[0]))
+
             # ---- inbox: unfiled parent emails (some days old) --------------
             def email(subject, sender, body, days_ago, classification=None, usta=None,
                       partner_usta=None, member_ustas=None):

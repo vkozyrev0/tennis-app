@@ -1,9 +1,9 @@
 """Tournament-workspace operations: roster, assignment, certification,
 availability, t-shirt order (audit A50)."""
-from datetime import date
+from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from ._models_common import CertType, Gender, SelectionStatus
 
@@ -85,6 +85,28 @@ class AssignmentBulkCreate(BaseModel):
 class AssignmentDayCreate(BaseModel):
     work_date: date
     working_as: CertType
+
+
+class IncidentCreate(BaseModel):
+    """Day-of incident quick-log (P4-3)."""
+    site_id: Optional[int] = None
+    occurred_at: Optional[datetime] = None     # default: now
+    category: Literal["weather", "injury", "dispute", "facility", "conduct", "other"]
+    severity: Literal["info", "minor", "major"] = "info"
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class IncidentUpdate(IncidentCreate):
+    resolved: bool = False
+    resolution: Optional[str] = Field(default=None, max_length=2000)
+
+
+class IncidentOut(IncidentUpdate):
+    id: int
+    tournament_id: int
+    site_label: Optional[str] = None
+    occurred_at: datetime
+    created_at: datetime
 
 
 class AssignmentDayStatus(BaseModel):

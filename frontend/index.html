@@ -153,6 +153,7 @@
       <button class="tab needs-active" data-target="panel-t-assignments">Assignments</button>
       <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
       <button class="tab needs-active" data-target="panel-t-staff">Staff</button>
+      <button class="tab needs-active" data-target="panel-t-incidents">Incidents</button>
       <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
     </div>
     <!-- Inbox promoted to its own top-level group: it's the cross-tournament
@@ -718,6 +719,41 @@
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="staff-msg"></span></div>
         </form>
         <table id="staff-table" class="list-table"><thead><tr><th>Name</th><th>Role</th><th>Days</th><th>Rate/day</th><th>Phone</th><th>Notes</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: Incidents (P4-3 day-of log) -->
+    <section class="panel tpanel" id="panel-t-incidents">
+      <div class="needs-active-note">Select a tournament in the bar above to log incidents.</div>
+      <div class="t-content card">
+        <h3>Incidents — <span class="t-name"></span> <span class="h3-subtitle">(day-of log: weather, injuries, disputes — quick one-liners, resolve later)</span></h3>
+        <form id="incident-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label>Category
+              <select name="category" required>
+                <option value="weather">Weather</option>
+                <option value="injury">Injury</option>
+                <option value="dispute">Dispute</option>
+                <option value="facility">Facility</option>
+                <option value="conduct">Conduct</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>Severity
+              <select name="severity">
+                <option value="info">Info</option>
+                <option value="minor">Minor</option>
+                <option value="major">Major</option>
+              </select>
+            </label>
+            <label>Site <select name="site_id" id="inc-site"><option value="">—</option></select></label>
+          </div>
+          <div class="row">
+            <label style="flex:3 1 280px">What happened <input name="description" required maxlength="2000" placeholder="e.g. Rain delay courts 1–3, play suspended 13:05" /></label>
+          </div>
+          <div class="actions-row"><button type="submit">Log incident</button><button type="button" class="cancel">Cancel</button><span class="msg" id="incident-msg"></span></div>
+        </form>
+        <table id="incidents-table" class="list-table"><thead><tr><th>When</th><th>Category</th><th>Sev</th><th>Site</th><th>What happened</th><th>Resolution</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </section>
 
@@ -1329,6 +1365,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=143"></script>
+  <script type="module" src="/app.js?v=144"></script>
 </body>
 </html>
