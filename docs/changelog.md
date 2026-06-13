@@ -1,7 +1,11 @@
-# CourtOps Tennis — UI/UX & polish changelog
+# CourtOps Tennis — changelog
 
-Detailed, per-pass record of the UI/UX and polish work. The high-level plan
-and status live in [roadmap.md](roadmap.md); this file is the granular log.
+The chronological log of shipped work — features, refactors, hardening, and
+UI/UX polish. The high-level plan and status live in [roadmap.md](roadmap.md);
+this is the granular record (per-commit detail beyond it lives in git).
+
+Newest first. Recent days are grouped by theme; earlier rounds are kept as
+dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
