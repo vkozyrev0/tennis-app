@@ -5,6 +5,18 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## app.js decomposition slice (d) — player_list.js (P2 #11d, 2026-06-13)
+The last app.js decomposition slice. `app/player_list.js`
+(`createPlayerList(ctx)` returning `wirePlayerList`) holds the generic
+player-keyed Part B list factory shared by the scheduling-avoidance,
+division-flex, and player-hotel lists (form + Tabulator table + delete +
+in-grid edit + file-from-email + CSV). Unlike grids.js (created at module top),
+it's created at the point of use — after `active`, `expandPlayerRef`, and
+`loadInbox` exist — so `active` is read through an injected `getActive()` rather
+than captured early. Body moved unchanged otherwise. Verified live on local
+uvicorn: all three lists build, load, and render an inserted row; no console
+errors.
+
 ## Broaden html`` adoption + local-uvicorn verification (2026-06-13)
 Follow-on to the P2 #12 helper. Adopted the workflow switch to **local uvicorn
 preview** (per the saved preference — no app-image rebuilds): verified this

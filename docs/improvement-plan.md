@@ -115,7 +115,12 @@ adult_lists) one endpoint at a time.
     an "active-changed" event and the reaction cascade (close detail, reset
     workspace forms, transition toast) is declared in one subscriber. Verified
     live: login / logout / session-restore / change-pw / active-switch.
-    wirePlayerList (Part-B-coupled) rides a later slice.
+    ✅ **slice (d) SHIPPED** (2026-06-13): `app/player_list.js`
+    (`createPlayerList(ctx)` → `wirePlayerList`) holds the generic player-keyed
+    Part B list factory (scheduling-avoidance / division-flex / player-hotels).
+    Created at the point of use (after `active`/expandPlayerRef/loadInbox exist),
+    so `active` is read via an injected `getActive()`. Verified live on local
+    uvicorn: all three lists build + load + render an inserted row.
 
 12. ✅ **SHIPPED (2026-06-13) — Render-template helper.** `app/html.js`: a
     tiny auto-escaping tagged-template `html` (no framework) + `raw()` for
