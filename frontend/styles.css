@@ -926,19 +926,6 @@ details.addbox > form { padding: 0.7rem 0.8rem; }
   0% { background: color-mix(in srgb, var(--accent) 22%, transparent); }
   100% { background: transparent; }
 }
-.import-row {
-  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
-  margin-bottom: 0.7rem; padding-bottom: 0.7rem; border-bottom: 1px dashed var(--border);
-  font-size: 0.82rem;
-}
-.import-row button {
-  padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
-  border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
-}
-.import-row button.ghost {
-  background: transparent; color: var(--link); border: 1px solid var(--border);
-}
-.import-row button.ghost:hover { background: var(--bg); border-color: var(--accent); }
 .t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
 .tshirt-summary { margin: 0.5rem 0 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
 .btn-link.add { color: var(--muted); }

@@ -16,16 +16,6 @@ def list_rates(conn=Depends(db_dep)):
         return cur.fetchall()
 
 
-@router.get("/{rate_id}", response_model=CertificationRateOut)
-def get_rate(rate_id: int, conn=Depends(db_dep)):
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM certification_rate WHERE id = %s", (rate_id,))
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="rate not found")
-    return row
-
-
 @router.post("", response_model=CertificationRateOut, status_code=201)
 def create_rate(body: CertificationRateCreate, conn=Depends(db_dep)):
     try:

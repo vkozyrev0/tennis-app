@@ -158,14 +158,6 @@ class MyAvailabilitySet(BaseModel):
     hotel_needed: bool = False
 
 
-class AvailabilityOut(BaseModel):
-    id: int
-    official_id: int
-    tournament_id: int
-    available_date: date
-    hotel_needed: bool = False
-
-
 class AvailabilitySet(BaseModel):
     official_id: int
     dates: list[date] = []

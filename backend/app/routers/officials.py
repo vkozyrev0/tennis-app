@@ -112,16 +112,6 @@ def official_schedule_ics(official_id: int, conn=Depends(db_dep)):
                     headers={"Content-Disposition":
                              f'attachment; filename="schedule-{row["last_name"]}.ics"'})
 
-@router.get("/{official_id}", response_model=OfficialOut)
-def get_official(official_id: int, conn=Depends(db_dep)):
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM official WHERE id = %s", (official_id,))
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="official not found")
-    return row
-
-
 @router.post("", response_model=OfficialOut, status_code=201)
 def create_official(body: OfficialCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:

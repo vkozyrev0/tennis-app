@@ -5,6 +5,29 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Mobile reports fix + dead-code removal (2026-06-13)
+Two small, audited cleanups.
+
+- **Mobile/day-of responsiveness.** At a 375px phone viewport the day-of
+  grids (roster check-in, incidents, assignments) already scroll inside
+  `.tbl-scroll`, so they were fine. The one real horizontal overflow was the
+  **Reports** tab: `.report-toolbar` was a `nowrap` flex row (title +
+  report-type buttons + min-coverage control + Print/CSV) that forced the page
+  to ~731px. Added `flex-wrap: wrap` so the controls reflow on narrow screens
+  while staying single-line on desktop (wrap only triggers when needed).
+  Verified overflow 356 → 0 at 375px.
+- **Dead-code removal** (from parallel backend + frontend audits, high-confidence
+  only): 3 unreachable single-resource GET routes (`GET /hotels/{id}`,
+  `/officials/{id}`, `/rates/{id}` — the UI works off the list endpoints and no
+  test hit them); 3 unused response models (`AvailabilityOut`,
+  `DoublesRequestOut`, `DoublesPairOut`) and their `models.py` re-exports; the
+  dead `deferredSetData` duplicate in app.js (makeListGrid has its own inline
+  build-gate) plus 3 unused `_`-aliased imports; the `.import-row`/`.ghost`
+  CSS; and 7 orphaned nav `<symbol>` defs in index.html (only `#i-brand` is
+  still `<use>`d). Full suite green (446/447; the one fail is the known
+  `test_zz_list_origin` name-collision flake, passes in isolation); frontend
+  reloads clean at app.js v=174.
+
 ## html`` adoption — complete sweep (2026-06-13)
 Finished the P2 #12 rollout: **every HTML *builder* in app.js now uses the
 auto-escaping `html`` / `hstr`` helpers** instead of hand `esc()` — grid cell

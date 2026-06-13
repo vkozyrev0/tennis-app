@@ -15,16 +15,6 @@ def list_hotels(conn=Depends(db_dep)):
         return cur.fetchall()
 
 
-@router.get("/{hotel_id}", response_model=HotelOut)
-def get_hotel(hotel_id: int, conn=Depends(db_dep)):
-    with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM hotel WHERE id = %s", (hotel_id,))
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="hotel not found")
-    return row
-
-
 @router.post("", response_model=HotelOut, status_code=201)
 def create_hotel(body: HotelCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:

@@ -237,33 +237,6 @@ class DoublesPairUpdate(BaseModel):
     age_division: Optional[str] = None
 
 
-class DoublesRequestOut(BaseModel):
-    id: int
-    tournament_id: int
-    age_division: Optional[str] = None
-    player_id: int
-    usta_number: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    partner_usta: Optional[str] = None
-    wants_random: bool
-    status: str
-    source_email_id: Optional[int] = None
-    source_subject: Optional[str] = None
-
-
-class DoublesPairOut(BaseModel):
-    id: int
-    tournament_id: int
-    age_division: Optional[str] = None
-    pairing_type: str
-    verified: bool
-    player1_id: int
-    player2_id: int
-    player1: Optional[str] = None
-    player2: Optional[str] = None
-
-
 # ---------- Pairing avoidance ----------
 class PairingMemberIn(BaseModel):
     usta_number: str

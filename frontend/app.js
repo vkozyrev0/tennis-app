@@ -2,14 +2,13 @@
 // as <script type="module">.
 import {
   esc, fmtDOW, fmtMDY as _fmtMDY, dowLong as _dowLong,
-  isoToUTCDate as _isoToUTCDate, fmtIsoUTC as _fmtIsoUTC,
   humanizeDetail as _humanizeDetail, csvDownload as _csvDownload,
 } from "./app/util.js";
 import {
   SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
   SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
 } from "./app/shirts.js";
-import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail, resolveFilePlayerId } from "./app/roster_prefill.js";
+import { rosterPrefillFromEmail, resolveFilePlayerId } from "./app/roster_prefill.js";
 import { createGridFactories } from "./app/grids.js";
 import { createAuth } from "./app/auth.js";
 import { createTournamentState } from "./app/state.js";
@@ -929,7 +928,7 @@ let CERTS = [
 ];
 let CERT_LABEL = Object.fromEntries(CERTS);
 const certLabel = (v) => CERT_LABEL[v] || v;
-// fmtDOW / _fmtIsoUTC / _isoToUTCDate now imported from ./app/util.js (A47).
+// fmtDOW now imported from ./app/util.js (A47).
 
 // Setup CRUDs each call refreshAllSelects from their onLoad — on first paint
 // that fires 5+ times in the same animation frame. Coalesce via rAF.
@@ -1472,26 +1471,6 @@ function _redrawPanelGrids(panelId) {
   const grids = GRIDS[panelId];
   if (!grids) return;
   requestAnimationFrame(() => grids.forEach((g) => { try { g.redraw(true); } catch (_) {} }));
-}
-// Audit M12: shared "deferred setData" pattern — Tabulator can't accept data
-// until `tableBuilt` fires; without this helper every grid factory carried
-// its own `built / pending` pair. Returns a function callers use in place of
-// table.setData() directly.
-function deferredSetData(table) {
-  const state = { built: false, pending: null };
-  const onBuilt = () => {
-    state.built = true;
-    if (state.pending !== null) { table.setData(state.pending); state.pending = null; }
-    _labelHeaderFilters(table);   // a11y #9
-  };
-  table.on("tableBuilt", onBuilt);
-  // Cover the case where Tabulator fires tableBuilt synchronously inside its
-  // constructor — our listener is registered AFTER `new Tabulator()` returns,
-  // so the sync-fire is missed and pending never flushes. Check the flag.
-  if (table.initialized) onBuilt();
-  const fn = (rows) => { if (state.built) table.setData(rows); else state.pending = rows; };
-  fn._state = state;  // makeListGrid uses .built directly to gate filter installs
-  return fn;
 }
 // Audit A48: an IntersectionObserver also catches *any* panel that becomes
 // visible (history sub-panels, modals revealing a grid, etc.) without each
