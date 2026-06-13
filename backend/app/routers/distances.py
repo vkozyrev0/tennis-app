@@ -2,7 +2,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..geocode import estimate_one_way_miles
+from ..geocode import road_one_way_miles
 from ..models import DistanceAuto, DistanceCreate, DistanceOut
 
 router = APIRouter(prefix="/api/distances", tags=["distances"])
@@ -12,12 +12,12 @@ _COLS = "id, official_id, site_id, one_way_miles, source"
 
 @router.post("/auto", response_model=DistanceOut, status_code=201)
 def auto_distance(body: DistanceAuto, conn=Depends(db_dep)):
-    """Estimate official↔site one-way miles from stored coordinates and upsert it
-    as a `geocoded` distance. This is a **great-circle estimate** (× a road
-    factor) — a key-free fallback until a routing API is configured (D3/U2) — so
-    the TD should review it before it drives reimbursement. Returns 422 when
-    either the official or the site has no coordinates on file (enter them, or
-    use manual distance entry). See app/geocode.py."""
+    """Compute official↔site one-way driving miles from stored coordinates and
+    upsert it. Uses the Google Distance Matrix API when GOOGLE_MAPS_API_KEY is
+    set (source `maps`, authoritative); otherwise a great-circle estimate × a
+    road factor (source `geocoded`, key-free fallback — review before it drives
+    reimbursement). Returns 422 when the official or site has no coordinates on
+    file (enter them, or use manual distance entry). See app/geocode.py."""
     with conn.cursor() as cur:
         cur.execute("SELECT lat, lng FROM official WHERE id = %s", (body.official_id,))
         o = cur.fetchone()
@@ -32,20 +32,21 @@ def auto_distance(body: DistanceAuto, conn=Depends(db_dep)):
                 status_code=422,
                 detail="official or site is missing coordinates — add them, or enter the distance manually",
             )
-        miles = estimate_one_way_miles(
+        miles, source = road_one_way_miles(
             float(o["lat"]), float(o["lng"]),
             float(s["lat"]), float(s["lng"]),
         )
-        # Upsert: re-estimating overwrites a prior value for the pair.
+        # Upsert: re-computing overwrites a prior value for the pair. source is
+        # 'maps' (API) or 'geocoded' (estimate) per road_one_way_miles.
         cur.execute(
             f"""
             INSERT INTO official_site_distance (official_id, site_id, one_way_miles, source)
-            VALUES (%s, %s, %s, 'geocoded')
+            VALUES (%s, %s, %s, %s)
             ON CONFLICT (official_id, site_id)
-            DO UPDATE SET one_way_miles = EXCLUDED.one_way_miles, source = 'geocoded'
+            DO UPDATE SET one_way_miles = EXCLUDED.one_way_miles, source = EXCLUDED.source
             RETURNING {_COLS}
             """,
-            (body.official_id, body.site_id, miles),
+            (body.official_id, body.site_id, miles, source),
         )
         return cur.fetchone()
 

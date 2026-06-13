@@ -543,8 +543,11 @@ item-by-item record lives in [improvement-plan.md](improvement-plan.md).
   assigns players by roster dropdown or a typed USTA # right in the grid.
 
 ## Open work (as of 2026-06-12)
-- **Google Maps *driving* distance** (Phase 2) — needs API key + egress; the
-  great-circle estimate + manual entry + workbook backfill cover the gap.
+- **Google Maps *driving* distance** (Phase 2) — ⚙️ **scaffolded** (2026-06-13):
+  `road_one_way_miles()` calls the Distance Matrix API behind
+  `GOOGLE_MAPS_API_KEY` (source `maps`) and `/distances/auto` stamps it; still
+  **blocked on the key + egress + cost approval**, so the great-circle estimate
+  (source `geocoded`) + manual entry + workbook backfill remain the live path.
 - **Dedicated forwarding-address auto-ingest** (D4) — needs mail infra;
   manual paste into the review inbox is the working POC path.
 - **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM

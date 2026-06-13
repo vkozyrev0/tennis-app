@@ -188,7 +188,9 @@ class DistanceCreate(BaseModel):
     official_id: int
     site_id: int
     one_way_miles: float = Field(ge=0, le=1000)
-    source: Literal["geocoded", "manual"] = "manual"
+    # 'maps' = authoritative Google driving distance; 'geocoded' = great-circle
+    # estimate fallback; 'manual' = TD-entered. (migration 0047 added 'maps'.)
+    source: Literal["geocoded", "manual", "maps"] = "manual"
 
 
 class DistanceOut(DistanceCreate):

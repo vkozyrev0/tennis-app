@@ -5,6 +5,22 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Scaffold: Google Maps driving-distance, key-gated (D3/U2, 2026-06-13)
+Wires the real routing path behind `GOOGLE_MAPS_API_KEY` so it's ready when the
+key/egress land, without changing behavior today.
+
+- `geocode.road_one_way_miles()` → `(miles, source)`: when the key is set it
+  calls the Google **Distance Matrix** API (stdlib urllib, no new dep) for the
+  authoritative driving distance (`source='maps'`); unset — or any API
+  error/quota/timeout — degrades to the existing great-circle estimate
+  (`source='geocoded'`). Mileage feeds pay, so it never raises/blocks.
+- Migration 0047 adds `'maps'` to the `distance_source` enum; the model Literal
+  + `POST /distances/auto` now stamp the real source instead of hardcoding
+  `geocoded`.
+- 4 tests (monkeypatched, no network): no-key fallback, key→maps, API-error
+  degrade, and the `/auto` endpoint stamping `maps` end-to-end (exercises the
+  enum value). Existing key-free behavior unchanged. Suite **447** green.
+
 ## Bug hunt — login user-enumeration timing + detection ReDoS audit (2026-06-13)
 Two adversarial passes (auth/session, detection regexes).
 
