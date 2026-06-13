@@ -6039,17 +6039,13 @@ async function _renderSchedule() {
   try { d = await api(`/tournaments/${active.id}/schedule`); }
   catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
   if (!d.days.length) { box.innerHTML = '<p class="muted">No play-date window set.</p>'; return; }
-  box.innerHTML = d.days.map((day) => {
-    const head = `<div class="sched-day-head">${esc(fmtDOW(day.date))} ` +
-      `<span class="sched-count${day.count === 0 ? " sched-empty" : ""}">${day.count} working</span></div>`;
-    if (!day.count) return `<div class="sched-day">${head}<p class="sched-none">— no officials assigned —</p></div>`;
+  box.innerHTML = html`${d.days.map((day) => {
+    const head = html`<div class="sched-day-head">${fmtDOW(day.date)} <span class="sched-count${day.count === 0 ? " sched-empty" : ""}">${day.count} working</span></div>`;
+    if (!day.count) return html`<div class="sched-day">${head}<p class="sched-none">— no officials assigned —</p></div>`;
     const rows = day.entries.map((e) =>
-      `<tr><td>${esc(e.official_name)}</td><td>${esc(certLabel(e.working_as))}</td>` +
-      `<td>${esc(e.site_label || "—")}</td><td>${_respChip(e.response_status)}</td></tr>`).join("");
-    return `<div class="sched-day">${head}` +
-      `<table class="list-table sched-table"><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
-      `<tbody>${rows}</tbody></table></div>`;
-  }).join("");
+      html`<tr><td>${e.official_name}</td><td>${certLabel(e.working_as)}</td><td>${e.site_label || "—"}</td><td>${raw(_respChip(e.response_status))}</td></tr>`);
+    return html`<div class="sched-day">${head}<table class="list-table sched-table"><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  })}`;
 }
 
 // Dietary summary: assigned officials grouped by restriction (most common first),
@@ -6066,13 +6062,8 @@ async function _renderDietary() {
     return;
   }
   const rows = d.items.map((i) =>
-    `<tr><td><strong>${esc(i.restriction)}</strong></td><td class="num">${i.count}</td>` +
-    `<td>${esc(i.people.join("; "))}</td></tr>`).join("");
-  box.innerHTML =
-    `<p class="diet-sub">${d.with_restrictions} of ${d.total_people} staffed official(s) have a dietary restriction` +
-    `${d.none_count ? ` · ${d.none_count} none` : ""}.</p>` +
-    `<table class="list-table diet-table"><thead><tr><th>Restriction</th><th class="num">Count</th><th>Officials</th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>`;
+    html`<tr><td><strong>${i.restriction}</strong></td><td class="num">${i.count}</td><td>${i.people.join("; ")}</td></tr>`);
+  box.innerHTML = html`<p class="diet-sub">${d.with_restrictions} of ${d.total_people} staffed official(s) have a dietary restriction${d.none_count ? html` · ${d.none_count} none` : ""}.</p><table class="list-table diet-table"><thead><tr><th>Restriction</th><th class="num">Count</th><th>Officials</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // Missing distances: official↔site pairs with no mileage on file (mileage stays
@@ -6086,14 +6077,8 @@ async function _renderMissingDistances() {
   catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
   if (!d.count) { box.innerHTML = '<p class="muted">✓ Every assigned official has a distance to their site.</p>'; return; }
   const rows = d.items.map((i) =>
-    `<tr data-oid="${i.official_id}" data-sid="${i.site_id}"><td>${esc(i.official_name)}</td>` +
-    `<td>${esc(i.site_label || "—")}</td><td class="num">${i.days}</td>` +
-    `<td><input type="number" class="md-miles" min="0" step="0.1" placeholder="miles" style="width:6rem" /> ` +
-    `<button type="button" class="md-save btn-small">Save</button></td></tr>`).join("");
-  box.innerHTML =
-    `<p class="muted md-sub">${d.count} official↔site pair(s) need a one-way distance for mileage.</p>` +
-    `<table class="list-table md-table"><thead><tr><th>Official</th><th>Site</th><th class="num">Days</th><th>One-way miles</th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>`;
+    html`<tr data-oid="${i.official_id}" data-sid="${i.site_id}"><td>${i.official_name}</td><td>${i.site_label || "—"}</td><td class="num">${i.days}</td><td><input type="number" class="md-miles" min="0" step="0.1" placeholder="miles" style="width:6rem" /> <button type="button" class="md-save btn-small">Save</button></td></tr>`);
+  box.innerHTML = html`<p class="muted md-sub">${d.count} official↔site pair(s) need a one-way distance for mileage.</p><table class="list-table md-table"><thead><tr><th>Official</th><th>Site</th><th class="num">Days</th><th>One-way miles</th></tr></thead><tbody>${rows}</tbody></table>`;
   box.querySelectorAll(".md-save").forEach((btn) => btn.addEventListener("click", async () => {
     const tr = btn.closest("tr");
     const miles = parseFloat(tr.querySelector(".md-miles").value);
