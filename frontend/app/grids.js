@@ -68,6 +68,10 @@ export function createGridFactories(ctx) {
     const grid = new Tabulator(mount, {
       index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
       renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
+      // Persist the TD's chosen SORT across visits (per-table localStorage key).
+      // Sort only — filter persistence would fight grids that set load-time
+      // filter defaults (e.g. the inbox). Bump the v1 key if columns change.
+      persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId,
       columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: cols,
     });
     const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
@@ -97,6 +101,10 @@ export function createGridFactories(ctx) {
     const grid = new Tabulator(mount, {
       layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
       renderVertical: "basic",
+      // Persist the chosen SORT (sort only — see makeListGrid). Opt out with
+      // opts.persist === false (the inbox does, to keep its load-time filter
+      // behaviour predictable).
+      ...(opts.persist === false ? {} : { persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId }),
       columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
       ...(opts.index ? { index: opts.index } : {}),
       ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),

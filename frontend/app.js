@@ -4180,7 +4180,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click" });
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false });
 // Persist inline edits (single click a cell): classification, manual player /
 // partner picks (the list editor's value is a player id), and typed USTA #s
 // (resolved against the roster cache; unknown numbers revert with a toast).
