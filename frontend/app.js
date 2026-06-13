@@ -4040,7 +4040,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const doApplyCorrection = async () => {
         try {
           const res = await api(`/emails/${m.id}/apply-correction`, { method: "POST" });
-          toast(`Correction applied to the ${esc(res.list)} row`, true);
+          toast(`Correction applied to the ${res.list} row`, true);
           loadInbox();
         } catch (e) { toast(e.message, false); }
       };
