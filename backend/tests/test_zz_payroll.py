@@ -137,6 +137,32 @@ def test_payroll_lifecycle_lands_in_assignment_audit():
     assert "finalized" in actions and "paid" in actions
 
 
+def test_multiple_orphaned_records_all_survive_in_summary():
+    # Two officials finalized, then BOTH assignments deleted: each record's
+    # assignment_id goes NULL (FK SET NULL). UNIQUE permits many NULLs, so the
+    # summary must not collapse them onto one key — both must still show.
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "ORPH " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-02"}))
+    recs = []
+    for _ in range(2):
+        o = _ok(client.post("/api/officials", json={
+            "first_name": "Orph", "last_name": "R" + uuid.uuid4().hex[:6]}))
+        _ok(client.post(f"/api/officials/{o['id']}/certifications",
+                        json={"cert_type": "roving_official"}))
+        a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                            json={"official_id": o["id"]}))
+        _ok(client.post(f"/api/assignments/{a['id']}/days",
+                        json={"work_date": "2026-09-01", "working_as": "roving_official"}))
+        recs.append(_ok(client.post(f"/api/assignments/{a['id']}/finalize")))
+        assert client.delete(f"/api/assignments/{a['id']}").status_code == 204
+    rows = _ok(client.get(f"/api/tournaments/{t['id']}/payroll"), 200)
+    orphans = [r for r in rows if r.get("orphaned")]
+    assert len(orphans) == 2, rows                      # neither dropped
+    assert all(o["official_name"] for o in orphans)     # identity survived
+    assert {o["finalized"]["record_id"] for o in orphans} == {r["record_id"] for r in recs}
+
+
 def test_finalize_404s():
     assert client.post("/api/assignments/99999999/finalize").status_code == 404
     assert client.delete("/api/payroll/99999999").status_code == 404

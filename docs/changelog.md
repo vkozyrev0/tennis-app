@@ -5,6 +5,20 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Bug hunt — payroll summary dropped multiple orphaned records (2026-06-13)
+Review sweep over the day's new features (payroll, manual inbox assignment,
+auth/state extraction). One real defect found + fixed:
+
+- **Payroll summary collapsed orphaned records.** `payroll_summary` keyed every
+  record by `assignment_id` in a dict. When an assignment is deleted the FK goes
+  NULL (`SET NULL`), and Postgres `UNIQUE` permits many NULLs — so two-plus
+  finalized records whose assignments were later deleted all keyed on `None` and
+  every orphan but the last silently vanished from the summary (money owed/paid
+  to a real person, gone from the view). Now split into a by-assignment map + an
+  orphan list. Also denormalized `official_name` into `_REC_COLS` to drop the
+  per-orphan N+1 re-query. Regression test added (two deleted-assignment records
+  both survive). Suite **429** green.
+
 ## app.js decomposition slices (b)+(c) — auth.js + state.js (2026-06-13)
 Continues the P2 #11 decomposition (slice (a), grids.js, shipped 06-12).
 

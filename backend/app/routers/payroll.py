@@ -23,7 +23,7 @@ from .assignments import _ASG_SELECT, _audit, _summary
 router = APIRouter(tags=["payroll"])
 
 _REC_COLS = (
-    "r.id AS record_id, r.assignment_id, r.days_worked, r.no_show_days, "
+    "r.id AS record_id, r.assignment_id, r.official_name, r.days_worked, r.no_show_days, "
     "r.pay, r.mileage, r.total, r.rule_version, r.finalized_at, r.finalized_by, "
     "r.paid, r.paid_at, r.paid_method, r.paid_note"
 )
@@ -82,7 +82,16 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
         assignments = cur.fetchall()
         cur.execute(f"SELECT {_REC_COLS} FROM payroll_record r "
                     "WHERE r.tournament_id = %s", (tournament_id,))
-        by_assignment = {r["assignment_id"]: r for r in cur.fetchall()}
+        # A deleted assignment leaves its record with assignment_id NULL (FK SET
+        # NULL); UNIQUE permits many NULLs, so these CAN'T share a dict key —
+        # keep them in a list, not the by-assignment map (which would collapse
+        # every orphan onto the single None key and lose all but one).
+        by_assignment, orphaned = {}, []
+        for r in cur.fetchall():
+            if r["assignment_id"] is None:
+                orphaned.append(r)
+            else:
+                by_assignment[r["assignment_id"]] = r
         out = []
         for a in assignments:
             s = _summary(cur, a)
@@ -100,15 +109,14 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
                 # money moved since finalization — re-finalize or investigate
                 "drift": bool(fin) and fin["total"] != s["total"],
             })
-        # Records whose assignment was deleted (FK went NULL or id vanished):
-        # the money trail still owes/paid someone — keep them visible.
-        for rec in by_assignment.values():
-            cur.execute("SELECT official_name FROM payroll_record WHERE id = %s",
-                        (rec["record_id"],))
+        # Records whose assignment was deleted (FK NULL) — plus any defensive
+        # leftovers — still owe/paid someone, so keep them visible. official_name
+        # is denormalized on the record (no per-row re-query).
+        for rec in orphaned + list(by_assignment.values()):
             out.append({
                 "assignment_id": rec["assignment_id"],
                 "official_id": None,
-                "official_name": cur.fetchone()["official_name"],
+                "official_name": rec["official_name"],
                 "days_worked": rec["days_worked"], "no_show_days": rec["no_show_days"],
                 "pay": None, "mileage": None, "total": None,
                 "missing_distance": False,
