@@ -5,6 +5,25 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## app.js decomposition slices (b)+(c) — auth.js + state.js (2026-06-13)
+Continues the P2 #11 decomposition (slice (a), grids.js, shipped 06-12).
+
+- **`app/auth.js`** (`createAuth(ctx)`) — owns `applyAuth` (the login/admin/
+  official view toggle), the login / logout / change-password form wiring, and
+  the one-shot "session expired" listener. What to LOAD when the role resolves
+  (nav history, breadcrumbs, adminInit/officialInit, the admin-loaded latch)
+  stays app-specific and is injected via `onRoleResolved` / `onLogout` — the
+  same dependency-injection seam grids.js uses, so the bodies move unchanged.
+- **`app/state.js`** (`createTournamentState()`) — `active` stays a module
+  global in app.js (hundreds of guards read it), but the "active tournament
+  changed" CHANGE is now an event: `setActive` calls `emit({active, prev})` on
+  a real transition and the reaction cascade (close open detail, reset
+  workspace forms, transition toast) is declared in one `onChange` subscriber
+  instead of inline.
+- Verified live against the all-in-one image: form login, logout (server
+  session ends, /auth/me 401), session-restore on reload, change-password
+  modal, and clear/switch active-tournament toasts — no console errors.
+
 ## Inbox Player 1/2 cells — single-click edit + clear + add-to-roster (2026-06-13)
 UX round on the manual-assignment grid (built 2026-06-12).
 

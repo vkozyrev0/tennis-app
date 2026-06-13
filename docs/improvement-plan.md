@@ -106,11 +106,16 @@ adult_lists) one endpoint at a time.
     SHIPPED** (2026-06-12): `app/grids.js` holds wireEntity + makeListGrid +
     makeReadGrid + _autoHeaderFilters (~445 lines) behind a
     createGridFactories(ctx) seam — factory bodies moved unchanged; the
-    module boundary surfaced (and fixed) one hoisting dependency. Remaining
-    slices in value order: (b) `auth.js` (login/session/role-view), (c) an
-    explicit `state.js` event for "active tournament changed" so the cascade
-    of reloads is declared in one place; wirePlayerList (Part-B-coupled)
-    rides a later slice.
+    module boundary surfaced (and fixed) one hoisting dependency.
+    ✅ **slices (b)+(c) SHIPPED** (2026-06-13): `app/auth.js` holds `applyAuth`
+    + the login/logout/change-password forms + the one-shot session-expired
+    listener behind `createAuth(ctx)` (what-to-load on role change is injected
+    via onRoleResolved/onLogout, so nav-history + adminInit/officialInit stay
+    in app.js); `app/state.js` adds `createTournamentState()` — setActive emits
+    an "active-changed" event and the reaction cascade (close detail, reset
+    workspace forms, transition toast) is declared in one subscriber. Verified
+    live: login / logout / session-restore / change-pw / active-switch.
+    wirePlayerList (Part-B-coupled) rides a later slice.
 
 12. **Render-template helper for the big card builders** (M) — renderAssignment
     (~250 lines) and friends are string-concat + createElement mixes. A tiny

@@ -11,6 +11,8 @@ import {
 } from "./app/shirts.js";
 import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail, resolveFilePlayerId } from "./app/roster_prefill.js";
 import { createGridFactories } from "./app/grids.js";
+import { createAuth } from "./app/auth.js";
+import { createTournamentState } from "./app/state.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
@@ -1327,6 +1329,20 @@ requestAnimationFrame(sizeLists);
 let active = null;
 let lastSelectedTournamentId = null;
 const activeSelect = document.getElementById("active-tournament");
+// Active-tournament-changed event (P2 #11c). `active` stays a module-global
+// (read by hundreds of guards); this owns only the CHANGE event so the cascade
+// of reactions is declared in one subscriber list instead of inline.
+const _tstate = createTournamentState();
+// The one-place declaration of what reacts to an active-tournament CHANGE.
+// (updateActiveUI runs on every refresh; this runs only on a real transition.)
+_tstate.onChange(({ active: next, prev }) => {
+  // Switching mid-edit would leave a modal open against another tournament's
+  // data — close any open detail + reset workspace forms. Toast the transition.
+  closeOpenDetail();
+  document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
+  if (next) toast(`Switched to ${next.name}`, true);
+  else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
+});
 
 function fillActiveSelect(rows) {
   const cur = activeSelect.value;
@@ -1356,16 +1372,10 @@ function setActive(id) {
   else localStorage.removeItem("activeTid");
   syncCombos();
   updateActiveUI();
-  // Switching the active tournament mid-edit would otherwise leave a modal open
-  // against a different tournament's data — close any open detail and toast.
-  // Audit F21: toast on every transition (set/cleared/switched).
-  const prevId = prev ? prev.id : null;
-  const nextId = active ? active.id : null;
-  if (prevId !== nextId) {
-    closeOpenDetail();
-    document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
-    if (active) toast(`Switched to ${active.name}`, true);
-    else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
+  // Audit F21: fire the change event on every transition (set/cleared/switched);
+  // the subscriber (declared next to _tstate above) owns the reaction cascade.
+  if ((prev ? prev.id : null) !== (active ? active.id : null)) {
+    _tstate.emit({ active, prev });
   }
 }
 
@@ -7353,86 +7363,31 @@ document.querySelectorAll("#official-app .avail-bulk [data-mebulk]").forEach((bt
   });
 });
 
-// Audit F3: one-shot listener so a stray flood of expired-session 401s
-// doesn't trigger a toast storm.
-let _authExpiredFired = false;
-document.addEventListener("auth-expired", () => {
-  if (_authExpiredFired) return;
-  _authExpiredFired = true;
-  toast("Session expired — please sign in again", false);
-  applyAuth(null);
-  setTimeout(() => { _authExpiredFired = false; }, 1000);
-});
-
-function applyAuth(who) {
-  const logged = !!who;
-  const isAdmin = logged && who.role === "admin";
-  const isOfficial = logged && who.role === "official";
-  document.getElementById("login-view").hidden = logged;
-  document.getElementById("user-box").hidden = !logged;
-  document.getElementById("username-label").textContent = who ? `${who.username} (${who.role})` : "";
-  document.getElementById("menu").hidden = !isAdmin;
-  document.getElementById("menu-groups").hidden = !isAdmin;
-  document.querySelector("main:not(#official-app)").hidden = !isAdmin;
-  document.getElementById("context-bar").hidden = !isAdmin;
-  // Hide the breadcrumb strip when not signed in as admin; clear stale crumbs
-  // on sign-out so a fresh session starts with a clean trail. When the user
-  // becomes admin (first login OR session restore), seed the trail with the
-  // currently active tab so the strip isn't empty until they click something.
-  if (!isAdmin) {
-    _navHistory = [];
-  } else if (_navHistory.length === 0) {
-    const activeTab = document.querySelector(".tab.active");
-    const grp = activeTab ? activeTab.closest(".menu-group") : null;
-    if (activeTab && grp) {
-      _navHistory = [{ group: grp.dataset.group, panel: activeTab.dataset.target }];
+// Auth / session / role-view wiring lives in app/auth.js (P2 #11b). What to
+// LOAD when the role resolves stays here (nav history, breadcrumbs, admin /
+// official init) and is injected via onRoleResolved; onLogout resets the
+// admin-loaded latch. createAuth also wires the login / logout / change-password
+// forms and the one-shot "session expired" listener.
+const { applyAuth } = createAuth({
+  api, setMsg, toast, onSubmit,
+  onRoleResolved: ({ isAdmin, isOfficial }) => {
+    // Clear stale crumbs on sign-out; when the user becomes admin (first login
+    // OR session restore), seed the trail with the currently active tab so the
+    // strip isn't empty until they click something.
+    if (!isAdmin) {
+      _navHistory = [];
+    } else if (_navHistory.length === 0) {
+      const activeTab = document.querySelector(".tab.active");
+      const grp = activeTab ? activeTab.closest(".menu-group") : null;
+      if (activeTab && grp) {
+        _navHistory = [{ group: grp.dataset.group, panel: activeTab.dataset.target }];
+      }
     }
-  }
-  if (typeof _renderCrumbs === "function") _renderCrumbs();
-  document.getElementById("official-app").hidden = !isOfficial;
-  if (isAdmin) adminInit();
-  if (isOfficial) officialInit();
-}
-
-onSubmit(document.getElementById("login-form"), async (e) => {
-  const f = e.target;
-  try {
-    const who = await api("/auth/login", { method: "POST", body: JSON.stringify({ username: f.username.value, password: f.password.value }) });
-    f.reset();
-    applyAuth(who);
-  } catch (err) { setMsg("login-msg", err.message, false); }
-});
-document.getElementById("logout-btn").addEventListener("click", async () => {
-  try { await api("/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
-  adminLoaded = false;
-  applyAuth(null);
-});
-
-// --- Change own password (admin or official; available from the header) ---
-const _cpwModal = document.getElementById("change-pw-modal");
-function _openChangePw() {
-  document.getElementById("change-pw-form").reset();
-  setMsg("cpw-msg", "", true);
-  _cpwModal.hidden = false;
-  document.getElementById("cpw-current").focus();
-}
-function _closeChangePw() { _cpwModal.hidden = true; }
-document.getElementById("change-pw-btn").addEventListener("click", _openChangePw);
-document.getElementById("cpw-cancel").addEventListener("click", _closeChangePw);
-_cpwModal.addEventListener("click", (e) => { if (e.target.id === "change-pw-modal") _closeChangePw(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !_cpwModal.hidden) _closeChangePw(); });
-onSubmit(document.getElementById("change-pw-form"), async () => {
-  const cur = document.getElementById("cpw-current").value;
-  const nw = document.getElementById("cpw-new").value;
-  const cf = document.getElementById("cpw-confirm").value;
-  if (nw !== cf) { setMsg("cpw-msg", "new passwords don't match", false); return; }
-  if (nw.length < 8) { setMsg("cpw-msg", "new password must be at least 8 characters", false); return; }
-  if (nw === cur) { setMsg("cpw-msg", "new password must differ from the current one", false); return; }
-  try {
-    await api("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: cur, new_password: nw }) });
-    _closeChangePw();
-    toast("Password updated — other devices were signed out", true);
-  } catch (e) { setMsg("cpw-msg", e.message, false); }
+    if (typeof _renderCrumbs === "function") _renderCrumbs();
+    if (isAdmin) adminInit();
+    if (isOfficial) officialInit();
+  },
+  onLogout: () => { adminLoaded = false; },
 });
 // Audit F27: explicit allow-list matches OfficialCreate so a future template
 // change can't silently introduce an extra input that breaks the PUT with a
