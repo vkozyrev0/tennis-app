@@ -122,6 +122,18 @@ def test_retention_sweep_dry_run_counts_but_does_not_redact():
     assert row["body"] == "old sensitive body"
 
 
+def test_retention_sweep_rejects_negative_window():
+    # A negative window makes the cutoff a FUTURE date → would redact every
+    # filed email. The policy sweep must refuse it (like /emails/purge does),
+    # and refuse BEFORE touching rows.
+    old_t = _tourney("2020-01-01", "2020-01-04")
+    e = _filed_email(old_t["id"], "must not be erased")
+    assert client.post("/api/retention/sweep?dry_run=false&older_than_days=-9999").status_code == 400
+    row = next(m for m in client.get(f"/api/emails?tournament_id={old_t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["body"] == "must not be erased"     # untouched
+
+
 def test_retention_sweep_redacts_concluded_not_recent():
     old_t = _tourney("2020-01-01", "2020-01-04")           # eligible
     recent_t = _tourney("2030-06-01", "2030-06-04")        # future → not eligible

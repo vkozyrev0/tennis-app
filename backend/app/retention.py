@@ -52,6 +52,13 @@ def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = Tr
     """Apply the retention policy. With dry_run=True, only counts what is eligible
     (nothing is modified). Returns a count-only report."""
     days = DEFAULT_EMAIL_RETENTION_DAYS if older_than_days is None else older_than_days
+    # Guard the footgun: a negative window makes the cutoff `current_date - (-N)`
+    # = a FUTURE date, which would match (and, when not dry-run, redact) EVERY
+    # filed email — including mail still inside its retention window. The manual
+    # /emails/purge endpoint already refuses this; the unattended policy sweep
+    # must too (it's the one wired to a scheduler).
+    if days < 0:
+        raise ValueError("older_than_days must be >= 0")
     cur.execute(_ELIGIBLE_EMAIL_IDS, (days,))
     ids = [r["id"] for r in cur.fetchall()]
     if ids and not dry_run:

@@ -5,6 +5,20 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Bug hunt — retention sweep missing the negative-window guard (2026-06-13)
+Broader sweep over older code paths (retention, imports, the money path). One
+real defect found + fixed:
+
+- **Policy retention sweep had no negative-`older_than_days` guard.** The manual
+  `/api/emails/purge` refuses a negative window (the cutoff `current_date - (-N)`
+  becomes a FUTURE date that matches every filed email), but the newer
+  policy-driven `/api/retention/sweep` — the one meant to run unattended on a
+  scheduler — was missing that guard, so `?dry_run=false&older_than_days=-9999`
+  would redact ALL filed-email PII. Added the guard at both layers
+  (`run_retention` raises `ValueError`; the endpoint returns 400) + a regression
+  test. The import merge path was also reviewed — its per-row savepoints are
+  already correct. Suite **437** green.
+
 ## Soft-delete + Trash restore — tournaments & incidents (P2 #13, 2026-06-13)
 Recoverable delete for the two non-PII, high-recoverability entities. **Scoped
 deliberately:** NOT players/officials/emails — `delete_player` is a COPPA
