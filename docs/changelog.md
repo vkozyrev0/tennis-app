@@ -72,6 +72,16 @@ than captured early. Body moved unchanged otherwise. Verified live on local
 uvicorn: all three lists build, load, and render an inserted row; no console
 errors.
 
+## html`` adoption — player-360 drawer (2026-06-13)
+Converted the player-360 drawer (the richest remaining user-data builder:
+tournament entries + the late-entry / withdrawal / scheduling / div-flex /
+hotel / doubles / pairing request sections, all parent-supplied free text) to
+`html`` / `raw()`. Kept the string-concat structure (per-row `html`` joined,
+pre-built pieces `raw()`'d) to dodge the double-escape trap. Verified live: id
+line, entries table, no escaped markup, no console errors. The remaining
+hand-`esc()` sites are low-risk one-offs (controlled-label spans, `title=`
+attributes, `<option>` text, the print-window exports) — left as-is.
+
 ## html`` adoption — official-360 assignments table (2026-06-13)
 Continued the incremental `html`` rollout: the official-360 drawer's
 assignments/pay table + body now build with `html`` / `raw()` (tournament

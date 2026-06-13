@@ -5684,29 +5684,30 @@ async function openPlayer360(playerId, tournamentId) {
   const p = d.player;
   document.getElementById("player360-title").textContent = `${p.last_name}, ${p.first_name}`;
   const loc = [p.city, p.state].filter(Boolean).join(", ");
+  // html`` auto-escapes the cell/field values; per-row templates are joined to a
+  // string and the pre-built pieces are raw()'d into the final body (one html``
+  // template + html`` would double-escape — see the helper's docs).
   const entriesHtml = d.entries.length
     ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Status</th><th>Div</th><th>T-shirt</th><th>Lodging</th></tr></thead><tbody>` +
-      d.entries.map((e) => `<tr><td>${esc(e.tournament_name)}</td><td>${chip(e.selection_status)}</td>` +
-        `<td>${esc(e.age_division || "")}</td><td>${esc(e.t_shirt_size || "")}</td><td>${esc(e.lodging_plan || "")}</td></tr>`).join("") +
+      d.entries.map((e) => html`<tr><td>${e.tournament_name}</td><td>${raw(chip(e.selection_status))}</td><td>${e.age_division || ""}</td><td>${e.t_shirt_size || ""}</td><td>${e.lodging_plan || ""}</td></tr>`).join("") +
       `</tbody></table>`
     : '<p class="muted">Not on any roster.</p>';
   const r = d.requests;
   const sec = (title, rows, fmt) => rows.length
     ? `<div class="p360-sec"><h4>${esc(title)} (${rows.length})</h4><ul>${rows.map((x) => `<li>${fmt(x)}</li>`).join("")}</ul></div>` : "";
   const reqHtml =
-    sec("Late entries", r.late_entries, (x) => `${esc(x.age_division || "")} ${esc(x.events || "")}${x.request_date ? ` · ${esc(x.request_date)}` : ""}`) +
-    sec("Withdrawals", r.withdrawals, (x) => `${esc(x.events || "")} — ${esc(x.reason || "(alternate, no reason)")}${x.was_alternate ? " · was alternate" : ""}`) +
-    sec("Scheduling avoidances", r.scheduling, (x) => `avoid ${esc(x.avoid_day || "")} ${esc(x.avoid_time_range || "")}`) +
-    sec("Division flexibility", r.division_flex, (x) => `${esc(x.home_division || "")} → ${esc(x.willing_divisions || "")}`) +
-    sec("Player hotels", r.hotels, (x) => `${esc(x.hotel_name || "")} ${esc(x.lodging_plan || "")}`) +
-    sec("Doubles", r.doubles, (x) => `${esc(x.age_division || "")} · ${x.wants_random ? "random" : "partner " + esc(x.partner_usta || "?")} · ${esc(x.status || "")}`) +
-    sec("Pairing avoidances", r.pairing, (x) => `${esc(x.age_division || "")} ${esc(x.relationship || "")}`);
-  body.innerHTML =
-    `<p class="p360-id">USTA #${esc(p.usta_number || "—")}${p.gender ? ` · ${esc(p.gender)}` : ""}${loc ? ` · ${esc(loc)}` : ""}</p>` +
-    `<h4>Tournament entries</h4>${entriesHtml}` +
-    (reqHtml
-      ? `<h4 class="p360-reqhead">Requests${d.tournament_id ? " (this tournament)" : ""}</h4>${reqHtml}`
-      : `<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`);
+    sec("Late entries", r.late_entries, (x) => html`${x.age_division || ""} ${x.events || ""}${x.request_date ? html` · ${x.request_date}` : ""}`) +
+    sec("Withdrawals", r.withdrawals, (x) => html`${x.events || ""} — ${x.reason || "(alternate, no reason)"}${x.was_alternate ? " · was alternate" : ""}`) +
+    sec("Scheduling avoidances", r.scheduling, (x) => html`avoid ${x.avoid_day || ""} ${x.avoid_time_range || ""}`) +
+    sec("Division flexibility", r.division_flex, (x) => html`${x.home_division || ""} → ${x.willing_divisions || ""}`) +
+    sec("Player hotels", r.hotels, (x) => html`${x.hotel_name || ""} ${x.lodging_plan || ""}`) +
+    sec("Doubles", r.doubles, (x) => html`${x.age_division || ""} · ${x.wants_random ? "random" : "partner " + (x.partner_usta || "?")} · ${x.status || ""}`) +
+    sec("Pairing avoidances", r.pairing, (x) => html`${x.age_division || ""} ${x.relationship || ""}`);
+  body.innerHTML = html`<p class="p360-id">USTA #${p.usta_number || "—"}${p.gender ? html` · ${p.gender}` : ""}${loc ? html` · ${loc}` : ""}</p><h4>Tournament entries</h4>${raw(entriesHtml)}${
+    reqHtml
+      ? html`<h4 class="p360-reqhead">Requests${d.tournament_id ? " (this tournament)" : ""}</h4>${raw(reqHtml)}`
+      : raw(`<p class="muted">No filed requests${d.tournament_id ? " for this tournament" : ""}.</p>`)
+  }`;
   _p360Export = { title: `${p.last_name}, ${p.first_name}`, subtitle: "Player profile", html: body.innerHTML };
 }
 
