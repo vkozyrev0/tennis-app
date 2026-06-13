@@ -5,6 +5,24 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Bulk-nudge + roster-completeness nudges (dashboard) (2026-06-13)
+Two more actionable dashboard nudges, both frontend-only (reuse existing
+endpoints — no new routes, no migration).
+
+- **Bulk-nudge all pending.** The pending-officials card gains a "✉ Nudge all
+  (N)" button (shown when ≥2 have an email) that opens one `mailto:?bcc=…` to
+  the whole unconfirmed group — same bcc pattern as the bulk-invite flow.
+- **Roster-completeness nudges.** A `#dash-roster-incomplete` card surfaces the
+  named entries behind the "N incomplete" count, reusing the **existing**
+  `GET …/roster-completeness` endpoint (one row per incomplete entry + per-issue
+  `issues`). Each shows the player + which fields are missing (division / gender
+  / shirt size / balance due) with a "Fix on Roster →" deep-link. (Initially
+  drafted a duplicate `roster-incomplete` endpoint, then found and switched to
+  the existing one — removed the dupe + its tests.)
+- Suite unchanged at 460 (both features reuse already-tested endpoints).
+  Verified live: bulk-nudge opens a 3-recipient bcc mailto; the roster card
+  lists 2 entries with mapped issue labels, no `[object Object]`.
+
 ## Pending-response nudges + batch column in payroll CSV (2026-06-13)
 A small actionable round, all read-only (no migration).
 

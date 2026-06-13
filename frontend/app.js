@@ -5698,6 +5698,7 @@ async function loadDashboard() {
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
   _renderDeclinedAlert(d.officials.declined);
   _renderPendingNudges(d.officials.pending);
+  _renderRosterIncomplete();
   _renderReadiness();
 }
 
@@ -5787,11 +5788,48 @@ async function _renderPendingNudges(pendingCount) {
       slot ? html` <span class="dash-pend-slot">${slot}</span>` : ""}${nudge}</li>`;
   };
   box.hidden = false;
-  box.innerHTML = html`<div class="dash-pend-head">⏳ ${d.count} awaiting accept/decline</div><ul class="dash-pend-list">${d.pending.map(item)}</ul><button type="button" id="dash-pend-go" class="btn-small">Chase on Assignments →</button>`;
+  const emails = d.pending.map((p) => p.official_email).filter(Boolean);
+  // "Nudge all" only when ≥2 have an email — for one, the per-row ✉ is enough.
+  const bulk = emails.length >= 2
+    ? html`<button type="button" id="dash-pend-all" class="btn-small">✉ Nudge all (${String(emails.length)})</button>`
+    : "";
+  box.innerHTML = html`<div class="dash-pend-head">⏳ ${d.count} awaiting accept/decline</div><ul class="dash-pend-list">${d.pending.map(item)}</ul><button type="button" id="dash-pend-go" class="btn-small">Chase on Assignments →</button>${bulk}`;
   document.getElementById("dash-pend-go")?.addEventListener("click", () => {
     _dashGo("staffing", "panel-t-assignments");
     setTimeout(() => { try { _asgRespFilter = "pending"; _renderAsgList(); } catch (_) {} }, 300);
   });
+  document.getElementById("dash-pend-all")?.addEventListener("click", () => {
+    // one bcc mailto to the whole pending group (same pattern as bulk invite).
+    const subj = encodeURIComponent(`Assignment confirmation — ${tName}`);
+    const body = encodeURIComponent(
+      `Hi,\n\nOur records show your officiating assignment for ${tName} is still ` +
+      `unconfirmed. Please reply to accept or decline.\n\nThanks!`);
+    window.open(`mailto:?bcc=${encodeURIComponent(emails.join(","))}&subject=${subj}&body=${body}`, "_blank");
+  });
+}
+
+// Roster-completeness nudge: selected/alternate entries missing required data.
+// Reuses the existing /roster-completeness endpoint (one row per incomplete
+// entry + per-issue `issues`), naming each player + which fields are missing,
+// with a deep-link to the Roster tab. Self-fetches (the dashboard payload
+// doesn't carry the count).
+const _ROSTER_ISSUE_LABEL = {
+  missing_division: "division", missing_gender: "gender",
+  missing_shirt: "shirt size", outstanding_balance: "balance due",
+};
+async function _renderRosterIncomplete() {
+  const box = document.getElementById("dash-roster-incomplete");
+  if (!box || !active) return;
+  let c;
+  try { c = await api(`/tournaments/${active.id}/roster-completeness`); }
+  catch (_) { box.hidden = true; return; }
+  const n = c.counts?.incomplete_entries || 0;
+  if (!n) { box.hidden = true; box.innerHTML = ""; return; }
+  const item = (e) => html`<li class="dash-pend-item"><span class="dash-pend-name">${e.player_name}</span> <span class="dash-pend-slot">missing: ${
+    e.issues.map((i) => _ROSTER_ISSUE_LABEL[i] || i).join(", ")}</span></li>`;
+  box.hidden = false;
+  box.innerHTML = html`<div class="dash-pend-head">📋 ${String(n)} incomplete roster entr${n === 1 ? raw("y") : raw("ies")}</div><ul class="dash-pend-list">${c.entries.map(item)}</ul><button type="button" id="dash-ri-go" class="btn-small">Fix on Roster →</button>`;
+  document.getElementById("dash-ri-go")?.addEventListener("click", () => _dashGo("tournament", "panel-t-roster"));
 }
 
 // --- Player 360 drawer: everything about one player, unified by USTA # ---

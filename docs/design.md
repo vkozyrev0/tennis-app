@@ -253,10 +253,11 @@ mismatches.
 blocker (uncovered day, double-booking, declined slot), `warn` = should-resolve.
 
 **Nudges (dashboard).** Beyond counts, the Home board lists the *named*,
-actionable follow-ups: declined assignments to re-staff (`/declined`) and
-officials who haven't accepted/declined (`/pending`), the latter with a
-pre-filled `mailto:` nudge per official — consistent with the app's mailto-only
-email model (no send infrastructure).
+actionable follow-ups: declined assignments to re-staff (`/declined`), officials
+who haven't accepted/declined (`/pending`), and incomplete roster entries
+(reusing `/roster-completeness`). The pending card carries a pre-filled `mailto:`
+nudge per official plus a "Nudge all" bcc to the whole group — consistent with
+the app's mailto-only email model (no send infrastructure).
 
 **Division logic.** Junior division = gender prefix (B/G) + age bucket
 (12/14/16/18, rounded up) from birth year. The catalog (`division`,
