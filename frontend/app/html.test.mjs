@@ -1,7 +1,7 @@
 // Deterministic unit test for the html`` template helper (DOM-free).
 // Run: node frontend/app/html.test.mjs
 import assert from "node:assert/strict";
-import { html, raw, Safe } from "./html.js";
+import { html, raw, hstr, Safe } from "./html.js";
 
 let passed = 0;
 function test(name, fn) { fn(); passed++; console.log("  ok -", name); }
@@ -56,6 +56,13 @@ test("html() returns a Safe whose toString is the markup", () => {
 
 test("raw(null) is empty, not the string 'null'", () => {
   assert.equal(String(html`${raw(null)}`), "");
+});
+
+test("hstr returns a plain string (for Tabulator formatters), still escaped", () => {
+  const out = hstr`<x>${"a<b"}</x>`;
+  assert.equal(typeof out, "string");           // NOT a Safe — formatters need a string
+  assert.equal(out, "<x>a&lt;b</x>");
+  assert.ok(!(out instanceof Safe));
 });
 
 console.log(`\n${passed} html-helper checks passed`);

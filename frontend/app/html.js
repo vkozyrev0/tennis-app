@@ -38,4 +38,11 @@ export function html(strings, ...vals) {
   return new Safe(out);
 }
 
+// String-returning variant for contexts that require a plain string, not a
+// Safe wrapper — notably Tabulator cell formatters (a returned object would
+// render as "[object Object]"). Same escaping rules as html``.
+export function hstr(strings, ...vals) {
+  return html(strings, ...vals).s;
+}
+
 export { Safe };

@@ -13,7 +13,7 @@ import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail, reso
 import { createGridFactories } from "./app/grids.js";
 import { createAuth } from "./app/auth.js";
 import { createTournamentState } from "./app/state.js";
-import { html, raw } from "./app/html.js";
+import { html, raw, hstr } from "./app/html.js";
 import { createPlayerList } from "./app/player_list.js";
 
 // ============================================================================
@@ -5256,7 +5256,7 @@ const pairingGrid = makeListGrid("pairing-table", [
   { title: "Relationship", field: "relationship", editor: "list", cssClass: "editable-cell",
     editorParams: { values: ["same_club", "siblings"] } },
   { title: "Players", field: "_players",
-    formatter: (c) => esc((c.getData().members || []).map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ")) },
+    formatter: (c) => hstr`${(c.getData().members || []).map((m) => [m.last_name, m.first_name].filter(Boolean).join(", ") || m.usta_number).join(" & ")}` },
   _ORIGIN_COL,
 ], "pairing-avoidances", "No pairing avoidances yet.",
   async (g) => { if (!(await confirmDialog("Delete group?"))) return; try { await api(`/pairing-avoidances/${g.id}`, { method: "DELETE" }); loadPairing(); } catch (e) { setMsg("pairing-msg", e.message, false); } },
@@ -5329,7 +5329,7 @@ const doublesReqGrid = makeListGrid("doubles-req-table", [
       // since the TD reads names, not USTA numbers, when scanning the queue.
       const partner = r.partner_usta ? Object.values(playersById).find((p) => p.usta_number === r.partner_usta) : null;
       const label = partner ? [partner.last_name, partner.first_name].filter(Boolean).join(", ") || partner.usta_number : (r.partner_usta || "?");
-      return `→ ${esc(label)} (awaiting partner)`;
+      return hstr`→ ${label} (awaiting partner)`;
     } },
   _ORIGIN_COL,
 ], "doubles-requests", "No doubles requests yet.",
