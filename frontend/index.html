@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=4" />
-  <link rel="stylesheet" href="/styles.css?v=70" />
+  <link rel="stylesheet" href="/styles.css?v=73" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -201,17 +201,25 @@
         <div id="dash-deadlines" class="dash-deadlines" hidden></div>
         <div id="dash-digest" class="dash-digest" hidden></div>
         <div id="dash-readiness" class="dash-readiness" hidden></div>
-        <div id="dash-declined" class="dash-declined" hidden></div>
-        <div id="dash-pending" class="dash-pending" hidden></div>
-        <div id="dash-roster-incomplete" class="dash-pending" hidden></div>
-        <div id="dash-coverage" class="dash-pending" hidden></div>
+        <!-- The named, actionable "needs attention" lists. A responsive grid
+             so they sit side-by-side on wide screens instead of stacking into
+             a tall wall; each card still hides itself when empty (display:none
+             leaves no grid track). -->
+        <div class="dash-attention">
+          <div id="dash-declined" class="dash-declined" hidden></div>
+          <div id="dash-pending" class="dash-pending" hidden></div>
+          <div id="dash-roster-incomplete" class="dash-pending" hidden></div>
+          <div id="dash-coverage" class="dash-pending" hidden></div>
+        </div>
         <div id="dash-tiles" class="dash-tiles" hidden></div>
         <h3>All tournaments</h3>
         <p class="muted">Upcoming &amp; recent — click a row to work on it.</p>
+        <div class="dash-tablewrap">
         <table id="dash-overview-table" class="list-table">
           <thead><tr><th>Tournament</th><th>Type</th><th>Play dates</th><th>Starts in</th><th>Reg. deadline</th><th>Late-entry deadline</th></tr></thead>
           <tbody></tbody>
         </table>
+        </div>
 
         <h3>Official workload <span class="h3-subtitle">(across all tournaments — balance staffing)</span></h3>
         <div id="dash-workload"></div>

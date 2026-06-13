@@ -257,7 +257,14 @@ header h1 > #health { margin-left: auto; }
   border-radius: 5px;
   padding: 0.18rem 0.45rem;
 }
-#context-bar.has-active { background: rgba(0, 0, 0, 0.25); border-color: #fff; }
+/* When a tournament is active, mark the context bar with a brand-ball accent
+   stripe + stronger tint so the TD can always tell which event they're editing
+   (the old has-active state was nearly indistinguishable from inactive). */
+#context-bar.has-active {
+  background: rgba(0, 0, 0, 0.3); border-color: #fff;
+  box-shadow: inset 4px 0 0 #d6ec4a; padding-left: 0.65rem;
+}
+.ctx-label { font-weight: 600; }
 .ctx-label { font-size: 0.68rem; opacity: 0.9; }
 #active-tournament { padding: 0.16rem 0.35rem; border-radius: 4px; border: 0; font: inherit; min-width: 180px; font-size: 0.74rem; }
 #context-bar .combo { width: auto; }
@@ -1127,6 +1134,15 @@ td.toggle { white-space: nowrap; }
 .btn-icon.inbox-affordance:focus-visible { opacity: 0.75; }
 .btn-icon.inbox-affordance:hover { opacity: 1; }
 
+/* Touch devices can't hover, so affordances that fade in on hover — the ✎
+   edit hint on editable cells and the inbox ✎/×/＋ icons — would be invisible
+   and undiscoverable. Where hover isn't available (a tablet courtside, the
+   day-of surface), always show them. */
+@media (hover: none) {
+  .tabulator .tabulator-cell.editable-cell::after { opacity: 0.5; }
+  .btn-icon.inbox-affordance { opacity: 0.7; }
+}
+
 /* Toast inline action ("View …") — link-style button beside the toast text. */
 .toast-action {
   margin-left: 0.6rem; background: rgba(255,255,255,0.18); border: 0;
@@ -1362,9 +1378,16 @@ td.toggle { white-space: nowrap; }
 .cov-min-ctl { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; }
 .cov-min-ctl input { width: 3.2rem; padding: 0.15rem 0.3rem; }
 /* Payroll payment batches: a compact list below the payroll grid (0048). */
-#payroll-batches { margin-top: 1.1rem; }
+#payroll-batches { margin-top: 1.1rem; overflow-x: auto; }  /* scroll the batch table on narrow screens */
 .batch-h { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--muted); }
 .batch-table { max-width: 640px; }
+
+/* A Tabulator grid whose columns (with their min-widths) total wider than the
+   viewport must scroll WITHIN its card, not push the whole page wide. Capping
+   the outer .tabulator at its container forces the internal .tabulator-tableholder
+   (overflow:auto) to provide the horizontal scroll. Fixes the payroll grid +
+   any other wide grid on a phone. */
+.tabulator { max-width: 100%; }
 
 /* Inbox progress summary (unfiled / filed / follow-up counts). */
 .inbox-summary { font-size: 0.88rem; color: var(--muted); margin: 0.2rem 0 0.5rem; }
@@ -1425,6 +1448,23 @@ td.toggle { white-space: nowrap; }
 .rdy-row.rdy-fail .rdy-icon { color: #c0392b; }
 .rdy-label { font-weight: 600; min-width: 9rem; }
 .rdy-detail { color: var(--muted); }
+/* "Needs attention" cards laid side-by-side on wide screens (they stacked into
+   a tall wall as more nudges were added). auto-fit drops to one column on narrow
+   viewports; a hidden/empty card is display:none so it leaves no grid track.
+   The grid gap owns spacing, so inner cards reset their own margins. */
+.dash-attention {
+  /* min(100%, 300px) so the 300px floor can't exceed a narrow phone's width
+     (a plain minmax(300px,…) overflows under ~300px). */
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 0.7rem; align-items: start; margin: 0.4rem 0 1rem;
+}
+.dash-attention > div { margin: 0; }
+
+/* Dashboard data tables can be wider than a phone; let them scroll horizontally
+   inside the card instead of pushing the whole page wide (the all-tournaments
+   overview + the cross-tournament workload were the 375px overflow culprits). */
+.dash-tablewrap, #dash-workload { overflow-x: auto; }
+
 /* Declined-assignment alert (dashboard) */
 .dash-declined { margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid var(--bad, #c0392b); }
