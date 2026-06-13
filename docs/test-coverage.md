@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 437 tests, all passing (migrations through 0046) — deterministic
+**Status:** 439 tests, all passing (migrations through 0046) — deterministic
 (login-throttle state leak fixed). CI runs the suite against a Postgres 16
 service on every push/PR and gates the Docker image build on it
 (`.github/workflows/docker.yml`).
@@ -204,7 +204,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (437)
+python -m pytest -q                                    # the whole suite (439)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -384,7 +384,7 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **437 tests, all passing** (see the status line at the top).
+Total suite count: **439 tests, all passing** (see the status line at the top).
 `test_zz_payroll.py` (11) — payroll finalization (P4-4): freeze the computed
 summary, double-finalize 409, drift after a post-finalize no-show,
 unfinalize-unless-paid, mark-paid lifecycle/defaults, idempotent finalize-all,

@@ -5,6 +5,26 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Hardening pass — soft-delete filter regression guards (2026-06-13)
+Deeper adversarial review of the money path, bulk email actions, the importer,
+and the soft-delete query surface. Findings:
+
+- **Bulk email actions are safe.** `bulk_detect_players` / `bulk_classify` loop
+  with no per-row try/except, so a row failure surfaces as a 500 (atomic
+  rollback) rather than the silent partial-commit bug class; `bulk_populate`
+  already has the per-row savepoint. No change.
+- **Importer parse/validate** reviewed (CSV/XLSX/PDF) — already well-audited;
+  no real defect.
+- **Soft-delete surface** confirmed fully covered for user-facing lists, and
+  **locked it**: new regression tests pin that a trashed tournament leaves the
+  dashboard **digest** and **deadlines** feeds (the `deleted_at IS NULL` filters
+  added with #13 are one-liners that are easy to revert). Known minor gap noted:
+  the API existence-guards don't reject a trashed tournament, so a direct API
+  call could still mutate one — the UI can't (it's hidden from the picker), so
+  it's left as a documented limitation rather than touching ~25 guards.
+
+Suite **439** green.
+
 ## app.js decomposition slice (d) — player_list.js (P2 #11d, 2026-06-13)
 The last app.js decomposition slice. `app/player_list.js`
 (`createPlayerList(ctx)` returning `wirePlayerList`) holds the generic

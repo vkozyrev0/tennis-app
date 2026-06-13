@@ -93,6 +93,29 @@ def test_incident_soft_delete_and_restore():
     assert inc["id"] in _ids(_ok(client.get(f"/api/tournaments/{t['id']}/incidents"), 200))
 
 
+def test_soft_deleted_tournament_leaves_dashboard_digest():
+    # Locks the dashboard digest filter (deleted_at IS NULL) — easy to revert.
+    t = _tournament()                              # play_end future → in digest
+    digest = _ok(client.get("/api/dashboard/digest"), 200)["tournaments"]
+    assert t["id"] in {d["tournament_id"] for d in digest}
+    assert client.delete(f"/api/tournaments/{t['id']}").status_code == 204
+    digest2 = _ok(client.get("/api/dashboard/digest"), 200)["tournaments"]
+    assert t["id"] not in {d["tournament_id"] for d in digest2}
+
+
+def test_soft_deleted_tournament_leaves_deadlines():
+    # Locks the deadlines filter. within_days=120 so the ~Sep deadline is in range.
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "DL " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-03",
+        "registration_deadline": "2026-09-01"}))
+    dl = _ok(client.get("/api/dashboard/deadlines?within_days=120"), 200)["deadlines"]
+    assert t["id"] in {d["tournament_id"] for d in dl}
+    assert client.delete(f"/api/tournaments/{t['id']}").status_code == 204
+    dl2 = _ok(client.get("/api/dashboard/deadlines?within_days=120"), 200)["deadlines"]
+    assert t["id"] not in {d["tournament_id"] for d in dl2}
+
+
 def test_incident_double_delete_404():
     t = _tournament()
     inc = _ok(client.post(f"/api/tournaments/{t['id']}/incidents", json={
