@@ -296,6 +296,9 @@ settle a group of finalized records at once (a check run / ACH file): creating a
 batch marks every member paid with one shared method/date/reference (all-or-nothing
 — a record already paid, batched, or from another tournament refuses the call);
 dissolving walks every member back to unpaid (records stay finalized; FK SET NULL).
+Members can be ticked in the grid to batch a subset, and each batch prints a
+receipt (`GET …/payroll/batches/{id}` → members, rendered via the shared
+`printDoc()` scaffold).
 The assignment-change audit-action enum gains `finalized` / `unfinalized` / `paid`
 / `unpaid`, and the whole tournament trail exports as CSV
 (`GET …/assignment-audit.csv`, in `assignments.py`).

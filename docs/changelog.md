@@ -5,6 +5,27 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Payroll batch UX: per-record selection + printable receipt (2026-06-13)
+Follow-ups on the payment-batch feature, same day.
+
+- **Per-record selection.** The Payroll grid gains a leading tick column on
+  finalized, unpaid, un-batched rows (backed by a `_batchSel` set, cleared on
+  every reload). "New batch…" now settles just the ticked records when any are
+  checked, else all eligible (backward compatible) — so the TD can cut a batch
+  for only the officials a given check covers.
+- **Printable batch receipt.** New `GET /api/payroll/batches/{id}` returns the
+  batch + its member records; a "Receipt" action in the batches list opens a
+  printable doc (one row per official + frozen total + batch total) via the
+  shared `printDoc()` scaffold — the paper the TD files with the checks.
+- **Dead-code sweep (medium tier).** Removed the unused `details.addbox`
+  collapse-by-default CSS (carried speculatively, never wired to any form;
+  recoverable from git) and trimmed its comment to keep the "two form patterns
+  kept distinct on purpose" guidance. The audit's other medium item (nav
+  `<symbol>`s) was already removed; the backend audit had no medium items.
+- Tests +1 (batch-detail lists members; 457 total, green). Verified live:
+  ticked 2 of 7 → batched exactly those 2 ($650), receipt rendered with the
+  right title / sub-line / 2 member rows / grand total, no `[object Object]`.
+
 ## Payroll payment batches + assignment-audit CSV (2026-06-13)
 Two payroll follow-ons (migration 0048).
 

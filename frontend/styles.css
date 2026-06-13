@@ -884,23 +884,13 @@ a.export-btn { text-decoration: none; }
  *      the inbox, and seeing the form + the resulting list together gives
  *      immediate feedback.
  *
- * The `details.addbox` pattern below is available if a workspace form ever
- * outgrows the inline pattern (collapse-by-default), but no current form
- * needs it. Settling on ONE pattern would force one of the two contexts
- * into a worse UX — kept distinct, documented here so future contributors
- * don't merge them by accident.
+ * Settling on ONE pattern would force one of the two contexts into a worse
+ * UX — kept distinct on purpose, documented here so future contributors
+ * don't merge them by accident. (A third `details.addbox` collapse-by-default
+ * pattern was carried speculatively but never used; removed — recover from
+ * git if a workspace form ever outgrows the inline pattern.)
  */
 .inline-form .row { margin-bottom: 0.5rem; }
-
-/* Collapsible workspace add-forms (list stays primary) */
-details.addbox { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 0.9rem; background: var(--elev); }
-details.addbox > summary {
-  cursor: pointer; padding: 0.5rem 0.8rem; font-weight: 600; color: var(--link);
-  list-style: none; user-select: none;
-}
-details.addbox > summary::-webkit-details-marker { display: none; }
-details.addbox[open] > summary { border-bottom: 1px solid var(--border); }
-details.addbox > form { padding: 0.7rem 0.8rem; }
 /* Import page group headings — Tournament data vs Setup catalogs. The
    level-4 heading sits above each <section> group, with a subtle rule under
    so the eye doesn't blur across the two groups. */

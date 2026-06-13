@@ -292,6 +292,36 @@ def list_batches(tournament_id: int, conn=Depends(db_dep)):
         return [_batch_out(b) for b in cur.fetchall()]
 
 
+@router.get("/api/payroll/batches/{batch_id}")
+def get_batch(batch_id: int, conn=Depends(db_dep)):
+    """One batch with its member records — the feed for the printable receipt
+    the TD files with the checks. members carry the frozen per-official total."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, tournament_id, reference, method, paid_on, note, created_by, "
+            "       created_at FROM payment_batch WHERE id = %s", (batch_id,))
+        b = cur.fetchone()
+        if b is None:
+            raise HTTPException(status_code=404, detail="payment batch not found")
+        cur.execute(
+            "SELECT official_name, days_worked, total, paid_at "
+            "FROM payroll_record WHERE batch_id = %s ORDER BY official_name", (batch_id,))
+        members = cur.fetchall()
+    return {
+        "batch_id": b["id"], "tournament_id": b["tournament_id"],
+        "reference": b["reference"], "method": b["method"],
+        "paid_on": b["paid_on"].isoformat(), "note": b["note"],
+        "created_by": b["created_by"], "created_at": b["created_at"].isoformat(),
+        "record_count": len(members),
+        "total": sum(float(m["total"]) for m in members),
+        "members": [{
+            "official_name": m["official_name"], "days_worked": m["days_worked"],
+            "total": float(m["total"]),
+            "paid_at": m["paid_at"].isoformat() if m["paid_at"] else None,
+        } for m in members],
+    }
+
+
 @router.post("/api/tournaments/{tournament_id}/payroll/batches", status_code=201)
 def create_batch(tournament_id: int, body: PaymentBatchCreate,
                  user=Depends(require_admin), conn=Depends(db_dep)):

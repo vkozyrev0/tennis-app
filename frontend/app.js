@@ -3099,6 +3099,9 @@ incidentForm.querySelector(".cancel").addEventListener("click", incReset);
 // money the TD already approved. Drift = finalized ≠ live (re-finalize or
 // investigate). Mark paid tracks settlement; paid records refuse unfinalize.
 const _PAID_METHODS = ["check", "ach", "cash", "venmo", "zelle", "other"];
+// record_ids checked for the next "New batch…". Reset on every payroll reload
+// (record states change) and after a batch is created.
+const _batchSel = new Set();
 async function _payrollMarkPaid(row) {
   const method = await (async () => {
     // tiny inline picker via prompt-less confirm flow: build a one-off dialog
@@ -3131,6 +3134,22 @@ async function _payrollMarkPaid(row) {
   } catch (e) { setMsg("payroll-msg", e.message, false); }
 }
 const payrollGrid = makeReadGrid("payroll-table", [
+  { title: "", field: "_sel", headerSort: false, width: 36, hozAlign: "center",
+    titleFormatter: () => '<span title="Tick finalized, unpaid rows to batch just those (else New batch settles all eligible)">✓</span>',
+    formatter: (cell) => {
+      const m = cell.getData();
+      // only finalized, not-yet-paid, un-batched records can join a new batch
+      if (!m.finalized || m.finalized.paid || m.finalized.batch_id) return "";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.className = "batch-pick";
+      cb.checked = _batchSel.has(m.finalized.record_id);
+      cb.addEventListener("click", (e) => e.stopPropagation());
+      cb.addEventListener("change", () => {
+        if (cb.checked) _batchSel.add(m.finalized.record_id);
+        else _batchSel.delete(m.finalized.record_id);
+      });
+      return cb;
+    } },
   { title: "Official", field: "official_name", headerFilter: "input",
     formatter: (c) => hstr`${c.getValue()}${c.getData().orphaned
       ? raw(' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>') : ""}` },
@@ -3204,6 +3223,7 @@ const payrollGrid = makeReadGrid("payroll-table", [
 ], "payroll", "No assignments yet — staff the tournament first.", { index: "assignment_id" });
 async function loadPayroll() {
   if (!active) return;
+  _batchSel.clear();   // record states change on reload — drop stale ticks
   const rows = await api(`/tournaments/${active.id}/payroll`);
   payrollGrid.setData(rows);
   const fin = rows.filter((r) => r.finalized);
@@ -3267,12 +3287,16 @@ async function _payrollNewBatch() {
   if (!eligible.length) {
     setMsg("payroll-msg", "no finalized, unpaid record to batch — finalize first", false); return;
   }
+  // honor row ticks if any eligible row is selected; otherwise batch them all
+  const picked = eligible.filter((r) => _batchSel.has(r.finalized.record_id));
+  const targets = picked.length ? picked : eligible;
+  const scope = picked.length ? "selected" : "finalized, unpaid";
   const today = new Date().toISOString().slice(0, 10);
   const info = await new Promise((resolve) => {
     const m = document.createElement("div"); m.className = "modal";
     m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
       hstr`<h3 class="detail-title">New payment batch</h3>` +
-      hstr`<p class="muted">${String(eligible.length)} finalized, unpaid record(s) will be settled together.</p>` +
+      hstr`<p class="muted">${String(targets.length)} ${scope} record(s) will be settled together.</p>` +
       '<div class="row"><label>Reference <input id="batch-ref" maxlength="200" placeholder="Check run 2026-06-15" /></label>' +
       '<label>Method <select id="batch-method">' +
       _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") + '</select></label></div>' +
@@ -3295,7 +3319,8 @@ async function _payrollNewBatch() {
   if (!info) return;
   try {
     const out = await api(`/tournaments/${active.id}/payroll/batches`, { method: "POST",
-      body: JSON.stringify({ ...info, record_ids: eligible.map((r) => r.finalized.record_id) }) });
+      body: JSON.stringify({ ...info, record_ids: targets.map((r) => r.finalized.record_id) }) });
+    _batchSel.clear();
     setMsg("payroll-msg", `batch created — ${out.record_count} record(s), ${money(out.total)}`, true);
     loadPayroll();
   } catch (e) { setMsg("payroll-msg", e.message, false); }
@@ -3310,10 +3335,13 @@ function _renderBatches(batches) {
   const rows = batches.map((b) => hstr`<tr>
     <td>${b.reference}</td><td>${b.method}</td><td>${b.paid_on}</td>
     <td class="num">${String(b.record_count)}</td><td class="num">${money(b.total)}</td>
-    <td class="actions"><button type="button" class="btn-link" data-dissolve="${String(b.batch_id)}">Dissolve</button></td></tr>`).join("");
+    <td class="actions"><button type="button" class="btn-link" data-receipt="${String(b.batch_id)}">Receipt</button><button type="button" class="btn-link" data-dissolve="${String(b.batch_id)}">Dissolve</button></td></tr>`).join("");
   wrap.innerHTML = hstr`<h4 class="batch-h">Payment batches</h4>
     <table class="list-table batch-table"><thead><tr><th>Reference</th><th>Method</th><th>Paid on</th><th class="num">Records</th><th class="num">Total</th><th></th></tr></thead>
     <tbody>${raw(rows)}</tbody></table>`;
+  wrap.querySelectorAll("[data-receipt]").forEach((btn) => {
+    btn.addEventListener("click", () => _printBatchReceipt(btn.dataset.receipt));
+  });
   wrap.querySelectorAll("[data-dissolve]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const b = batches.find((x) => String(x.batch_id) === btn.dataset.dissolve);
@@ -3322,6 +3350,27 @@ function _renderBatches(batches) {
             setMsg("payroll-msg", "batch dissolved", true); loadPayroll(); }
       catch (e) { setMsg("payroll-msg", e.message, false); }
     });
+  });
+}
+
+// Printable batch receipt — the paper the TD files with the checks. Reuses the
+// shared printDoc() scaffold; one row per official with the frozen total.
+async function _printBatchReceipt(batchId) {
+  let d;
+  try { d = await api(`/payroll/batches/${batchId}`); }
+  catch (e) { setMsg("payroll-msg", e.message, false); return; }
+  const rows = d.members.length ? d.members.map((m) =>
+    hstr`<tr><td>${m.official_name}</td><td class="num">${String(m.days_worked)}</td><td class="num">${money(m.total)}</td></tr>`).join("")
+    : `<tr><td colspan="3" class="muted">No records in this batch.</td></tr>`;
+  printDoc({
+    title: `Payment batch — ${d.reference}`,
+    styleExtra: `
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }`,
+    body: hstr`
+    <h1>Payment batch receipt</h1>
+    <div class="sub">${d.reference} · ${d.method} · paid ${d.paid_on}${d.note ? ` · ${d.note}` : ""} · generated ${_fmtMDY(new Date().toISOString().slice(0, 10))}</div>
+    <table><thead><tr><th>Official</th><th class="num">Days</th><th class="num">Total</th></tr></thead><tbody>${raw(rows)}</tbody></table>
+    <div class="grand"><strong>Batch total: ${money(d.total)}</strong> · ${String(d.record_count)} official(s)</div>`,
   });
 }
 

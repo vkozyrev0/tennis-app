@@ -315,6 +315,22 @@ def test_batch_404_unknown_tournament_and_batch():
         "reference": "X", "method": "cash", "paid_on": "2026-09-10",
         "record_ids": [1]}).status_code == 404
     assert client.delete("/api/payroll/batches/99999999").status_code == 404
+    assert client.get("/api/payroll/batches/99999999").status_code == 404
+
+
+def test_batch_detail_lists_members():
+    t, recs = _two_finalized()
+    ids = [r["record_id"] for r in recs]
+    b = _ok(client.post(f"/api/tournaments/{t['id']}/payroll/batches", json={
+        "reference": "receipt me", "method": "check", "paid_on": "2026-09-14",
+        "record_ids": ids}))
+    detail = _ok(client.get(f"/api/payroll/batches/{b['batch_id']}"), 200)
+    assert detail["reference"] == "receipt me" and detail["method"] == "check"
+    assert detail["record_count"] == 2
+    assert detail["total"] == sum(r["total"] for r in recs)
+    assert len(detail["members"]) == 2
+    assert all(m["official_name"] and m["paid_at"] == "2026-09-14" for m in detail["members"])
+    assert sum(m["total"] for m in detail["members"]) == detail["total"]
 
 
 # ---- Assignment-audit CSV (tournament-wide trail) --------------------------

@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 456 tests, all passing (migrations through 0048) — deterministic
+**Status:** 457 tests, all passing (migrations through 0048) — deterministic
 (login-throttle state leak fixed). CI runs the suite against a Postgres 16
 service on every push/PR and gates the Docker image build on it
 (`.github/workflows/docker.yml`).
@@ -384,16 +384,17 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **456 tests, all passing** (see the status line at the top).
-`test_zz_payroll.py` (20) — payroll finalization (P4-4): freeze the computed
+Total suite count: **457 tests, all passing** (see the status line at the top).
+`test_zz_payroll.py` (21) — payroll finalization (P4-4): freeze the computed
 summary, double-finalize 409, drift after a post-finalize no-show,
 unfinalize-unless-paid, mark-paid lifecycle/defaults, idempotent finalize-all,
 audit-trail landing, 404s; multiple orphaned (deleted-assignment) records all
 survive the summary; CSV export shape + 404. **Payment batches (0048):** create
 marks members paid, refuses already-paid/batched, rejects foreign/missing
 records (all-or-nothing), list aggregates count + total, dissolve walks members
-back to unpaid (stays finalized), lifecycle audits, 404s. **Assignment-audit
-CSV:** tournament-wide trail export shape (created/finalized/paid present) + 404.
+back to unpaid (stays finalized), lifecycle audits, 404s, batch-detail lists
+members. **Assignment-audit CSV:** tournament-wide trail export shape
+(created/finalized/paid present) + 404.
 
 `test_zz_soft_delete.py` (7) — soft-delete (P2 #13): tournament trash hides it
 from the list + shows in `/trash` + restores; double-delete 404 and
