@@ -154,6 +154,7 @@
       <button class="tab needs-active" data-target="panel-t-roomblocks">Room blocks</button>
       <button class="tab needs-active" data-target="panel-t-staff">Staff</button>
       <button class="tab needs-active" data-target="panel-t-incidents">Incidents</button>
+      <button class="tab needs-active" data-target="panel-t-payroll">Payroll</button>
       <button class="tab needs-active" data-target="panel-t-reports">Reports</button>
     </div>
     <!-- Inbox promoted to its own top-level group: it's the cross-tournament
@@ -754,6 +755,20 @@
           <div class="actions-row"><button type="submit">Log incident</button><button type="button" class="cancel">Cancel</button><span class="msg" id="incident-msg"></span></div>
         </form>
         <table id="incidents-table" class="list-table"><thead><tr><th>When</th><th>Category</th><th>Sev</th><th>Site</th><th>What happened</th><th>Resolution</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- T: Payroll (P4-4) — finalize/lock computed pay, settle, export -->
+    <section class="panel tpanel" id="panel-t-payroll">
+      <div class="needs-active-note">Select a tournament in the bar above to run payroll.</div>
+      <div class="t-content card">
+        <h3>Payroll — <span class="t-name"></span> <span class="h3-subtitle">(finalize freezes each official's computed pay so later edits can't move approved money)</span></h3>
+        <div class="actions-row">
+          <button type="button" id="payroll-finalize-all">Finalize all</button>
+          <span class="msg" id="payroll-msg"></span>
+          <span id="payroll-totals" class="muted" style="margin-left:auto"></span>
+        </div>
+        <table id="payroll-table" class="list-table"><thead><tr><th>Official</th><th>Days</th><th>Pay</th><th>Mileage</th><th>Total</th><th>Finalized</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </section>
 
@@ -1365,6 +1380,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=151"></script>
+  <script type="module" src="/app.js?v=152"></script>
 </body>
 </html>

@@ -528,8 +528,10 @@ item-by-item record lives in [improvement-plan.md](improvement-plan.md).
   (planned/worked/no_show/early_departure; no-shows drop out of pay + the .ics
   feed) and **player check-in** (P4-1/2); a tournament **incident log** with
   quick-log + resolve flow (P4-3); an append-only **assignment change audit**
-  (who/when/what, History modal on each card) (P4-5). Payroll finalization
-  (P4-4) is the remaining day-of gap — see Open work.
+  (who/when/what, History modal on each card) (P4-5); **payroll finalization**
+  — freeze each official's computed pay into an immutable record, mark-paid
+  settlement, drift detection, idempotent finalize-all, Payroll tab (P4-4,
+  migration 0045). All day-of items are now shipped.
 - **Inbox detection wave (Part B)** — **doubles partner** detection (both
   players on a doubles email) and **pairing-avoidance group** detection (every
   named player); **USTA-number extraction** covering one/both/neither numbers,
@@ -552,9 +554,9 @@ item-by-item record lives in [improvement-plan.md](improvement-plan.md).
   for the retention sweep — tied to the post-POC deployment switch (see
   `docs/pii-hardening-plan.md`). *(H3 retention **policy + sweep job** with
   dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
-- **Payroll finalization** (P4-4) — an approved/paid state over the existing
-  pay statements + a payroll CSV batch export; today statements print but
-  nothing records that they were settled. The last unbuilt day-of item.
+- **Payroll CSV batch export** — the finalize/mark-paid lifecycle ships (P4-4,
+  see above); a one-click CSV of the finalized records for the bookkeeper is
+  the remaining slice (deferred from the finalization pass).
 - **Multi-user TD access** (D8) — ✅ **shipped**: admin user management (create/list/reset-password/delete with self + last-admin guards) at `/api/admin/users` + a Setup → Users tab.
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
   refactor); structured assignment-card layout. *(Inline "add distance" on the

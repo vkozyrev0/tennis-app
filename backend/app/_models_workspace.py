@@ -119,6 +119,15 @@ class RosterSignIn(BaseModel):
     signed_in: bool
 
 
+class PayrollMarkPaid(BaseModel):
+    """Mark a finalized payroll record paid (or walk it back). paid_at defaults
+    to today server-side when omitted on a paid=true call."""
+    paid: bool
+    paid_at: Optional[date] = None
+    paid_method: Optional[Literal["check", "ach", "cash", "venmo", "zelle", "other"]] = None
+    paid_note: Optional[str] = Field(default=None, max_length=500)
+
+
 class CoverageFillCreate(BaseModel):
     """Fill a coverage gap: assign `official_id` to the tournament (if not already)
     and add this (work_date, working_as) day in one call."""

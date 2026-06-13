@@ -5,6 +5,36 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Payroll finalization — P4-4, the last day-of gap (2026-06-13)
+Closes the final open day-of item. The live pay/mileage/total numbers always
+recompute from current rows — right while the event runs, wrong the moment the
+TD approves payment, because a later day edit, rate change, or no-show toggle
+would silently move money already promised.
+
+- **Migration 0045** `payroll_record` — one frozen record per assignment
+  (days, no-shows, pay, mileage, total, rule version, day-by-day breakdown in
+  `detail` jsonb). Identity denormalized + `assignment_id` FK `SET NULL` on
+  delete, so the money trail outlives the assignment (same policy as
+  `assignment_audit`). The audit `action` enum gains
+  `finalized/unfinalized/paid/unpaid`.
+- **`routers/payroll.py`** — `GET /tournaments/{id}/payroll` (one row per
+  assignment: live numbers + finalized record + a **drift** flag when the two
+  disagree, plus orphaned records whose assignment was deleted); `POST
+  /assignments/{id}/finalize` (409 if already finalized); `POST
+  /tournaments/{id}/payroll/finalize-all` (idempotent sweep); `DELETE
+  /payroll/{id}` to unfinalize (**refused once paid** — walk the payment back
+  first); `PUT /payroll/{id}/paid` (settlement date defaults to today, method +
+  note; walking back clears them). Every step lands in `assignment_audit`.
+- **Payroll tab** (Operations group) — grid of official · days (−N no-shows) ·
+  pay · mileage · live total (with column sum) · finalized amount (drift badge)
+  · status, with per-row Finalize / Mark paid / Unfinalize / Unmark and a
+  Finalize-all button; totals strip shows finalized + paid sums.
+- **8 tests** (`test_zz_payroll.py`): freeze, double-finalize 409, drift after a
+  post-finalize no-show, unfinalize-unless-paid, mark-paid lifecycle/defaults,
+  idempotent finalize-all, audit-trail landing, 404s. Suite: **428** green.
+
+CSV export was scoped but deferred this pass (verify-and-commit).
+
 ## Inbox doubles intelligence + real-corpus USTA extraction (2026-06-12)
 Driven by the TD's actual "Tournament Emails for CourtOps" PDF (30 real
 reply-chain emails, now a repo fixture). Suite: **420** green.

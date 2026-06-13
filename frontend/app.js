@@ -1432,6 +1432,7 @@ function _populateTournamentLoaders() {
     "panel-t-roomblocks": () => loadRoomBlocks(),
     "panel-t-staff": () => loadStaff(),
     "panel-t-incidents": () => loadIncidents(),
+    "panel-t-payroll": () => loadPayroll(),
     "panel-t-availability": () => loadAvailability(),
     "panel-t-tshirt-order": () => { loadTshirtOrder(); loadTshirtsBySite(); },
     "panel-t-inbox": () => loadInbox(),
@@ -3110,6 +3111,135 @@ onSubmit(incidentForm, async () => {
   } catch (e) { setMsg("incident-msg", e.message, false); markInvalid(incidentForm, e.message); }
 });
 incidentForm.querySelector(".cancel").addEventListener("click", incReset);
+
+// =================== Payroll (P4-4 finalize/lock + settle) ===================
+// Live numbers recompute from current rows; "Finalize" freezes one official's
+// computed summary into payroll_record so later day/rate edits can't move
+// money the TD already approved. Drift = finalized ≠ live (re-finalize or
+// investigate). Mark paid tracks settlement; paid records refuse unfinalize.
+const _PAID_METHODS = ["check", "ach", "cash", "venmo", "zelle", "other"];
+async function _payrollMarkPaid(row) {
+  const method = await (async () => {
+    // tiny inline picker via prompt-less confirm flow: build a one-off dialog
+    return new Promise((resolve) => {
+      const m = document.createElement("div"); m.className = "modal";
+      m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
+        `<h3 class="detail-title">Mark paid — ${esc(row.official_name)}</h3>` +
+        '<div class="row"><label>Method <select id="pay-method">' +
+        _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") +
+        '</select></label>' +
+        '<label>Note <input id="pay-note" maxlength="500" placeholder="check #1042 / batch 7" /></label></div>' +
+        '<div class="modal-actions"><button type="button" id="pay-ok">Mark paid</button>' +
+        '<button type="button" id="pay-cancel" class="cancel">Cancel</button></div></div>';
+      document.body.appendChild(m);
+      m.querySelector("#pay-ok").addEventListener("click", () => {
+        const v = { method: m.querySelector("#pay-method").value,
+                    note: m.querySelector("#pay-note").value.trim() || null };
+        m.remove(); resolve(v);
+      });
+      m.querySelector("#pay-cancel").addEventListener("click", () => { m.remove(); resolve(null); });
+      m.addEventListener("click", (e) => { if (e.target === m) { m.remove(); resolve(null); } });
+    });
+  })();
+  if (!method) return;
+  try {
+    await api(`/payroll/${row.finalized.record_id}/paid`, { method: "PUT",
+      body: JSON.stringify({ paid: true, paid_method: method.method, paid_note: method.note }) });
+    setMsg("payroll-msg", `paid — ${row.official_name}`, true);
+    loadPayroll();
+  } catch (e) { setMsg("payroll-msg", e.message, false); }
+}
+const payrollGrid = makeReadGrid("payroll-table", [
+  { title: "Official", field: "official_name", headerFilter: "input",
+    formatter: (c) => esc(c.getValue()) + (c.getData().orphaned
+      ? ' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>' : "") },
+  { title: "Days", field: "days_worked", width: 80, hozAlign: "right",
+    formatter: (c) => {
+      const m = c.getData();
+      return esc(String(c.getValue())) + (m.no_show_days
+        ? ` <span class="badge badge-warn" title="no-show days (unpaid)">−${m.no_show_days}</span>` : "");
+    } },
+  { title: "Pay", field: "pay", width: 100, hozAlign: "right", formatter: (c) => money(c.getValue()) },
+  { title: "Mileage", field: "mileage", width: 100, hozAlign: "right",
+    formatter: (c) => c.getData().missing_distance
+      ? '<span class="badge badge-warn" title="no distance on file — mileage can\'t compute">no dist.</span>'
+      : money(c.getValue()) },
+  { title: "Total (live)", field: "total", width: 110, hozAlign: "right", bottomCalc: "sum",
+    bottomCalcFormatter: (c) => money(c.getValue()),
+    formatter: (c) => `<strong>${money(c.getValue())}</strong>` },
+  { title: "Finalized", field: "_fin", width: 130, hozAlign: "right",
+    formatter: (c) => {
+      const m = c.getData();
+      if (!m.finalized) return '<span class="muted">—</span>';
+      const tip = `by ${m.finalized.finalized_by} · ${new Date(m.finalized.finalized_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      return `<span title="${esc(tip)}">${money(m.finalized.total)}</span>` +
+        (m.drift ? ' <span class="badge badge-bad" title="live total no longer matches the finalized amount — unfinalize + re-finalize, or investigate">drift</span>' : "");
+    } },
+  { title: "Status", field: "_status", width: 120,
+    formatter: (c) => {
+      const m = c.getData();
+      if (!m.finalized) return '<span class="muted">open</span>';
+      if (!m.finalized.paid) return '<span class="badge badge-info">finalized</span>';
+      const tip = [m.finalized.paid_at, m.finalized.paid_method, m.finalized.paid_note]
+        .filter(Boolean).join(" · ");
+      return `<span class="badge badge-ok" title="${esc(tip)}">paid</span>`;
+    } },
+  { title: "", field: "_act", headerSort: false, width: 170, cssClass: "grid-actions-cell",
+    formatter: (cell) => {
+      const m = cell.getData();
+      const wrap = document.createElement("div"); wrap.className = "grid-actions";
+      const btn = (label, title, fn) => {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "btn-link"; b.textContent = label; b.title = title;
+        b.addEventListener("click", (ev) => { ev.stopPropagation(); fn(); });
+        wrap.appendChild(b);
+      };
+      if (!m.finalized) {
+        btn("Finalize", "Freeze this official's computed pay into a payroll record", async () => {
+          try { await api(`/assignments/${m.assignment_id}/finalize`, { method: "POST" });
+                setMsg("payroll-msg", `finalized — ${m.official_name}`, true); loadPayroll(); }
+          catch (e) { setMsg("payroll-msg", e.message, false); }
+        });
+      } else if (!m.finalized.paid) {
+        btn("Mark paid", "Record settlement (date/method/note)", () => _payrollMarkPaid(m));
+        btn("Unfinalize", "Re-open this record so pay recomputes from current rows", async () => {
+          if (!(await confirmDialog(`Unfinalize ${m.official_name}? The frozen amount is discarded.`))) return;
+          try { await api(`/payroll/${m.finalized.record_id}`, { method: "DELETE" });
+                setMsg("payroll-msg", `re-opened — ${m.official_name}`, true); loadPayroll(); }
+          catch (e) { setMsg("payroll-msg", e.message, false); }
+        });
+      } else {
+        btn("Unmark paid", "Walk the payment back (needed before unfinalizing)", async () => {
+          if (!(await confirmDialog(`Unmark ${m.official_name} as paid?`))) return;
+          try { await api(`/payroll/${m.finalized.record_id}/paid`, { method: "PUT",
+                  body: JSON.stringify({ paid: false }) });
+                setMsg("payroll-msg", `payment walked back — ${m.official_name}`, true); loadPayroll(); }
+          catch (e) { setMsg("payroll-msg", e.message, false); }
+        });
+      }
+      return wrap;
+    } },
+], "payroll", "No assignments yet — staff the tournament first.", { index: "assignment_id" });
+async function loadPayroll() {
+  if (!active) return;
+  const rows = await api(`/tournaments/${active.id}/payroll`);
+  payrollGrid.setData(rows);
+  const fin = rows.filter((r) => r.finalized);
+  const paid = fin.filter((r) => r.finalized.paid);
+  const sum = (xs, f) => xs.reduce((n, r) => n + (f(r) || 0), 0);
+  document.getElementById("payroll-totals").textContent =
+    `${fin.length}/${rows.length} finalized (${money(sum(fin, (r) => r.finalized.total))})` +
+    ` · ${paid.length} paid (${money(sum(paid, (r) => r.finalized.total))})`;
+}
+document.getElementById("payroll-finalize-all").addEventListener("click", async () => {
+  if (!active) return;
+  if (!(await confirmDialog("Finalize every open assignment's pay at the current computed amounts?"))) return;
+  try {
+    const out = await api(`/tournaments/${active.id}/payroll/finalize-all`, { method: "POST" });
+    setMsg("payroll-msg", `finalized ${out.finalized} (now ${out.total_finalized} total)`, true);
+    loadPayroll();
+  } catch (e) { setMsg("payroll-msg", e.message, false); }
+});
 
 // Populate the staff Days multi-select from the active tournament's play window;
 // `selected` is an optional Set of ISO dates to pre-check.
