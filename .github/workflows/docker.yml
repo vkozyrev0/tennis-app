@@ -18,6 +18,13 @@ permissions:
   contents: read
   packages: write
 
+# Node.js 20 is deprecated for Actions; GitHub forces Node 24 on 2026-06-16 and
+# removes Node 20 on 2026-09-16. This opts every JavaScript action onto Node 24
+# NOW so CI proves it works ahead of the forced switch. Safe to remove once
+# Node 24 is the default (after 2026-06-16).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   # Run the backend suite first; the image build/push is gated on it (needs: test).
   test:
@@ -45,7 +52,7 @@ jobs:
       PGSSLMODE: disable
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -66,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

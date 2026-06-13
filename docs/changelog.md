@@ -5,6 +5,21 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## CI Node 24 opt-in + coverage-gap nudge (2026-06-13)
+- **CI Node 24.** GitHub deprecated the Node 20 Actions runtime (forced
+  2026-06-16, removed 2026-09-16). Set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+  at the workflow level so every action runs on Node 24 now (CI proves
+  compatibility ahead of the forced switch), and bumped `actions/checkout@v4 →
+  @v5` (Node-24 native). The env var is safe to remove once Node 24 is the
+  default (after 2026-06-16).
+- **Coverage-gap nudge.** A `#dash-coverage` card names *which* play days have no
+  official assigned (the tile only showed the count), rendered from the existing
+  dashboard payload (`coverage.uncovered_days`) — no extra fetch. Deep-links to
+  the coverage report. (Skipped a separate unfiled-inbox card — the existing
+  dashboard tile already shows that count with a deep-link.)
+- Frontend + CI only; suite unchanged at 460. Coverage card verified live
+  (1 uncovered day → "📅 1 play day with no official · 2026-06-26 (Fri)").
+
 ## Bulk-nudge + roster-completeness nudges (dashboard) (2026-06-13)
 Two more actionable dashboard nudges, both frontend-only (reuse existing
 endpoints — no new routes, no migration).

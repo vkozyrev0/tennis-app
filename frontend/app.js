@@ -5699,7 +5699,23 @@ async function loadDashboard() {
   _renderDeclinedAlert(d.officials.declined);
   _renderPendingNudges(d.officials.pending);
   _renderRosterIncomplete();
+  _renderCoverageGap(d.coverage);
   _renderReadiness();
+}
+
+// Coverage-gap nudge: which play days have NO official assigned. The tile shows
+// the count; this names the actual dates (from the dashboard payload, no extra
+// fetch) so the TD knows exactly which days to staff. Deep-links to the coverage
+// report (same target as the uncovered-days tile).
+function _renderCoverageGap(cov) {
+  const box = document.getElementById("dash-coverage");
+  if (!box || !active) return;
+  const days = cov?.uncovered_days || [];
+  if (!days.length) { box.hidden = true; box.innerHTML = ""; return; }
+  const item = (iso) => html`<li class="dash-pend-item"><span class="dash-pend-name">${fmtDOW(iso)}</span></li>`;
+  box.hidden = false;
+  box.innerHTML = html`<div class="dash-pend-head">📅 ${String(days.length)} play day${days.length === 1 ? raw("") : raw("s")} with no official</div><ul class="dash-pend-list">${days.map(item)}</ul><button type="button" id="dash-cov-go" class="btn-small">View coverage on Reports →</button>`;
+  document.getElementById("dash-cov-go")?.addEventListener("click", () => _dashGo("staffing", "panel-t-reports"));
 }
 
 // Pre-tournament readiness scorecard: one pass/warn/fail row per area, with an
