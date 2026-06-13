@@ -4915,20 +4915,73 @@ const photelList = wirePlayerList({
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
+// ---- Shared print/PDF window scaffold --------------------------------------
+// The TD-facing exports (hotel report, pay statement(s), 360 export, staffing
+// plan, rooming list, schedule) each open a blank window and write a
+// self-contained, auto-printing HTML document. They differ only in <title>,
+// body markup, and a few doc-specific CSS rules — so the doctype/head, the
+// shared print stylesheet, the pop-up guard, the Print/Close controls, the
+// auto-print trigger, and (optionally) an embedded CSV-download button live
+// here instead of being copy-pasted into every builder.
+//
+// Injection: callers pass a `title` (escaped here) and a pre-built `body`
+// string; every interpolated value inside `body`/`styleExtra` already goes
+// through esc() at the call site (escapes &<>), so a name containing
+// `</style>` becomes `&lt;/style&gt;` and cannot break out of the document.
+// The popup is a fresh document with no shared origin state.
+const PRINT_BASE_CSS = `
+      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      h1 { font-size: 18px; margin: 0 0 0.1rem; }
+      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
+      .sub, .meta { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
+      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
+      .muted { color: #556070; }
+      table { border-collapse: collapse; width: 100%; margin: 0.3rem 0 0.6rem; }
+      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
+      th { background: #f4f6f8; font-weight: 700; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+      td.empty { color: #556070; font-style: italic; text-align: center; }
+      tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
+      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
+      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }`;
+
+// Opens the print window and writes the wrapped document. Returns false (after a
+// toast) if pop-ups are blocked, so callers can bail. `styleExtra` is appended
+// after the base CSS so a doc can add or override rules (landscape @page, an
+// .h4 heading, a .grand box, …). `csv` (optional) = {data, filename}: embeds a
+// ⬇ CSV button wired to download that blob. `printLabel` overrides the primary
+// button text.
+function printDoc({ title, body, styleExtra = "", printLabel = "Save as PDF / Print", csv = null, popupMsg = "Allow pop-ups to export the PDF" }) {
+  const win = window.open("", "_blank");
+  if (!win) { toast(popupMsg, false); return false; }
+  const csvBtn = csv ? ` <button id="dl">⬇ CSV</button>` : "";
+  const csvScript = csv ? `
+      document.getElementById("dl").addEventListener("click", function () {
+        var blob = new Blob([${JSON.stringify(csv.data)}], {type: "text/csv"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = ${JSON.stringify(csv.filename)};
+        a.click();
+      });` : "";
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+    <style>${PRINT_BASE_CSS}${styleExtra}</style></head><body>
+    ${body}
+    <div class="noprint"><button onclick="window.print()">${esc(printLabel)}</button>${csvBtn} <button onclick="window.close()">Close</button></div>
+    <script>${csvScript}
+      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
+    <\/script>
+  </body></html>`);
+  win.document.close();
+  return true;
+}
+
 // Confidential per-hotel roster: summary pivot + initials-only detail; opens
 // in a new window with a print-ready stylesheet and auto-triggers Print so
 // the TD can hand it to ops/CVB/etc. without exposing full player names.
-//
-// Note on injection: every interpolated value goes through esc() (which
-// escapes &<>), so a player/hotel name containing `</style>` becomes
-// `&lt;/style&gt;` and cannot break out of the <style> block. The popup is
-// also a fresh document with no shared origin state.
 async function openHotelConfidentialReport() {
   if (!active) { toast("Select a tournament first", false); return; }
   try {
     const data = await api(`/tournaments/${active.id}/hotel-confidential-report`);
-    const win = window.open("", "_blank", "noopener");
-    if (!win) { toast("Allow pop-ups for this site to print the report", false); return; }
     const e = esc;
     const summaryRows = data.summary.length
       ? data.summary.map((r) => `<tr><td>${e(r.hotel_name)}</td><td class="num">${r.players}</td><td class="num">${r.officials}</td><td class="num"><strong>${r.total}</strong></td></tr>`).join("")
@@ -4940,24 +4993,16 @@ async function openHotelConfidentialReport() {
       ? data.officials.map((o) => `<tr><td>${e(o.name)}</td><td>${e(o.hotel_name)}</td></tr>`).join("")
       : `<tr><td colspan="2" class="empty">No officials with a hotel assignment.</td></tr>`;
     const t = active.name;
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Hotel report — ${e(t)}</title>
-      <style>
-        body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.2cm; font-size: 12px; }
-        h1 { font-size: 18px; margin: 0 0 0.2rem; }
-        h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom: 2px solid #2e6f40; padding-bottom: 0.2rem; color: #2e6f40; }
-        .meta { color: #556070; font-size: 11px; margin-bottom: 0.4rem; }
-        table { border-collapse: collapse; width: 100%; margin: 0.4rem 0 0.8rem; }
-        th, td { border: 1px solid #d9e0e6; padding: 5px 8px; text-align: left; font-size: 11px; }
-        th { background: #f4f6f8; font-weight: 700; }
-        td.num { text-align: right; font-variant-numeric: tabular-nums; }
-        td.empty { color: #556070; font-style: italic; text-align: center; }
-        tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
-        .pagebreak { page-break-before: always; }
-        @media print { @page { margin: 1.2cm; } }
-        @media print { .noprint { display: none; } }
-        .noprint { margin-top: 1rem; }
-        .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-      </style></head><body>
+    printDoc({
+      title: `Hotel report — ${t}`,
+      printLabel: "Print this report",
+      popupMsg: "Allow pop-ups for this site to print the report",
+      styleExtra: `
+      body { margin: 1.2cm; }
+      h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom-width: 2px; }
+      .meta { margin-bottom: 0.4rem; }
+      .pagebreak { page-break-before: always; }`,
+      body: `
       <h1>Confidential hotel report</h1>
       <div class="meta">${e(t)} · ${e(active.play_start_date || "")} → ${e(active.play_end_date || "")} · names shown as first-initial + last name</div>
 
@@ -4972,13 +5017,8 @@ async function openHotelConfidentialReport() {
       <table><thead><tr><th>Name</th><th>Hotel</th></tr></thead><tbody>${playerRows}</tbody></table>
 
       <h2>Officials (${data.totals.officials})</h2>
-      <table><thead><tr><th>Name</th><th>Hotel</th></tr></thead><tbody>${officialRows}</tbody></table>
-
-      <div class="noprint"><button onclick="window.print()">Print this report</button>
-        <button onclick="window.close()">Close</button></div>
-      <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
-    </body></html>`);
-    win.document.close();
+      <table><thead><tr><th>Name</th><th>Hotel</th></tr></thead><tbody>${officialRows}</tbody></table>`,
+    });
   } catch (err) { setMsg("photel-msg", err.message, false); }
 }
 document.getElementById("photel-report-btn").addEventListener("click", openHotelConfidentialReport);
@@ -5665,8 +5705,6 @@ async function exportPayStatement(officialId) {
   let d;
   try { d = await api(`/officials/${officialId}/pay-statement`); }
   catch (e) { toast(e.message, false); return; }
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   const e = esc, off = d.official, tt = d.totals;
   const sections = d.assignments.length ? d.assignments.map((a) => {
     const dayRows = a.days.map((x) =>
@@ -5681,32 +5719,19 @@ async function exportPayStatement(officialId) {
       `<p class="line">Pay: <strong>${money(a.pay)}</strong> · Mileage: <strong>${mileage}</strong>` +
       ` · Assignment total: <strong>${money(a.total)}</strong></p>`;
   }).join("") : `<p class="muted">No assignments on file.</p>`;
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Pay statement — ${e(off.name)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
-      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
-      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
-      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }
-      .muted { color: #556070; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+  printDoc({
+    title: `Pay statement — ${off.name}`,
+    styleExtra: `
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }`,
+    body: `
     <h1>Officiating pay statement</h1>
     <div class="sub">${e(off.name)}${off.location ? ` · ${e(off.location)}` : ""}` +
       `${off.email ? ` · ${e(off.email)}` : ""}${off.phone ? ` · ${e(off.phone)}` : ""}` +
       ` · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
     ${sections}
     <div class="grand"><strong>Grand total: ${money(tt.total)}</strong> ` +
-      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.assignments} assignment(s)</div>
-    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
-    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
-  </body></html>`);
-  win.document.close();
+      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.assignments} assignment(s)</div>`,
+  });
 }
 
 // Print/PDF the currently-open 360 drawer (player or official) — reuses the
@@ -5715,35 +5740,20 @@ async function exportPayStatement(officialId) {
 let _p360Export = null;
 function exportP360() {
   if (!_p360Export) { toast("Open a profile first", false); return; }
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   const { title, subtitle, html } = _p360Export;
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(subtitle)} — ${esc(title)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      .sub { color: #556070; font-size: 11px; margin-bottom: 0.8rem; }
+  printDoc({
+    title: `${subtitle} — ${title}`,
+    styleExtra: `
       h4 { font-size: 13px; margin: 1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: 0.15rem; color: #2e6f40; }
-      table { border-collapse: collapse; width: 100%; margin: 0.3rem 0 0.7rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      th { background: #f4f6f8; font-weight: 700; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-      tr.totals td { font-weight: 700; background: #e7f1ea; }
       .p360-id { color: #556070; font-size: 12px; }
       ul { margin: 0.2rem 0 0.6rem; padding-left: 1.2rem; }
       .badge { display: inline-block; padding: 1px 6px; border: 1px solid #ccd; border-radius: 5px; font-size: 10px; }
-      .p360-link { display: none; }  /* the 👤 affordance has no meaning on paper */
-      .muted { color: #556070; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+      .p360-link { display: none; }  /* the 👤 affordance has no meaning on paper */`,
+    body: `
     <h1>${esc(title)}</h1>
     <div class="sub">${esc(subtitle)} · generated ${esc(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
-    ${html}
-    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
-    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
-  </body></html>`);
-  win.document.close();
+    ${html}`,
+  });
 }
 document.getElementById("player360-print")?.addEventListener("click", exportP360);
 
@@ -6310,25 +6320,16 @@ function exportReportPdf() {
     }).join("");
     return `<tr><td>${e(certLabel(r.role))} (${holders} certified)</td>${cells}</tr>`;
   }).join("") : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned.</td></tr>`;
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Staffing plan — ${e(t.name)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.2cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.2rem; }
-      h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom: 2px solid #2e6f40; padding-bottom: 0.2rem; color: #2e6f40; }
-      .meta { color: #556070; font-size: 11px; margin-bottom: 0.4rem; }
-      table { border-collapse: collapse; width: 100%; margin: 0.4rem 0 0.8rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      th { background: #f4f6f8; font-weight: 700; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  printDoc({
+    title: `Staffing plan — ${e(t.name)}`,
+    styleExtra: `
+      body { margin: 1.2cm; }
+      h2 { font-size: 14px; margin: 1.4rem 0 0.4rem; border-bottom-width: 2px; }
+      .meta { margin-bottom: 0.4rem; }
       td.day, th.day { text-align: center; }
-      td.empty { color: #556070; font-style: italic; text-align: center; }
       .flag { color: #c62828; font-size: 10px; }
-      tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
-      @media print { @page { margin: 1cm; size: landscape; } .noprint { display: none; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+      @media print { @page { margin: 1cm; size: landscape; } }`,
+    body: `
     <h1>Officials staffing plan</h1>
     <div class="meta">${e(t.name)} · ${e(t.play_start_date)} → ${e(t.play_end_date)}${totals.rule_version ? ` · pay rule ${e(reportData.officials.find((o) => o.rule_version)?.rule_version || "")}` : ""}</div>
     <table><thead><tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th><th>Check-in</th><th>Check-out</th>${dayHead}<th class="num">Days</th><th class="num">Pay</th><th class="num">Mileage</th></tr></thead>
@@ -6348,11 +6349,8 @@ function exportReportPdf() {
     <h2>Room-block pickup (officials)</h2>
     <table><thead><tr><th>Hotel</th><th>Confirmation</th><th>Dates</th><th class="num">Reserved</th><th class="num">Assigned</th><th class="num">Unused</th></tr></thead><tbody>${pickupRows}</tbody></table>
     <h2>Other staff${totals.staff_pay ? ` — pay ${money(totals.staff_pay)}` : ""}</h2>
-    <table><thead><tr><th>Name</th><th>Role</th>${dayHead}<th class="num">Pay</th></tr></thead><tbody>${staffRows}</tbody></table>
-    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
-    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));</script>
-  </body></html>`);
-  win.document.close();
+    <table><thead><tr><th>Name</th><th>Role</th>${dayHead}<th class="num">Pay</th></tr></thead><tbody>${staffRows}</tbody></table>`,
+  });
 }
 document.getElementById("report-pdf").addEventListener("click", exportReportPdf);
 
@@ -6365,8 +6363,6 @@ async function exportPayStatementsBatch() {
   try { d = await api(`/tournaments/${active.id}/pay-statements`); }
   catch (e) { toast(e.message, false); return; }
   if (!d.officials.length) { toast("No officials assigned yet", false); return; }
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export the PDF", false); return; }
   const e = esc, t = d.tournament, tt = d.totals;
   const sections = d.officials.map((o) => {
     const dayRows = o.days.length ? o.days.map((x) =>
@@ -6381,30 +6377,17 @@ async function exportPayStatementsBatch() {
       `<p class="line">Pay: <strong>${money(o.pay)}</strong> · Mileage: <strong>${mileage}</strong>` +
       ` · Total: <strong>${money(o.total)}</strong></p>`;
   }).join("");
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Pay statements — ${e(t.name)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
-      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
-      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.4rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
-      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }
-      .muted { color: #556070; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+  printDoc({
+    title: `Pay statements — ${t.name}`,
+    styleExtra: `
+      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }`,
+    body: `
     <h1>Officiating pay statements</h1>
     <div class="sub">${e(t.name)} · ${e(t.play_start_date)} → ${e(t.play_end_date)} · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
     ${sections}
     <div class="grand"><strong>Tournament total: ${money(tt.total)}</strong> ` +
-      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.officials} official(s)</div>
-    <div class="noprint"><button onclick="window.print()">Save as PDF / Print</button> <button onclick="window.close()">Close</button></div>
-    <script>window.addEventListener("load", () => setTimeout(() => window.print(), 250));<\/script>
-  </body></html>`);
-  win.document.close();
+      `(pay ${money(tt.pay)} + mileage ${money(tt.mileage)}) · ${tt.days} day(s) across ${tt.officials} official(s)</div>`,
+  });
 }
 document.getElementById("report-pay-statements").addEventListener("click", exportPayStatementsBatch);
 
@@ -6417,8 +6400,6 @@ async function exportRoomingList() {
   try { d = await api(`/tournaments/${active.id}/rooming-list`); }
   catch (e) { toast(e.message, false); return; }
   if (!d.blocks.length) { toast("No official room blocks for this tournament", false); return; }
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export", false); return; }
   const e = esc, t = d.tournament, tt = d.totals;
   // CSV rows for the embedded download (flat: one row per occupant).
   const csv = [["Hotel", "Confirmation", "Official", "First night", "Last night", "Dietary", "Phone"]];
@@ -6439,39 +6420,18 @@ async function exportRoomingList() {
       `<tbody>${rows}</tbody></table>`;
   }).join("");
   const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Rooming list — ${e(t.name)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
-      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
-      .line { font-size: 11px; color: #556070; margin: 0.1rem 0 0.4rem; }
-      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      .muted { color: #556070; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+  printDoc({
+    title: `Rooming list — ${t.name}`,
+    popupMsg: "Allow pop-ups to export",
+    csv: { data: csvData, filename: "rooming-list-" + (t.name || "").replace(/\s+/g, "_") + ".csv" },
+    styleExtra: `
+      h2 { margin-bottom: 0.2rem; }
+      .line { color: #556070; margin: 0.1rem 0 0.4rem; }`,
+    body: `
     <h1>Hotel rooming list</h1>
     <div class="sub">${e(t.name)} · ${tt.blocks} block(s) · ${tt.occupants} room night-guest(s) · ${tt.rooms_reserved} room(s) reserved · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
-    ${sections}
-    <div class="noprint">
-      <button onclick="window.print()">Save as PDF / Print</button>
-      <button id="dl">⬇ CSV</button>
-      <button onclick="window.close()">Close</button>
-    </div>
-    <script>
-      document.getElementById("dl").addEventListener("click", function () {
-        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = ${JSON.stringify("rooming-list-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
-        a.click();
-      });
-      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
-    <\/script>
-  </body></html>`);
-  win.document.close();
+    ${sections}`,
+  });
 }
 document.getElementById("report-rooming-list").addEventListener("click", exportRoomingList);
 
@@ -6483,8 +6443,6 @@ async function exportSchedule() {
   try { d = await api(`/tournaments/${active.id}/schedule`); }
   catch (e) { toast(e.message, false); return; }
   if (!d.days.length) { toast("No play-date window set", false); return; }
-  const win = window.open("", "_blank");
-  if (!win) { toast("Allow pop-ups to export", false); return; }
   const e = esc, t = d.tournament;
   const csv = [["Date", "Official", "Role", "Site", "Response"]];
   const sections = d.days.map((day) => {
@@ -6498,39 +6456,18 @@ async function exportSchedule() {
       `<tbody>${rows}</tbody></table>`;
   }).join("");
   const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Schedule — ${e(t.name)}</title>
-    <style>
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      .sub { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
-      h2 { font-size: 13px; margin: 1.1rem 0 0.2rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
-      h2 .cnt { font-weight: 400; color: #556070; font-size: 11px; }
-      table { border-collapse: collapse; width: 100%; margin: 0.2rem 0 0.5rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      .muted { color: #556070; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }
-    </style></head><body>
+  printDoc({
+    title: `Schedule — ${t.name}`,
+    popupMsg: "Allow pop-ups to export",
+    csv: { data: csvData, filename: "schedule-" + (t.name || "").replace(/\s+/g, "_") + ".csv" },
+    styleExtra: `
+      h2 { margin-bottom: 0.2rem; }
+      h2 .cnt { font-weight: 400; color: #556070; font-size: 11px; }`,
+    body: `
     <h1>Day-by-day schedule</h1>
     <div class="sub">${e(t.name)} · generated ${e(_fmtMDY(new Date().toISOString().slice(0, 10)))}</div>
-    ${sections}
-    <div class="noprint">
-      <button onclick="window.print()">Save as PDF / Print</button>
-      <button id="dl">⬇ CSV</button>
-      <button onclick="window.close()">Close</button>
-    </div>
-    <script>
-      document.getElementById("dl").addEventListener("click", function () {
-        var blob = new Blob([${JSON.stringify(csvData)}], {type: "text/csv"});
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = ${JSON.stringify("schedule-" + (t.name || "").replace(/\s+/g, "_") + ".csv")};
-        a.click();
-      });
-      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
-    <\/script>
-  </body></html>`);
-  win.document.close();
+    ${sections}`,
+  });
 }
 document.getElementById("report-schedule-export").addEventListener("click", exportSchedule);
 async function reportCsvExport() {

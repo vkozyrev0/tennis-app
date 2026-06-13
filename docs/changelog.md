@@ -5,6 +5,32 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Unified print-window export scaffold (2026-06-13)
+The seven TD-facing "open a blank window, write a self-contained auto-printing
+HTML doc" exports (hotel confidential report, pay statement, pay-statements
+batch, 360 profile export, staffing plan, rooming list, day-by-day schedule)
+each carried a copy-pasted doctype/head, a ~12-line print stylesheet, the
+pop-up guard, the Print/Close controls, and the auto-print `<script>`. Drift
+had crept in (h2 13px vs 14px, margin 1.2cm vs 1.4cm, etc.).
+
+- Added a single `printDoc({ title, body, styleExtra, csv, printLabel,
+  popupMsg })` helper + a shared `PRINT_BASE_CSS`. The helper owns the wrapper,
+  the pop-up guard (returns false after a toast), the controls, the auto-print
+  trigger, and — when `csv: {data, filename}` is passed — an embedded ⬇ CSV
+  download button (rooming list + schedule). `styleExtra` is appended after the
+  base CSS so each doc keeps its specifics (landscape `@page` for the staffing
+  plan, the `.grand` total box for pay statements, `h4`/`.badge` for the 360
+  export, the players-page-break for the hotel report).
+- The 7 builders now just assemble their `body` string and call `printDoc`.
+  net −63 lines in app.js; the print scaffold has one source of truth.
+- Dropped the lone `"noopener"` on the hotel report's `window.open` (it was the
+  only one with it; `noopener` can null the returned handle, so the no-feature
+  form the other six already used is the reliable one).
+- Verified live: intercepted `window.open` and triggered all five reports-tab
+  exports against a seeded tournament — each produced the right `<title>`, the
+  base stylesheet, its own styleExtra (pagebreak / `.grand` / landscape / CSV
+  button + script + filename), and no `[object Object]`.
+
 ## Mobile reports fix + dead-code removal (2026-06-13)
 Two small, audited cleanups.
 
