@@ -4821,28 +4821,18 @@ async function _suggestAlternates(wd) {
   } catch (_) { _hideWdSuggest(); return; }
   if (!sameDiv.length && !others.length) {
     box.hidden = false;
-    box.innerHTML = `<p class="wd-suggest-empty">No alternates waiting${div ? ` in <strong>${esc(div)}</strong> or any other division` : ""} — nothing to promote.</p>`;
+    box.innerHTML = html`<p class="wd-suggest-empty">No alternates waiting${div ? html` in <strong>${div}</strong> or any other division` : ""} — nothing to promote.</p>`;
     return;
   }
-  const who = wd ? `${esc(wd.last_name)}, ${esc(wd.first_name)}` : "a player";
+  const who = wd ? html`${wd.last_name}, ${wd.first_name}` : "a player";
+  // per-row html`` (auto-escapes names); joined to a string + raw()'d into the
+  // list so the outer html`` doesn't re-escape (see helper double-escape note).
   const row = (a, best) =>
-    `<li class="wd-alt${best ? " is-best" : ""}">` +
-    `<span class="wd-alt-name">${esc(a.last_name)}, ${esc(a.first_name)}` +
-    (a.player_id ? ` <span class="p360-link" data-pid="${a.player_id}" title="Open player 360">👤</span>` : "") + `</span>` +
-    `<span class="wd-alt-div">${esc(a.age_division || "—")}${best ? ' <span class="wd-best-tag">best match</span>' : ""}</span>` +
-    `<button type="button" class="wd-promote" data-eid="${a.id}" data-name="${esc(a.last_name)}, ${esc(a.first_name)}">↑ Promote to selected</button>` +
-    `</li>`;
+    html`<li class="wd-alt${best ? " is-best" : ""}"><span class="wd-alt-name">${a.last_name}, ${a.first_name}${a.player_id ? raw(` <span class="p360-link" data-pid="${a.player_id}" title="Open player 360">👤</span>`) : ""}</span><span class="wd-alt-div">${a.age_division || "—"}${best ? raw(' <span class="wd-best-tag">best match</span>') : ""}</span><button type="button" class="wd-promote" data-eid="${a.id}" data-name="${a.last_name}, ${a.first_name}">↑ Promote to selected</button></li>`;
   box.hidden = false;
-  box.innerHTML =
-    `<div class="wd-suggest-head"><strong>${who}</strong> withdrew` +
-    (div ? ` from <strong>${esc(div)}</strong>` : "") +
-    ` — promote an alternate to fill the slot:</div>` +
-    `<ul class="wd-alt-list">` +
-    sameDiv.map((a) => row(a, true)).join("") +
-    (others.length
-      ? `<li class="wd-alt-sep">Other divisions</li>` + others.map((a) => row(a, false)).join("")
-      : "") +
-    `</ul>`;
+  box.innerHTML = html`<div class="wd-suggest-head"><strong>${who}</strong> withdrew${div ? html` from <strong>${div}</strong>` : ""} — promote an alternate to fill the slot:</div><ul class="wd-alt-list">${raw(sameDiv.map((a) => row(a, true)).join(""))}${
+    others.length ? html`<li class="wd-alt-sep">Other divisions</li>${raw(others.map((a) => row(a, false)).join(""))}` : ""
+  }</ul>`;
   box.querySelectorAll(".wd-promote").forEach((btn) => btn.addEventListener("click", async () => {
     btn.disabled = true;
     try {
