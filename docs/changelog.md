@@ -5,6 +5,23 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## html`` template helper for card builders (P2 #12, 2026-06-13)
+The big card builders (`renderAssignment` et al.) are long string-concat blocks
+that hand-call `esc()` on every interpolation — one forgotten call is an XSS,
+and double-escaping is just as easy. New `app/html.js`: a tagged template that
+**auto-escapes** every `${value}` (text), with `raw(...)` to opt out for trusted
+markup (badge HTML, an already-escaped attribute fragment) and arrays/`null`/
+`false` handled so `${cond ? html`…` : ""}` and `${items.map(…)}` compose. The
+result is a `Safe` wrapper whose `toString()` is the HTML, so `el.innerHTML =
+html`…`` works and nested `${html`…`}` doesn't re-escape.
+
+Adopted in `renderAssignment`'s header block (the worst manual-`esc` offender —
+removed ~6 hand `esc()` calls; official name / site / hotel / diet now
+auto-escape). 10 unit tests in `html.test.mjs` (escaping, raw, nesting, arrays,
+conditionals, XSS payload). Verified live: the assignment card renders
+identically (name, meta with em-dash fallback, free-band mileage span, response
+chip) with no double-escaping. Broader adoption is incremental.
+
 ## Payroll CSV export (2026-06-13)
 The deferred slice of P4-4: `GET /tournaments/{id}/payroll/export.csv` streams
 the **finalized** records (live/unfinalized amounts aren't payable, so they're

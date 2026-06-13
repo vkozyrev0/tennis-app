@@ -117,11 +117,12 @@ adult_lists) one endpoint at a time.
     live: login / logout / session-restore / change-pw / active-switch.
     wirePlayerList (Part-B-coupled) rides a later slice.
 
-12. **Render-template helper for the big card builders** (M) — renderAssignment
-    (~250 lines) and friends are string-concat + createElement mixes. A tiny
-    tagged-template `html` helper (no framework) makes them readable and
-    lintable. Do it together with 11(a) so the extraction doesn't move
-    unreadable code.
+12. ✅ **SHIPPED (2026-06-13) — Render-template helper.** `app/html.js`: a
+    tiny auto-escaping tagged-template `html` (no framework) + `raw()` for
+    trusted markup, 10 unit tests (`html.test.mjs`). Adopted in
+    renderAssignment's header block (removed ~6 hand `esc()` calls; name / site
+    / hotel / diet auto-escape now) and verified the card renders identically.
+    Broader adoption across the other builders is incremental, low-risk follow-on.
 
 13. **Soft-delete for Officials / Players / Sites** (M, backend+frontend) —
     hard DELETE loses assignment/pay/distance history on a misclick; the

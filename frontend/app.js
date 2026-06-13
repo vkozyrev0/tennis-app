@@ -13,6 +13,7 @@ import { genderFromDivision as _genderFromDivision, rosterPrefillFromEmail, reso
 import { createGridFactories } from "./app/grids.js";
 import { createAuth } from "./app/auth.js";
 import { createTournamentState } from "./app/state.js";
+import { html, raw } from "./app/html.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
@@ -2625,18 +2626,21 @@ function renderAssignment(a, availDates) {
     if (a.official_phone) parts.push(`<a href="tel:${esc(a.official_phone)}">${esc(a.official_phone)}</a>`);
     contact = `<div class="asg-contact">awaiting response · ${parts.join(" · ")}</div>`;
   }
-  head.innerHTML =
-    `<div class="asg-name"><strong>${esc(a.official_name)}</strong></div>` +
-    `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · hotel: ${esc(a.hotel_name) || "—"}` +
-    (a.dietary_restrictions ? ` · diet: ${esc(a.dietary_restrictions)}` : "") + `</div>` +
-    contact +
-    `<div class="asg-badges">` +
-      `<span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>` +
-      `<span class="badge badge-info">mileage ${mileage}</span>` +
-      `<span class="badge badge-ok"${auditTip ? ` title="${auditTip}"` : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>` +
-      ` ${_respChip(a.response_status)}` +
-      (flagChips ? " " + flagChips : "") +
-    `</div>`;
+  // Built with the auto-escaping html`` helper (P2 #12): plain ${text} is
+  // HTML-escaped, raw(...) marks already-trusted markup (badges, the contact
+  // line, the pre-escaped audit-title attribute fragment, mileage's free-band
+  // span). site_label/hotel_name fall back with `|| "—"` BEFORE interpolation
+  // so the em-dash isn't escaped away.
+  head.innerHTML = html`
+    <div class="asg-name"><strong>${a.official_name}</strong></div>
+    <div class="asg-meta">site: ${a.site_label || "—"} · hotel: ${a.hotel_name || "—"}${a.dietary_restrictions ? html` · diet: ${a.dietary_restrictions}` : ""}</div>
+    ${raw(contact)}
+    <div class="asg-badges">
+      <span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>
+      <span class="badge badge-info">mileage ${raw(mileage)}</span>
+      <span class="badge badge-ok"${raw(auditTip ? ` title="${auditTip}"` : "")}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>
+      ${raw(_respChip(a.response_status))}${flagChips ? raw(" " + flagChips) : ""}
+    </div>`;
   const actions = document.createElement("span"); actions.className = "asg-actions";
   const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
   ed.addEventListener("click", () => {
