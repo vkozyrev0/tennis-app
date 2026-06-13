@@ -1713,7 +1713,7 @@ async function _renderRosterCompleteness() {
   catch (e) { box.innerHTML = ""; return; }
   if (!c.counts.incomplete_entries) {
     box.innerHTML = c.counts.total_active
-      ? '<p class="rc-clean">✓ All ' + esc(c.counts.total_active) + ' active roster entries are complete.</p>' : "";
+      ? hstr`<p class="rc-clean">✓ All ${c.counts.total_active} active roster entries are complete.</p>` : "";
     return;
   }
   const k = c.counts;
@@ -1723,18 +1723,9 @@ async function _renderRosterCompleteness() {
     k.missing_shirt ? `${k.missing_shirt} no t-shirt` : "",
     k.outstanding_balance ? `${k.outstanding_balance} balance due` : "",
   ].filter(Boolean).join(" · ");
-  box.innerHTML =
-    `<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} active entr` +
-    `${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${esc(chips)})</span></summary>` +
-    `<ul class="rc-list">` +
-    c.entries.map((e) =>
-      `<li class="rc-row" data-eid="${e.entry_id}">` +
-      `<span class="rc-name">${esc(e.player_name)} <span class="muted">#${esc(e.usta_number || "—")}</span></span>` +
-      `<span class="rc-issues">${e.issues.map((i) =>
-        `<span class="rc-issue${i === "outstanding_balance" ? " rc-issue-pay" : ""}">${esc(_COMPLETE_LABEL[i] || i)}` +
-        (i === "outstanding_balance" && e.amount_outstanding != null ? ` ${money(e.amount_outstanding)}` : "") +
-        `</span>`).join(" ")}</span></li>`
-    ).join("") + `</ul></details>`;
+  box.innerHTML = html`<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} active entr${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${chips})</span></summary><ul class="rc-list">${c.entries.map((e) =>
+    html`<li class="rc-row" data-eid="${e.entry_id}"><span class="rc-name">${e.player_name} <span class="muted">#${e.usta_number || "—"}</span></span><span class="rc-issues">${e.issues.map((i) =>
+      html`<span class="rc-issue${i === "outstanding_balance" ? " rc-issue-pay" : ""}">${_COMPLETE_LABEL[i] || i}${i === "outstanding_balance" && e.amount_outstanding != null ? ` ${money(e.amount_outstanding)}` : ""}</span>`)}</span></li>`)}</ul></details>`;
   box.querySelectorAll(".rc-row").forEach((row) => row.addEventListener("click", () => {
     const id = Number(row.dataset.eid);
     const r = (rosterRows || []).find((x) => x.id === id);
@@ -2570,7 +2561,7 @@ function _renderAsgList() {
     .filter((a) => _asgRespFilter === "all" || a.response_status === _asgRespFilter)
     .sort((x, y) => (_RESP_ORDER[x.response_status] ?? 3) - (_RESP_ORDER[y.response_status] ?? 3));
   if (!shown.length) {
-    box.innerHTML = `<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No ${esc(_asgRespFilter)} assignments.</div>`;
+    box.innerHTML = hstr`<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No ${_asgRespFilter} assignments.</div>`;
     return;
   }
   for (const a of shown) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
@@ -2629,8 +2620,8 @@ function renderAssignment(a, availDates) {
   let contact = "";
   if (a.response_status === "pending" && (a.official_email || a.official_phone)) {
     const parts = [];
-    if (a.official_email) parts.push(`<a href="mailto:${esc(a.official_email)}?subject=${encodeURIComponent("Assignment confirmation — " + (active ? active.name : ""))}">${esc(a.official_email)}</a>`);
-    if (a.official_phone) parts.push(`<a href="tel:${esc(a.official_phone)}">${esc(a.official_phone)}</a>`);
+    if (a.official_email) parts.push(hstr`<a href="mailto:${a.official_email}?subject=${encodeURIComponent("Assignment confirmation — " + (active ? active.name : ""))}">${a.official_email}</a>`);
+    if (a.official_phone) parts.push(hstr`<a href="tel:${a.official_phone}">${a.official_phone}</a>`);
     contact = `<div class="asg-contact">awaiting response · ${parts.join(" · ")}</div>`;
   }
   // Built with the auto-escaping html`` helper (P2 #12): plain ${text} is
