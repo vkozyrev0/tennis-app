@@ -1,6 +1,7 @@
 # CourtOps Tennis — PII Hardening Plan (minors' data / COPPA)
 
-> **Status:** plan only — no code changes in this document. It operationalizes
+> **Status:** H1 + H3 shipped (per-item marks below); H2 is deploy-gated. The
+> document itself remains the plan of record. It operationalizes
 > the roadmap's parked *"PII-at-rest encryption + DB hardening"* item
 > ([roadmap.md](roadmap.md) §On hold) and the audit's §5.1/§5.3 constraints,
 > grounded in COPPA obligations confirmed by external research.

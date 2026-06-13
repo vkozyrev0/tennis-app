@@ -5,18 +5,23 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 [vision-summary.md](vision-summary.md) · [audit.md](audit.md) ·
 [data-model.md](data-model.md).
 
-> **Status (2026-06-06):** Phases 0–4 are functionally shipped; Phase 5 is polish
+> **Status (2026-06-12):** Phases 0–4 are functionally shipped; Phase 5 is polish
 > and deploy-time hardening (see *On hold* for the two externally-blocked items).
-> The latest **TD-review build-out** (a question-driven round from a TD's
-> perspective) closed the remaining workflow gaps — a "Today" dashboard +
-> cross-tournament digest, a pre-event **readiness scorecard**, coverage-gap →
-> one-click fill, conflict / declined / missing-distance / no-login reports,
-> bulk-invite + personalised invite text, inbox **triage** (classify → detect →
-> populate) with aging + unmatched drilldowns, Player/Official 360 + exports,
-> rooming list, day-by-day schedule, pay statements, dietary + workload rollups,
-> and self-service availability. Full list in [changelog.md](changelog.md);
-> end-to-end validation in [e2e-findings.md](e2e-findings.md). Suite: **333**
-> green and deterministic.
+> The latest rounds — the **improvement plan** (P1 quick wins + P2 structural
+> refactors), **day-of operations** (official actual status, player check-in,
+> incident log, assignment change audit), and an **inbox detection wave**
+> (doubles partners, pairing-avoidance groups, USTA-number extraction, manual
+> player assignment) — are summarized in *Shipped 2026-06-10 → 06-12* below.
+> Earlier, the **TD-review build-out** closed the remaining workflow gaps — a
+> "Today" dashboard + cross-tournament digest, a pre-event **readiness
+> scorecard**, coverage-gap → one-click fill, conflict / declined /
+> missing-distance / no-login reports, bulk-invite + personalised invite text,
+> inbox **triage** (classify → detect → populate) with aging + unmatched
+> drilldowns, Player/Official 360 + exports, rooming list, day-by-day schedule,
+> pay statements, dietary + workload rollups, and self-service availability.
+> Full list in [changelog.md](changelog.md); end-to-end validation in
+> [e2e-findings.md](e2e-findings.md). Suite: **420** green and deterministic;
+> CI builds + publishes `ghcr.io/vkozyrev0/tennis-app:latest` on main pushes.
 
 ---
 
@@ -507,7 +512,35 @@ A round of fixes + features, merged to `main` (full backend suite: 109 green).
 - **PII hardening** — plan doc + **H1** (boot guard/TLS) + **H3**
   (history erasure on delete, email-body purge) (above).
 
-## Open work (as of 2026-06-04)
+## Shipped 2026-06-10 → 06-12 (improvement-plan rounds + day-of operations + inbox detection)
+Three threads landed in quick succession (suite now **420** green); the
+item-by-item record lives in [improvement-plan.md](improvement-plan.md).
+- **P1 quick wins (all seven)** — empty-state guidance, terminology pass,
+  in-grid edit feedback, uniform 409s, pagination helper, `mark_email_filed`
+  unification, delegated combobox listeners (commit 367868d).
+- **P2 structural refactors** — assignment money/flag calc extracted into a
+  unit-tested `app/assignment_calc.py` (#8); pure email-text extractors into
+  `app/email_extract.py` (#9 phase 1); per-row **savepoints for bulk writes**,
+  which surfaced and fixed a real silent-data-loss bug (#10); Tabulator grid
+  factories extracted into `frontend/app/grids.js` (#11a); API **contract
+  tests** — response shapes + query-count ceilings (#14).
+- **Day-of operations (P4)** — official **actual status**
+  (planned/worked/no_show/early_departure; no-shows drop out of pay + the .ics
+  feed) and **player check-in** (P4-1/2); a tournament **incident log** with
+  quick-log + resolve flow (P4-3); an append-only **assignment change audit**
+  (who/when/what, History modal on each card) (P4-5). Payroll finalization
+  (P4-4) is the remaining day-of gap — see Open work.
+- **Inbox detection wave (Part B)** — **doubles partner** detection (both
+  players on a doubles email) and **pairing-avoidance group** detection (every
+  named player); **USTA-number extraction** covering one/both/neither numbers,
+  number-before-name and name-before-number orders, and (name, USTA #) pair
+  extraction — exercised against the real email corpus, plus a **real-PDF
+  email-import fixture** with pair detection on PDF import.
+- **Inbox grid: manual player assignment** — editable **Player 1 / Player 2**
+  column groups on the inbox grid, so when detection can't match, the TD
+  assigns players by roster dropdown or a typed USTA # right in the grid.
+
+## Open work (as of 2026-06-12)
 - **Google Maps *driving* distance** (Phase 2) — needs API key + egress; the
   great-circle estimate + manual entry + workbook backfill cover the gap.
 - **Dedicated forwarding-address auto-ingest** (D4) — needs mail infra;
@@ -519,6 +552,9 @@ A round of fixes + features, merged to `main` (full backend suite: 109 green).
   for the retention sweep — tied to the post-POC deployment switch (see
   `docs/pii-hardening-plan.md`). *(H3 retention **policy + sweep job** with
   dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
+- **Payroll finalization** (P4-4) — an approved/paid state over the existing
+  pay statements + a payroll CSV batch export; today statements print but
+  nothing records that they were settled. The last unbuilt day-of item.
 - **Multi-user TD access** (D8) — ✅ **shipped**: admin user management (create/list/reset-password/delete with self + last-admin guards) at `/api/admin/users` + a Setup → Users tab.
 - **Lower-priority polish** — utility-class system for buttons (cosmetic
   refactor); structured assignment-card layout. *(Inline "add distance" on the

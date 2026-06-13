@@ -5,6 +5,138 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Inbox doubles intelligence + real-corpus USTA extraction (2026-06-12)
+Driven by the TD's actual "Tournament Emails for CourtOps" PDF (30 real
+reply-chain emails, now a repo fixture). Suite: **420** green.
+
+- **Doubles partner detection** (commit `05702e0`, migration 0041): a doubles
+  email names TWO players, but the inbox only detected one. New
+  `email_message.detected_partner_id`; the detector runs the layered match a
+  second time with the primary excluded (doubles emails only). Both detect
+  endpoints persist the partner; re-classifying away from doubles clears it.
+  The inbox Player column renders "X + Y" (each a Player-360 link), Detect/
+  Suggest toasts name both, and file-from-email pre-fills the doubles form's
+  partner picker.
+- **Pairing-avoidance group detection** (commit `15d66c9`, migration 0042):
+  pairing emails name a GROUP ("don't pair A with B and C"). New
+  `detected_member_ids int[]` (all detected players, primary first; NULL for
+  other classifications); the detector loops the layered match, excluding
+  everyone found so far, until dry (capped at 6). The grid shows the whole
+  group; file-from-email builds one pairing member row per detected player.
+- **Real-PDF fixture + pair detection on PDF import** (commit `b1a0d4c`):
+  `tests/fixtures/tournament_emails.pdf` (30 real TD emails) with a parse
+  contract + real-data detection tests; `_merge_email_pdf` now runs the pair
+  detector, so PDF-imported doubles/pairing emails carry the partner / member
+  group immediately. The inbox USTA # column stacks both numbers for a
+  detected pair (partner's number comes from THEIR roster record) and the
+  filter matches either.
+- **USTA numbers — one, both, or neither** (commit `34bf777`):
+  `extract_ustas()` returns ALL plausible numbers (the old single-number
+  extractor gave up on two bare numbers — exactly the doubles case); labeled
+  8-digit numbers now qualify as detector candidates; a rostered+stranger mix
+  matches the rostered player and still surfaces the unknown number with the
+  ✉ mark.
+- **Number-before-name detection + first-mentioned-is-primary** (commit
+  `cf5acf7`): per the TD's real email structure, a digit run immediately
+  before a capitalized First Last ("21043871 Ethan Carter") is a
+  high-confidence USTA #; `usta_candidates()` returns numbers in order of
+  appearance, so the first-mentioned player is the primary (requester) —
+  roster iteration order no longer decides.
+- **(name, USTA#) pair extraction — every doubles shape in the corpus**
+  (commit `a2d256c`): a survey of all 30 fixture emails found name-first is
+  the dominant shape ("* Kate Hampton USTA# 2018840232", "Ava Wright (USTA
+  #2018460819)", "Cooper's USTA number is 2018394774").
+  `extract_name_usta_pairs()` in `app/email_extract.py` yields ordered
+  (name, usta) pairs from both directions with sentence-leak cleanup; the
+  grid Player column falls back to the parsed names with the ✉ mark when
+  nobody matched the roster. All 5 numbered doubles emails in the corpus now
+  yield clean pairs.
+- **Inbox grid: Player 1 / Player 2 column groups with manual assignment**
+  (commit `5acc0c9`): each group is Player + USTA #, double-click editable —
+  pick from a roster typeahead dropdown or type a USTA # directly, covering
+  emails detection can't resolve. `EmailUpdate` gains `detected_partner_id`
+  (a manually set partner persists for ANY classification); `makeReadGrid`
+  gains opt-in editing; Player 2 requires Player 1 first; detail-pane saves
+  no longer wipe a detected/manual partner.
+- **P2 #11 slice (a) — Tabulator grid factories extracted** (commit
+  `d9c2cfc`): the generic grid layer (`wireEntity`, `makeListGrid`,
+  `makeReadGrid`, `_autoHeaderFilters`) moves to `frontend/app/grids.js`
+  (~445 lines) behind a `createGridFactories(ctx)` seam, shrinking app.js to
+  ~7.3k. Factory bodies moved unchanged; verified live in the rebuilt image.
+
+---
+
+## Day-of operations — P4 build-out (2026-06-10 → 06-12)
+The top verified gap from the investigation round: everything before and
+after an event was covered, but nothing recorded what actually happened ON
+the day. Suite grew 386 → 405 over the three slices.
+
+- **Official actual status (P4-1)** (commit `dce0c33`, migration 0040):
+  `assignment_day.actual_status` (planned | worked | no_show |
+  early_departure). `pay_for()` EXCLUDES no-show days (verified live: pay
+  450 → 300 on a no-show day → restored on reset); the frozen pay_audit days
+  carry the status, the summary exposes a no_show_days rollup, and the .ics
+  feed skips no-show days. UI: each day chip wears its status (no-show struck
+  through red, worked green, early dashed) with a status menu.
+- **Player check-in (P4-2)** (commit `dce0c33`): `PUT /api/roster/{id}/signin`
+  over the existing `signed_in` column — the sign-in SHEET exports stay; this
+  records the result in-app. UI: an "In" roster column (click toggles,
+  filterable) and a "checked in X/Y selected" counts line — the no-show list
+  is one header-filter away.
+- **Incident log (P4-3)** (commit `3c55bd3`, migration 0043): the
+  tournament's operational memory — weather delays, injuries, disputes,
+  facility problems logged as one-liners and resolved in place. New
+  `tournament_incident` table + `routers/incidents.py` (open incidents
+  first); UI: Tournament → Incidents tab with a quick-log form and a grid
+  where typing into the Resolution cell RESOLVES the incident (clearing it
+  reopens). Demo seeds a resolved rain delay + an open facility issue.
+- **Assignment change audit (P4-5)** (commit `1b6f8c4`, migration 0044):
+  pay_audit freezes AMOUNTS; this records ACTIONS — the dispute-resolution
+  trail. Append-only `assignment_audit` with tournament/official identity
+  denormalized so the trail survives assignment deletion; hooks on every
+  mutating endpoint record the acting admin's username (the official portal's
+  accept/decline records under the OFFICIAL's login). UI: a History action on
+  each card opens a modal table (when / who / what / detail).
+- **P4-6 verified false positive** (commit `3dc6dda`): self-service
+  dietary/lodging is ALREADY BUILT — `PUT /api/me/profile` updates dietary
+  from the portal "My profile" form, and per-tournament hotel-needed rides
+  the portal availability flow.
+
+---
+
+## Investigation round + P2 #9/#10/#14 (2026-06-10)
+A gap-analysis + issue-hunt + live-probe pass, then three more
+improvement-plan items. Suite: 367 → **386** green.
+
+- **Investigation-round fixes** (commit `5a1f780`): **ILIKE wildcard leak**
+  (med) — searching "%" or "_" matched EVERY row; new
+  `query_helpers.like_escape()` applied at all six sites. **`_rate_for`
+  fallback** (high, edge) — work logged before any rate's effective_from was
+  paid at the NEWEST rate; the fallback now picks the EARLIEST. **esc()
+  hygiene** (low) — four innerHTML sites interpolated counts unescaped.
+  Verified clean in the same pass: auth gates, paging edge params,
+  room-capacity TOCTOU, parameterized ILIKE, money rounding. The docs commit
+  (`e7edb49`) also added the P4 verified-missing-features register
+  (day-of-tournament operations) and a round-2 false-positive ledger.
+- **P2 #9 phase 1 — pure email-text extractors** (commit `055d7c5`): the six
+  pure (subject, body) → value parsers move out of the 745-line emails router
+  into `app/email_extract.py` (no-DB), with 11 direct unit tests pinning each
+  contract. Move-only.
+- **P2 #10 — per-row savepoints for bulk writes** (commit `cf21d0e`): a REAL
+  latent silent-data-loss bug — `bulk_populate` caught per-row errors without
+  a savepoint, so in Postgres the first failure aborted the whole transaction
+  and the request-end COMMIT silently rolled back rows already filed while
+  the response still reported `filed: N`. New `app/bulk_ops.py` `savepoint()`
+  contextmanager; one bad row now skips just itself (assignments bulk-create
+  too).
+- **P2 #14 — API contract tests** (commit `b18fd54`): SHAPE assertions on the
+  hand-built-dict endpoints (assignment summary, pay-statements, officials
+  report) + QUERY-COUNT ceilings via a CountingCursor patched into
+  `app.db.get_conn` (assignments 24, players 5, emails 6) — catches
+  float-vs-string drift and N+1 regressions before the frontend does.
+
+---
+
 ## Improvement-plan execution: P1 round 1 + the money-calc extraction (2026-06-10)
 Executing [improvement-plan.md](improvement-plan.md) (suite: **365** green).
 

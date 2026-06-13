@@ -41,7 +41,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 3 small helper modules; **Tabulator 6.3.1** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 4 small helper modules; **Tabulator 6.3.1** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -61,7 +61,14 @@ backend/
     security.py        # hash_pw/verify_pw, get_current_user, require_admin
     crypto.py          # Fernet encrypt/decrypt for PII-at-rest (H2)
     triage.py          # local keyword email classifier (no LLM)
+    email_extract.py   # pure regex extraction from email text: USTA #s, (name, USTA#) pairs,
+                       # withdrawal reason, division, events, avoid day/time
+    assignment_calc.py # pure pay/mileage/flag math (rates, free band, cap, RULE_VERSION)
+    bulk_ops.py        # savepoint() contextmanager: per-row failure isolation in bulk loops
+    db_errors.py       # global psycopg unique/FK/check handlers -> friendly 4xx
+    query_helpers.py   # like_escape + paged_select (q/limit/offset + X-Total-Count)
     importer.py        # staged spreadsheet import: per-type registry, parse/validate/merge
+                       # (+ PDF inbox import: a tournament-emails PDF -> staged email rows)
     email_targets.py   # single source of truth: classification -> target list registry
     playerops.py       # upsert_player, mark_email_filed (shared helpers)
     shirtops.py        # t-shirt size normalization
@@ -72,7 +79,7 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0039_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0044_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
@@ -82,7 +89,8 @@ backend/
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
   app.js               # ~7.3k lines: all behaviour (ES module)
-  app/util.js, app/shirts.js, app/roster_prefill.js   # extracted helpers (+ a .test.mjs)
+  app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
+  app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a)
   styles.css, tokens.css
   vendor/tabulator.*   # vendored grid lib
 scripts/
@@ -136,14 +144,30 @@ place. Models do light validation (required fields, enums, ranges).
 
 **Errors are `HTTPException`.** 404 for missing, 400 for bad input, 409 for
 unique/business conflicts, 403/401 for auth. Conflict and FK violations from
-psycopg are caught and re-raised as friendly 4xx.
+psycopg are caught and re-raised as friendly 4xx — globally, via the exception
+handlers `db_errors.install(app)` registers (unique → 409, FK → 400/409,
+check → 400, each naming the violated constraint), so routers don't need
+per-call try/except.
+
+**Bulk loops use savepoints (`bulk_ops.savepoint`).** In Postgres the *first*
+failed statement aborts the whole transaction: every later statement raises
+`InFailedSqlTransaction` and the request-end commit silently becomes a rollback
+— so a bulk loop that catches an error and "continues" loses **all** its rows
+while still reporting success counts. The fix is a shared `savepoint(cur)`
+contextmanager: each per-row write runs inside `with savepoint(cur):`, a
+failure rolls back only that row, and the loop records it in `skipped` and
+carries on.
+
+**Server-side search/paging (`query_helpers`).** The big lists share
+`paged_select` (builds `q`/`limit`/`offset` SQL + sets the `X-Total-Count`
+header) and `like_escape` (escapes `%`/`_` in user search terms).
 
 **Route ordering rule.** Static path segments must be declared **before** dynamic
 `/{id}` routes in the same router, or they're swallowed as the id (e.g.
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0039`), each tracked in
+**Migrations are forward-only, filename-ordered** (`0001…0044`), each tracked in
 `schema_migrations`. `migrate.py` creates the DB if absent then applies pending
 files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
@@ -169,7 +193,8 @@ workspace vs Part B vs reporting:
   statements), `availability` (TD-entered + the heatmap grid), `dashboard`
   (per-tournament + cross-tournament digest/deadlines + readiness), `reports`
   (staffing plan, coverage, schedule, rooming list, dietary, missing-distance,
-  officials-without-login).
+  officials-without-login), `incidents` (day-of incident log: weather, injury,
+  dispute, facility, conduct — logged as one-liners, optionally resolved later).
 - **Part B inbox:** `emails` (the review inbox: list/search/status, triage =
   classify→detect→populate, aging, unmatched), and the per-classification list
   routers `late_entries`, `withdrawals`, `doubles`, `pairing_avoidances`,
@@ -181,7 +206,9 @@ workspace vs Part B vs reporting:
 player-identity path, keyed by USTA #), `playerops.mark_email_filed`,
 `email_targets` (the classification→target-list registry used by both single-file
 and bulk populate so they can't drift), `shirtops.norm_shirt`, `crypto`,
-`triage.classify`, `importer`.
+`triage.classify`, `email_extract` (pure regex extraction from email text),
+`assignment_calc` (pure pay/mileage math), `bulk_ops.savepoint`, `db_errors`,
+`query_helpers`, `ical`, `importer`.
 
 ---
 
@@ -220,14 +247,33 @@ blocker (uncovered day, double-booking, declined slot), `warn` = should-resolve.
 (12/14/16/18, rounded up) from birth year. The catalog (`division`,
 `tournament_event`) is editable Setup data, seeded by migration 0027.
 
-**Email triage (`triage.py`).** Purely **local keyword rules** (no LLM — minors'
-PII constraint): ordered patterns map an email's subject+body to a classification
-(withdrawal, late_entry, doubles, pairing_avoidance, scheduling_avoidance,
-division_flex, hotel, else `other`). Player detection (`_detect_player_for`)
-layers high-precision signals (explicit USTA #, full name, USTA withdrawal
-template) over weak ones (bare surname), matching against the **roster**;
-ambiguous matches are skipped, not guessed. Bulk **triage** = classify → detect →
-populate in one pass, reusing the three bulk handlers so it can't drift.
+**Email triage (`triage.py` + `email_extract.py`).** Purely **local keyword
+rules** (no LLM — minors' PII constraint): ordered patterns map an email's
+subject+body to a classification (withdrawal, late_entry, doubles,
+pairing_avoidance, scheduling_avoidance, division_flex, hotel, else `other`).
+The text-extraction regexes live in `email_extract.py`: **layered USTA-number
+patterns** — labeled (`USTA # 1234…`), bare 9–11 digit, number-before-name, and
+name-before-number — behind `extract_usta` / `extract_ustas` /
+`usta_candidates` / `extract_name_usta_pairs` (the last returns **(name,
+USTA #) pairs**, every doubles shape in the real corpus), plus withdrawal
+reason, age division, events, and avoid-day/time extractors.
+
+**Player detection (`_detect_player_for`)** is an eight-layer ladder, most to
+least reliable; the first layer that yields **exactly one** roster player wins,
+and an ambiguous signal is skipped, not guessed: L1 explicit USTA # → L2 full
+name in the subject → L3 USTA withdrawal body template → L4 full name in the
+body → L5 USTA portal subject template (first name + gender + division) → L6
+unique surname in the subject → L7 unique surname anywhere → L8 **off-roster**
+USTA match (the # belongs to a player in the system but not entered in this
+tournament). `_detect_pair_for` extends it to multi-player classifications:
+**doubles** re-runs the ladder with the primary excluded to find the partner;
+**pairing_avoidance** loops the ladder, excluding everyone found so far, until
+it comes up dry (capped at 6) to find the whole group
+(`detected_member_ids`, primary first). Extracted (name, USTA #) pairs feed the
+inbox grid for players not yet rostered. Bulk **triage** = classify → detect →
+populate in one pass, reusing the three bulk handlers so it can't drift. A
+**PDF inbox import** (`emails_pdf` import type, pdfplumber) parses a
+tournament-emails PDF into staged email rows.
 
 **Point-in-time names.** Player names are versioned (`player_history`); the roster
 resolves the name valid as of the tournament's play-start date.
@@ -238,16 +284,29 @@ resolves the name valid as of the tournament's play-start date.
 
 **No build, one page, one big module.** `index.html` contains every panel
 (hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~7.3k lines,
-loaded as `<script type="module">`) holds all behaviour; three ESM helpers split
-out pure logic (`util.js` formatting/CSV, `shirts.js` size normalisation,
-`roster_prefill.js`). Tabulator is vendored.
+loaded as `<script type="module">`) holds all behaviour; four ESM helpers under
+`app/` split out logic (`util.js` formatting/CSV, `shirts.js` size
+normalisation, `roster_prefill.js`, and `grids.js` — see below). Tabulator is
+vendored.
+
+**Grid factories live in `app/grids.js`** (P2 #11a):
+`createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,
+_autoHeaderFilters }` — the Setup master/detail CRUD factory, the workspace
+list grid, the read-only summary grid, and the auto header-filter helper.
+`app.js` calls it **once**, passing a `ctx` object of its own helpers (`api`,
+`esc`, `setMsg`, `confirmDialog`, the `GRIDS` registry, …) — the factories are
+deliberately coupled to the app's toast/message/modal conventions, so only the
+construction seam is new; the moved bodies are unchanged. `makeReadGrid`
+supports opt-in in-grid editing via `opts.editable` (the `editTriggerEvent`,
+e.g. `"dblclick"` so single-click links keep working in editable cells) +
+`opts.onCellEdited`. `wirePlayerList` (the Part B list-page factory) remains in
+`app.js`.
 
 **Structure (rough sections, headers in the file):** theme + small helpers →
 keyboard shortcuts → searchable comboboxes → caches/labels/tabs/menu → active-
-tournament state → **GRIDS registry + grid factories** (`wireEntity`,
-`makeListGrid`, `makeReadGrid`, `wirePlayerList` own all Tabulator wiring) →
-workspace pages → Setup entity configs → CSV/print exporters → Player/Official
-360 → dashboards.
+tournament state → **GRIDS registry + grid factories** (constructed from
+`app/grids.js`; `wirePlayerList` local) → workspace pages → Setup entity
+configs → CSV/print exporters → Player/Official 360 → dashboards.
 
 **Conventions:**
 - `api(path, opts)` wrapper — prefixes `/api`, sends cookies, runs a progress
@@ -262,6 +321,18 @@ workspace pages → Setup entity configs → CSV/print exporters → Player/Offi
   lib); CSV exports build a Blob.
 - **Player/Official 360** is a shared modal opened from anywhere a name appears
   (a `_playerCell` formatter + a capture-phase delegated click handler).
+- **Inbox grid player columns:** two editable column **groups** — *Player 1*
+  (Player + USTA #) and *Player 2* (Player + USTA #2). Double-click a cell to
+  manually assign when detection fails: the name cell is a roster dropdown, the
+  number cell takes a typed USTA #. Display priority per slot: matched roster
+  player → (name, USTA #) parsed from the email text (✉ mark, not rostered
+  yet) → bare email-text number; a pairing-avoidance group shows the primary in
+  slot 1 and the rest of the group in slot 2. Updates are **full-body PUTs**:
+  the endpoint overwrites the detection links with whatever is sent, so every
+  PUT carries the row's current `detected_player_id` + `detected_partner_id`
+  and omitting a field silently clears it; clearing the primary clears the
+  partner; a manually-set partner persists for **any** classification
+  (auto-detection only fills it for doubles).
 - **Server-side search/paging** on the big lists (inbox, players, officials):
   `q`/`limit`/`offset` + an `X-Total-Count` header on the API; Setup grids opt in
   via `wireEntity`'s `serverSearch` (capped page + "refine" note; the

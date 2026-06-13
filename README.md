@@ -10,7 +10,8 @@ halves:
   computes pay + mileage. Reports, conflict checks, and a readiness scorecard
   keep an event on track.
 - **Player operations (Part B)** — a human-reviewed **inbox** where parent/player
-  email is triaged (classify → match → file) into structured lists: roster, late
+  email is triaged (classify → detect players/partners/USTA #s → file, with
+  manual assignment when detection can't match) into structured lists: roster, late
   entries, withdrawals, scheduling avoidances, division flexibility, doubles,
   pairing avoidances, player hotels, and t-shirt orders.
 

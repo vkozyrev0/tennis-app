@@ -235,6 +235,14 @@ but the app has no live-operations surface:
 8. **Configurable mileage/cert catalogs** (M, low value now) — constants are
    fine for a single TD; revisit if other organizations adopt the tool.
 
+> **Addendum (2026-06-12):** alongside P4, a Part-B **inbox detection wave**
+> shipped outside this plan's numbering — doubles-partner + pairing-avoidance
+> group detection, USTA-number extraction (one/both/neither, either name/number
+> order, (name, USTA #) pairs), a real-PDF import fixture — capped by editable
+> **Player 1 / Player 2** column groups on the inbox grid so the TD manually
+> assigns players (roster dropdown or typed USTA #) when detection can't match.
+> Suite: **420** green. See roadmap *Shipped 2026-06-10 → 06-12*.
+
 Known blockers (unchanged, tracked in the roadmap): mail send/ingest infra,
 Maps API key, LLM-triage privacy decision, PII H2 at deploy, USTA draw API
 (intentionally out of scope, D7).

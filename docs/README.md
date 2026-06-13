@@ -20,7 +20,7 @@ master data) and a per-tournament workspace (scoped operations).
 | [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
 | [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
 | [roadmap.md](roadmap.md) | What's shipped, what's open. |
-| [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale), with sequencing. |
+| [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale, plus P4 missing features), with shipped marks and sequencing. |
 | [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
 | [changelog.md](changelog.md) | Chronological log of shipped work. |
 | [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
@@ -66,8 +66,10 @@ against a live server, see [e2e-findings.md](e2e-findings.md).
 
 The original TD audit (D1–D8) is closed. Eight subsequent code/UX
 critique passes are also closed; the running findings register is
-folded into `changelog.md`. Active open items live in `roadmap.md`
-under "Open work".
+folded into `changelog.md`. The 2026-06-10 improvement plan's P1 round
+and most P2/P4 items are shipped (see `improvement-plan.md` for the
+per-item marks). Active open items live in `roadmap.md` under
+"Open work".
 
 POC stack: **Postgres** (localhost) · **FastAPI + psycopg3** · **vanilla
 HTML/CSS/JS**. The POC defaults to `admin/admin`; harden before any

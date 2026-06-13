@@ -312,6 +312,9 @@ person sets `classification` and files each message into a list.
 > no data leaves the building** (D5-safe); the inbox "Suggest" button applies it and
 > a human confirms. Upgrading to an **LLM** that reads email content is the still-
 > open **D5** call (cloud vs local).
+>
+> Player auto-detection persists onto this row — see **EmailMessage detection
+> columns** (migrations 0030/0031/0039/0041/0042) at the bottom of this doc.
 
 ### DoublesRequest  /  DoublesPair  ✅ *built (migration 0016)*
 Two-sided verification (audit §2.2).
@@ -569,4 +572,72 @@ API endpoints (existing tournaments router):
 | `tshirt_hotel_dietary` | **B3** Combined T-shirt + Hotel-question + Dietary, one row per player. | Production |
 | `player_hotels` | Specific hotel-name + lodging (FK to `hotel`); drives CVB analytics. | Distinct from B3 — coexists |
 | `late_entries` / `withdrawals` / `scheduling_avoidances` / `division_flexibility` / `pairing_avoidances` / `doubles_requests` | Per-list inbox flows | Unchanged |
+| `emails_pdf` | Tournament-emails **PDF** (pdfplumber) → parsed/staged email rows for the inbox. | Production |
 | `distances` | Setup catalog (global, not per-tournament). | Unchanged |
+
+---
+
+## Day-of operations + inbox detection (migrations 0040–0044)
+
+### AssignmentDay.actual_status (migration 0040)  ✅ *day-of truth*
+Planned-vs-actual per assignment day (P4-1). The TD marks what really happened
+on the day; `no_show` days **drop out of pay**, the rest is reporting truth
+(who actually worked) for payroll reconciliation.
+| Column | Notes |
+|--------|-------|
+| `actual_status` | TEXT NOT NULL DEFAULT `'planned'` CHECK IN (`planned`, `worked`, `no_show`, `early_departure`) |
+
+> Player day-of check-in is **not** part of 0040 — the roster's `signed_in`
+> flag (migration 0028, B2b) already covers the player side; 0040 touches
+> `assignment_day` only.
+
+### EmailMessage detection columns (migrations 0030/0031/0039 + 0041 + 0042)  ✅
+Auto-detection writes its result onto the email row so the inbox grid and the
+filing flows can read it back. Earlier additions: `detected_player_id`
+(0030, FK → Player — the primary detected player), `detected_match_kind`
+(0031 — *why* it matched, `manual` when hand-picked), `detected_usta_text`
+(0039 — the USTA # parsed from the text, persisted so it's server-side
+searchable despite body encryption). New:
+| Column | Migration | Notes |
+|--------|-----------|-------|
+| `detected_partner_id` | 0041 | INT FK → Player, ON DELETE SET NULL. **Doubles**: the detected partner (second player) — the detector re-runs the layered match with the primary excluded. NULL for other classifications (auto-fill; a manual partner persists). |
+| `detected_member_ids` | 0042 | INT[]. **Pairing-avoidance groups**: ALL detected players, primary first (the detector loops, excluding everyone found so far, cap 6), so the inbox shows the whole group and filing pre-fills every member row. NULL otherwise. |
+
+### TournamentIncident  ✅ *built (migration 0043)*
+Day-of incident log (P4-3) — the tournament's operational memory. Weather
+delays, injuries, disputes, facility problems get logged as they happen (quick
+one-liner), optionally resolved later; feeds post-event review and
+protest/dispute paper trails. Tournament-scoped
+(`/api/tournaments/{id}/incidents`).
+| Field | Notes |
+|-------|-------|
+| `id` | PK (identity) |
+| `tournament_id` | FK → Tournament, ON DELETE CASCADE |
+| `site_id` | FK → Site (nullable), ON DELETE SET NULL |
+| `occurred_at` | timestamptz, default now() |
+| `category` | `weather` \| `injury` \| `dispute` \| `facility` \| `conduct` \| `other` |
+| `severity` | `info` (default) \| `minor` \| `major` |
+| `description` | required one-liner |
+| `resolved`, `resolution` | bool (default false) + optional resolution text |
+| `created_at` | timestamptz |
+
+Indexed on `(tournament_id, occurred_at DESC)`.
+
+### AssignmentAudit  ✅ *built (migration 0044)*
+**Append-only** assignment change trail (P4-5): WHO changed an assignment,
+WHEN, and WHAT — the dispute-resolution record `pay_audit` doesn't cover (that
+freezes *amounts*, not *actions*). `assignment_id` is SET NULL on delete and
+the tournament/official identity is **denormalized**, so the trail survives
+the assignment itself being removed.
+| Field | Notes |
+|-------|-------|
+| `id` | PK (identity) |
+| `assignment_id` | FK → Assignment (nullable), ON DELETE SET NULL |
+| `tournament_id`, `official_id`, `official_name` | denormalized identity (no FKs) — survives deletes |
+| `changed_at` | timestamptz, default now() |
+| `changed_by` | required (the logged-in user) |
+| `action` | `created` \| `updated` \| `deleted` \| `day_added` \| `day_removed` \| `day_status` \| `response` |
+| `detail` | jsonb — the change payload |
+
+Indexed on `(assignment_id, changed_at DESC)` and
+`(tournament_id, changed_at DESC)`.

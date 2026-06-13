@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 365 tests, all passing (migrations through 0039) — deterministic
+**Status:** 420 tests, all passing (migrations through 0044) — deterministic
 (login-throttle state leak fixed). CI runs the suite against a Postgres 16
 service on every push/PR and gates the Docker image build on it
 (`.github/workflows/docker.yml`).
@@ -10,8 +10,19 @@ Recent additions (2026-06-09 → 06-10): `test_zz_players_paging` /
 `test_zz_officials_paging` (server q/limit/offset + X-Total-Count),
 `test_zz_ical` (RFC 5545 schedule export), `test_zz_db_errors` (global
 constraint-violation → 409/400 mapping), and `test_zz_assignment_calc`
-(15 pure unit tests pinning the pay/mileage formula and flag semantics —
+(16 pure unit tests pinning the pay/mileage formula and flag semantics —
 the first no-DB unit layer over the money path).
+
+Newer additions (2026-06-10 → 06-12): `test_zz_contracts` (response shapes +
+query-count ceilings, P2 #14), `test_zz_bulk_savepoint` (per-row savepoint
+isolation, the silent-data-loss fix), `test_zz_rate_fallback` (`_rate_for`
+earliest-rate fallback), `test_zz_day_of` (per-day actual status + player
+check-in, migration 0040), `test_zz_incidents` (incident log, 0043),
+`test_zz_assignment_audit` (assignment change audit, 0044),
+`test_zz_doubles_partner` (doubles partner + pairing-avoidance group
+detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
+`test_zz_real_pdf` (real TD email-export fixture). See the
+[2026-06-10 → 06-12 additions](#2026-06-10--06-12-additions) section below.
 
 ## How the suite is wired
 
@@ -21,7 +32,7 @@ the first no-DB unit layer over the money path).
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
-| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`. |
+| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`. |
 
 **Frontend unit check (JS):** the one piece of pure frontend logic that's
 risky to verify only through the live grid — seeding the roster add-form from an
@@ -39,7 +50,8 @@ so module-load logins would invalidate sibling modules' sessions).
 
 | Type | Definition | Where used |
 |------|------------|------------|
-| **API integration** | Black-box HTTP call → assert status + body + DB-visible side-effects. | All tests. The suite stays at the HTTP boundary — no internal-function imports. |
+| **API integration** | Black-box HTTP call → assert status + body + DB-visible side-effects. | The vast majority of tests. The suite mostly stays at the HTTP boundary; the deliberate exceptions are the pure-unit modules (`test_zz_assignment_calc`, `test_zz_email_extract`, `test_config_guard`) and a handful of internal-helper tests (`test_zz_bulk_savepoint`, `test_zz_rate_fallback`, `test_zz_real_pdf`'s importer calls). |
+| **Unit (no HTTP)** | Imports a pure function and pins its contract directly — no DB or test client needed (or a rolled-back transaction where a cursor is required). | `test_zz_assignment_calc` (pay/mileage formula), `test_zz_email_extract` (extractor regexes), `test_config_guard`, `test_zz_rate_fallback`, `test_zz_bulk_savepoint`. |
 | **Smoke** | Confirms a feature exists and returns 200/201 with a plausible shape. | `test_health_ok`, `test_site_crud`, etc. |
 | **Contract** | Asserts the exact shape, status code, and side-effects a router promises. | `test_player_put_optimistic_concurrency`, `test_assignment_pay_and_mileage`. |
 | **Regression** | Reproduces a closed bug + asserts the fix holds. | `test_player_hotels_analytics_and_tshirts` (audit F1), `test_import_doubles_new_player_with_gender` (sixth-pass), `test_roster_import_requires_gender_for_new_players` (audit C1). |
@@ -180,7 +192,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `util.js`, `shirts.js`) | **None at runtime.** | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`) | **None at runtime** (except `roster_prefill.test.mjs`, above). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -192,7 +204,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (298)
+python -m pytest -q                                    # the whole suite (420)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -245,4 +257,131 @@ players already in roster from Initial); B3 184 rows / 0 failures.
 Distribution after all three: 147 Hotel / 27 Local / 25 None lodging;
 127 selected / 54 alternate / 18 withdrawn statuses.
 
-Total suite count: **298 tests, all passing** (see the status line at the top).
+---
+
+## 2026-06-10 → 06-12 additions
+
+### test_zz_contracts.py — API contract tests (P2 #14) · 6 tests
+
+Two hardening layers over endpoints that return hand-built dicts (no
+`response_model`, so FastAPI can't validate them).
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_assignment_summary_shape` | Contract | Assignments list: money fields are real numbers (never Decimal-as-string), flags are real booleans, day dates are ISO strings, list fields present even when empty, `response_status` enum. |
+| `test_pay_statement_shape` | Contract | Pay-statements report: per-official `pay`/`mileage`/`total` + `totals` are numeric. |
+| `test_officials_report_shape` | Contract | Staffing report: officials list + numeric totals + per-official `days` list. |
+| `test_assignments_list_query_ceiling` | Contract (perf) | Counting cursor via monkeypatched `get_conn`: the assignments list stays ≤24 queries for 3 staffed assignments — trips if a per-day query sneaks into `_summary`. |
+| `test_players_list_query_ceiling` | Contract (perf) | `paged_select` = COUNT + SELECT (+ auth) ≤5 queries — trips on any per-row query. |
+| `test_emails_list_query_ceiling` | Contract (perf) | Inbox list ≤6 queries (the lazy USTA backfill adds at most one UPDATE per legacy row; the test inbox has none). |
+
+### test_zz_bulk_savepoint.py — per-row savepoint isolation (P2 #10) · 2 tests
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_without_savepoint_one_error_poisons_the_transaction` | Unit (DB cursor) | Documents the Postgres failure mode the helper exists for: after one failed statement the whole transaction is aborted — the naive catch-and-continue pattern raises `InFailedSqlTransaction` on the next row and the request-end COMMIT silently rolls everything back. |
+| `test_savepoint_isolates_the_failed_row_and_the_rest_commits` | Unit (DB cursor) | `app.bulk_ops.savepoint` skips only the duplicate row; the survivors really persist after COMMIT (the silent-data-loss fix). |
+
+### test_zz_rate_fallback.py — `_rate_for` fallback semantics · 1 test
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_pre_catalog_work_uses_earliest_rate_and_on_date_uses_effective` | Unit (rolled-back transaction) | Work logged BEFORE the rate catalog starts picks the EARLIEST known rate (nearest that early date), not the newest; work on/after an effective date gets the rate in effect that day. |
+
+### test_zz_day_of.py — day-of operations (P4-1/P4-2, migration 0040) · 4 tests
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_no_show_drops_out_of_pay_and_back` | Contract | `PUT /api/assignment-days/{id}/status`: marking a day `no_show` excludes it from pay (snapshot refrozen, `pay_audit` reflects it); flipping back to `worked` restores full pay. |
+| `test_day_status_validation_and_404` | Contract | Bad status value → 422; unknown day id → 404. |
+| `test_no_show_day_leaves_the_ics_feed` | Contract | A `no_show` day drops its VEVENT from `GET /api/officials/{id}/schedule.ics`. |
+| `test_player_check_in_toggle` | Contract | `PUT /api/roster/{id}/signin` toggles `signed_in` both ways; the roster list reflects it; unknown roster id → 404. |
+
+### test_zz_incidents.py — day-of incident log (P4-3, migration 0043) · 3 tests
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_log_resolve_and_scope` | Contract | Quick-log defaults (`resolved=false`, `occurred_at` now); per-tournament scoping; resolve with a note; open incidents sort before resolved. |
+| `test_validation_and_404s` | Contract | Bad category / empty description → 422; unknown tournament/incident ids → 404 on POST/PUT/DELETE. |
+| `test_site_label_and_delete` | Contract | `site_label` resolves to the site code; DELETE → 204 and the list empties. |
+
+### test_zz_assignment_audit.py — assignment change audit (P4-5, migration 0044) · 3 tests
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_lifecycle_actions_are_recorded_with_actor` | Contract | created / day_added / day_status / day_removed land in `GET /api/assignments/{id}/audit` (newest first) with `changed_by` + structured `detail`. |
+| `test_official_response_is_attributed_to_their_login` | Contract | An official's accept via `/api/me/assignments/{id}/respond` (second TestClient so the login doesn't rotate the admin session) is attributed to their username. |
+| `test_trail_survives_assignment_deletion` | Contract | Deleting the assignment NULLs the FK (per-assignment endpoint returns []) but the rows survive with denormalized `official_name`, queryable by tournament. |
+
+### test_zz_doubles_partner.py — doubles partner + pairing groups (migrations 0041/0042) · 16 tests
+
+E2E through the inbox API: a doubles email names TWO players — the detector
+fills both slots (primary + partner), the inbox list returns both names, and
+re-classifying away from doubles clears the partner.
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_doubles_email_detects_both_players` | Contract | `POST /api/emails/{id}/detect-player` on a doubles email fills `detected_player_id` AND `detected_partner_id`/`_name`; the inbox list carries both. |
+| `test_non_doubles_email_keeps_partner_null` | Contract | Two names in a non-doubles email → partner stays NULL. |
+| `test_single_name_doubles_email_has_no_partner` | Contract | One name → primary only. |
+| `test_reclassifying_away_from_doubles_clears_partner` | Contract | PUT to `late_entry` clears the detected partner. |
+| `test_bulk_detect_fills_partner` | Contract | `POST /api/emails/bulk/detect-players` fills the partner too. |
+| `test_pairing_email_detects_the_whole_group` | Contract | A pairing-avoidance email naming 3 rostered players fills `detected_member_ids`/`_names` (whole group), surfaced in the list. |
+| `test_single_name_pairing_email_keeps_members_null` | Contract | One name → no group. |
+| `test_reclassifying_away_from_pairing_clears_members` | Contract | PUT to `withdrawal` clears the member group. |
+| `test_doubles_pair_matches_by_usta_numbers_alone` | Contract | Both USTA numbers, NO names — the pair resolves entirely via USTA match (`detected_partner_usta` set). |
+| `test_doubles_text_keeps_both_numbers_when_unmatched` | Contract | Two unrostered numbers: nobody matches but BOTH surface in `detected_usta_text` (the old single-number extractor gave up). |
+| `test_doubles_mixed_one_matched_one_text_only` | Contract | Rostered number matches; the stranger's number still surfaces in the text. |
+| `test_first_mentioned_number_is_primary` | Contract | The TD's real `<usta> <name>` format twice over: the FIRST-mentioned pair is the requester — roster iteration order must not decide. |
+| `test_manual_partner_assignment_persists` | Contract | Manual Player 2 via `PUT /api/emails/{id}` with `detected_partner_id` persists; list returns partner id + name + USTA. |
+| `test_manual_partner_survives_any_classification` | Contract | The TD's manual pick wins even off the doubles classification (e.g. a withdrawal naming two players). |
+| `test_clearing_primary_clears_manual_partner` | Contract | Clearing the primary player clears the manual partner too. |
+| `test_put_without_partner_field_clears_it` | Contract | A PUT body that omits `detected_partner_id` resets it to NULL, like the other `detected_*` fields. |
+
+### test_zz_email_extract.py — pure extractor units (P2 #9) · 15 tests
+
+UNIT tests for `app/email_extract.py` — no DB, no HTTP. Pins each extractor's
+contract directly, including the conservative give-up paths.
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_usta_labeled_beats_bare` | Unit | A labeled `USTA #:` number wins over longer bare digit runs (phone numbers). |
+| `test_usta_single_bare_run` | Unit | A single bare 10-digit run qualifies. |
+| `test_usta_ambiguous_bare_numbers_give_up` | Unit | Two bare numbers → `extract_usta` returns None (conservative). |
+| `test_usta_none_when_absent` | Unit | No numbers → None. |
+| `test_division_usta_wording_and_code` | Unit | "Boys' 14 & under" → B14; "G 16" → G16. |
+| `test_division_only_junior_ladder` | Unit | "B 11" and adult NTRP don't match. |
+| `test_events_mixed_not_double_counted` | Unit | "singles and mixed doubles" → both, mixed not double-counted as doubles. |
+| `test_reason_field_then_due_to_then_keyword` | Unit | Reason precedence: `Reason:` field → "due to …" clause → keyword (Illness) → None. |
+| `test_reason_skips_portal_boilerplate` | Unit | The portal's "for the following reason:" boilerplate with nothing after it → None. |
+| `test_avoid_day_abbreviations` | Unit | "Saturday or sun morning" → "Sat, Sun". |
+| `test_avoid_time_clause_beats_daypart` | Unit | "not before 10:30 AM mornings" → the clause wins over the daypart. |
+| `test_extract_ustas_multiple_numbers` | Unit | Multi-number extraction: labeled + bare in order, deduped; formatted phone numbers excluded; capped at 3 (a wall of digits is noise). |
+| `test_usta_number_before_name_pattern` | Unit | Unlabeled 8-digit numbers qualify via name adjacency (`<usta> <name>`); subject + body candidates in order of appearance; a bare 8-digit run with no adjacent name does NOT qualify. |
+| `test_name_usta_pairs_real_corpus_shapes` | Unit | `extract_name_usta_pairs` across all 5 real-corpus doubles shapes: bulleted `Name USTA# nnn` lines, `(USTA nnn)` labels, bare parens, prose with sentence-leakage trimming, and number-first. |
+| `test_name_first_eight_digit_unlabeled_qualifies` | Unit | `Kate Hampton 20188402` — name BEFORE the number also admits the candidate. |
+
+### test_zz_real_pdf.py — real TD email-export fixture · 3 tests
+
+Parses `backend/tests/fixtures/tournament_emails.pdf` — an actual "Tournament
+Emails for CourtOps" export (30 emails, quoted reply chains, glyph-quadrupled
+labels) — through `_parse_pdf_emails` → triage → pair detection.
+
+| Test | Type | What it locks in |
+|------|------|------------------|
+| `test_parses_every_email_with_subject_and_body` | Regression (real data) | All 30 emails parse with a non-empty subject and body; known threads (incl. deglyphed labels) present. |
+| `test_real_doubles_email_detects_pair_with_ustas` | E2E (real data) | "Confirmed partnership" (names only, no USTA #s in the text) triages `doubles` and links BOTH rostered players; both USTA numbers surface from their roster records. |
+| `test_usta_portal_withdrawal_template_detected` | E2E (real data) | The portal subject template ("WITHDRAWAL REQUEST: <first name>, Boys' 14 & under singles" — no surname) resolves via the L5 layer when exactly one rostered boy fits. |
+
+### Other recent suites (already summarized in the wiring table)
+
+| File | Tests | What it covers |
+|------|-------|----------------|
+| `test_zz_assignment_calc.py` | 16 | Pure unit tests pinning the pay/mileage formula and flag semantics (no DB). |
+| `test_zz_players_paging.py` / `test_zz_officials_paging.py` | 6 / 4 | Server-side q/limit/offset + `X-Total-Count`. |
+| `test_zz_ical.py` | 4 | RFC 5545 schedule export. |
+| `test_zz_db_errors.py` | 4 | Global constraint-violation → 409/400 mapping. |
+
+---
+
+Total suite count: **420 tests, all passing** (see the status line at the top).
