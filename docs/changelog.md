@@ -72,6 +72,16 @@ than captured early. Body moved unchanged otherwise. Verified live on local
 uvicorn: all three lists build, load, and render an inserted row; no console
 errors.
 
+## html`` adoption — official-360 assignments table (2026-06-13)
+Continued the incremental `html`` rollout: the official-360 drawer's
+assignments/pay table + body now build with `html`` / `raw()` (tournament
+names auto-escape; the response chip and pre-built certs stay `raw`). Verified
+live on local uvicorn — table renders correctly (row, totals, response chip,
+pay-statement button), no escaped markup, no console errors. The remaining
+hand-`esc()` sites are small one-off spans + the print-window export (separate
+document); converting them is low-value and left as ongoing incremental work
+rather than a mass rewrite.
+
 ## Broaden html`` adoption + local-uvicorn verification (2026-06-13)
 Follow-on to the P2 #12 helper. Adopted the workflow switch to **local uvicorn
 preview** (per the saved preference — no app-image rebuilds): verified this

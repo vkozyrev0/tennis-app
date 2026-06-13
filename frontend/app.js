@@ -5728,20 +5728,14 @@ async function openOfficial360(officialId) {
     : '<span class="muted">no certifications on file</span>';
   const tt = d.pay.totals;
   const asg = d.pay.tournaments.length
-    ? `<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Days</th><th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th><th>Response</th></tr></thead><tbody>` +
-      d.pay.tournaments.map((t) => `<tr><td>${esc(t.tournament_name)}</td><td>${t.days}</td>` +
-        `<td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td>` +
-        `<td>${_respChip(t.response_status)}</td></tr>`).join("") +
-      `<tr class="totals"><td>Season totals (${tt.assignments} assignment${tt.assignments === 1 ? "" : "s"})</td><td>${tt.days}</td>` +
-      `<td class="num">${money(tt.pay)}</td><td class="num">${money(tt.mileage)}</td><td class="num">${money(tt.total)}</td><td></td></tr></tbody></table>`
-    : '<p class="muted">No assignments yet.</p>';
+    ? html`<table class="list-table p360-table"><thead><tr><th>Tournament</th><th>Days</th><th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th><th>Response</th></tr></thead><tbody>${
+        d.pay.tournaments.map((t) => html`<tr><td>${t.tournament_name}</td><td>${t.days}</td><td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td><td>${raw(_respChip(t.response_status))}</td></tr>`)
+      }<tr class="totals"><td>Season totals (${tt.assignments} assignment${tt.assignments === 1 ? "" : "s"})</td><td>${tt.days}</td><td class="num">${money(tt.pay)}</td><td class="num">${money(tt.mileage)}</td><td class="num">${money(tt.total)}</td><td></td></tr></tbody></table>`
+    : raw('<p class="muted">No assignments yet.</p>');
   const payBtn = tt.assignments
-    ? `<p><button type="button" id="off-pay-statement" class="btn-small" data-oid="${officialId}" data-name="${esc(o.last_name)}, ${esc(o.first_name)}">⬇ Pay statement (PDF)</button></p>`
+    ? html`<p><button type="button" id="off-pay-statement" class="btn-small" data-oid="${officialId}" data-name="${o.last_name}, ${o.first_name}">⬇ Pay statement (PDF)</button></p>`
     : "";
-  body.innerHTML =
-    `<p class="p360-id">Official${loc ? ` · ${esc(loc)}` : ""}</p>` +
-    `<h4>Certifications</h4><p>${certs}</p>` +
-    `<h4>Assignments &amp; pay</h4>${asg}${payBtn}`;
+  body.innerHTML = html`<p class="p360-id">Official${loc ? html` · ${loc}` : ""}</p><h4>Certifications</h4><p>${raw(certs)}</p><h4>Assignments &amp; pay</h4>${asg}${payBtn}`;
   _p360Export = { title: `${o.last_name}, ${o.first_name}`, subtitle: "Official profile", html: body.innerHTML };
   document.getElementById("off-pay-statement")?.addEventListener("click", (e) =>
     exportPayStatement(Number(e.currentTarget.dataset.oid)));
