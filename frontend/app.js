@@ -3250,6 +3250,22 @@ document.getElementById("payroll-finalize-all").addEventListener("click", async 
     loadPayroll();
   } catch (e) { setMsg("payroll-msg", e.message, false); }
 });
+document.getElementById("payroll-export").addEventListener("click", async () => {
+  if (!active) return;
+  // Only finalized (frozen) records export. Guard with a fetch so an empty
+  // export tells the TD to finalize first instead of downloading a header row.
+  try {
+    const rows = await api(`/tournaments/${active.id}/payroll`);
+    if (!rows.some((r) => r.finalized)) { setMsg("payroll-msg", "nothing finalized yet — finalize records first", false); return; }
+    // Same-origin GET carries the session cookie; the attachment disposition
+    // makes the browser download rather than navigate.
+    const a = document.createElement("a");
+    a.href = `/api/tournaments/${active.id}/payroll/export.csv`;
+    a.download = "";
+    document.body.appendChild(a); a.click(); a.remove();
+    setMsg("payroll-msg", "CSV exported", true);
+  } catch (e) { setMsg("payroll-msg", e.message, false); }
+});
 
 // Populate the staff Days multi-select from the active tournament's play window;
 // `selected` is an optional Set of ISO dates to pre-check.

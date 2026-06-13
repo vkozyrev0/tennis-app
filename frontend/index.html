@@ -765,6 +765,7 @@
         <h3>Payroll — <span class="t-name"></span> <span class="h3-subtitle">(finalize freezes each official's computed pay so later edits can't move approved money)</span></h3>
         <div class="actions-row">
           <button type="button" id="payroll-finalize-all">Finalize all</button>
+          <button type="button" id="payroll-export" class="secondary" title="Download the finalized records as a CSV for the bookkeeper">Export CSV</button>
           <span class="msg" id="payroll-msg"></span>
           <span id="payroll-totals" class="muted" style="margin-left:auto"></span>
         </div>
@@ -1380,6 +1381,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=154"></script>
+  <script type="module" src="/app.js?v=155"></script>
 </body>
 </html>

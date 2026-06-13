@@ -163,6 +163,28 @@ def test_multiple_orphaned_records_all_survive_in_summary():
     assert {o["finalized"]["record_id"] for o in orphans} == {r["record_id"] for r in recs}
 
 
+def test_csv_export_lists_finalized_records():
+    t, o, a, s = _staffed()
+    rec = _ok(client.post(f"/api/assignments/{a['id']}/finalize"))
+    _ok(client.put(f"/api/payroll/{rec['record_id']}/paid",
+                   json={"paid": True, "paid_method": "check", "paid_note": "ck 1042"}), 200)
+    r = client.get(f"/api/tournaments/{t['id']}/payroll/export.csv")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    body = r.content.decode("utf-8-sig")
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    assert lines[0].startswith("Official,Days worked,No-show days,Pay,Mileage,Total")
+    # the official's row is present with the frozen total + paid columns
+    row = next(ln for ln in lines[1:] if o["last_name"] in ln)
+    assert f"{s['total']:.2f}" in row
+    assert ",yes," in row and "check" in row and "ck 1042" in row
+
+
+def test_csv_export_404_unknown_tournament():
+    assert client.get("/api/tournaments/99999999/payroll/export.csv").status_code == 404
+
+
 def test_finalize_404s():
     assert client.post("/api/assignments/99999999/finalize").status_code == 404
     assert client.delete("/api/payroll/99999999").status_code == 404

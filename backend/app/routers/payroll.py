@@ -11,7 +11,10 @@ record — refused once paid (walk the payment back first).
 Every lifecycle step lands in assignment_audit (finalized / unfinalized /
 paid / unpaid), reusing the P4-5 trail.
 """
+import csv
+import io
 import json
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -124,6 +127,44 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
                 "orphaned": True,
             })
         return out
+
+
+_CSV_HEADERS = ["Official", "Days worked", "No-show days", "Pay", "Mileage",
+                "Total", "Rule version", "Finalized at", "Finalized by",
+                "Paid", "Paid date", "Method", "Note"]
+
+
+@router.get("/api/tournaments/{tournament_id}/payroll/export.csv")
+def payroll_export_csv(tournament_id: int, conn=Depends(db_dep)):
+    """The finalized records as a CSV for the bookkeeper. Only FINALIZED rows
+    (frozen amounts) — live/unfinalized numbers aren't payable yet. utf-8-sig so
+    Excel reads the encoding; amounts as plain 2dp strings (not locale money)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT name FROM tournament WHERE id = %s", (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(f"SELECT {_REC_COLS} FROM payroll_record r "
+                    "WHERE r.tournament_id = %s ORDER BY r.official_name", (tournament_id,))
+        recs = cur.fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_CSV_HEADERS)
+    money = lambda v: "" if v is None else f"{float(v):.2f}"
+    for r in recs:
+        w.writerow([
+            r["official_name"], r["days_worked"], r["no_show_days"],
+            money(r["pay"]), money(r["mileage"]), money(r["total"]),
+            r["rule_version"] or "",
+            r["finalized_at"].isoformat(timespec="minutes"), r["finalized_by"],
+            "yes" if r["paid"] else "no",
+            r["paid_at"].isoformat() if r["paid_at"] else "",
+            r["paid_method"] or "", r["paid_note"] or "",
+        ])
+    body = buf.getvalue().encode("utf-8-sig")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"
+    return Response(content=body, media_type="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="payroll-{slug}.csv"'})
 
 
 @router.post("/api/assignments/{assignment_id}/finalize", status_code=201)

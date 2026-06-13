@@ -5,6 +5,16 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Payroll CSV export (2026-06-13)
+The deferred slice of P4-4: `GET /tournaments/{id}/payroll/export.csv` streams
+the **finalized** records (live/unfinalized amounts aren't payable, so they're
+excluded) — official, days, no-shows, pay, mileage, total, rule version,
+finalized at/by, paid + date/method/note. utf-8-sig for Excel; amounts as plain
+2dp; the filename is the slugified tournament name. An **Export CSV** button on
+the Payroll tab guards an empty export (toasts "finalize records first") and
+downloads via a cookie-carrying same-origin link. 2 tests; suite **431** green.
+Verified live: endpoint returns the CSV, button builds the right href.
+
 ## Bug hunt — payroll summary dropped multiple orphaned records (2026-06-13)
 Review sweep over the day's new features (payroll, manual inbox assignment,
 auth/state extraction). One real defect found + fixed:
