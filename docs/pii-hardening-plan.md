@@ -129,7 +129,9 @@ provisioning steps.
 - **H2.3 Key management.** `PII_ENCRYPTION_KEY` (Fernet) from the environment; a
   POC dev default is used locally and the **boot guard refuses prod** without a
   real key (`config.py` `validate()`). *Remaining:* a real secret-manager/KMS +
-  rotation at deploy time.
+  zero-downtime rotation — **designed** in
+  [pii-h2-key-management.md](pii-h2-key-management.md) (MultiFernet plural keys,
+  re-encrypt backfill, deploy runbook); deploy-time to implement.
 
 **Done when:** disk + the listed columns are encrypted; detection/extraction
 still works against decrypted-in-memory values; keys live outside the DB.
