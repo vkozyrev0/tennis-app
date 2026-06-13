@@ -583,7 +583,7 @@ const BADGE = {
 };
 function chip(v) {
   if (v == null || v === "") return "";
-  return `<span class="badge badge-${BADGE[v] || "muted"}">${esc(v)}</span>`;
+  return hstr`<span class="badge badge-${BADGE[v] || "muted"}">${v}</span>`;
 }
 
 // Open the modal overlay wrapping a workspace add-form (used when filing/editing).
@@ -2579,7 +2579,7 @@ function _renderAsgList() {
 const _RESP_META = { pending: ["muted", "⏳ pending"], accepted: ["ok", "✓ accepted"], declined: ["bad", "✗ declined"] };
 function _respChip(status) {
   const [cls, label] = _RESP_META[status] || ["muted", status || ""];
-  return `<span class="badge badge-${cls}" title="official's accept/decline">${esc(label)}</span>`;
+  return hstr`<span class="badge badge-${cls}" title="official's accept/decline">${label}</span>`;
 }
 function renderAssignment(a, availDates) {
   const card = document.createElement("div");
@@ -3437,11 +3437,11 @@ async function renderAvailHeatmap() {
   if (!box || !active) return;
   let g;
   try { g = await api(`/tournaments/${active.id}/availability/grid`); }
-  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   if (!g.days.length) { box.innerHTML = '<p class="muted">This tournament has no play-date window set.</p>'; return; }
   if (!g.officials.length) { box.innerHTML = '<p class="muted">No availability declared and nobody assigned yet.</p>'; return; }
   const head = `<th class="hm-name">Official</th>` +
-    g.days.map((d) => `<th class="hm-day">${esc(fmtDOW(d))}</th>`).join("");
+    g.days.map((d) => hstr`<th class="hm-day">${fmtDOW(d)}</th>`).join("");
   const body = g.officials.map((o) => {
     const avail = new Set(o.available), asg = new Set(o.assigned);
     const cells = g.days.map((d) => {
@@ -3454,13 +3454,12 @@ async function renderAvailHeatmap() {
       // Non-assigned cells are clickable to staff this official on this day.
       const click = !s;
       if (click) cls.push("hm-clickable");
-      const attrs = click ? ` data-oid="${o.official_id}" data-date="${esc(d)}" data-name="${esc(o.official_name)}"` : "";
-      const title = `${esc(o.official_name)} · ${esc(fmtDOW(d))}: ` +
+      const attrs = click ? hstr` data-oid="${o.official_id}" data-date="${d}" data-name="${o.official_name}"` : "";
+      const title = `${o.official_name} · ${fmtDOW(d)}: ` +
         (a ? "available" : "not declared") + (s ? ", assigned" : " — click to assign");
-      return `<td class="${cls.join(" ")}"${attrs} title="${title}">${s ? "●" : ""}</td>`;
+      return hstr`<td class="${cls.join(" ")}"${raw(attrs)} title="${title}">${s ? "●" : ""}</td>`;
     }).join("");
-    const pid = `<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${esc(o.official_name)}` +
-      (o.hotel_needed ? ' <span class="hm-hotel-tag" title="needs hotel">🛏</span>' : "") + `</span>`;
+    const pid = hstr`<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${o.official_name}${o.hotel_needed ? raw(' <span class="hm-hotel-tag" title="needs hotel">🛏</span>') : ""}</span>`;
     return `<tr><th class="hm-name">${pid}</th>${cells}</tr>`;
   }).join("");
   const foot = `<th class="hm-name">Available / assigned</th>` +
@@ -3507,14 +3506,8 @@ async function _openAssignCell(cell) {
   // backend cert guard allows any role when no certs are recorded).
   const roles = held.length ? held.map((c) => c.cert_type) : CERTS.map(([v]) => v);
   const note = held.length ? "Assign as:" : "No certifications on file — assign as:";
-  pop.innerHTML =
-    `<div class="cov-pop-head">Assign ${esc(name)} · ${esc(fmtDOW(date))}</div>` +
-    `<p class="cov-pop-note">${note}</p>` +
-    `<ul class="cov-cand-list">` +
-    roles.map((role) =>
-      `<li class="cov-cand"><span class="cov-cand-name">${esc(certLabel(role))}</span>` +
-      `<button type="button" class="cov-fill-btn" data-role="${esc(role)}">Assign</button></li>`
-    ).join("") + `</ul>`;
+  pop.innerHTML = html`<div class="cov-pop-head">Assign ${name} · ${fmtDOW(date)}</div><p class="cov-pop-note">${note}</p><ul class="cov-cand-list">${roles.map((role) =>
+    html`<li class="cov-cand"><span class="cov-cand-name">${certLabel(role)}</span><button type="button" class="cov-fill-btn" data-role="${role}">Assign</button></li>`)}</ul>`;
   pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
     btn.disabled = true;
     try {
@@ -3599,8 +3592,8 @@ const EMAIL_CLASS_VALUES = Object.fromEntries(
   EMAIL_CLASSES.map((v) => [v, (EMAIL_CLASS_META[v] || {}).label || v]));
 function classChip(v) {
   const meta = EMAIL_CLASS_META[v];
-  if (!meta) return v ? `<span class="badge badge-muted">${esc(v)}</span>` : "";
-  return `<span class="badge badge-${meta.color}">${esc(meta.label)}</span>`;
+  if (!meta) return v ? hstr`<span class="badge badge-muted">${v}</span>` : "";
+  return hstr`<span class="badge badge-${meta.color}">${meta.label}</span>`;
 }
 // Confidence hint for an auto-detected player: a small dot after the name whose
 // color + tooltip explain HOW the player was matched, so the TD trusts a USTA #
@@ -3619,7 +3612,7 @@ const MATCH_KIND_META = {
 function matchHint(kind) {
   const m = MATCH_KIND_META[kind];
   if (!m) return "";
-  return ` <span class="match-hint match-${m.cls}" title="${esc(m.label)}" aria-label="${esc(m.label)}">${m.dot}</span>`;
+  return hstr` <span class="match-hint match-${m.cls}" title="${m.label}" aria-label="${m.label}">${m.dot}</span>`;
 }
 const lateForm = document.getElementById("late-form");
 const wdForm = document.getElementById("withdrawal-form");
@@ -3714,8 +3707,8 @@ function _inboxSlots(m) {
 }
 const _MAIL_MARK = ' <span class="muted" title="parsed from the email; not matched to the roster yet">✉</span>';
 const _p360 = (pid, name) => pid
-  ? `<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${esc(name)}</span>`
-  : esc(name);
+  ? hstr`<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${name}</span>`
+  : hstr`${name}`;
 // Roster dropdown for the manual player/partner pickers (typeahead list).
 const _playerPickValues = () => Object.values(playersById)
   .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
@@ -5420,9 +5413,9 @@ function _daysUntil(iso) {
 function _deadlineCell(iso) {
   const n = _daysUntil(iso);
   if (n === null) return '<span class="muted">—</span>';
-  if (n < 0) return `${esc(_fmtMDY(iso))} <span class="muted">(passed)</span>`;
-  if (n === 0) return `${esc(_fmtMDY(iso))} <span class="warn">(today)</span>`;
-  return `${esc(_fmtMDY(iso))} <span class="${n <= 7 ? "warn" : "muted"}">(in ${n}d)</span>`;
+  if (n < 0) return hstr`${_fmtMDY(iso)} <span class="muted">(passed)</span>`;
+  if (n === 0) return hstr`${_fmtMDY(iso)} <span class="warn">(today)</span>`;
+  return hstr`${_fmtMDY(iso)} <span class="${n <= 7 ? "warn" : "muted"}">(in ${n}d)</span>`;
 }
 function _dashGo(group, tab) {
   activateGroup(group);
@@ -5645,7 +5638,7 @@ async function openPlayer360(playerId, tournamentId) {
   try {
     const q = tournamentId ? `?tournament_id=${tournamentId}` : "";
     d = await api(`/players/${playerId}/overview${q}`);
-  } catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  } catch (e) { body.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   const p = d.player;
   document.getElementById("player360-title").textContent = `${p.last_name}, ${p.first_name}`;
   const loc = [p.city, p.state].filter(Boolean).join(", ");
@@ -5685,7 +5678,7 @@ async function openOfficial360(officialId) {
   _p360Modal.hidden = false;
   let d;
   try { d = await api(`/officials/${officialId}/overview`); }
-  catch (e) { body.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { body.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   const o = d.official;
   document.getElementById("player360-title").textContent = `${o.last_name}, ${o.first_name} · official`;
   const loc = [o.city, o.state].filter(Boolean).join(", ");
@@ -5996,7 +5989,7 @@ async function _renderConflicts() {
   if (!box || !active) return;
   let rep;
   try { rep = await api(`/tournaments/${active.id}/conflicts`); }
-  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   if (!rep.counts.total) {
     box.innerHTML = '<p class="conflict-clean">✓ No staffing conflicts — every assignment is clean.</p>';
     return;
@@ -6032,7 +6025,7 @@ async function _renderSchedule() {
   if (!box || !active) return;
   let d;
   try { d = await api(`/tournaments/${active.id}/schedule`); }
-  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   if (!d.days.length) { box.innerHTML = '<p class="muted">No play-date window set.</p>'; return; }
   box.innerHTML = html`${d.days.map((day) => {
     const head = html`<div class="sched-day-head">${fmtDOW(day.date)} <span class="sched-count${day.count === 0 ? " sched-empty" : ""}">${day.count} working</span></div>`;
@@ -6050,7 +6043,7 @@ async function _renderDietary() {
   if (!box || !active) return;
   let d;
   try { d = await api(`/tournaments/${active.id}/dietary-summary`); }
-  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   if (!d.total_people) { box.innerHTML = '<p class="muted">No officials staffed yet.</p>'; return; }
   if (!d.items.length) {
     box.innerHTML = `<p class="muted">No dietary restrictions on file (${d.total_people} official(s) staffed).</p>`;
@@ -6069,7 +6062,7 @@ async function _renderMissingDistances() {
   if (!box || !active) return;
   let d;
   try { d = await api(`/tournaments/${active.id}/missing-distances`); }
-  catch (e) { box.innerHTML = `<p class="msg bad">${esc(e.message)}</p>`; return; }
+  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
   if (!d.count) { box.innerHTML = '<p class="muted">✓ Every assigned official has a distance to their site.</p>'; return; }
   const rows = d.items.map((i) =>
     html`<tr data-oid="${i.official_id}" data-sid="${i.site_id}"><td>${i.official_name}</td><td>${i.site_label || "—"}</td><td class="num">${i.days}</td><td><input type="number" class="md-miles" min="0" step="0.1" placeholder="miles" style="width:6rem" /> <button type="button" class="md-save btn-small">Save</button></td></tr>`);
