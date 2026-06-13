@@ -13,6 +13,12 @@ from ..security import COOKIE_NAME, get_current_user, hash_pw, verify_pw
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Constant valid-format hash so a login for a NONEXISTENT username still pays the
+# full PBKDF2 cost. Without it, a missing user short-circuits past verify_pw and
+# the 401 comes back measurably faster than for a real user (whose password is
+# hashed) — a user-enumeration timing side-channel. Computed once at import.
+_DUMMY_HASH = hash_pw(secrets.token_urlsafe(16))
+
 
 # In-process rate limiter: keyed on (client_ip, username_lower). 5 failures in
 # 5 minutes trip a 5-minute lockout. Resets on a successful login. For a POC
@@ -105,6 +111,10 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
         )
         user = cur.fetchone()
         if user is None or not verify_pw(body.password, user["password_hash"]):
+            # Equalize timing: a missing user must still run PBKDF2 once, or the
+            # faster 401 leaks which usernames exist (see _DUMMY_HASH).
+            if user is None:
+                verify_pw(body.password, _DUMMY_HASH)
             _record_fail(key)
             raise HTTPException(status_code=401, detail="invalid username or password")
         # Successful auth — rotate any pre-existing token for this user (defends

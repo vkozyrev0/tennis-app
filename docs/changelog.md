@@ -5,6 +5,25 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Bug hunt — login user-enumeration timing + detection ReDoS audit (2026-06-13)
+Two adversarial passes (auth/session, detection regexes).
+
+- **Fixed: login user-enumeration via timing.** `POST /api/auth/login` did
+  `if user is None or not verify_pw(...)` — a nonexistent username short-circuits
+  past PBKDF2 (200k iters) and the 401 returns measurably faster than for a real
+  user with a wrong password, leaking which usernames exist. (The generic 401
+  message already blocked content-based enumeration, but not timing.) Now a
+  missing user runs one `verify_pw` against a constant `_DUMMY_HASH` so both
+  paths pay the hash cost. Tests: identical 401 body for unknown-user vs
+  wrong-password, plus a loose timing lower-bound that catches the short-circuit
+  regressing.
+- **Audited: detection regexes are ReDoS-safe.** The name/USTA extractors avoid
+  nested same-class quantifiers; all nine extractors finish in <30ms on 40k-char
+  adversarial inputs (caps spam, long tokens, digit runs, paren bait, unicode,
+  newline walls) and never crash on None/garbage. Locked with a robustness test.
+
+Suite **443** green.
+
 ## Hardening pass — soft-delete filter regression guards (2026-06-13)
 Deeper adversarial review of the money path, bulk email actions, the importer,
 and the soft-delete query surface. Findings:
