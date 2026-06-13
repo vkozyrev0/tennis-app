@@ -5,6 +5,33 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## html`` adoption — complete sweep (2026-06-13)
+Finished the P2 #12 rollout: **every HTML *builder* in app.js now uses the
+auto-escaping `html`` / `hstr`` helpers** instead of hand `esc()` — grid cell
+formatters, the whole Home dashboard, all Reports tables (incl. the
+attribute-fragment coverage/cert grids), the availability heatmap, coverage
+popups, renderAssignment, player/official 360 drawers, Part B lists, import
+preview, t-shirt order, official self-service cards, and the shared chip
+helpers (`chip`/`classChip`/`_respChip`/`matchHint`/`_p360`/`_deadlineCell`).
+`esc()` count: ~184 → 8.
+
+- **Technique:** elements use `html`` (returns a `Safe` wrapper); cell
+  formatters and attribute fragments use `hstr`` (returns a string, so
+  Tabulator formatters never render `[object Object]` and conditional
+  attribute fragments compose via `raw(hstr`…`)` without re-escaping).
+- **Bugs fixed along the way:** the `html`` + `html`` `+`-concatenation
+  double-escape trap (each row must be one template); and a latent
+  double-escape in the official-app card issues (`esc()` at push *and* via
+  `issues.map(esc)`).
+- **Deliberately left on `esc()` (the only 8 remaining):** the email-body
+  line formatter (escape-then-regex-then-wrap, not a template), the
+  print-window export documents (separate `document.write` docs with embedded
+  `<style>`/`<script>`), and one `toast()` string arg — none are `html``
+  builders. Documented in-code where non-obvious.
+- Verified live on local uvicorn across home/roster/assignments/availability/
+  reports/inbox/t-shirt: no `[object Object]`, no escaped-markup leak, no
+  console errors. Suite stays 447 (no behavior change). app.js v173.
+
 ## Scaffold: Google Maps driving-distance, key-gated (D3/U2, 2026-06-13)
 Wires the real routing path behind `GOOGLE_MAPS_API_KEY` so it's ready when the
 key/egress land, without changing behavior today.
