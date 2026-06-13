@@ -416,7 +416,10 @@ function _populateDatalist(id, items) {
   dl.innerHTML = items.map((it) => {
     const value = typeof it === "string" ? it : it.code;
     const label = typeof it === "string" ? "" : (it.label === it.code ? "" : it.label);
-    return `<option value="${esc(value)}"${label ? ` label="${esc(label)}"` : ""}>${esc(label || value)}</option>`;
+    // Conditional attribute via hstr fragment + raw() so it composes without
+    // re-escaping (the documented attribute-fragment technique).
+    const labelAttr = label ? hstr` label="${label}"` : "";
+    return hstr`<option value="${value}"${raw(labelAttr)}>${label || value}</option>`;
   }).join("");
 }
 // Filter divisions / events by tournament type + (optional) player gender.
@@ -948,7 +951,7 @@ function _refreshAllSelectsImpl() {
   // Suggest known hotel names on the player-hotel input (free text still allowed).
   const dl = document.getElementById("known-hotels");
   if (dl) dl.innerHTML = Object.values(hotelsById)
-    .map((h) => `<option value="${esc(h.name)}"></option>`).join("");
+    .map((h) => hstr`<option value="${h.name}"></option>`).join("");
 }
 
 // Part B forms reference the existing Players list instead of free-typing a
@@ -5194,7 +5197,7 @@ async function loadTshirtsBySite() {
   const sites = [...new Set(rows.map((r) => r.site_name))].sort();
   const prev = sel.value;
   sel.innerHTML = `<option value="">— all sites —</option>` +
-    sites.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join("");
+    sites.map((s) => hstr`<option value="${s}">${s}</option>`).join("");
   sel.value = sites.includes(prev) ? prev : "";
   _renderTshirtsBySite();
   status.textContent = rows.length ? `${rows.length} selected players with t-shirts` : "No selected players with a t-shirt size yet.";
@@ -5875,35 +5878,31 @@ function _renderCoverage() {
   if (bits.length) { covNote.hidden = false; covNote.innerHTML = "⚠ " + bits.join(" · ") + " — fill before the event."; }
   else { covNote.hidden = true; covNote.textContent = ""; }
 
-  // NOTE: the site-/role-coverage tables below intentionally stay on esc() (not
-  // the html`` helper). Their cells build CONDITIONAL ATTRIBUTE FRAGMENTS
-  // (`const attrs = fixable ? ' data-cov-role=… data-cov-date=…' : ''`) that
-  // don't compose with html`` — interpolating a raw attribute fragment would
-  // escape its quotes and break the markup. esc() here escapes the same
-  // characters (< > &) in the same attribute/text spots, so the output is
-  // byte-identical; converting would be pure churn + high transcription risk.
   const siteCov = reportData.site_coverage || [];
   document.querySelector("#site-coverage-table thead").innerHTML =
-    "<tr><th>Site</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
+    html`<tr><th>Site</th>${cols.map((c) => html`<th class="daycol">${c.head}</th>`)}</tr>`;
   const scBody = document.querySelector("#site-coverage-table tbody");
   scBody.innerHTML = siteCov.length
-    ? siteCov.map((s) => {
+    ? html`${siteCov.map((s) => {
         const cells = s.by_date.map((b) => {
           const cls = _covClass(b.officials);
-          return `<td class="daycol${cls ? " " + cls : ""}">${b.officials}</td>`;
+          return hstr`<td class="daycol${cls ? " " + cls : ""}">${b.officials}</td>`;
         }).join("");
-        return `<tr><td>${esc(s.site_label)}</td>${cells}</tr>`;
-      }).join("")
-    : `<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
+        return html`<tr><td>${s.site_label}</td>${raw(cells)}</tr>`;
+      })}`
+    : html`<tr><td class="empty" colspan="${cols.length + 1}">No sites linked to this tournament.</td></tr>`;
 
   // Per-role coverage grid: rows = roles used, columns = days, cell = officials
   // working that role that day (same zero/thin highlighting as the others).
+  // Conditional attribute fragments (flag/attrs) are built with hstr`` (which
+  // auto-escapes + returns a string) and raw()'d into the cell, so they compose
+  // without re-escaping — the documented attribute-fragment technique.
   const roleCov = reportData.role_coverage || [];
   document.querySelector("#role-coverage-table thead").innerHTML =
-    "<tr><th>Role</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
+    html`<tr><th>Role</th>${cols.map((c) => html`<th class="daycol">${c.head}</th>`)}</tr>`;
   const rcBody = document.querySelector("#role-coverage-table tbody");
   rcBody.innerHTML = roleCov.length
-    ? roleCov.map((r) => {
+    ? html`${roleCov.map((r) => {
         const holders = r.holders || 0;
         const cells = r.by_date.map((b) => {
           const n = b.officials;
@@ -5914,14 +5913,13 @@ function _renderCoverage() {
           const below = n === 0 || n < _coverageMin;
           const fixable = below && holders > n;
           const flag = fixable
-            ? ` <span class="cov-flag" title="${esc(`${n} staffed, ${holders} certified available — click to fill`)}">⚑</span>` : "";
-          const attrs = fixable ? ` data-cov-role="${esc(r.role)}" data-cov-date="${esc(b.date)}"` : "";
-          return `<td class="daycol${cls ? " " + cls : ""}${fixable ? " cov-fixable" : ""}"${attrs} ` +
-            `title="${esc(`${n} staffed · ${holders} certified${fixable ? " — click to fill" : ""}`)}">${n}${flag}</td>`;
+            ? hstr` <span class="cov-flag" title="${`${n} staffed, ${holders} certified available — click to fill`}">⚑</span>` : "";
+          const attrs = fixable ? hstr` data-cov-role="${r.role}" data-cov-date="${b.date}"` : "";
+          return hstr`<td class="daycol${cls ? " " + cls : ""}${fixable ? " cov-fixable" : ""}"${raw(attrs)} title="${`${n} staffed · ${holders} certified${fixable ? " — click to fill" : ""}`}">${n}${raw(flag)}</td>`;
         }).join("");
-        return `<tr><td>${esc(certLabel(r.role))} <span class="muted">(${holders} certified)</span></td>${cells}</tr>`;
-      }).join("")
-    : `<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
+        return html`<tr><td>${certLabel(r.role)} <span class="muted">(${holders} certified)</span></td>${raw(cells)}</tr>`;
+      })}`
+    : html`<tr><td class="empty" colspan="${cols.length + 1}">No officials assigned yet.</td></tr>`;
 }
 
 // Coverage gap → invite: clicking a fixable role/day cell opens a popover of
