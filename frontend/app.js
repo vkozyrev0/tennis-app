@@ -1510,11 +1510,11 @@ requestAnimationFrame(() => {
 // Player column: "Last, First" (sorts by last name). Used by the player-keyed grids.
 const _playerCell = (cell) => {
   const d = cell.getData();
-  const name = esc([d.last_name, d.first_name].filter(Boolean).join(", "));
+  const fullName = [d.last_name, d.first_name].filter(Boolean).join(", ");
   // Make the player name a 360 link wherever a player_id is on the row, so the
   // TD can open the full player view from any Part B list (delegated handler).
-  if (!d.player_id) return name;
-  return `<span class="p360-link" data-pid="${d.player_id}" role="button" tabindex="0" title="View everything about this player (360)">${name}</span>`;
+  if (!d.player_id) return hstr`${fullName}`;
+  return hstr`<span class="p360-link" data-pid="${d.player_id}" role="button" tabindex="0" title="View everything about this player (360)">${fullName}</span>`;
 };
 // One delegated handler opens the Player 360 from any .p360-link (Part B lists,
 // inbox, …). openPlayer360 is a hoisted function declaration defined later.
@@ -1640,11 +1640,11 @@ async function loadTSiteDivisions() {
   const rows = matrix.filter((d) => d.tournament_type === ttype);
   for (const d of rows) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${esc(d.label || d.code)}</td><td class="muted">${esc(d.tournament_type)}</td><td></td>`;
+    tr.innerHTML = hstr`<td>${d.label || d.code}</td><td class="muted">${d.tournament_type}</td><td></td>`;
     const sel = document.createElement("select");
     sel.setAttribute("aria-label", `Site for ${d.label || d.code}`);
     sel.innerHTML = `<option value="">— unassigned —</option>` +
-      sites.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+      sites.map((s) => hstr`<option value="${s.id}">${s.name}</option>`).join("");
     sel.value = d.site_id ? String(d.site_id) : "";
     sel.addEventListener("change", async () => {
       const sid = sel.value ? Number(sel.value) : null;
@@ -2105,7 +2105,7 @@ function _renderBatch(el, body) {
   el.innerHTML = `<div class="muted">Staged ${body.total}: <strong>${body.valid} valid</strong>, ${body.invalid} invalid.</div>`;
   if (body.errors && body.errors.length) {
     el.innerHTML += '<ul class="import-errors">' +
-      body.errors.map((e) => `<li>row ${esc(e.row)}: ${esc(e.error)}</li>`).join("") + "</ul>";
+      body.errors.map((e) => hstr`<li>row ${e.row}: ${e.error}</li>`).join("") + "</ul>";
   }
   const merge = document.createElement("button");
   merge.type = "button"; merge.className = "export-btn"; merge.disabled = !body.valid;
@@ -2120,11 +2120,11 @@ function _renderBatch(el, body) {
       if (nConf) {
         html += `<div class="warn" style="margin-top:0.2rem">⚠ ${nConf} conflict(s) — merged anyway:</div>` +
           '<ul class="import-errors" style="color:var(--warn-ink,#8a6d1b)">' +
-          r.conflicts.map((c) => `<li>row ${esc(c.row)}: ${esc(c.detail)}</li>`).join("") + "</ul>";
+          r.conflicts.map((c) => hstr`<li>row ${c.row}: ${c.detail}</li>`).join("") + "</ul>";
       }
       if (r.errors && r.errors.length) {
         html += '<ul class="import-errors"><li>' +
-          r.errors.map((e) => `row ${esc(e.row)}: ${esc(e.error)}`).join("</li><li>") + "</li></ul>";
+          r.errors.map((e) => hstr`row ${e.row}: ${e.error}`).join("</li><li>") + "</li></ul>";
       }
       el.innerHTML = html;
       _importRefresh();
@@ -2166,8 +2166,7 @@ async function buildImportPage() {
     // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable
     // so gotoImport() can land focus here. Sighted users see no change; SR /
     // keyboard users get correct focus order after the deep-link.
-    sec.innerHTML = `<h4 tabindex="-1">${esc(t.label)}</h4><p class="muted">${esc(t.desc)} ` +
-      `<span class="muted">Columns: ${esc(t.columns.join(", "))}${t.required.length ? ` (required: ${esc(t.required.join(", "))})` : ""}.</span></p>`;
+    sec.innerHTML = hstr`<h4 tabindex="-1">${t.label}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
     const row = document.createElement("div"); row.className = "export-grid";
     for (const fmt of ["csv", "xlsx"]) {
       const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
@@ -2396,12 +2395,9 @@ async function _renderNoLogin() {
   catch (_) { box.hidden = true; return; }
   if (!d.count) { box.hidden = true; box.innerHTML = ""; return; }
   const names = d.officials.map((o) =>
-    `${esc(o.official_name)}${o.has_email ? "" : ' <span class="muted">(no email)</span>'}`).join("; ");
+    hstr`${o.official_name}${o.has_email ? "" : raw(' <span class="muted">(no email)</span>')}`).join("; ");
   box.hidden = false;
-  box.innerHTML =
-    `<span class="asg-nologin-text">🔑 ${d.count} assigned official${d.count === 1 ? "" : "s"} ` +
-    `can't accept/decline — no login: <strong>${names}</strong>.</span> ` +
-    `<button type="button" id="asg-nologin-go" class="btn-small">Set up logins →</button>`;
+  box.innerHTML = html`<span class="asg-nologin-text">🔑 ${d.count} assigned official${d.count === 1 ? "" : "s"} can't accept/decline — no login: <strong>${raw(names)}</strong>.</span> <button type="button" id="asg-nologin-go" class="btn-small">Set up logins →</button>`;
   document.getElementById("asg-nologin-go")?.addEventListener("click", () =>
     _dashGo("setup", "panel-officials"));
 }
@@ -2424,10 +2420,7 @@ function _renderBulkInvite(assignedIds, availByOfficial) {
     box.innerHTML = candidates.map((o) => {
       const n = (availByOfficial[o.id] || []).length;
       const avail = n ? `${n} avail day(s)` : "no availability";
-      return `<label class="bulk-row"><input type="checkbox" class="bulk-cb" value="${o.id}" ` +
-        `data-label="${esc(officialLabel(o).toLowerCase())}" />` +
-        `<span class="bulk-name">${esc(officialLabel(o))}</span>` +
-        `<span class="bulk-meta">${esc(avail)}</span></label>`;
+      return hstr`<label class="bulk-row"><input type="checkbox" class="bulk-cb" value="${o.id}" data-label="${officialLabel(o).toLowerCase()}" /><span class="bulk-name">${officialLabel(o)}</span><span class="bulk-meta">${avail}</span></label>`;
     }).join("");
   }
   _bulkSyncCount();
@@ -3133,7 +3126,7 @@ async function _payrollMarkPaid(row) {
     return new Promise((resolve) => {
       const m = document.createElement("div"); m.className = "modal";
       m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
-        `<h3 class="detail-title">Mark paid — ${esc(row.official_name)}</h3>` +
+        hstr`<h3 class="detail-title">Mark paid — ${row.official_name}</h3>` +
         '<div class="row"><label>Method <select id="pay-method">' +
         _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") +
         '</select></label>' +
@@ -3364,7 +3357,7 @@ function renderAvailTable() {
   if (gap.length) {
     el.hidden = false;
     el.innerHTML = `⚠ ${gap.length} of ${rows.length} available official(s) have no assigned day yet: ` +
-      `<strong>${gap.map((r) => esc(r.official_name)).join("; ")}</strong>. ` +
+      hstr`<strong>${gap.map((r) => r.official_name).join("; ")}</strong>. ` +
       `Staff them on the Assignments tab.`;
   } else {
     el.hidden = true; el.textContent = "";
@@ -3483,7 +3476,7 @@ async function _openAssignCell(cell) {
   const oid = Number(cell.dataset.oid), date = cell.dataset.date, name = cell.dataset.name;
   const pop = document.createElement("div");
   pop.className = "cov-pop";
-  pop.innerHTML = `<div class="cov-pop-head">${esc(name)} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  pop.innerHTML = hstr`<div class="cov-pop-head">${name} · ${fmtDOW(date)}</div><p class="muted">Loading…</p>`;
   document.body.appendChild(pop);
   _hmPop = pop;
   const r = cell.getBoundingClientRect();
@@ -4640,14 +4633,10 @@ async function _renderInboxAging() {
   catch (_) { box.hidden = true; return; }
   // Only surface when there's a backlog worth nudging (oldest ≥ 2 days).
   if (!d.count || d.oldest_age_days < 2) { box.hidden = true; box.innerHTML = ""; return; }
-  const age = (n) => `<span class="ia-age${n >= 7 ? " ia-old" : ""}">${n}d</span>`;
+  const age = (n) => html`<span class="ia-age${n >= 7 ? " ia-old" : ""}">${n}d</span>`;
   box.hidden = false;
-  box.innerHTML =
-    `<div class="ia-head">⏳ Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div>` +
-    `<ul class="ia-list">` + d.items.map((i) =>
-      `<li class="ia-item" data-subj="${esc(i.subject || "")}">${age(i.age_days)} ` +
-      `<span class="ia-subj">${esc(i.subject || "(no subject)")}</span> ` +
-      `<span class="muted">${esc(i.from_address || "")}</span></li>`).join("") + `</ul>`;
+  box.innerHTML = html`<div class="ia-head">⏳ Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div><ul class="ia-list">${d.items.map((i) =>
+    html`<li class="ia-item" data-subj="${i.subject || ""}">${age(i.age_days)} <span class="ia-subj">${i.subject || "(no subject)"}</span> <span class="muted">${i.from_address || ""}</span></li>`)}</ul>`;
   box.querySelectorAll(".ia-item").forEach((li) => li.addEventListener("click", () => {
     const search = document.getElementById("inbox-search");
     if (search) { search.value = li.dataset.subj; loadInbox(); }
@@ -4680,7 +4669,7 @@ function _originCell(c) {
   const r = c.getData();
   if (r.source_email_id) {
     const subj = r.source_subject || `email #${r.source_email_id}`;
-    return `<span class="origin-email" title="${esc("Filed from email: " + subj)}">✉ email</span>`;
+    return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">✉ email</span>`;
   }
   return '<span class="muted">manual</span>';
 }
@@ -5050,7 +5039,7 @@ function renderTshirtSummary() {
   const el = document.getElementById("tshirt-summary");
   el.innerHTML = keys.length
     ? `<span class="muted">Order quantities — latest size per player (${players} player${players === 1 ? "" : "s"}):</span> `
-      + keys.map((c) => `<span class="badge badge-info">${esc(label(c))}: ${counts[c]}</span>`).join(" ")
+      + keys.map((c) => hstr`<span class="badge badge-info">${label(c)}: ${counts[c]}</span>`).join(" ")
     : "";
 }
 async function tshirtOrderExport() {
@@ -5099,10 +5088,10 @@ function _renderTshirtOrder(data) {
     const delta = (snap != null) ? (r.requested - snap) : null;
     const dCls = (delta == null || delta === 0) ? "" : (delta > 0 ? "warn" : "muted");
     const dStr = (delta == null) ? "—" : (delta > 0 ? `+${delta}` : `${delta}`);
-    return `<tr>
-      <td><strong>${esc(r.size)}</strong> <span class="muted">${esc(r.label)}</span></td>
+    return html`<tr>
+      <td><strong>${r.size}</strong> <span class="muted">${r.label}</span></td>
       <td class="num">${r.requested}</td>
-      <td class="num"><input type="number" min="0" step="1" data-size="${esc(r.size)}" value="${r.on_hand}" style="width:5rem;text-align:right" /></td>
+      <td class="num"><input type="number" min="0" step="1" data-size="${r.size}" value="${r.on_hand}" style="width:5rem;text-align:right" /></td>
       <td class="num">${r.to_order}</td>
       <td class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}">${snap == null ? "—" : snap}</td>
       <td class="num order-snapshot ${dCls}" style="${hasSnapshot ? "" : "display:none"}">${dStr}</td>
@@ -5115,7 +5104,7 @@ function _renderTshirtOrder(data) {
     `<th class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}"></th>`;
   const status = document.getElementById("tshirt-order-status");
   if (data.ordered_at) {
-    status.innerHTML = `Order placed <strong>${esc(data.ordered_at)}</strong> — the Snapshot column shows what was requested at that moment.`;
+    status.innerHTML = hstr`Order placed <strong>${data.ordered_at}</strong> — the Snapshot column shows what was requested at that moment.`;
   } else {
     status.innerHTML = `<em>No order placed yet.</em> Set inventory below, then click "Place order" to snapshot today's requested counts.`;
   }
@@ -5176,7 +5165,7 @@ async function loadTshirtsBySite() {
   if (!tbody) return;
   let rows;
   try { rows = await api(`/tournaments/${active.id}/tshirts-by-site`); }
-  catch (e) { tbody.innerHTML = `<tr><td colspan="4" class="muted">${esc(e.message)}</td></tr>`; return; }
+  catch (e) { tbody.innerHTML = hstr`<tr><td colspan="4" class="muted">${e.message}</td></tr>`; return; }
   _tshirtBySiteRows = rows;
   // Populate the site filter with the actual sites that appear (so the TD
   // doesn't see sites with zero shirts).
@@ -5202,7 +5191,7 @@ function _renderTshirtsBySite() {
   const entries = [...counts.entries()].sort();  // tab-delimited keys sort by site, then div, then size
   tbody.innerHTML = entries.map(([k, n]) => {
     const [site, div, size] = k.split("\t");
-    return `<tr><td>${esc(site)}</td><td>${esc(div)}</td><td>${esc(size)}</td><td class="num">${n}</td></tr>`;
+    return hstr`<tr><td>${site}</td><td>${div}</td><td>${size}</td><td class="num">${n}</td></tr>`;
   }).join("") || `<tr><td colspan="4" class="muted">Nothing to show for this site.</td></tr>`;
   const tot = [...counts.values()].reduce((a, b) => a + b, 0);
   document.getElementById("tshirt-by-site-totals").innerHTML =
@@ -5643,7 +5632,7 @@ async function openPlayer360(playerId, tournamentId) {
     : '<p class="muted">Not on any roster.</p>';
   const r = d.requests;
   const sec = (title, rows, fmt) => rows.length
-    ? `<div class="p360-sec"><h4>${esc(title)} (${rows.length})</h4><ul>${rows.map((x) => `<li>${fmt(x)}</li>`).join("")}</ul></div>` : "";
+    ? html`<div class="p360-sec"><h4>${title} (${rows.length})</h4><ul>${rows.map((x) => html`<li>${fmt(x)}</li>`)}</ul></div>` : "";
   const reqHtml =
     sec("Late entries", r.late_entries, (x) => html`${x.age_division || ""} ${x.events || ""}${x.request_date ? html` · ${x.request_date}` : ""}`) +
     sec("Withdrawals", r.withdrawals, (x) => html`${x.events || ""} — ${x.reason || "(alternate, no reason)"}${x.was_alternate ? " · was alternate" : ""}`) +
@@ -5674,7 +5663,7 @@ async function openOfficial360(officialId) {
   document.getElementById("player360-title").textContent = `${o.last_name}, ${o.first_name} · official`;
   const loc = [o.city, o.state].filter(Boolean).join(", ");
   const certs = d.certs.length
-    ? d.certs.map((c) => `<span class="badge badge-info">${esc(certLabel(c))}</span>`).join(" ")
+    ? d.certs.map((c) => hstr`<span class="badge badge-info">${certLabel(c)}</span>`).join(" ")
     : '<span class="muted">no certifications on file</span>';
   const tt = d.pay.totals;
   const asg = d.pay.tournaments.length
@@ -5788,12 +5777,10 @@ document.getElementById("player360-print")?.addEventListener("click", exportP360
   const close = () => { box.hidden = true; box.innerHTML = ""; input.setAttribute("aria-expanded", "false"); };
   const render = (rows, q) => {
     if (!rows.length) {
-      box.innerHTML = `<div class="ps-empty">No players or officials match “${esc(q)}”.</div>`;
+      box.innerHTML = hstr`<div class="ps-empty">No players or officials match “${q}”.</div>`;
     } else {
       box.innerHTML = rows.map((r) =>
-        `<button type="button" class="ps-item" role="option" data-type="${r.type}" data-id="${r.id}">` +
-        `<span class="ps-name">${esc(r.name)} <span class="ps-tag ps-tag-${r.type}">${r.type === "official" ? "Official" : "Player"}</span></span>` +
-        `<span class="ps-meta">${esc(r.meta)}</span></button>`).join("");
+        hstr`<button type="button" class="ps-item" role="option" data-type="${r.type}" data-id="${r.id}"><span class="ps-name">${r.name} <span class="ps-tag ps-tag-${r.type}">${r.type === "official" ? "Official" : "Player"}</span></span><span class="ps-meta">${r.meta}</span></button>`).join("");
       box.querySelectorAll(".ps-item").forEach((b) => b.addEventListener("click", () => {
         if (b.dataset.type === "official") openOfficial360(Number(b.dataset.id));
         else openPlayer360(Number(b.dataset.id), active ? active.id : null);
@@ -5860,8 +5847,8 @@ function _renderCoverage() {
     .filter((c) => c.officials > 0 && c.officials < _coverageMin)
     .map((c) => c.date);
   const bits = [];
-  if (uncovered.length) bits.push(`<strong>${uncovered.length} day(s) with no official</strong>: ${uncovered.map((d) => esc(fmtDOW(d))).join(", ")}`);
-  if (thin.length) bits.push(`${thin.length} day(s) below the ${_coverageMin}-official minimum: ${thin.map((d) => esc(fmtDOW(d))).join(", ")}`);
+  if (uncovered.length) bits.push(hstr`<strong>${uncovered.length} day(s) with no official</strong>: ${uncovered.map((d) => fmtDOW(d)).join(", ")}`);
+  if (thin.length) bits.push(hstr`${thin.length} day(s) below the ${_coverageMin}-official minimum: ${thin.map((d) => fmtDOW(d)).join(", ")}`);
   if (bits.length) { covNote.hidden = false; covNote.innerHTML = "⚠ " + bits.join(" · ") + " — fill before the event."; }
   else { covNote.hidden = true; covNote.textContent = ""; }
 
@@ -5927,7 +5914,7 @@ async function _openCovGap(cell) {
   const role = cell.dataset.covRole, date = cell.dataset.covDate;
   const pop = document.createElement("div");
   pop.className = "cov-pop";
-  pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div><p class="muted">Loading…</p>`;
+  pop.innerHTML = hstr`<div class="cov-pop-head">${certLabel(role)} · ${fmtDOW(date)}</div><p class="muted">Loading…</p>`;
   document.body.appendChild(pop);
   _covPop = pop;
   // Anchor below the cell, clamped to the viewport.
@@ -5937,11 +5924,10 @@ async function _openCovGap(cell) {
   let cands;
   try {
     cands = await api(`/tournaments/${active.id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${encodeURIComponent(date)}`);
-  } catch (err) { pop.innerHTML = `<p class="msg bad">${esc(err.message)}</p>`; return; }
+  } catch (err) { pop.innerHTML = hstr`<p class="msg bad">${err.message}</p>`; return; }
   if (_covPop !== pop) return;  // closed while loading
   if (!cands.length) {
-    pop.innerHTML = `<div class="cov-pop-head">${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
-      `<p class="cov-pop-empty">No un-booked official holds this certification. Add a certification or a new official first.</p>`;
+    pop.innerHTML = html`<div class="cov-pop-head">${certLabel(role)} · ${fmtDOW(date)}</div><p class="cov-pop-empty">No un-booked official holds this certification. Add a certification or a new official first.</p>`;
     return;
   }
   const tag = (c) => {
@@ -5951,13 +5937,8 @@ async function _openCovGap(cell) {
     if (c.busy_elsewhere) t.push('<span class="cov-tag cov-tag-warn">busy elsewhere</span>');
     return t.join(" ");
   };
-  pop.innerHTML =
-    `<div class="cov-pop-head">Fill ${esc(certLabel(role))} · ${esc(fmtDOW(date))}</div>` +
-    `<ul class="cov-cand-list">` +
-    cands.map((c) =>
-      `<li class="cov-cand"><span class="cov-cand-name">${esc(c.official_name)} ${tag(c)}</span>` +
-      `<button type="button" class="cov-fill-btn" data-oid="${c.official_id}" data-name="${esc(c.official_name)}">Fill</button></li>`
-    ).join("") + `</ul>`;
+  pop.innerHTML = html`<div class="cov-pop-head">Fill ${certLabel(role)} · ${fmtDOW(date)}</div><ul class="cov-cand-list">${cands.map((c) =>
+    html`<li class="cov-cand"><span class="cov-cand-name">${c.official_name} ${raw(tag(c))}</span><button type="button" class="cov-fill-btn" data-oid="${c.official_id}" data-name="${c.official_name}">Fill</button></li>`)}</ul>`;
   pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
     btn.disabled = true;
     try {
@@ -6086,7 +6067,7 @@ async function loadReports() {
   document.querySelector("#report-table thead").innerHTML =
     "<tr><th>Name</th><th>Position</th><th>Dietary</th><th>Hotel?</th>" +
     "<th>Check-in</th><th>Check-out</th>" +
-    cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") +
+    cols.map((c) => hstr`<th class="daycol">${c.head}</th>`).join("") +
     '<th class="num">Days</th><th class="num">Pay</th><th class="num">Mileage</th></tr>';
   const tbody = document.querySelector("#report-table tbody");
   tbody.innerHTML = "";
@@ -6102,16 +6083,10 @@ async function loadReports() {
       (o.uncertified_days && o.uncertified_days.length) ? "not certified" : "",
       o.response_status === "declined" ? "DECLINED" : "",
     ].filter(Boolean);
-    const warn = flags.length ? ` <span class="warn" title="${esc(flags.join(", "))}">⚠</span>` : "";
+    const warn = flags.length ? hstr` <span class="warn" title="${flags.join(", ")}">⚠</span>` : "";
     const dayCells = cols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
     const tr = document.createElement("tr");
-    tr.innerHTML =
-      `<td>${esc(o.official_name)}${warn}</td><td>${esc(roles)}</td>` +
-      `<td>${esc(o.dietary_restrictions)}</td><td>${o.hotel_name ? "Yes" : "No"}</td>` +
-      `<td>${esc(_fmtMDY(o.check_in))}</td><td>${esc(_fmtMDY(o.check_out))}</td>` +
-      dayCells +
-      `<td class="num">${o.days.length}</td>` +
-      `<td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td>`;
+    tr.innerHTML = html`<td>${o.official_name}${raw(warn)}</td><td>${roles}</td><td>${o.dietary_restrictions}</td><td>${o.hotel_name ? "Yes" : "No"}</td><td>${_fmtMDY(o.check_in)}</td><td>${_fmtMDY(o.check_out)}</td>${raw(dayCells)}<td class="num">${o.days.length}</td><td class="num">${money(o.pay)}</td><td class="num">${money(o.mileage)}</td>`;
     tbody.appendChild(tr);
   }
   const lead = 6 + cols.length;  // columns before the Days/Pay/Mileage trio
@@ -7132,10 +7107,7 @@ async function loadMyPay() {
   try { s = await api("/me/pay-summary"); } catch (_) { return; }
   if (!s.tournaments.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
   const rows = s.tournaments.map((t) =>
-    `<tr><td>${esc(t.tournament_name || ("Tournament " + t.tournament_id))}</td>` +
-    `<td>${t.days}</td><td>${_respChip(t.response_status)}</td>` +
-    `<td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td>` +
-    `<td class="num">${money(t.total)}</td></tr>`).join("");
+    html`<tr><td>${t.tournament_name || ("Tournament " + t.tournament_id)}</td><td>${t.days}</td><td>${raw(_respChip(t.response_status))}</td><td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td></tr>`).join("");
   box.innerHTML = `<table class="list-table"><thead><tr><th>Tournament</th><th>Days</th><th>Status</th>` +
     `<th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th></tr></thead><tbody>${rows}` +
     `<tr><th colspan="3">Season total — ${s.totals.assignments} assignment(s), ${s.totals.days} day(s)</th>` +
@@ -7161,14 +7133,15 @@ async function loadMyAssignments() {
     const issues = [];
     for (const d of (a.days_outside_availability || [])) issues.push(`${fmtDOW(d)} — outside the dates you marked available`);
     for (const u of (a.uncertified_days || [])) issues.push(`${fmtDOW(u.work_date)} — ${certLabel(u.working_as)}, which isn't in your certifications`);
-    if (a.has_conflict) for (const c of (a.conflicts || [])) issues.push(`${fmtDOW(c.work_date)} — also booked at ${esc(c.other_tournament)}`);
+    // plain text — escaped once when rendered (issuesHtml below). (Previously
+    // esc()'d here AND again via issues.map(esc) — a latent double-escape.)
+    if (a.has_conflict) for (const c of (a.conflicts || [])) issues.push(`${fmtDOW(c.work_date)} — also booked at ${c.other_tournament}`);
     const issuesHtml = issues.length
-      ? `<div class="asg-flags">⚠ Heads-up: ${issues.map(esc).join("; ")}.</div>` : "";
+      ? html`<div class="asg-flags">⚠ Heads-up: ${issues.join("; ")}.</div>` : "";
     const prompt = a.response_status === "pending"
       ? '<div class="asg-prompt">Please <strong>accept</strong> or <strong>decline</strong> below.</div>' : "";
-    const card_head = `<div class="asg-head"><strong>${esc(tname)}</strong> ${_respChip(a.response_status)}` +
-      `<div class="asg-meta">site: ${esc(a.site_label) || "—"} · days: ${esc(days)} · pay $${a.pay.toFixed(2)} · mileage ${mileage}</div></div>`;
-    card.innerHTML = card_head + prompt + issuesHtml;
+    const card_head = html`<div class="asg-head"><strong>${tname}</strong> ${raw(_respChip(a.response_status))}<div class="asg-meta">site: ${a.site_label || "—"} · days: ${days} · pay $${a.pay.toFixed(2)} · mileage ${mileage}</div></div>`;
+    card.innerHTML = `${card_head}${prompt}${issuesHtml}`;
     const actions = document.createElement("div"); actions.className = "add-day";
     const mk = (status, txt, danger) => {
       const b = document.createElement("button"); b.type = "button";
