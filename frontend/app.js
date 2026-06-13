@@ -2592,7 +2592,7 @@ function renderAssignment(a, availDates) {
   const mileage = a.missing_distance ? '<span class="warn">no distance</span>'
     : (a.mileage == null ? "—"
        : (a.mileage === 0 && a.one_way_miles != null
-          ? `$0.00 <span class="muted" title="${esc("Within the first 50 free round-trip miles (" + a.one_way_miles + " mi one-way) — no mileage owed.")}">(free band)</span>`
+          ? hstr`$0.00 <span class="muted" title="${"Within the first 50 free round-trip miles (" + a.one_way_miles + " mi one-way) — no mileage owed."}">(free band)</span>`
           : "$" + a.mileage.toFixed(2)));
   // Cross-tournament double-booking (a warning, not a block — audit §3.4). A
   // different-site clash is impossible (badge-bad); same/no site is a soft
@@ -2601,13 +2601,13 @@ function renderAssignment(a, availDates) {
     (c) => `${c.work_date}${c.other_site ? ` @ ${c.other_site}` : ""} (${c.other_tournament})`
   ).join("; ");
   const flagChips = [
-    a.has_conflict ? `<span class="badge badge-${a.has_hard_conflict ? "bad" : "warn"}" title="${esc(conflictTitle)}">⚠ double-booked</span>` : "",
+    a.has_conflict ? hstr`<span class="badge badge-${a.has_hard_conflict ? "bad" : "warn"}" title="${conflictTitle}">⚠ double-booked</span>` : "",
     a.hotel_date_mismatch ? '<span class="badge badge-warn">⚠ hotel dates</span>' : "",
     a.work_date_out_of_window ? '<span class="badge badge-warn">⚠ off-window day</span>' : "",
     (a.days_outside_availability && a.days_outside_availability.length)
-      ? `<span class="badge badge-warn" title="${esc("Worked on day(s) the official did not declare available: " + a.days_outside_availability.join(", "))}">⚠ not available</span>` : "",
+      ? hstr`<span class="badge badge-warn" title="${"Worked on day(s) the official did not declare available: " + a.days_outside_availability.join(", ")}">⚠ not available</span>` : "",
     (a.uncertified_days && a.uncertified_days.length)
-      ? `<span class="badge badge-bad" title="${esc("Assigned a role the official isn't certified for: " + a.uncertified_days.map((u) => certLabel(u.working_as) + " on " + u.work_date).join("; "))}">⚠ not certified</span>` : "",
+      ? hstr`<span class="badge badge-bad" title="${"Assigned a role the official isn't certified for: " + a.uncertified_days.map((u) => certLabel(u.working_as) + " on " + u.work_date).join("; ")}">⚠ not certified</span>` : "",
     a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
     // Day-of truth (P4-1): pay already excludes these days; the badge says why.
     a.no_show_days ? `<span class="badge badge-bad" title="No-show day(s) are excluded from pay">✗ ${a.no_show_days} no-show</span>` : "",
@@ -2615,11 +2615,14 @@ function renderAssignment(a, availDates) {
   // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
   // inputs (miles + rule constants) so the TD can see how a figure was reached.
   const pa = a.pay_audit;
-  const auditTip = pa ? esc(
-    `Frozen audit — ${pa.rule_version || ""} · ` +
-    `miles ${pa.one_way_miles ?? "—"} · rate $${pa.constants?.mileage_rate}/mi · ` +
-    `first ${pa.constants?.free_miles}mi free · cap $${pa.constants?.mileage_cap} · ` +
-    `pay $${pa.pay} + mileage $${pa.mileage ?? 0} = $${pa.total}`) : "";
+  // Plain (unescaped) string; the title attribute is escaped where it's built
+  // (hstr fragment in the head template below).
+  const auditTip = pa
+    ? `Frozen audit — ${pa.rule_version || ""} · ` +
+      `miles ${pa.one_way_miles ?? "—"} · rate $${pa.constants?.mileage_rate}/mi · ` +
+      `first ${pa.constants?.free_miles}mi free · cap $${pa.constants?.mileage_cap} · ` +
+      `pay $${pa.pay} + mileage $${pa.mileage ?? 0} = $${pa.total}`
+    : "";
   const head = document.createElement("div"); head.className = "asg-head";
   // Contact line — shown for pending responders so the TD can chase directly
   // (mailto/tel). Hidden once accepted/declined to keep the card uncluttered.
@@ -2642,7 +2645,7 @@ function renderAssignment(a, availDates) {
     <div class="asg-badges">
       <span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>
       <span class="badge badge-info">mileage ${raw(mileage)}</span>
-      <span class="badge badge-ok"${raw(auditTip ? ` title="${auditTip}"` : "")}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>
+      <span class="badge badge-ok"${auditTip ? raw(hstr` title="${auditTip}"`) : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>
       ${raw(_respChip(a.response_status))}${flagChips ? raw(" " + flagChips) : ""}
     </div>`;
   const actions = document.createElement("span"); actions.className = "asg-actions";
