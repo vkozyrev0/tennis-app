@@ -88,3 +88,9 @@ feature work against a realistic, messy tournament.
 - Target: `http://localhost:8000` · tournaments 40 (junior) + 41 (adult).
 - Checks: **31 passed, 0 failed**; 0 discovery(ies).
 - No discoveries — every challenge surfaced where expected.
+
+## E2E run 2ab236 — 2026-06-13
+
+- Target: `http://localhost:8000` · tournaments 5 (junior) + 6 (adult).
+- Checks: **31 passed, 0 failed**; 0 discovery(ies).
+- No discoveries — every challenge surfaced where expected.

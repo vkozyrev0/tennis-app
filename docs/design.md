@@ -87,10 +87,10 @@ backend/
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_zz_*.py (per-feature)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (per-feature)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~7.3k lines: all behaviour (ES module)
+  app.js               # ~7.6k lines: all behaviour (ES module)
   app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
   app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a)
   app/auth.js          # login + session view (sign-in/out, change-password, role-split header)
@@ -173,7 +173,7 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0044`), each tracked in
+**Migrations are forward-only, filename-ordered** (`0001…0048`), each tracked in
 `schema_migrations`. `migrate.py` creates the DB if absent then applies pending
 files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
@@ -323,7 +323,7 @@ the erasure guarantee.
 ## 8. Frontend design
 
 **No build, one page, one big module.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~7.3k lines,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~7.6k lines,
 loaded as `<script type="module">`) holds all behaviour; eight ESM helpers under
 `app/` split out logic (`util.js` formatting/CSV, `shirts.js` size
 normalisation, `roster_prefill.js`, `grids.js` — see below — plus `auth.js`

@@ -5,410 +5,104 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
-## UI fixes: nav icons regression, header heights, modal dropdowns (2026-06-13)
-Three issues reported from a screenshot.
+## 2026-06-13
 
-- **Nav tab icons missing (regression).** The dead-code sweep removed the 7 nav
-  `<symbol>` defs as "unreferenced", but the group buttons reference them
-  *dynamically* — `app.js` builds `<use href="#i-${group}">` via
-  `createElementNS`, which the literal-`<use href>` audit grep didn't catch.
-  Restored all 7 symbols and added a comment warning they're referenced
-  dynamically. (Lesson: createElementNS/setAttributeNS refs evade text greps.)
-- **Uneven header button heights.** `#trash-btn` and `#change-pw-btn` had no
-  styling (browser-default ~21–24px) while their `#logout-btn` sibling and the
-  theme/shortcuts buttons were 40px. Folded all three user-box buttons into one
-  styled rule (`min-height: 2.5rem`) so the header controls line up.
-- **Dropdowns hidden behind edit dialogs.** The inbox-filing dialog
-  (`#inbox-detail`, a `.modal` at z-1800) contains player/division combos, but
-  `.combo-list` was z-1700 — so the dropdown rendered *behind* the modal. Raised
-  `.combo-list` to 1850 (above `.modal` 1800) and `#confirm-modal` to 1900 (above
-  the combo, preserving confirm-over-open-combo). Fixed the stale z-index
-  comments that still said `.modal` was 1500. Verified: combos resolve, header
-  buttons all 40px, and a z-1850 layer paints over z-1800.
+A heavy build-and-harden day. Grouped by area below; the per-commit detail lives
+in git history. The suite grew 428 → **460** green; migrations 0045–0048 landed.
 
-## CI Node 24 opt-in + coverage-gap nudge (2026-06-13)
-- **CI Node 24.** GitHub deprecated the Node 20 Actions runtime (forced
-  2026-06-16, removed 2026-09-16). Set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
-  at the workflow level so every action runs on Node 24 now (CI proves
-  compatibility ahead of the forced switch), and bumped `actions/checkout@v4 →
-  @v5` (Node-24 native). The env var is safe to remove once Node 24 is the
-  default (after 2026-06-16).
-- **Coverage-gap nudge.** A `#dash-coverage` card names *which* play days have no
-  official assigned (the tile only showed the count), rendered from the existing
-  dashboard payload (`coverage.uncovered_days`) — no extra fetch. Deep-links to
-  the coverage report. (Skipped a separate unfiled-inbox card — the existing
-  dashboard tile already shows that count with a deep-link.)
-- Frontend + CI only; suite unchanged at 460. Coverage card verified live
-  (1 uncovered day → "📅 1 play day with no official · 2026-06-26 (Fri)").
+### Payroll: finalization → payment batches (P4-4 + follow-ons)
+- **Finalization (migration 0045).** Freezes each assignment's computed pay into
+  an immutable `payroll_record` (days, no-shows, pay, mileage, total, rule
+  version, day-by-day `detail` jsonb) so later day/rate/no-show edits can't move
+  money already approved. Identity denormalized + FK `SET NULL`, so the trail
+  outlives the assignment (same policy as `assignment_audit`, whose `action`
+  enum gains finalized/unfinalized/paid/unpaid). `routers/payroll.py`: a
+  per-assignment summary with a **drift** flag (finalized ≠ live) + orphaned
+  records; finalize / finalize-all (idempotent) / unfinalize (refused once paid)
+  / mark-paid (date/method/note). Payroll tab with per-row actions + totals.
+- **Bookkeeper CSV.** `GET …/payroll/export.csv` — finalized records only,
+  utf-8-sig, slugified filename; later gained a trailing **Batch** column
+  (LEFT JOIN `payment_batch.reference`).
+- **Payment batches (migration 0048).** `payment_batch` table + `batch_id` FK.
+  Create a batch from finalized, unpaid, un-batched records (all-or-nothing) →
+  marks them paid with one method/date/reference; list with member count + total;
+  dissolve walks members back to unpaid (they stay *finalized*; FK SET NULL).
+  UI: a New-batch dialog, the batches list, per-record tick selection, and a
+  printable **receipt** (`GET /payroll/batches/{id}`) via the `printDoc()`
+  scaffold. Each step lands in `assignment_audit`.
+- **Assignment-audit CSV.** `GET …/assignment-audit.csv` — the whole tournament
+  trail (when / official / action / detail / by), chronological, surviving
+  deletes (denormalized identity).
 
-## Bulk-nudge + roster-completeness nudges (dashboard) (2026-06-13)
-Two more actionable dashboard nudges, both frontend-only (reuse existing
-endpoints — no new routes, no migration).
+### Dashboard nudges (named, actionable; mailto-only, no send infra)
+Beyond the status tiles, the Home board now names *who* to chase:
+- **Pending-response** (`GET …/pending`) — unconfirmed officials, each with a
+  pre-filled ✉ mailto nudge, plus a "Nudge all" bcc when ≥2 have an email.
+- **Roster-completeness** — the named incomplete entries (reusing the existing
+  `/roster-completeness`), flagging which fields are missing.
+- **Coverage-gap** — which play days have no official (from the dashboard
+  payload, no extra fetch). Joins the existing declined-assignments alert.
 
-- **Bulk-nudge all pending.** The pending-officials card gains a "✉ Nudge all
-  (N)" button (shown when ≥2 have an email) that opens one `mailto:?bcc=…` to
-  the whole unconfirmed group — same bcc pattern as the bulk-invite flow.
-- **Roster-completeness nudges.** A `#dash-roster-incomplete` card surfaces the
-  named entries behind the "N incomplete" count, reusing the **existing**
-  `GET …/roster-completeness` endpoint (one row per incomplete entry + per-issue
-  `issues`). Each shows the player + which fields are missing (division / gender
-  / shirt size / balance due) with a "Fix on Roster →" deep-link. (Initially
-  drafted a duplicate `roster-incomplete` endpoint, then found and switched to
-  the existing one — removed the dupe + its tests.)
-- Suite unchanged at 460 (both features reuse already-tested endpoints).
-  Verified live: bulk-nudge opens a 3-recipient bcc mailto; the roster card
-  lists 2 entries with mapped issue labels, no `[object Object]`.
+### Refactors & decomposition
+- **`html`` auto-escaping helper (P2 #12) + complete sweep.** New `app/html.js`
+  (`html`` → a `Safe` wrapper; `hstr`` → a string for Tabulator formatters;
+  `raw()` opts out). Adopted across *every* builder in app.js; the `esc()` count
+  fell ~184 → 8 (documented non-template holdouts). 10 unit tests.
+- **Unified print-window scaffold.** The 7 TD-facing print/PDF exports collapsed
+  onto one `printDoc({title, body, styleExtra, csv, …})` + a shared
+  `PRINT_BASE_CSS` (−63 lines; copy-paste drift removed).
+- **app.js decomposition (P2 #11, slices b–d).** Extracted `app/auth.js`
+  (`createAuth`), `app/state.js` (`createTournamentState` — active-change is now
+  an event), and `app/player_list.js` (`createPlayerList`, the shared Part-B
+  list factory). Slice (a), grids.js, shipped 06-12.
+- **Dead-code removal (high + medium tier).** From parallel backend+frontend
+  audits: 3 unreachable single-resource GET routes, 3 unused response models +
+  their re-exports, the `deferredSetData` duplicate + 3 unused imports, and the
+  `.import-row` / `.ghost` / `details.addbox` CSS. (One over-reach — the 7 nav
+  `<symbol>`s — was caught and reverted; see UI fixes.)
+- **Inbox Player 1/2 cells.** Single-click edit, a `×` clear affordance, and a
+  `＋` add-to-roster on parsed-but-unrostered names; affordances hover-revealed.
 
-## Pending-response nudges + batch column in payroll CSV (2026-06-13)
-A small actionable round, all read-only (no migration).
+### Soft-delete + Trash restore (P2 #13, migration 0046)
+Recoverable delete for `tournament` + `tournament_incident` **only** — NOT
+players/officials/emails, since `delete_player` is a COPPA PII erasure and
+soft-delete there would regress it. DELETE flags `deleted_at` (partial indexes
+on active rows); lists filter `deleted_at IS NULL`; new restore endpoints + a
+`trash.py` router + a Trash modal in the header. 5 tests.
 
-- **Pending-response nudges (dashboard).** The Home status board already counted
-  "N awaiting accept/decline" but didn't say *who*. New
-  `GET /api/tournaments/{id}/pending` returns the named officials (with email +
-  the slot they'd work), and a `#dash-pending` card lists each with a ✉ **Nudge**
-  mailto link (pre-filled confirmation ask) — fits the app's mailto-only model,
-  no send infrastructure. Parallel to the existing declined-alert card; a "Chase
-  on Assignments →" button deep-links to the pending-filtered list.
-- **Batch column in the bookkeeper CSV.** `payroll/export.csv` gains a trailing
-  `Batch` column (LEFT JOIN payment_batch.reference) so the bookkeeper sees which
-  check/ACH run settled each official; blank when paid out-of-band or unpaid.
-- CI verified green on the prior push (docker build + 457-test suite, 2m39s).
-- Tests +3 (pending list + 404; CSV carries batch reference). Suite 457 → 460,
-  green. Nudges verified live: 3 officials listed, each with a correct
-  `mailto:…?subject=Assignment%20confirmation…` link, no `[object Object]`.
+### Bug hunts & hardening
+- **Login user-enumeration via timing** — a missing username short-circuited
+  past PBKDF2, returning 401 measurably faster; now both paths pay the hash cost
+  against a constant dummy hash.
+- **Retention sweep** lacked a negative-`older_than_days` guard (a negative
+  window's future cutoff would redact ALL filed-email PII); guarded at both the
+  `run_retention` and endpoint layers.
+- **Payroll summary** collapsed multiple orphaned (deleted-assignment) records
+  onto the single NULL key, hiding all but one; split into a by-assignment map +
+  an orphan list (+ denormalized `official_name` to drop an N+1).
+- **Soft-delete regression guards** pinned on the digest/deadlines feeds; the
+  detection regexes audited ReDoS-safe (<30 ms on 40k-char adversarial input).
 
-## Payroll batch UX: per-record selection + printable receipt (2026-06-13)
-Follow-ups on the payment-batch feature, same day.
+### Infrastructure
+- **Google Maps driving-distance scaffold (migration 0047).** Key-gated behind
+  `GOOGLE_MAPS_API_KEY` (`source='maps'`); degrades to the great-circle estimate
+  when unset or on any API error/quota/timeout — mileage feeds pay, so it never
+  blocks. No behavior change until the key/egress land.
+- **CI Node 24 opt-in.** `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` + `checkout@v5`,
+  ahead of GitHub's 2026-06-16 forced switch (scheduled for removal after).
 
-- **Per-record selection.** The Payroll grid gains a leading tick column on
-  finalized, unpaid, un-batched rows (backed by a `_batchSel` set, cleared on
-  every reload). "New batch…" now settles just the ticked records when any are
-  checked, else all eligible (backward compatible) — so the TD can cut a batch
-  for only the officials a given check covers.
-- **Printable batch receipt.** New `GET /api/payroll/batches/{id}` returns the
-  batch + its member records; a "Receipt" action in the batches list opens a
-  printable doc (one row per official + frozen total + batch total) via the
-  shared `printDoc()` scaffold — the paper the TD files with the checks.
-- **Dead-code sweep (medium tier).** Removed the unused `details.addbox`
-  collapse-by-default CSS (carried speculatively, never wired to any form;
-  recoverable from git) and trimmed its comment to keep the "two form patterns
-  kept distinct on purpose" guidance. The audit's other medium item (nav
-  `<symbol>`s) was already removed; the backend audit had no medium items.
-- Tests +1 (batch-detail lists members; 457 total, green). Verified live:
-  ticked 2 of 7 → batched exactly those 2 ($650), receipt rendered with the
-  right title / sub-line / 2 member rows / grand total, no `[object Object]`.
+### UI fixes
+- **Mobile/day-of responsiveness.** The day-of grids already scroll inside
+  `.tbl-scroll`; the lone 375px overflow was the Reports `.report-toolbar`
+  (a 731px nowrap row) — `flex-wrap: wrap` took it to 0.
+- **Nav-icons regression.** The dead-code sweep removed 7 nav `<symbol>`s that
+  app.js references *dynamically* via `createElementNS` (the literal-`<use>`
+  grep missed them); restored, with a warning comment.
+- **Header button heights** evened (Trash / Change-password rendered at
+  browser-default size); **modal-edit dropdowns** raised above the dialog
+  (`.combo-list` z 1700 → 1850, `#confirm-modal` → 1900) so the inbox-filing
+  combos are no longer hidden behind the modal.
 
-## Payroll payment batches + assignment-audit CSV (2026-06-13)
-Two payroll follow-ons (migration 0048).
-
-- **Payment batches.** The TD settles officials in groups (a check run, an ACH
-  file) rather than one transfer per assignment. New `payment_batch` table +
-  `batch_id` FK on `payroll_record`. `POST …/payroll/batches` creates a batch
-  from every finalized, not-yet-paid, un-batched record and marks them all paid
-  with one shared method/date/reference (all-or-nothing: a record already paid,
-  already batched, or from another tournament refuses the whole call).
-  `GET …/payroll/batches` lists batches with member count + summed total.
-  `DELETE /payroll/batches/{id}` dissolves a batch — every member walks back to
-  unpaid (but stays *finalized*); the FK is SET NULL so the money rows survive.
-  Each step lands in `assignment_audit` (paid / unpaid). UI: a "New batch…"
-  dialog (reference / method / paid-on / note) on the Payroll tab, a batches
-  list below the grid with a Dissolve action, and a ⛁ marker on batched rows.
-- **Assignment-audit CSV.** `GET …/assignment-audit.csv` exports the whole
-  tournament audit trail (when / official / action / detail / by), chronological,
-  utf-8-sig, including rows whose assignment was later deleted (identity is
-  denormalized on the trail). UI: an "Audit CSV" button on the Payroll tab.
-- Tests: +9 (batch create / refuse-already-paid / reject-foreign-or-missing /
-  list-aggregates / dissolve-walks-back / lifecycle-audits / 404s; audit-CSV
-  export + 404). Suite 447 → 456, all green. Verified the batch lifecycle live
-  (create → marks 7 paid → dissolve → back to unpaid, records stay finalized).
-
-## Unified print-window export scaffold (2026-06-13)
-The seven TD-facing "open a blank window, write a self-contained auto-printing
-HTML doc" exports (hotel confidential report, pay statement, pay-statements
-batch, 360 profile export, staffing plan, rooming list, day-by-day schedule)
-each carried a copy-pasted doctype/head, a ~12-line print stylesheet, the
-pop-up guard, the Print/Close controls, and the auto-print `<script>`. Drift
-had crept in (h2 13px vs 14px, margin 1.2cm vs 1.4cm, etc.).
-
-- Added a single `printDoc({ title, body, styleExtra, csv, printLabel,
-  popupMsg })` helper + a shared `PRINT_BASE_CSS`. The helper owns the wrapper,
-  the pop-up guard (returns false after a toast), the controls, the auto-print
-  trigger, and — when `csv: {data, filename}` is passed — an embedded ⬇ CSV
-  download button (rooming list + schedule). `styleExtra` is appended after the
-  base CSS so each doc keeps its specifics (landscape `@page` for the staffing
-  plan, the `.grand` total box for pay statements, `h4`/`.badge` for the 360
-  export, the players-page-break for the hotel report).
-- The 7 builders now just assemble their `body` string and call `printDoc`.
-  net −63 lines in app.js; the print scaffold has one source of truth.
-- Dropped the lone `"noopener"` on the hotel report's `window.open` (it was the
-  only one with it; `noopener` can null the returned handle, so the no-feature
-  form the other six already used is the reliable one).
-- Verified live: intercepted `window.open` and triggered all five reports-tab
-  exports against a seeded tournament — each produced the right `<title>`, the
-  base stylesheet, its own styleExtra (pagebreak / `.grand` / landscape / CSV
-  button + script + filename), and no `[object Object]`.
-
-## Mobile reports fix + dead-code removal (2026-06-13)
-Two small, audited cleanups.
-
-- **Mobile/day-of responsiveness.** At a 375px phone viewport the day-of
-  grids (roster check-in, incidents, assignments) already scroll inside
-  `.tbl-scroll`, so they were fine. The one real horizontal overflow was the
-  **Reports** tab: `.report-toolbar` was a `nowrap` flex row (title +
-  report-type buttons + min-coverage control + Print/CSV) that forced the page
-  to ~731px. Added `flex-wrap: wrap` so the controls reflow on narrow screens
-  while staying single-line on desktop (wrap only triggers when needed).
-  Verified overflow 356 → 0 at 375px.
-- **Dead-code removal** (from parallel backend + frontend audits, high-confidence
-  only): 3 unreachable single-resource GET routes (`GET /hotels/{id}`,
-  `/officials/{id}`, `/rates/{id}` — the UI works off the list endpoints and no
-  test hit them); 3 unused response models (`AvailabilityOut`,
-  `DoublesRequestOut`, `DoublesPairOut`) and their `models.py` re-exports; the
-  dead `deferredSetData` duplicate in app.js (makeListGrid has its own inline
-  build-gate) plus 3 unused `_`-aliased imports; the `.import-row`/`.ghost`
-  CSS; and 7 orphaned nav `<symbol>` defs in index.html (only `#i-brand` is
-  still `<use>`d). Full suite green (446/447; the one fail is the known
-  `test_zz_list_origin` name-collision flake, passes in isolation); frontend
-  reloads clean at app.js v=174.
-
-## html`` adoption — complete sweep (2026-06-13)
-Finished the P2 #12 rollout: **every HTML *builder* in app.js now uses the
-auto-escaping `html`` / `hstr`` helpers** instead of hand `esc()` — grid cell
-formatters, the whole Home dashboard, all Reports tables (incl. the
-attribute-fragment coverage/cert grids), the availability heatmap, coverage
-popups, renderAssignment, player/official 360 drawers, Part B lists, import
-preview, t-shirt order, official self-service cards, and the shared chip
-helpers (`chip`/`classChip`/`_respChip`/`matchHint`/`_p360`/`_deadlineCell`).
-`esc()` count: ~184 → 8.
-
-- **Technique:** elements use `html`` (returns a `Safe` wrapper); cell
-  formatters and attribute fragments use `hstr`` (returns a string, so
-  Tabulator formatters never render `[object Object]` and conditional
-  attribute fragments compose via `raw(hstr`…`)` without re-escaping).
-- **Bugs fixed along the way:** the `html`` + `html`` `+`-concatenation
-  double-escape trap (each row must be one template); and a latent
-  double-escape in the official-app card issues (`esc()` at push *and* via
-  `issues.map(esc)`).
-- **Deliberately left on `esc()` (the only 8 remaining):** the email-body
-  line formatter (escape-then-regex-then-wrap, not a template), the
-  print-window export documents (separate `document.write` docs with embedded
-  `<style>`/`<script>`), and one `toast()` string arg — none are `html``
-  builders. Documented in-code where non-obvious.
-- Verified live on local uvicorn across home/roster/assignments/availability/
-  reports/inbox/t-shirt: no `[object Object]`, no escaped-markup leak, no
-  console errors. Suite stays 447 (no behavior change). app.js v173.
-- _Supersedes the incremental `html``-adoption steps (player-360 drawer,
-  official-360 assignments table, the `renderAssignment`/History broadening) —
-  all folded into this complete sweep._
-
-## Scaffold: Google Maps driving-distance, key-gated (D3/U2, 2026-06-13)
-Wires the real routing path behind `GOOGLE_MAPS_API_KEY` so it's ready when the
-key/egress land, without changing behavior today.
-
-- `geocode.road_one_way_miles()` → `(miles, source)`: when the key is set it
-  calls the Google **Distance Matrix** API (stdlib urllib, no new dep) for the
-  authoritative driving distance (`source='maps'`); unset — or any API
-  error/quota/timeout — degrades to the existing great-circle estimate
-  (`source='geocoded'`). Mileage feeds pay, so it never raises/blocks.
-- Migration 0047 adds `'maps'` to the `distance_source` enum; the model Literal
-  + `POST /distances/auto` now stamp the real source instead of hardcoding
-  `geocoded`.
-- 4 tests (monkeypatched, no network): no-key fallback, key→maps, API-error
-  degrade, and the `/auto` endpoint stamping `maps` end-to-end (exercises the
-  enum value). Existing key-free behavior unchanged. Suite **447** green.
-
-## Bug hunt — login user-enumeration timing + detection ReDoS audit (2026-06-13)
-Two adversarial passes (auth/session, detection regexes).
-
-- **Fixed: login user-enumeration via timing.** `POST /api/auth/login` did
-  `if user is None or not verify_pw(...)` — a nonexistent username short-circuits
-  past PBKDF2 (200k iters) and the 401 returns measurably faster than for a real
-  user with a wrong password, leaking which usernames exist. (The generic 401
-  message already blocked content-based enumeration, but not timing.) Now a
-  missing user runs one `verify_pw` against a constant `_DUMMY_HASH` so both
-  paths pay the hash cost. Tests: identical 401 body for unknown-user vs
-  wrong-password, plus a loose timing lower-bound that catches the short-circuit
-  regressing.
-- **Audited: detection regexes are ReDoS-safe.** The name/USTA extractors avoid
-  nested same-class quantifiers; all nine extractors finish in <30ms on 40k-char
-  adversarial inputs (caps spam, long tokens, digit runs, paren bait, unicode,
-  newline walls) and never crash on None/garbage. Locked with a robustness test.
-
-Suite **443** green.
-
-## Hardening pass — soft-delete filter regression guards (2026-06-13)
-Deeper adversarial review of the money path, bulk email actions, the importer,
-and the soft-delete query surface. Findings:
-
-- **Bulk email actions are safe.** `bulk_detect_players` / `bulk_classify` loop
-  with no per-row try/except, so a row failure surfaces as a 500 (atomic
-  rollback) rather than the silent partial-commit bug class; `bulk_populate`
-  already has the per-row savepoint. No change.
-- **Importer parse/validate** reviewed (CSV/XLSX/PDF) — already well-audited;
-  no real defect.
-- **Soft-delete surface** confirmed fully covered for user-facing lists, and
-  **locked it**: new regression tests pin that a trashed tournament leaves the
-  dashboard **digest** and **deadlines** feeds (the `deleted_at IS NULL` filters
-  added with #13 are one-liners that are easy to revert). Known minor gap noted:
-  the API existence-guards don't reject a trashed tournament, so a direct API
-  call could still mutate one — the UI can't (it's hidden from the picker), so
-  it's left as a documented limitation rather than touching ~25 guards.
-
-Suite **439** green.
-
-## app.js decomposition slice (d) — player_list.js (P2 #11d, 2026-06-13)
-The last app.js decomposition slice. `app/player_list.js`
-(`createPlayerList(ctx)` returning `wirePlayerList`) holds the generic
-player-keyed Part B list factory shared by the scheduling-avoidance,
-division-flex, and player-hotel lists (form + Tabulator table + delete +
-in-grid edit + file-from-email + CSV). Unlike grids.js (created at module top),
-it's created at the point of use — after `active`, `expandPlayerRef`, and
-`loadInbox` exist — so `active` is read through an injected `getActive()` rather
-than captured early. Body moved unchanged otherwise. Verified live on local
-uvicorn: all three lists build, load, and render an inserted row; no console
-errors.
-
-## Bug hunt — retention sweep missing the negative-window guard (2026-06-13)
-Broader sweep over older code paths (retention, imports, the money path). One
-real defect found + fixed:
-
-- **Policy retention sweep had no negative-`older_than_days` guard.** The manual
-  `/api/emails/purge` refuses a negative window (the cutoff `current_date - (-N)`
-  becomes a FUTURE date that matches every filed email), but the newer
-  policy-driven `/api/retention/sweep` — the one meant to run unattended on a
-  scheduler — was missing that guard, so `?dry_run=false&older_than_days=-9999`
-  would redact ALL filed-email PII. Added the guard at both layers
-  (`run_retention` raises `ValueError`; the endpoint returns 400) + a regression
-  test. The import merge path was also reviewed — its per-row savepoints are
-  already correct. Suite **437** green.
-
-## Soft-delete + Trash restore — tournaments & incidents (P2 #13, 2026-06-13)
-Recoverable delete for the two non-PII, high-recoverability entities. **Scoped
-deliberately:** NOT players/officials/emails — `delete_player` is a COPPA
-PII-erasure (it nulls the minor's PII from `player_history`), and soft-delete
-there would regress that privacy guarantee, so those stay hard-delete.
-
-- **Migration 0046** adds `deleted_at timestamptz` (NULL = active) to `tournament`
-  and `tournament_incident`, with partial indexes on the active rows.
-- DELETE on both now flags `deleted_at = now()` instead of removing the row; the
-  cascade is deferred, so a trashed tournament keeps its roster / assignments /
-  emails for restore. List queries (`GET /tournaments`, the dashboard
-  deadlines+digest, the official self-service picker, the incident list) filter
-  `deleted_at IS NULL`, so trashed rows leave every list.
-- New `POST /tournaments/{id}/restore`, `POST /incidents/{id}/restore`, and
-  `GET /trash` (a `trash.py` router) listing what's trashed.
-- **Trash** button in the header opens a modal (built with the new `html``
-  helper) listing trashed tournaments + incidents with per-row Restore;
-  restoring a tournament refreshes the Setup list + active picker.
-- 5 tests (`test_zz_soft_delete.py`): hide-from-list, restore round-trip,
-  double-delete 404, restore-requires-trashed, children survive the trip,
-  incident trash/restore. Suite **436** green. Verified live: trash a
-  tournament → leaves the picker → appears in Trash → Restore → back in picker.
-
-## html`` template helper for card builders (P2 #12, 2026-06-13)
-The big card builders (`renderAssignment` et al.) are long string-concat blocks
-that hand-call `esc()` on every interpolation — one forgotten call is an XSS,
-and double-escaping is just as easy. New `app/html.js`: a tagged template that
-**auto-escapes** every `${value}` (text), with `raw(...)` to opt out for trusted
-markup (badge HTML, an already-escaped attribute fragment) and arrays/`null`/
-`false` handled so `${cond ? html`…` : ""}` and `${items.map(…)}` compose. The
-result is a `Safe` wrapper whose `toString()` is the HTML, so `el.innerHTML =
-html`…`` works and nested `${html`…`}` doesn't re-escape.
-
-Adopted in `renderAssignment`'s header block (the worst manual-`esc` offender —
-removed ~6 hand `esc()` calls; official name / site / hotel / diet now
-auto-escape). 10 unit tests in `html.test.mjs` (escaping, raw, nesting, arrays,
-conditionals, XSS payload). Verified live: the assignment card renders
-identically (name, meta with em-dash fallback, free-band mileage span, response
-chip) with no double-escaping. Broader adoption is incremental.
-
-## Payroll CSV export (2026-06-13)
-The deferred slice of P4-4: `GET /tournaments/{id}/payroll/export.csv` streams
-the **finalized** records (live/unfinalized amounts aren't payable, so they're
-excluded) — official, days, no-shows, pay, mileage, total, rule version,
-finalized at/by, paid + date/method/note. utf-8-sig for Excel; amounts as plain
-2dp; the filename is the slugified tournament name. An **Export CSV** button on
-the Payroll tab guards an empty export (toasts "finalize records first") and
-downloads via a cookie-carrying same-origin link. 2 tests; suite **431** green.
-Verified live: endpoint returns the CSV, button builds the right href.
-
-## Bug hunt — payroll summary dropped multiple orphaned records (2026-06-13)
-Review sweep over the day's new features (payroll, manual inbox assignment,
-auth/state extraction). One real defect found + fixed:
-
-- **Payroll summary collapsed orphaned records.** `payroll_summary` keyed every
-  record by `assignment_id` in a dict. When an assignment is deleted the FK goes
-  NULL (`SET NULL`), and Postgres `UNIQUE` permits many NULLs — so two-plus
-  finalized records whose assignments were later deleted all keyed on `None` and
-  every orphan but the last silently vanished from the summary (money owed/paid
-  to a real person, gone from the view). Now split into a by-assignment map + an
-  orphan list. Also denormalized `official_name` into `_REC_COLS` to drop the
-  per-orphan N+1 re-query. Regression test added (two deleted-assignment records
-  both survive). Suite **429** green.
-
-## app.js decomposition slices (b)+(c) — auth.js + state.js (2026-06-13)
-Continues the P2 #11 decomposition (slice (a), grids.js, shipped 06-12).
-
-- **`app/auth.js`** (`createAuth(ctx)`) — owns `applyAuth` (the login/admin/
-  official view toggle), the login / logout / change-password form wiring, and
-  the one-shot "session expired" listener. What to LOAD when the role resolves
-  (nav history, breadcrumbs, adminInit/officialInit, the admin-loaded latch)
-  stays app-specific and is injected via `onRoleResolved` / `onLogout` — the
-  same dependency-injection seam grids.js uses, so the bodies move unchanged.
-- **`app/state.js`** (`createTournamentState()`) — `active` stays a module
-  global in app.js (hundreds of guards read it), but the "active tournament
-  changed" CHANGE is now an event: `setActive` calls `emit({active, prev})` on
-  a real transition and the reaction cascade (close open detail, reset
-  workspace forms, transition toast) is declared in one `onChange` subscriber
-  instead of inline.
-- Verified live against the all-in-one image: form login, logout (server
-  session ends, /auth/me 401), session-restore on reload, change-password
-  modal, and clear/switch active-tournament toasts — no console errors.
-
-## Inbox Player 1/2 cells — single-click edit + clear + add-to-roster (2026-06-13)
-UX round on the manual-assignment grid (built 2026-06-12).
-
-- **Single-click editing** — the four player/USTA cells open their editor on one
-  click (`makeReadGrid` `editable: "click"`); the 360 link, Detect, and the new
-  affordances `stopPropagation` so they act instead of editing.
-- **Clear affordance** — a faded `×` on a matched cell unassigns the player
-  (clearing Player 1 clears Player 2, matching the server). The cell then falls
-  back to the parsed-from-email (✉) display.
-- **Add-to-roster from a ✉ cell** — a `＋` on a parsed-but-unrostered name opens
-  the roster form pre-filled from the email (same `rosterPrefillFromEmail` plan
-  as the ⋯ menu, now also surfaced inline).
-- Affordances (`✎` edit / `×` clear / `＋` add) stay hidden until the row is
-  hovered so the names read cleanly; matched names remain 360 links.
-
-## Payroll finalization — P4-4, the last day-of gap (2026-06-13)
-Closes the final open day-of item. The live pay/mileage/total numbers always
-recompute from current rows — right while the event runs, wrong the moment the
-TD approves payment, because a later day edit, rate change, or no-show toggle
-would silently move money already promised.
-
-- **Migration 0045** `payroll_record` — one frozen record per assignment
-  (days, no-shows, pay, mileage, total, rule version, day-by-day breakdown in
-  `detail` jsonb). Identity denormalized + `assignment_id` FK `SET NULL` on
-  delete, so the money trail outlives the assignment (same policy as
-  `assignment_audit`). The audit `action` enum gains
-  `finalized/unfinalized/paid/unpaid`.
-- **`routers/payroll.py`** — `GET /tournaments/{id}/payroll` (one row per
-  assignment: live numbers + finalized record + a **drift** flag when the two
-  disagree, plus orphaned records whose assignment was deleted); `POST
-  /assignments/{id}/finalize` (409 if already finalized); `POST
-  /tournaments/{id}/payroll/finalize-all` (idempotent sweep); `DELETE
-  /payroll/{id}` to unfinalize (**refused once paid** — walk the payment back
-  first); `PUT /payroll/{id}/paid` (settlement date defaults to today, method +
-  note; walking back clears them). Every step lands in `assignment_audit`.
-- **Payroll tab** (Operations group) — grid of official · days (−N no-shows) ·
-  pay · mileage · live total (with column sum) · finalized amount (drift badge)
-  · status, with per-row Finalize / Mark paid / Unfinalize / Unmark and a
-  Finalize-all button; totals strip shows finalized + paid sums.
-- **8 tests** (`test_zz_payroll.py`): freeze, double-finalize 409, drift after a
-  post-finalize no-show, unfinalize-unless-paid, mark-paid lifecycle/defaults,
-  idempotent finalize-all, audit-trail landing, 404s. Suite: **428** green.
-
-CSV export was scoped but deferred this pass (verify-and-commit).
 
 ## Inbox doubles intelligence + real-corpus USTA extraction (2026-06-12)
 Driven by the TD's actual "Tournament Emails for CourtOps" PDF (30 real

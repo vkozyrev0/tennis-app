@@ -69,9 +69,10 @@ against a live server, see [e2e-findings.md](e2e-findings.md).
 The original TD audit (D1–D8) is closed. Subsequent code/UX
 critique passes are closed; the running findings register is
 folded into `changelog.md`. The 2026-06-10 improvement plan's P1 round
-and nearly all P2/P4 items are shipped (all of P2 #8–14; P4 day-of
-operations + payroll) — see `improvement-plan.md` for the per-item
-marks. Active open items live in `roadmap.md` under "Open work".
+and most P2/P4 items are shipped (P2 #8 + #10–14 and #9 phase 1; all P4
+day-of + payroll work — only the deferred at-scale P4-7/P4-8 remain) —
+see `improvement-plan.md` for the per-item marks. Active open items live
+in `roadmap.md` under "Open work".
 
 POC stack: **Postgres** (localhost) · **FastAPI + psycopg3** · **vanilla
 HTML/CSS/JS**. The POC defaults to `admin/admin`; harden before any
