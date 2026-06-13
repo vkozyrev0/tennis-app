@@ -1771,8 +1771,8 @@ const rosterGrid = new Tabulator(rosterMount, {
     { title: "Player", field: "last_name",
       // design-crit R-1: show just the name (the USTA # was truncating the cell
       // mid-paren); the number is still searchable and shown on hover.
-      formatter: (cell) => { const e = cell.getData(); const u = e.usta_number ? ` (USTA ${esc(e.usta_number)})` : "";
-        return `<span title="${esc(rosterName(e))}${u}">${esc(rosterName(e))}</span>`; },
+      formatter: (cell) => { const e = cell.getData(); const u = e.usta_number ? ` (USTA ${e.usta_number})` : "";
+        return hstr`<span title="${rosterName(e) + u}">${rosterName(e)}</span>`; },
       headerFilter: "input", headerFilterFunc: (term, _v, e) => (rosterName(e) + " " + (e.usta_number || "")).toLowerCase().includes(String(term).toLowerCase()) },
     { title: "Div", field: "age_division", editor: "list", cssClass: "editable-cell",
       editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }),
@@ -1804,10 +1804,10 @@ const rosterGrid = new Tabulator(rosterMount, {
       // Audit M28: source from the canonical list defined alongside _SHIRT_LABEL
       // so the roster grid editor and the t-shirt order page can't drift.
       editor: "list", editorParams: () => ({ values: ["", ...SHIRT_LABELS] }),
-      formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">—</span>`,
+      formatter: (c) => c.getValue() ? hstr`${c.getValue()}` : `<span class="muted">—</span>`,
       headerFilter: "input" },
     { title: "Dietary", field: "dietary_preference", editor: "input", cssClass: "editable-cell",
-      formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">—</span>`,
+      formatter: (c) => c.getValue() ? hstr`${c.getValue()}` : `<span class="muted">—</span>`,
       headerFilter: "input" },
     // B3 lodging — canonical plan from the combined import. Falls back to
     // the raw free-text answer (rendered in muted italic) when the mapper
@@ -1817,8 +1817,8 @@ const rosterGrid = new Tabulator(rosterMount, {
       editor: "list", editorParams: { values: ["", "Hotel", "Local / family", "Commuter", "Commuter 1-2 hrs", "Commuter 2+ hrs"] },
       formatter: (cell) => {
         const e = cell.getData();
-        if (e.lodging_plan) return esc(e.lodging_plan);
-        if (e.lodging_plan_raw) return `<span class="muted" style="font-style:italic" title="Unmapped — click to set a canonical plan">${esc(e.lodging_plan_raw)}</span>`;
+        if (e.lodging_plan) return hstr`${e.lodging_plan}`;
+        if (e.lodging_plan_raw) return hstr`<span class="muted" style="font-style:italic" title="Unmapped — click to set a canonical plan">${e.lodging_plan_raw}</span>`;
         return "";
       },
       headerFilter: "input",
@@ -2890,7 +2890,7 @@ const trbForm = document.getElementById("trb-form");
 let trbEditId = null;
 const trbGrid = makeListGrid("trb-table", [
   { title: "ID", field: "id", width: 64 },
-  { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return esc(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id); },
+  { title: "Hotel", field: "hotel_id", formatter: (c) => { const b = c.getData(); return hstr`${hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id}`; },
     headerFilter: "input", headerFilterFunc: (term, _v, b) => String(hotelsById[b.hotel_id] ? hotelsById[b.hotel_id].name : b.hotel_id).toLowerCase().includes(String(term).toLowerCase()) },
   { title: "Type", field: "kind", cssClass: "editable-cell", formatter: (c) => (c.getData().kind === "official" ? "Officials comp" : "Player rate"),
     editor: "list", editorParams: { values: { player: "Player rate", official: "Officials comp" } } },
@@ -2955,10 +2955,10 @@ let staffEditId = null;
 const staffGrid = makeListGrid("staff-table", [
   { title: "Name", field: "name", headerFilter: "input" },
   { title: "Role", field: "role", cssClass: "editable-cell",
-    formatter: (c) => esc(STAFF_ROLES[c.getValue()] || c.getValue()),
+    formatter: (c) => hstr`${STAFF_ROLES[c.getValue()] || c.getValue()}`,
     editor: "list", editorParams: { values: STAFF_ROLES } },
   { title: "Days", field: "days", headerSort: false,
-    formatter: (c) => esc((c.getValue() || []).map(fmtDOW).join(", ")) },
+    formatter: (c) => hstr`${(c.getValue() || []).map(fmtDOW).join(", ")}` },
   { title: "Rate/day", field: "daily_rate", hozAlign: "right", width: 90,
     formatter: (c) => (c.getValue() != null ? money(c.getValue()) : "") },
   { title: "Phone", field: "phone" },
@@ -3049,24 +3049,24 @@ const INC_CATS = { weather: "Weather", injury: "Injury", dispute: "Dispute",
                    facility: "Facility", conduct: "Conduct", other: "Other" };
 const incidentsGrid = makeListGrid("incidents-table", [
   { title: "When", field: "occurred_at", width: 150,
-    formatter: (c) => esc(new Date(c.getValue()).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })) },
+    formatter: (c) => hstr`${new Date(c.getValue()).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` },
   { title: "Category", field: "category", width: 110,
-    formatter: (c) => esc(INC_CATS[c.getValue()] || c.getValue()),
+    formatter: (c) => hstr`${INC_CATS[c.getValue()] || c.getValue()}`,
     headerFilter: "list", headerFilterParams: { values: INC_CATS, clearable: true } },
   { title: "Sev", field: "severity", width: 80,
     formatter: (c) => c.getValue() === "major"
       ? '<span class="badge badge-bad">major</span>'
       : c.getValue() === "minor" ? '<span class="badge badge-warn">minor</span>' : '<span class="muted">info</span>' },
   { title: "Site", field: "site_label", width: 90,
-    formatter: (c) => c.getValue() ? esc(c.getValue()) : '<span class="muted">—</span>' },
+    formatter: (c) => c.getValue() ? hstr`${c.getValue()}` : '<span class="muted">—</span>' },
   { title: "What happened", field: "description", widthGrow: 2, headerFilter: "input",
     formatter: (c) => c.getRow().getData().resolved
-      ? `<span class="muted">${esc(c.getValue())}</span>` : esc(c.getValue()) },
+      ? hstr`<span class="muted">${c.getValue()}</span>` : hstr`${c.getValue()}` },
   // Day-of flow: type the outcome straight into the Resolution cell — saving a
   // non-empty resolution marks the incident resolved (and clearing it reopens).
   { title: "Resolution", field: "resolution", widthGrow: 1, editor: "input", cssClass: "editable-cell",
     formatter: (c) => c.getValue()
-      ? `<span class="ok">✓</span> ${esc(c.getValue())}`
+      ? hstr`<span class="ok">✓</span> ${c.getValue()}`
       : '<span class="muted" title="Click to type a resolution — saving resolves the incident">open…</span>' },
 ], "incidents", "No incidents logged — that's a good day.",
   async (i) => { if (!(await confirmDialog("Delete this incident?"))) return;
@@ -3163,13 +3163,13 @@ async function _payrollMarkPaid(row) {
 }
 const payrollGrid = makeReadGrid("payroll-table", [
   { title: "Official", field: "official_name", headerFilter: "input",
-    formatter: (c) => esc(c.getValue()) + (c.getData().orphaned
-      ? ' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>' : "") },
+    formatter: (c) => hstr`${c.getValue()}${c.getData().orphaned
+      ? raw(' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>') : ""}` },
   { title: "Days", field: "days_worked", width: 80, hozAlign: "right",
     formatter: (c) => {
       const m = c.getData();
-      return esc(String(c.getValue())) + (m.no_show_days
-        ? ` <span class="badge badge-warn" title="no-show days (unpaid)">−${m.no_show_days}</span>` : "");
+      return hstr`${String(c.getValue())}${m.no_show_days
+        ? raw(` <span class="badge badge-warn" title="no-show days (unpaid)">−${m.no_show_days}</span>`) : ""}`;
     } },
   { title: "Pay", field: "pay", width: 100, hozAlign: "right", formatter: (c) => money(c.getValue()) },
   { title: "Mileage", field: "mileage", width: 100, hozAlign: "right",
@@ -3184,8 +3184,8 @@ const payrollGrid = makeReadGrid("payroll-table", [
       const m = c.getData();
       if (!m.finalized) return '<span class="muted">—</span>';
       const tip = `by ${m.finalized.finalized_by} · ${new Date(m.finalized.finalized_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-      return `<span title="${esc(tip)}">${money(m.finalized.total)}</span>` +
-        (m.drift ? ' <span class="badge badge-bad" title="live total no longer matches the finalized amount — unfinalize + re-finalize, or investigate">drift</span>' : "");
+      return hstr`<span title="${tip}">${money(m.finalized.total)}</span>${
+        m.drift ? raw(' <span class="badge badge-bad" title="live total no longer matches the finalized amount — unfinalize + re-finalize, or investigate">drift</span>') : ""}`;
     } },
   { title: "Status", field: "_status", width: 120,
     formatter: (c) => {
@@ -3194,7 +3194,7 @@ const payrollGrid = makeReadGrid("payroll-table", [
       if (!m.finalized.paid) return '<span class="badge badge-info">finalized</span>';
       const tip = [m.finalized.paid_at, m.finalized.paid_method, m.finalized.paid_note]
         .filter(Boolean).join(" · ");
-      return `<span class="badge badge-ok" title="${esc(tip)}">paid</span>`;
+      return hstr`<span class="badge badge-ok" title="${tip}">paid</span>`;
     } },
   { title: "", field: "_act", headerSort: false, width: 170, cssClass: "grid-actions-cell",
     formatter: (cell) => {
