@@ -3815,7 +3815,7 @@ function _inboxNameCell(cell, slotIdx) {
   }
   if (s.name) {            // parsed from the email text, not on the roster yet
     const nameSpan = document.createElement("span");
-    nameSpan.innerHTML = esc(s.name) + _MAIL_MARK;
+    nameSpan.innerHTML = hstr`${s.name}${raw(_MAIL_MARK)}`;
     wrap.append(nameSpan, editBtn());
     if (rosterPrefillFromEmail(m).canAdd) {
       wrap.append(_iconBtn("＋", "Add this player to the roster (pre-filled from the email)",
@@ -3855,19 +3855,19 @@ const inboxGrid = makeReadGrid("inbox-table", [
       cb.addEventListener("change", (e) => _inboxBulkToggle(m.id, e.target.checked));
       return cb;
     } },
-  { title: "Received", field: "received_at", width: 110, formatter: (c) => esc((c.getData().received_at || "").slice(0, 10)) },
+  { title: "Received", field: "received_at", width: 110, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
   // Which tournament this email is filed under. The inbox shows every
   // tournament's mail; this column (+ its header filter) is how the TD scopes
   // or reassigns. Header-filtered to the active tournament by default.
   { title: "Tournament", field: "tournament_name", width: 150,
-    formatter: (c) => c.getValue() ? esc(c.getValue()) : `<span class="muted">— unassigned —</span>`,
+    formatter: (c) => c.getValue() ? hstr`${c.getValue()}` : `<span class="muted">— unassigned —</span>`,
     headerFilter: "input" },
   { title: "From", field: "from_address" },
   { title: "Subject", field: "subject", formatter: (c) => {
       const m = c.getData();
       const corr = m.amends_email_id ? ' <span class="badge badge-info" title="corrects an earlier email">↻ correction</span>' : "";
       const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
-      return esc(m.subject || "") + corr + sup;
+      return hstr`${m.subject || ""}${raw(corr)}${raw(sup)}`;
     } },
   // Two player-related column GROUPS — Player/USTA # and Player 2/USTA #2.
   // Each cell is double-click editable so the TD can manually assign a player
@@ -3885,7 +3885,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       formatter: (c) => {
         const s = _inboxSlots(c.getData())[0];
         if (!s.usta) return '<span class="muted">—</span>';
-        return esc(s.usta) + (s.matched ? "" : _MAIL_MARK);
+        return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) =>
@@ -3903,7 +3903,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       formatter: (c) => {
         const s = _inboxSlots(c.getData())[1];
         if (!s.usta) return '<span class="muted">—</span>';
-        return esc(s.usta) + (s.matched ? "" : _MAIL_MARK);
+        return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) => (e.detected_partner_usta || "").includes(String(term).trim()) },
@@ -4698,7 +4698,7 @@ const _ORIGIN_COL = { title: "Origin", field: "source_email_id", headerSort: fal
   width: 100, formatter: _originCell };
 const lateGrid = makeListGrid("late-table", [
   { title: "Date", field: "request_date", editor: "date", cssClass: "editable-cell",
-    formatter: (c) => { const e = c.getData(); return esc(e.request_date) + (e.past_deadline ? ' <span class="warn" title="Past the late-entry deadline">⚠</span>' : ""); } },
+    formatter: (c) => { const e = c.getData(); return hstr`${e.request_date}${e.past_deadline ? raw(' <span class="warn" title="Past the late-entry deadline">⚠</span>') : ""}`; } },
   { title: "Time", field: "request_time", editor: "input", cssClass: "editable-cell" },
   { title: "Player", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
@@ -6779,7 +6779,7 @@ const officialsCrud = wireEntity({
 });
 const phHistGrid = makeReadGrid("player-history-table", [
   { title: "When", field: "_when", headerSort: false,
-    formatter: (c) => { const h = c.getData(); return esc((h.valid_from || "").slice(0, 10) + " → " + (h.valid_to || "").slice(0, 10)); } },
+    formatter: (c) => { const h = c.getData(); return hstr`${(h.valid_from || "").slice(0, 10) + " → " + (h.valid_to || "").slice(0, 10)}`; } },
   { title: "Name", field: "last_name", formatter: _playerCell },
   { title: "USTA #", field: "usta_number" },
   { title: "Change", field: "change_type" },
@@ -7487,7 +7487,7 @@ async function loadUsers() {
     const isSelf = me && u.username === me.username;
     const tr = document.createElement("tr");
     const nameCell = document.createElement("td");
-    nameCell.innerHTML = esc(u.username) + (isSelf ? ' <span class="badge badge-info">you</span>' : "");
+    nameCell.innerHTML = hstr`${u.username}${isSelf ? raw(' <span class="badge badge-info">you</span>') : ""}`;
     const dateCell = document.createElement("td");
     dateCell.textContent = (u.created_at || "").slice(0, 10);
     const actCell = document.createElement("td"); actCell.className = "grid-actions-cell";
