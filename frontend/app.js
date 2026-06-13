@@ -5875,6 +5875,13 @@ function _renderCoverage() {
   if (bits.length) { covNote.hidden = false; covNote.innerHTML = "⚠ " + bits.join(" · ") + " — fill before the event."; }
   else { covNote.hidden = true; covNote.textContent = ""; }
 
+  // NOTE: the site-/role-coverage tables below intentionally stay on esc() (not
+  // the html`` helper). Their cells build CONDITIONAL ATTRIBUTE FRAGMENTS
+  // (`const attrs = fixable ? ' data-cov-role=… data-cov-date=…' : ''`) that
+  // don't compose with html`` — interpolating a raw attribute fragment would
+  // escape its quotes and break the markup. esc() here escapes the same
+  // characters (< > &) in the same attribute/text spots, so the output is
+  // byte-identical; converting would be pure churn + high transcription risk.
   const siteCov = reportData.site_coverage || [];
   document.querySelector("#site-coverage-table thead").innerHTML =
     "<tr><th>Site</th>" + cols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") + "</tr>";
@@ -5993,40 +6000,27 @@ async function _renderConflicts() {
     box.innerHTML = '<p class="conflict-clean">✓ No staffing conflicts — every assignment is clean.</p>';
     return;
   }
-  const name = (c) => `<strong>${esc(c.official_name)}</strong>`;
+  const name = (c) => html`<strong>${c.official_name}</strong>`;
   const groups = [];
   if (rep.double_bookings.length) {
-    groups.push(`<div class="conflict-group"><h5>⛔ Double-booked (${rep.double_bookings.length}` +
-      (rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : "") + `)</h5><ul>` +
-      rep.double_bookings.map((c) =>
-        `<li class="${c.different_site ? "conflict-hard" : ""}">${name(c)} on <strong>${esc(fmtDOW(c.work_date))}</strong> — also at ` +
-        `${esc(c.other_tournament || "another event")}${c.other_site ? ` (${esc(c.other_site)})` : ""}` +
-        `${c.different_site ? ' <span class="conflict-badge">different site — impossible</span>' : ' <span class="conflict-badge soft">same/again — verify</span>'}</li>`
-      ).join("") + `</ul></div>`);
+    groups.push(html`<div class="conflict-group"><h5>⛔ Double-booked (${rep.double_bookings.length}${rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : ""})</h5><ul>${rep.double_bookings.map((c) =>
+      html`<li class="${c.different_site ? "conflict-hard" : ""}">${name(c)} on <strong>${fmtDOW(c.work_date)}</strong> — also at ${c.other_tournament || "another event"}${c.other_site ? html` (${c.other_site})` : ""}${c.different_site ? raw(' <span class="conflict-badge">different site — impossible</span>') : raw(' <span class="conflict-badge soft">same/again — verify</span>')}</li>`)}</ul></div>`);
   }
   if (rep.uncertified.length) {
-    groups.push(`<div class="conflict-group"><h5>⚠ Uncertified for the role (${rep.uncertified.length})</h5><ul>` +
-      rep.uncertified.map((c) =>
-        `<li>${name(c)} works <strong>${esc(certLabel(c.working_as))}</strong> on ${esc(fmtDOW(c.work_date))} without that certification</li>`
-      ).join("") + `</ul></div>`);
+    groups.push(html`<div class="conflict-group"><h5>⚠ Uncertified for the role (${rep.uncertified.length})</h5><ul>${rep.uncertified.map((c) =>
+      html`<li>${name(c)} works <strong>${certLabel(c.working_as)}</strong> on ${fmtDOW(c.work_date)} without that certification</li>`)}</ul></div>`);
   }
   if (rep.outside_availability.length) {
-    groups.push(`<div class="conflict-group"><h5>📅 Worked outside declared availability (${rep.outside_availability.length})</h5><ul>` +
-      rep.outside_availability.map((c) =>
-        `<li>${name(c)} is assigned <strong>${esc(fmtDOW(c.work_date))}</strong> but didn't declare it available</li>`
-      ).join("") + `</ul></div>`);
+    groups.push(html`<div class="conflict-group"><h5>📅 Worked outside declared availability (${rep.outside_availability.length})</h5><ul>${rep.outside_availability.map((c) =>
+      html`<li>${name(c)} is assigned <strong>${fmtDOW(c.work_date)}</strong> but didn't declare it available</li>`)}</ul></div>`);
   }
   if (rep.out_of_window.length) {
-    groups.push(`<div class="conflict-group"><h5>🗓 Day outside the play window (${rep.out_of_window.length})</h5><ul>` +
-      rep.out_of_window.map((c) => `<li>${name(c)} has a worked day outside the tournament dates</li>`).join("") +
-      `</ul></div>`);
+    groups.push(html`<div class="conflict-group"><h5>🗓 Day outside the play window (${rep.out_of_window.length})</h5><ul>${rep.out_of_window.map((c) => html`<li>${name(c)} has a worked day outside the tournament dates</li>`)}</ul></div>`);
   }
   if (rep.hotel_mismatch.length) {
-    groups.push(`<div class="conflict-group"><h5>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h5><ul>` +
-      rep.hotel_mismatch.map((c) => `<li>${name(c)} works days outside their room-block check-in/out</li>`).join("") +
-      `</ul></div>`);
+    groups.push(html`<div class="conflict-group"><h5>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h5><ul>${rep.hotel_mismatch.map((c) => html`<li>${name(c)} works days outside their room-block check-in/out</li>`)}</ul></div>`);
   }
-  box.innerHTML = `<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>` + groups.join("");
+  box.innerHTML = html`<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>${groups}`;
 }
 
 // Day-by-day schedule: one block per play-day listing who works (official, role,
@@ -6162,11 +6156,11 @@ async function loadReports() {
   const lodge = document.querySelector("#lodging-table tbody");
   const housed = reportData.officials.filter((o) => o.hotel_name);
   lodge.innerHTML = housed.length
-    ? housed.map((o) => {
+    ? html`${housed.map((o) => {
         const ds = o.days.map((d) => d.work_date).sort();
         const span = ds.length ? `${fmtDOW(ds[0])} – ${fmtDOW(ds[ds.length - 1])}` : "—";
-        return `<tr><td>${esc(o.official_name)}</td><td>${esc(o.hotel_name)}</td><td>${esc(span)}</td></tr>`;
-      }).join("")
+        return html`<tr><td>${o.official_name}</td><td>${o.hotel_name}</td><td>${span}</td></tr>`;
+      })}`
     : '<tr><td class="empty" colspan="3">No officials have a hotel assignment yet.</td></tr>';
 
   // Room-block pickup: reserved vs assigned per official comp block, so the TD
@@ -6174,14 +6168,11 @@ async function loadReports() {
   const blocks = reportData.room_blocks || [];
   const pickupBody = document.querySelector("#pickup-table tbody");
   pickupBody.innerHTML = blocks.length
-    ? blocks.map((b) => {
+    ? html`${blocks.map((b) => {
         const span = (b.check_in && b.check_out)
-          ? `${esc(_fmtMDY(b.check_in))} – ${esc(_fmtMDY(b.check_out))}` : "—";
-        const unusedCls = b.remaining > 0 ? ' class="warn"' : "";
-        return `<tr><td>${esc(b.hotel_name)}</td><td>${esc(b.confirmation_number || "")}</td>` +
-          `<td>${span}</td><td class="num">${b.room_count}</td>` +
-          `<td class="num">${b.assigned}</td><td class="num"${unusedCls}>${b.remaining}</td></tr>`;
-      }).join("")
+          ? `${_fmtMDY(b.check_in)} – ${_fmtMDY(b.check_out)}` : "—";
+        return html`<tr><td>${b.hotel_name}</td><td>${b.confirmation_number || ""}</td><td>${span}</td><td class="num">${b.room_count}</td><td class="num">${b.assigned}</td><td class="num${b.remaining > 0 ? " warn" : ""}">${b.remaining}</td></tr>`;
+      })}`
     : '<tr><td class="empty" colspan="6">No official room blocks for this tournament.</td></tr>';
   document.getElementById("pickup-totals").innerHTML = blocks.length
     ? `<th colspan="3">Totals</th><th class="num">${totals.rooms_reserved}</th>` +
@@ -6199,18 +6190,15 @@ async function loadReports() {
   const staff = reportData.staff || [];
   const scols = _reportColumns(reportData.tournament);
   document.querySelector("#report-staff-table thead").innerHTML =
-    "<tr><th>Name</th><th>Role</th>" +
-    scols.map((c) => `<th class="daycol">${esc(c.head)}</th>`).join("") +
-    '<th class="num">Pay</th><th>Phone</th></tr>';
+    html`<tr><th>Name</th><th>Role</th>${scols.map((c) => html`<th class="daycol">${c.head}</th>`)}<th class="num">Pay</th><th>Phone</th></tr>`;
   const staffBody = document.querySelector("#report-staff-table tbody");
   staffBody.innerHTML = staff.length
-    ? staff.map((s) => {
+    ? html`${staff.map((s) => {
         const worked = new Set(s.days || []);
         const dayCells = scols.map((c) => `<td class="daycol">${worked.has(c.date) ? "✓" : ""}</td>`).join("");
-        return `<tr><td>${esc(s.name)}</td><td>${esc(STAFF_ROLES[s.role] || s.role)}</td>${dayCells}` +
-          `<td class="num">${s.pay ? money(s.pay) : ""}</td><td>${esc(s.phone || "")}</td></tr>`;
-      }).join("")
-    : `<tr><td class="empty" colspan="${scols.length + 4}">No non-official staff added for this tournament.</td></tr>`;
+        return html`<tr><td>${s.name}</td><td>${STAFF_ROLES[s.role] || s.role}</td>${raw(dayCells)}<td class="num">${s.pay ? money(s.pay) : ""}</td><td>${s.phone || ""}</td></tr>`;
+      })}`
+    : html`<tr><td class="empty" colspan="${scols.length + 4}">No non-official staff added for this tournament.</td></tr>`;
   if (staff.length && (totals.staff_pay || 0) > 0) {
     staffBody.innerHTML += `<tr><th colspan="${scols.length + 2}">Staff pay total</th>` +
       `<th class="num">${money(totals.staff_pay)}</th><th></th></tr>`;
@@ -6224,20 +6212,20 @@ async function loadReports() {
 function _renderCertPool() {
   const pool = reportData.cert_pool || { officials: [], counts: {} };
   document.querySelector("#cert-pool-table thead").innerHTML =
-    "<tr><th>Official</th>" + CERTS.map(([, lbl]) => `<th class="num">${esc(lbl)}</th>`).join("") + "</tr>";
+    html`<tr><th>Official</th>${CERTS.map(([, lbl]) => html`<th class="num">${lbl}</th>`)}</tr>`;
   const body = document.querySelector("#cert-pool-table tbody");
   body.innerHTML = pool.officials.length
-    ? pool.officials.map((o) => {
+    ? html`${pool.officials.map((o) => {
         const held = new Set(o.certs);
         const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
         // An official with no certs can't be assigned ANY role — flag the name.
         const noCert = !o.certs.length;
         const name = noCert
-          ? `<span class="warn" title="holds no certification — can't be assigned any role">⚠ ${esc(o.official_name)}</span>`
-          : esc(o.official_name);
-        return `<tr><td>${name}</td>${cells}</tr>`;
-      }).join("")
-    : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials in the system yet.</td></tr>`;
+          ? html`<span class="warn" title="holds no certification — can't be assigned any role">⚠ ${o.official_name}</span>`
+          : html`${o.official_name}`;
+        return html`<tr><td>${name}</td>${raw(cells)}</tr>`;
+      })}`
+    : html`<tr><td class="empty" colspan="${CERTS.length + 1}">No officials in the system yet.</td></tr>`;
   // Footer: holders per cert (zero flagged as a coverage gap in the pool).
   document.getElementById("cert-pool-totals").innerHTML =
     `<th>Holders</th>` + CERTS.map(([v]) => {
@@ -6250,8 +6238,7 @@ function _renderCertPool() {
   if (note) {
     if (noneCert.length) {
       note.hidden = false;
-      note.innerHTML = `⚠ ${noneCert.length} official(s) hold no certification: ` +
-        `<strong>${noneCert.map((o) => esc(o.official_name)).join("; ")}</strong> — can't be assigned any role.`;
+      note.innerHTML = html`⚠ ${noneCert.length} official(s) hold no certification: <strong>${noneCert.map((o) => o.official_name).join("; ")}</strong> — can't be assigned any role.`;
     } else { note.hidden = true; note.textContent = ""; }
   }
 }
