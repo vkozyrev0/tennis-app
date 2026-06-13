@@ -20,7 +20,7 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 > drilldowns, Player/Official 360 + exports, rooming list, day-by-day schedule,
 > pay statements, dietary + workload rollups, and self-service availability.
 > Full list in [changelog.md](changelog.md); end-to-end validation in
-> [e2e-findings.md](e2e-findings.md). Suite: **457** green and deterministic;
+> [e2e-findings.md](e2e-findings.md). Suite: **460** green and deterministic;
 > CI builds + publishes `ghcr.io/vkozyrev0/tennis-app:latest` on main pushes.
 
 ---

@@ -252,6 +252,12 @@ mismatches.
 **Readiness scorecard** rolls these into pass/warn/fail per area; `fail` =
 blocker (uncovered day, double-booking, declined slot), `warn` = should-resolve.
 
+**Nudges (dashboard).** Beyond counts, the Home board lists the *named*,
+actionable follow-ups: declined assignments to re-staff (`/declined`) and
+officials who haven't accepted/declined (`/pending`), the latter with a
+pre-filled `mailto:` nudge per official — consistent with the app's mailto-only
+email model (no send infrastructure).
+
 **Division logic.** Junior division = gender prefix (B/G) + age bucket
 (12/14/16/18, rounded up) from birth year. The catalog (`division`,
 `tournament_event`) is editable Setup data, seeded by migration 0027.

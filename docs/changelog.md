@@ -5,6 +5,24 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Pending-response nudges + batch column in payroll CSV (2026-06-13)
+A small actionable round, all read-only (no migration).
+
+- **Pending-response nudges (dashboard).** The Home status board already counted
+  "N awaiting accept/decline" but didn't say *who*. New
+  `GET /api/tournaments/{id}/pending` returns the named officials (with email +
+  the slot they'd work), and a `#dash-pending` card lists each with a ✉ **Nudge**
+  mailto link (pre-filled confirmation ask) — fits the app's mailto-only model,
+  no send infrastructure. Parallel to the existing declined-alert card; a "Chase
+  on Assignments →" button deep-links to the pending-filtered list.
+- **Batch column in the bookkeeper CSV.** `payroll/export.csv` gains a trailing
+  `Batch` column (LEFT JOIN payment_batch.reference) so the bookkeeper sees which
+  check/ACH run settled each official; blank when paid out-of-band or unpaid.
+- CI verified green on the prior push (docker build + 457-test suite, 2m39s).
+- Tests +3 (pending list + 404; CSV carries batch reference). Suite 457 → 460,
+  green. Nudges verified live: 3 officials listed, each with a correct
+  `mailto:…?subject=Assignment%20confirmation…` link, no `[object Object]`.
+
 ## Payroll batch UX: per-record selection + printable receipt (2026-06-13)
 Follow-ups on the payment-batch feature, same day.
 

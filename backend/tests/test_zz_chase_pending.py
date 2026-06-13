@@ -69,3 +69,24 @@ def test_contact_null_when_not_on_file():
     s = _summary(t["id"], a["id"])
     assert s["official_email"] is None
     assert s["official_phone"] is None
+
+
+def test_pending_nudge_list():
+    t = _tournament()
+    email = f"nudge_{uuid.uuid4().hex[:6]}@example.com"
+    o1 = _official(email=email)
+    o2 = _official()  # no email
+    a1 = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o1["id"]}))
+    a2 = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o2["id"]}))
+    # both pending by default → both appear, carrying the email (for the mailto
+    # nudge) and first_name; the one with no email on file reports null.
+    d = _ok(client.get(f"/api/tournaments/{t['id']}/pending"), 200)
+    assert d["count"] == 2
+    by_id = {p["assignment_id"]: p for p in d["pending"]}
+    assert by_id[a1["id"]]["official_email"] == email
+    assert by_id[a2["id"]]["official_email"] is None
+    assert all(p["official_name"] and p.get("first_name") for p in d["pending"])
+
+
+def test_pending_404_unknown_tournament():
+    assert client.get("/api/tournaments/99999999/pending").status_code == 404

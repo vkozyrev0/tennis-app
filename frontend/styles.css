@@ -1423,6 +1423,16 @@ td.toggle { white-space: nowrap; }
 .dash-dec-item { font-size: 0.86rem; }
 .dash-dec-name { font-weight: 600; }
 .dash-dec-slot { font-size: 0.76rem; color: var(--muted); }
+/* Pending-response nudges (dashboard) — amber, one notch softer than declined */
+.dash-pending { margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
+  background: var(--warn-bg); border: 1px solid var(--warn-ink, #c08a00); }
+.dash-pend-head { font-weight: 700; font-size: 0.9rem; color: var(--warn-ink, #c08a00); margin-bottom: 0.3rem; }
+.dash-pend-list { list-style: none; margin: 0 0 0.45rem; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.dash-pend-item { font-size: 0.86rem; }
+.dash-pend-name { font-weight: 600; }
+.dash-pend-slot { font-size: 0.76rem; color: var(--muted); }
+.dash-pend-nudge { font-size: 0.78rem; color: var(--accent); text-decoration: none; margin-left: 0.3rem; }
+.dash-pend-nudge:hover { text-decoration: underline; }
 /* Cross-tournament digest */
 .dash-digest { margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
   background: var(--panel, #f7f9fb); border: 1px solid var(--line); }

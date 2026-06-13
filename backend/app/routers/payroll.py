@@ -132,7 +132,7 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
 
 _CSV_HEADERS = ["Official", "Days worked", "No-show days", "Pay", "Mileage",
                 "Total", "Rule version", "Finalized at", "Finalized by",
-                "Paid", "Paid date", "Method", "Note"]
+                "Paid", "Paid date", "Method", "Note", "Batch"]
 
 
 @router.get("/api/tournaments/{tournament_id}/payroll/export.csv")
@@ -145,7 +145,11 @@ def payroll_export_csv(tournament_id: int, conn=Depends(db_dep)):
         t = cur.fetchone()
         if t is None:
             raise HTTPException(status_code=404, detail="tournament not found")
-        cur.execute(f"SELECT {_REC_COLS} FROM payroll_record r "
+        # LEFT JOIN the batch so the bookkeeper sees which check/ACH run settled
+        # each official (blank when the record was paid out-of-band or not paid).
+        cur.execute(f"SELECT {_REC_COLS}, b.reference AS batch_reference "
+                    "FROM payroll_record r "
+                    "LEFT JOIN payment_batch b ON b.id = r.batch_id "
                     "WHERE r.tournament_id = %s ORDER BY r.official_name", (tournament_id,))
         recs = cur.fetchall()
     buf = io.StringIO()
@@ -161,6 +165,7 @@ def payroll_export_csv(tournament_id: int, conn=Depends(db_dep)):
             "yes" if r["paid"] else "no",
             r["paid_at"].isoformat() if r["paid_at"] else "",
             r["paid_method"] or "", r["paid_note"] or "",
+            r["batch_reference"] or "",
         ])
     body = buf.getvalue().encode("utf-8-sig")
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"

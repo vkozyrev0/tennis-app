@@ -333,6 +333,20 @@ def test_batch_detail_lists_members():
     assert sum(m["total"] for m in detail["members"]) == detail["total"]
 
 
+def test_payroll_csv_carries_batch_reference():
+    t, recs = _two_finalized()
+    ids = [r["record_id"] for r in recs]
+    _ok(client.post(f"/api/tournaments/{t['id']}/payroll/batches", json={
+        "reference": "Check run 99", "method": "check", "paid_on": "2026-09-15",
+        "record_ids": ids}))
+    body = client.get(f"/api/tournaments/{t['id']}/payroll/export.csv").content.decode("utf-8-sig")
+    lines = [ln for ln in body.splitlines() if ln.strip()]
+    assert lines[0].endswith("Batch")                      # new trailing column
+    # the tournament has exactly its 2 batched records; both carry the reference
+    data = lines[1:]
+    assert len(data) == 2 and all(ln.rstrip().endswith("Check run 99") for ln in data)
+
+
 # ---- Assignment-audit CSV (tournament-wide trail) --------------------------
 
 def test_assignment_audit_csv_export():

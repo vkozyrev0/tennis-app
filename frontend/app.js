@@ -5697,6 +5697,7 @@ async function loadDashboard() {
   tiles.querySelectorAll("[data-go-group]").forEach((b) =>
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
   _renderDeclinedAlert(d.officials.declined);
+  _renderPendingNudges(d.officials.pending);
   _renderReadiness();
 }
 
@@ -5755,6 +5756,41 @@ async function _renderDeclinedAlert(declinedCount) {
     _dashGo("staffing", "panel-t-assignments");
     // pre-filter the assignments list to declined so the TD lands on the work.
     setTimeout(() => { try { _asgRespFilter = "declined"; _renderAsgList(); } catch (_) {} }, 300);
+  });
+}
+
+// Pending-response nudges: officials assigned but not yet accept/declined. Lists
+// each with a ✉ mailto nudge (pre-filled confirmation ask) — fits the app's
+// mailto-only model (no send infra). Parallel to the declined alert above.
+async function _renderPendingNudges(pendingCount) {
+  const box = document.getElementById("dash-pending");
+  if (!box || !active) return;
+  if (!pendingCount) { box.hidden = true; box.innerHTML = ""; return; }
+  let d;
+  try { d = await api(`/tournaments/${active.id}/pending`); }
+  catch (_) { box.hidden = true; return; }
+  if (!d.count) { box.hidden = true; return; }
+  const tName = active.name || "the tournament";
+  const item = (r) => {
+    const slot = r.day_count ? `${r.day_count} day${r.day_count === 1 ? "" : "s"}` : "";
+    // a pre-filled mailto so the TD can chase a confirmation in one click; only
+    // shown when an email is on file (else just the name).
+    let nudge = "";
+    if (r.official_email) {
+      const subj = encodeURIComponent(`Assignment confirmation — ${tName}`);
+      const body = encodeURIComponent(
+        `Hi ${r.first_name || ""},\n\nPlease confirm (accept or decline) your officiating ` +
+        `assignment for ${tName}${slot ? ` (${slot})` : ""}.\n\nThanks!`);
+      nudge = html` <a class="dash-pend-nudge" href="mailto:${r.official_email}?subject=${raw(subj)}&body=${raw(body)}">✉ Nudge</a>`;
+    }
+    return html`<li class="dash-pend-item"><span class="dash-pend-name">${r.official_name}</span>${
+      slot ? html` <span class="dash-pend-slot">${slot}</span>` : ""}${nudge}</li>`;
+  };
+  box.hidden = false;
+  box.innerHTML = html`<div class="dash-pend-head">⏳ ${d.count} awaiting accept/decline</div><ul class="dash-pend-list">${d.pending.map(item)}</ul><button type="button" id="dash-pend-go" class="btn-small">Chase on Assignments →</button>`;
+  document.getElementById("dash-pend-go")?.addEventListener("click", () => {
+    _dashGo("staffing", "panel-t-assignments");
+    setTimeout(() => { try { _asgRespFilter = "pending"; _renderAsgList(); } catch (_) {} }, 300);
   });
 }
 
