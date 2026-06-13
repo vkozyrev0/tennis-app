@@ -5,6 +5,19 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Broaden html`` adoption + local-uvicorn verification (2026-06-13)
+Follow-on to the P2 #12 helper. Adopted the workflow switch to **local uvicorn
+preview** (per the saved preference — no app-image rebuilds): verified this
+round's features (payroll CSV, Trash restore, assignment card) end-to-end on the
+live local server, then broadened `html``:
+
+- `renderAssignment` day chips and the assignment **History** audit-table now
+  build with `html`` / `raw()` instead of hand `esc()`.
+- Caught (and noted) the double-escape trap while converting: `html`` + `html``
+  with `+` collapses both `Safe`s to a string the outer template re-escapes —
+  each row must be ONE `html`` template so the map yields an array of `Safe`
+  (the pattern the unit test pins). Day chips verified live; no console errors.
+
 ## Bug hunt — retention sweep missing the negative-window guard (2026-06-13)
 Broader sweep over older code paths (retention, imports, the money path). One
 real defect found + fixed:

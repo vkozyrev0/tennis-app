@@ -2748,11 +2748,10 @@ function renderAssignment(a, availDates) {
     const st = d.actual_status || "planned";
     if (st !== "planned") chip.classList.add("st-" + st);
     const oow = _outOfWindow(d.work_date);
-    chip.innerHTML = `${oow ? '<span class="warn" title="outside the play window">⚠ </span>' : ""}` +
-      `${d.conflict ? '<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>' : ""}` +
-      `${d.outside_availability ? '<span class="warn" title="official did not declare this day available">⚠ </span>' : ""}` +
-      `${d.uncertified ? '<span class="warn" title="official is not certified for this role">⚠ </span>' : ""}` +
-      `${esc(fmtDOW(d.work_date))} · ${esc(certLabel(d.working_as))} $${d.rate_applied.toFixed(2)} `;
+    chip.innerHTML = html`${oow ? raw('<span class="warn" title="outside the play window">⚠ </span>') : ""}${
+      d.conflict ? raw('<span class="warn" title="double-booked: this official is assigned elsewhere this day">⚠ </span>') : ""}${
+      d.outside_availability ? raw('<span class="warn" title="official did not declare this day available">⚠ </span>') : ""}${
+      d.uncertified ? raw('<span class="warn" title="official is not certified for this role">⚠ </span>') : ""}${fmtDOW(d.work_date)} · ${certLabel(d.working_as)} $${d.rate_applied.toFixed(2)} `;
     const setSt = async (status) => {
       try {
         await api(`/assignment-days/${d.id}/status`, { method: "PUT", body: JSON.stringify({ actual_status: status }) });
@@ -3030,11 +3029,9 @@ async function showAssignmentHistory(a) {
   if (!rows.length) {
     body.innerHTML = '<p class="muted">No recorded changes yet (the trail starts with migration 0044 — earlier edits predate it).</p>';
   } else {
-    body.innerHTML = '<table class="list-table"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>' +
-      rows.map((r) => `<tr><td>${esc(new Date(r.changed_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td>` +
-        `<td>${esc(r.changed_by)}</td><td>${esc(_AUDIT_LABEL[r.action] || r.action)}</td>` +
-        `<td class="muted">${esc(_auditDetail(r))}</td></tr>`).join("") +
-      "</tbody></table>";
+    body.innerHTML = html`<table class="list-table"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>${
+      rows.map((r) => html`<tr><td>${new Date(r.changed_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td><td>${r.changed_by}</td><td>${_AUDIT_LABEL[r.action] || r.action}</td><td class="muted">${_auditDetail(r)}</td></tr>`)
+    }</tbody></table>`;
   }
   m.hidden = false;
 }
