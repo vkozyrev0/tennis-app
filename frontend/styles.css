@@ -984,7 +984,7 @@ td.toggle { white-space: nowrap; }
 .add-day-label { color: var(--muted); font-size: 0.8rem; }
 
 /* ---- reports ---- */
-.report-toolbar { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
+.report-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; }
 /* The report-toolbar h3 is a flex CHILD (siblings = Print/CSV buttons), so it
    needs `flex: 1; margin: 0` to fill the leading space and push the actions
    right. Distinct from `.h3-flex` (which makes the h3 itself a flex CONTAINER
