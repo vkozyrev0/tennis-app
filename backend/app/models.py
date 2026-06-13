@@ -59,6 +59,7 @@ from ._models_workspace import (  # noqa: F401
     AssignmentDayCreate,
     CoverageFillCreate,
     PayrollMarkPaid,
+    PaymentBatchCreate,
     AssignmentResponse,
     AvailabilitySet,
     CertificationCreate,

@@ -588,7 +588,7 @@ API endpoints (existing tournaments router):
 
 ---
 
-## Day-of operations + inbox detection (migrations 0040–0047)
+## Day-of operations + inbox detection (migrations 0040–0048)
 
 ### AssignmentDay.actual_status (migration 0040)  ✅ *day-of truth*
 Planned-vs-actual per assignment day (P4-1). The TD marks what really happened
@@ -682,5 +682,25 @@ trail survives the assignment itself being removed (same policy as
 | `paid_at` | date — meaningful only when `paid` |
 | `paid_method` | TEXT, CHECK IN (`check`, `ach`, `cash`, `venmo`, `zelle`, `other`) |
 | `paid_note` | TEXT |
+| `batch_id` | INT FK → PaymentBatch (nullable), ON DELETE SET NULL (migration 0048) — the batch this record was settled in, if any |
 
-Indexed on `(tournament_id)` (`idx_payroll_tournament`).
+Indexed on `(tournament_id)` (`idx_payroll_tournament`) and `(batch_id)` (`idx_payroll_batch`).
+
+### PaymentBatch  ✅ *built (migration 0048)*
+A group settlement — a check run, an ACH file, a cash day — that pays several
+finalized `payroll_record`s at once. Creating a batch marks every member paid
+with one shared method/date/reference; dissolving it walks every member back to
+unpaid (the records stay *finalized* — the FK is `ON DELETE SET NULL`, so the
+money rows survive the batch). Tournament-scoped.
+| Field | Notes |
+|-------|-------|
+| `id` | PK (identity) |
+| `tournament_id` | FK → Tournament, ON DELETE CASCADE |
+| `reference` | TEXT NOT NULL — e.g. "Check run 2026-06-15", "ACH #42" |
+| `method` | TEXT NOT NULL, CHECK IN (`check`, `ach`, `cash`, `venmo`, `zelle`, `other`) |
+| `paid_on` | date NOT NULL |
+| `note` | TEXT |
+| `created_by` | TEXT NOT NULL |
+| `created_at` | timestamptz NOT NULL, default now() |
+
+Indexed on `(tournament_id)` (`idx_payment_batch_tournament`).

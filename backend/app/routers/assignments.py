@@ -10,7 +10,10 @@ Room-count IS a hard guard — an official can't be put in a full block (audit �
 Pay/mileage/total are snapshotted on every change with the rule version, so a
 figure is reproducible later even if rates/distances change — audit §5.3.
 """
+import csv
+import io
 import json
+import re
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -500,6 +503,46 @@ def assignment_audit_trail(assignment_id: int, conn=Depends(db_dep)):
             (assignment_id,),
         )
         return cur.fetchall()
+
+
+_AUDIT_CSV_HEADERS = ["When", "Official", "Action", "Detail", "By"]
+
+
+@router.get("/api/tournaments/{tournament_id}/assignment-audit.csv")
+def assignment_audit_csv(tournament_id: int, conn=Depends(db_dep)):
+    """The whole assignment audit trail for a tournament as a CSV — the
+    dispute-resolution record (who changed what, when) the bookkeeper or a
+    grievance review can keep. Chronological (oldest first) so it reads as a
+    timeline. utf-8-sig so Excel reads the encoding. Includes rows whose
+    assignment was later deleted (identity is denormalized on the trail)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT name FROM tournament WHERE id = %s", (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT changed_at, official_name, action, detail, changed_by "
+            "FROM assignment_audit WHERE tournament_id = %s "
+            "ORDER BY changed_at ASC, id ASC",
+            (tournament_id,),
+        )
+        rows = cur.fetchall()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(_AUDIT_CSV_HEADERS)
+    for r in rows:
+        # detail is a small jsonb object; compact-json it so the CSV stays one
+        # cell per row (empty when null).
+        detail = json.dumps(r["detail"], separators=(",", ":")) if r["detail"] else ""
+        w.writerow([
+            r["changed_at"].isoformat(timespec="minutes"),
+            r["official_name"] or "", r["action"], detail, r["changed_by"],
+        ])
+    body = buf.getvalue().encode("utf-8-sig")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"
+    return Response(content=body, media_type="text/csv",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="assignment-audit-{slug}.csv"'})
 
 
 @router.post("/api/tournaments/{tournament_id}/assignments", status_code=201)

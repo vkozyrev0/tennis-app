@@ -128,6 +128,17 @@ class PayrollMarkPaid(BaseModel):
     paid_note: Optional[str] = Field(default=None, max_length=500)
 
 
+class PaymentBatchCreate(BaseModel):
+    """Create a payment batch and mark its member records paid in one call. The
+    method/paid_on/note settle all members at once; record_ids must be finalized,
+    not-yet-paid records in this tournament."""
+    reference: str = Field(min_length=1, max_length=200)
+    method: Literal["check", "ach", "cash", "venmo", "zelle", "other"]
+    paid_on: date
+    note: Optional[str] = Field(default=None, max_length=500)
+    record_ids: list[int] = Field(min_length=1)
+
+
 class CoverageFillCreate(BaseModel):
     """Fill a coverage gap: assign `official_id` to the tournament (if not already)
     and add this (work_date, working_as) day in one call."""

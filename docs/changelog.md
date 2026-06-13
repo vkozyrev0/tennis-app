@@ -5,6 +5,30 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Payroll payment batches + assignment-audit CSV (2026-06-13)
+Two payroll follow-ons (migration 0048).
+
+- **Payment batches.** The TD settles officials in groups (a check run, an ACH
+  file) rather than one transfer per assignment. New `payment_batch` table +
+  `batch_id` FK on `payroll_record`. `POST …/payroll/batches` creates a batch
+  from every finalized, not-yet-paid, un-batched record and marks them all paid
+  with one shared method/date/reference (all-or-nothing: a record already paid,
+  already batched, or from another tournament refuses the whole call).
+  `GET …/payroll/batches` lists batches with member count + summed total.
+  `DELETE /payroll/batches/{id}` dissolves a batch — every member walks back to
+  unpaid (but stays *finalized*); the FK is SET NULL so the money rows survive.
+  Each step lands in `assignment_audit` (paid / unpaid). UI: a "New batch…"
+  dialog (reference / method / paid-on / note) on the Payroll tab, a batches
+  list below the grid with a Dissolve action, and a ⛁ marker on batched rows.
+- **Assignment-audit CSV.** `GET …/assignment-audit.csv` exports the whole
+  tournament audit trail (when / official / action / detail / by), chronological,
+  utf-8-sig, including rows whose assignment was later deleted (identity is
+  denormalized on the trail). UI: an "Audit CSV" button on the Payroll tab.
+- Tests: +9 (batch create / refuse-already-paid / reject-foreign-or-missing /
+  list-aggregates / dissolve-walks-back / lifecycle-audits / 404s; audit-CSV
+  export + 404). Suite 447 → 456, all green. Verified the batch lifecycle live
+  (create → marks 7 paid → dissolve → back to unpaid, records stay finalized).
+
 ## Unified print-window export scaffold (2026-06-13)
 The seven TD-facing "open a blank window, write a self-contained auto-printing
 HTML doc" exports (hotel confidential report, pay statement, pay-statements

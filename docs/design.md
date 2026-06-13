@@ -81,7 +81,7 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0047_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0048_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
@@ -287,12 +287,18 @@ tournament-emails PDF into staged email rows.
 **Point-in-time names.** Player names are versioned (`player_history`); the roster
 resolves the name valid as of the tournament's play-start date.
 
-**Payroll finalization (`payroll.py`, migration 0045).** At event close the TD
-**freezes** each official's computed pay into an immutable `payroll_record` so the
-figure can't drift when rates/distances change afterward; records can be
+**Payroll finalization (`payroll.py`, migrations 0045 + 0048).** At event close
+the TD **freezes** each official's computed pay into an immutable `payroll_record`
+so the figure can't drift when rates/distances change afterward; records can be
 **marked paid** (settlement) and unfinalized/unpaid to correct. Finalize-all is
-idempotent and detects drift against the live calc. The assignment-change
-audit-action enum gains `finalized` / `unfinalized` / `paid` / `unpaid`.
+idempotent and detects drift against the live calc. **Payment batches (0048)**
+settle a group of finalized records at once (a check run / ACH file): creating a
+batch marks every member paid with one shared method/date/reference (all-or-nothing
+— a record already paid, batched, or from another tournament refuses the call);
+dissolving walks every member back to unpaid (records stay finalized; FK SET NULL).
+The assignment-change audit-action enum gains `finalized` / `unfinalized` / `paid`
+/ `unpaid`, and the whole tournament trail exports as CSV
+(`GET …/assignment-audit.csv`, in `assignments.py`).
 
 **Soft-delete (`trash.py`, migration 0046).** `tournament` and
 `tournament_incident` carry a `deleted_at` column (NULL = active); list queries

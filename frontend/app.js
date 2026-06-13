@@ -3161,9 +3161,10 @@ const payrollGrid = makeReadGrid("payroll-table", [
       const m = c.getData();
       if (!m.finalized) return '<span class="muted">open</span>';
       if (!m.finalized.paid) return '<span class="badge badge-info">finalized</span>';
-      const tip = [m.finalized.paid_at, m.finalized.paid_method, m.finalized.paid_note]
+      const tip = [m.finalized.paid_at, m.finalized.paid_method, m.finalized.paid_note,
+                   m.finalized.batch_id ? `batch #${m.finalized.batch_id}` : null]
         .filter(Boolean).join(" · ");
-      return hstr`<span class="badge badge-ok" title="${tip}">paid</span>`;
+      return hstr`<span class="badge badge-ok" title="${tip}">paid${m.finalized.batch_id ? raw(" <span class=\"muted\">⛁</span>") : ""}</span>`;
     } },
   { title: "", field: "_act", headerSort: false, width: 170, cssClass: "grid-actions-cell",
     formatter: (cell) => {
@@ -3211,6 +3212,9 @@ async function loadPayroll() {
   document.getElementById("payroll-totals").textContent =
     `${fin.length}/${rows.length} finalized (${money(sum(fin, (r) => r.finalized.total))})` +
     ` · ${paid.length} paid (${money(sum(paid, (r) => r.finalized.total))})`;
+  // Payment batches ride below the grid; supplemental, so don't block on them.
+  try { _renderBatches(await api(`/tournaments/${active.id}/payroll/batches`)); }
+  catch { /* leave the prior batch list in place on a transient fetch error */ }
 }
 document.getElementById("payroll-finalize-all").addEventListener("click", async () => {
   if (!active) return;
@@ -3237,6 +3241,89 @@ document.getElementById("payroll-export").addEventListener("click", async () => 
     setMsg("payroll-msg", "CSV exported", true);
   } catch (e) { setMsg("payroll-msg", e.message, false); }
 });
+document.getElementById("payroll-audit-csv").addEventListener("click", () => {
+  if (!active) return;
+  // Same-origin GET carries the session cookie; the attachment disposition
+  // downloads rather than navigates. No pre-fetch guard — the trail is rarely
+  // empty (creating an assignment already logs), and a header-only CSV is fine.
+  const a = document.createElement("a");
+  a.href = `/api/tournaments/${active.id}/assignment-audit.csv`;
+  a.download = "";
+  document.body.appendChild(a); a.click(); a.remove();
+  setMsg("payroll-msg", "audit CSV exported", true);
+});
+document.getElementById("payroll-batch-new").addEventListener("click", _payrollNewBatch);
+
+// Create one payment batch from every finalized, not-yet-paid, un-batched record
+// (the "pay everyone who's ready in one check run" case). A dialog collects the
+// shared reference/method/date/note; the POST marks all members paid at once.
+async function _payrollNewBatch() {
+  if (!active) return;
+  let eligible;
+  try {
+    const rows = await api(`/tournaments/${active.id}/payroll`);
+    eligible = rows.filter((r) => r.finalized && !r.finalized.paid && !r.finalized.batch_id);
+  } catch (e) { setMsg("payroll-msg", e.message, false); return; }
+  if (!eligible.length) {
+    setMsg("payroll-msg", "no finalized, unpaid record to batch — finalize first", false); return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const info = await new Promise((resolve) => {
+    const m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
+      hstr`<h3 class="detail-title">New payment batch</h3>` +
+      hstr`<p class="muted">${String(eligible.length)} finalized, unpaid record(s) will be settled together.</p>` +
+      '<div class="row"><label>Reference <input id="batch-ref" maxlength="200" placeholder="Check run 2026-06-15" /></label>' +
+      '<label>Method <select id="batch-method">' +
+      _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") + '</select></label></div>' +
+      `<div class="row"><label>Paid on <input id="batch-date" type="date" value="${today}" /></label>` +
+      '<label>Note <input id="batch-note" maxlength="500" placeholder="optional" /></label></div>' +
+      '<div class="modal-actions"><button type="button" id="batch-ok">Create batch</button>' +
+      '<button type="button" id="batch-cancel" class="cancel">Cancel</button></div></div>';
+    document.body.appendChild(m);
+    const close = (v) => { m.remove(); resolve(v); };
+    m.querySelector("#batch-ok").addEventListener("click", () => {
+      const reference = m.querySelector("#batch-ref").value.trim();
+      const paid_on = m.querySelector("#batch-date").value;
+      if (!reference || !paid_on) { markInvalid(m.querySelector("#batch-ref"), "reference and date are required"); return; }
+      close({ reference, method: m.querySelector("#batch-method").value, paid_on,
+              note: m.querySelector("#batch-note").value.trim() || null });
+    });
+    m.querySelector("#batch-cancel").addEventListener("click", () => close(null));
+    m.addEventListener("click", (e) => { if (e.target === m) close(null); });
+  });
+  if (!info) return;
+  try {
+    const out = await api(`/tournaments/${active.id}/payroll/batches`, { method: "POST",
+      body: JSON.stringify({ ...info, record_ids: eligible.map((r) => r.finalized.record_id) }) });
+    setMsg("payroll-msg", `batch created — ${out.record_count} record(s), ${money(out.total)}`, true);
+    loadPayroll();
+  } catch (e) { setMsg("payroll-msg", e.message, false); }
+}
+
+// Render the payment-batch list below the grid. Each batch shows reference,
+// method, date, member count + summed total, and a Dissolve action (walks its
+// records back to unpaid — they stay finalized).
+function _renderBatches(batches) {
+  const wrap = document.getElementById("payroll-batches");
+  if (!batches.length) { wrap.innerHTML = ""; return; }
+  const rows = batches.map((b) => hstr`<tr>
+    <td>${b.reference}</td><td>${b.method}</td><td>${b.paid_on}</td>
+    <td class="num">${String(b.record_count)}</td><td class="num">${money(b.total)}</td>
+    <td class="actions"><button type="button" class="btn-link" data-dissolve="${String(b.batch_id)}">Dissolve</button></td></tr>`).join("");
+  wrap.innerHTML = hstr`<h4 class="batch-h">Payment batches</h4>
+    <table class="list-table batch-table"><thead><tr><th>Reference</th><th>Method</th><th>Paid on</th><th class="num">Records</th><th class="num">Total</th><th></th></tr></thead>
+    <tbody>${raw(rows)}</tbody></table>`;
+  wrap.querySelectorAll("[data-dissolve]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const b = batches.find((x) => String(x.batch_id) === btn.dataset.dissolve);
+      if (!(await confirmDialog(`Dissolve batch "${b.reference}"? Its ${b.record_count} record(s) go back to unpaid (they stay finalized).`))) return;
+      try { await api(`/payroll/batches/${btn.dataset.dissolve}`, { method: "DELETE" });
+            setMsg("payroll-msg", "batch dissolved", true); loadPayroll(); }
+      catch (e) { setMsg("payroll-msg", e.message, false); }
+    });
+  });
+}
 
 // Populate the staff Days multi-select from the active tournament's play window;
 // `selected` is an optional Set of ISO dates to pre-check.

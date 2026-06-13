@@ -19,7 +19,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import PayrollMarkPaid
+from ..models import PayrollMarkPaid, PaymentBatchCreate
 from ..security import require_admin
 from .assignments import _ASG_SELECT, _audit, _summary
 
@@ -28,7 +28,7 @@ router = APIRouter(tags=["payroll"])
 _REC_COLS = (
     "r.id AS record_id, r.assignment_id, r.official_name, r.days_worked, r.no_show_days, "
     "r.pay, r.mileage, r.total, r.rule_version, r.finalized_at, r.finalized_by, "
-    "r.paid, r.paid_at, r.paid_method, r.paid_note"
+    "r.paid, r.paid_at, r.paid_method, r.paid_note, r.batch_id"
 )
 
 
@@ -48,6 +48,7 @@ def _record_out(r: dict) -> dict:
         "paid_at": r["paid_at"].isoformat() if r["paid_at"] else None,
         "paid_method": r["paid_method"],
         "paid_note": r["paid_note"],
+        "batch_id": r["batch_id"],
     }
 
 
@@ -247,3 +248,124 @@ def mark_paid(record_id: int, body: PayrollMarkPaid, user=Depends(require_admin)
             _audit(cur, rec["assignment_id"], "paid" if body.paid else "unpaid",
                    {"record_id": record_id, "method": body.paid_method}, user["username"])
         return _record_out(row)
+
+
+# ---- Payment batches -------------------------------------------------------
+# A batch settles a group of finalized records at once (a check run, an ACH
+# file). Creating one marks every member paid with the shared method/date;
+# dissolving it walks every member back to unpaid. See migration 0048.
+
+def _batch_out(b: dict) -> dict:
+    """Normalize a payment_batch + aggregates row for JSON."""
+    return {
+        "batch_id": b["id"],
+        "reference": b["reference"],
+        "method": b["method"],
+        "paid_on": b["paid_on"].isoformat(),
+        "note": b["note"],
+        "created_by": b["created_by"],
+        "created_at": b["created_at"].isoformat(),
+        "record_count": b["record_count"],
+        "total": float(b["total"]),
+    }
+
+
+@router.get("/api/tournaments/{tournament_id}/payroll/batches")
+def list_batches(tournament_id: int, conn=Depends(db_dep)):
+    """Payment batches for the tournament, newest first, with member count and
+    summed total (LEFT JOIN so a batch whose records were unfinalized still
+    lists, at count 0)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT b.id, b.reference, b.method, b.paid_on, b.note, b.created_by, "
+            "       b.created_at, count(r.id) AS record_count, "
+            "       COALESCE(sum(r.total), 0) AS total "
+            "FROM payment_batch b "
+            "LEFT JOIN payroll_record r ON r.batch_id = b.id "
+            "WHERE b.tournament_id = %s "
+            "GROUP BY b.id ORDER BY b.created_at DESC, b.id DESC",
+            (tournament_id,),
+        )
+        return [_batch_out(b) for b in cur.fetchall()]
+
+
+@router.post("/api/tournaments/{tournament_id}/payroll/batches", status_code=201)
+def create_batch(tournament_id: int, body: PaymentBatchCreate,
+                 user=Depends(require_admin), conn=Depends(db_dep)):
+    """Create a batch and mark its member records paid. Every record_id must be
+    a finalized record in THIS tournament that is not already paid or batched —
+    otherwise the whole call is refused (409), so a batch is all-or-nothing."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        # de-dupe ids; fetch the candidate records and validate as a set
+        ids = list(dict.fromkeys(body.record_ids))
+        cur.execute(
+            "SELECT id, assignment_id, tournament_id, paid, batch_id "
+            "FROM payroll_record WHERE id = ANY(%s)", (ids,))
+        found = {r["id"]: r for r in cur.fetchall()}
+        missing = [i for i in ids if i not in found]
+        if missing:
+            raise HTTPException(status_code=404,
+                                detail=f"payroll record(s) not found: {missing}")
+        wrong_t = [i for i, r in found.items() if r["tournament_id"] != tournament_id]
+        if wrong_t:
+            raise HTTPException(status_code=409,
+                                detail=f"record(s) not in this tournament: {wrong_t}")
+        already = [i for i, r in found.items() if r["paid"] or r["batch_id"] is not None]
+        if already:
+            raise HTTPException(status_code=409,
+                                detail=f"record(s) already paid or batched: {already}")
+        cur.execute(
+            "INSERT INTO payment_batch (tournament_id, reference, method, paid_on, note, created_by) "
+            "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, created_at",
+            (tournament_id, body.reference, body.method, body.paid_on, body.note,
+             user["username"]),
+        )
+        batch = cur.fetchone()
+        cur.execute(
+            "UPDATE payroll_record SET paid = true, paid_at = %s, paid_method = %s, "
+            "  paid_note = COALESCE(%s, paid_note), batch_id = %s "
+            "WHERE id = ANY(%s) RETURNING total",
+            (body.paid_on, body.method, body.note, batch["id"], ids),
+        )
+        total = sum(float(r["total"]) for r in cur.fetchall())
+        for i in ids:
+            aid = found[i]["assignment_id"]
+            if aid is not None:
+                _audit(cur, aid, "paid",
+                       {"record_id": i, "batch_id": batch["id"], "method": body.method},
+                       user["username"])
+        return {
+            "batch_id": batch["id"], "reference": body.reference, "method": body.method,
+            "paid_on": body.paid_on.isoformat(), "note": body.note,
+            "created_by": user["username"], "created_at": batch["created_at"].isoformat(),
+            "record_count": len(ids), "total": total,
+        }
+
+
+@router.delete("/api/payroll/batches/{batch_id}", status_code=204)
+def dissolve_batch(batch_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
+    """Dissolve a batch: walk every member record back to unpaid and remove the
+    batch. The records themselves stay finalized — only the settlement is undone
+    (mirrors PUT paid=false). Each member lands an 'unpaid' audit entry."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM payment_batch WHERE id = %s", (batch_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="payment batch not found")
+        cur.execute("SELECT id, assignment_id FROM payroll_record WHERE batch_id = %s",
+                    (batch_id,))
+        members = cur.fetchall()
+        cur.execute(
+            "UPDATE payroll_record SET paid = false, paid_at = NULL, paid_method = NULL, "
+            "  paid_note = NULL, batch_id = NULL WHERE batch_id = %s", (batch_id,))
+        for m in members:
+            if m["assignment_id"] is not None:
+                _audit(cur, m["assignment_id"], "unpaid",
+                       {"record_id": m["id"], "batch_id": batch_id}, user["username"])
+        cur.execute("DELETE FROM payment_batch WHERE id = %s", (batch_id,))
+    return Response(status_code=204)
