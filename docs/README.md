@@ -14,18 +14,20 @@ master data) and a per-tournament workspace (scoped operations).
 
 ## Docs
 
-| File | Purpose |
-|------|---------|
-| [design.md](design.md) | **Architecture & rebuild guide** — structure, patterns, and domain rules; enough to recreate the app. |
-| [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
-| [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
-| [roadmap.md](roadmap.md) | What's shipped, what's open. |
-| [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale, plus P4 missing features), with shipped marks and sequencing. |
-| [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
-| [changelog.md](changelog.md) | Chronological log of shipped work. |
-| [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
-| [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
-| [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
+| # | File | Purpose |
+|---|------|---------|
+| 1 | [vision-summary.md](vision-summary.md) | The TD's product vision, normalized. Stable anchor. |
+| 2 | [design.md](design.md) | **Architecture & rebuild guide** — structure, patterns, and domain rules; enough to recreate the app. |
+| 3 | [data-model.md](data-model.md) | Current schema + entity relationships, kept current with migrations. |
+| 4 | [roadmap.md](roadmap.md) | What's shipped, what's open. |
+| 5 | [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale, plus P4 missing features), with shipped marks and sequencing. |
+| 6 | [changelog.md](changelog.md) | Chronological log of shipped work. |
+| 7 | [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
+| 8 | [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
+| 9 | [pii-hardening-plan.md](pii-hardening-plan.md) | PII hardening plan for minors' data (COPPA): inventory, obligations, phased remediation. |
+| 10 | [pii-h2-key-management.md](pii-h2-key-management.md) | H2 PII key-management & rotation design (Fernet MultiFernet, re-encrypt backfill, deploy runbook). |
+| 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
+| 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 
 ## Quickstart
 
@@ -64,12 +66,12 @@ against a live server, see [e2e-findings.md](e2e-findings.md).
 
 ## Status
 
-The original TD audit (D1–D8) is closed. Eight subsequent code/UX
-critique passes are also closed; the running findings register is
+The original TD audit (D1–D8) is closed. Subsequent code/UX
+critique passes are closed; the running findings register is
 folded into `changelog.md`. The 2026-06-10 improvement plan's P1 round
-and most P2/P4 items are shipped (see `improvement-plan.md` for the
-per-item marks). Active open items live in `roadmap.md` under
-"Open work".
+and nearly all P2/P4 items are shipped (all of P2 #8–14; P4 day-of
+operations + payroll) — see `improvement-plan.md` for the per-item
+marks. Active open items live in `roadmap.md` under "Open work".
 
 POC stack: **Postgres** (localhost) · **FastAPI + psycopg3** · **vanilla
 HTML/CSS/JS**. The POC defaults to `admin/admin`; harden before any

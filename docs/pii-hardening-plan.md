@@ -1,7 +1,10 @@
 # CourtOps Tennis — PII Hardening Plan (minors' data / COPPA)
 
-> **Status:** H1 + H3 shipped (per-item marks below); H2 is deploy-gated. The
-> document itself remains the plan of record. It operationalizes
+> **Status:** H1 + H3 shipped (per-item marks below); H2.2 column-level
+> encryption shipped (`app/crypto.py`, migration 0037); H2.3
+> key-management/rotation is designed in
+> [pii-h2-key-management.md](pii-h2-key-management.md) (deploy-time to
+> implement). The document itself remains the plan of record. It operationalizes
 > the roadmap's parked *"PII-at-rest encryption + DB hardening"* item
 > ([roadmap.md](roadmap.md) §On hold) and the audit's §5.1/§5.3 constraints,
 > grounded in COPPA obligations confirmed by external research.
@@ -220,4 +223,5 @@ on `postgres`/`postgres` or a non-TLS DSN; tests still pass against a dev DB.
 - [roadmap.md](roadmap.md) — §On hold "PII encryption at rest / DB hardening".
 - [audit.md](audit.md) — §5.1 (minors' PII / non-public), §5.3 (auditability).
 - `backend/app/config.py` — DB DSN + default creds (H1).
+- [pii-h2-key-management.md](pii-h2-key-management.md) — H2.3 key-management & rotation design.
 - FTC COPPA FAQ + 16 CFR Part 312 — primary obligations (§2).

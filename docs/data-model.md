@@ -11,6 +11,10 @@ Storage-agnostic; field types are indicative. **PK** = primary key,
 > workflow — review inbox + all lists (late entries, withdrawals, scheduling
 > avoidances, division flexibility, pairing avoidances, doubles, player hotels,
 > t-shirts). Markers below call out where the model and the running app differ.
+> The **P4 day-of-operations series** also shipped: day-of operations
+> (actual-status, incidents, audit trail), **payroll finalization** (freeze pay
+> at event close + mark-paid + CSV export), and scoped **soft-delete**
+> (tournaments + incidents Trash/restore).
 
 ---
 
@@ -26,6 +30,13 @@ The central entity linking both halves of the system.
 | `play_start_date`, `play_end_date` | match-play window, 3–6 days |
 | `registration_deadline` | normal registration cutoff; withdrawals happen after this |
 | `late_entry_deadline` | **distinct** date for late entries (§2.5) |
+| `deleted_at` | timestamptz, NULL = active (migration 0046 soft-delete) |
+
+> **Soft-delete (migration 0046)** is scoped to **Tournament and
+> TournamentIncident only** — *not* players/officials/emails, where delete is a
+> COPPA PII-erasure and stays hard-delete. Lists filter `deleted_at IS NULL`;
+> trashed rows appear in a **Trash** list and can be **restored**. Backed by
+> partial indexes `idx_tournament_active` / `idx_incident_active`.
 
 > A tournament can be held at **more than one site**, so Site is a
 > **many-to-many** via `tournament_site` (not a single `site_id`).
@@ -59,7 +70,7 @@ every tournament held at that site, so distance is entered/geocoded once.
 | `official_id` | FK → Official |
 | `site_id` | FK → Site |
 | `one_way_miles` | TD-entered or geocoded (D3/U2) |
-| `source` | `geocoded` \| `manual` |
+| `source` | `geocoded` \| `manual` \| `maps` (migration 0047; `maps` = Google Distance Matrix driving distance when `GOOGLE_MAPS_API_KEY` is set) |
 
 > The matrix is **sparse**: a row exists only for an (official, site) pair whose
 > distance is known. In the sample workbook, **18 of 47 officials had no distance
@@ -577,7 +588,7 @@ API endpoints (existing tournaments router):
 
 ---
 
-## Day-of operations + inbox detection (migrations 0040–0044)
+## Day-of operations + inbox detection (migrations 0040–0047)
 
 ### AssignmentDay.actual_status (migration 0040)  ✅ *day-of truth*
 Planned-vs-actual per assignment day (P4-1). The TD marks what really happened
@@ -620,6 +631,7 @@ protest/dispute paper trails. Tournament-scoped
 | `description` | required one-liner |
 | `resolved`, `resolution` | bool (default false) + optional resolution text |
 | `created_at` | timestamptz |
+| `deleted_at` | timestamptz, NULL = active (migration 0046 soft-delete) |
 
 Indexed on `(tournament_id, occurred_at DESC)`.
 
@@ -636,8 +648,39 @@ the assignment itself being removed.
 | `tournament_id`, `official_id`, `official_name` | denormalized identity (no FKs) — survives deletes |
 | `changed_at` | timestamptz, default now() |
 | `changed_by` | required (the logged-in user) |
-| `action` | `created` \| `updated` \| `deleted` \| `day_added` \| `day_removed` \| `day_status` \| `response` |
+| `action` | `created` \| `updated` \| `deleted` \| `day_added` \| `day_removed` \| `day_status` \| `response` \| `finalized` \| `unfinalized` \| `paid` \| `unpaid` *(payroll lifecycle, 0045)* |
 | `detail` | jsonb — the change payload |
 
 Indexed on `(assignment_id, changed_at DESC)` and
 `(tournament_id, changed_at DESC)`.
+
+### PayrollRecord  ✅ *built (migration 0045)*
+**One immutable record per assignment**, written when payroll is **finalized**
+at event close (P4-4). It **freezes the computed pay** — per-day cert rates were
+already snapshotted onto `assignment_day` — so later edits to days, rates,
+distances, or no-show flags can't move money already approved for payment.
+Identity is **denormalized** and the FK is `ON DELETE SET NULL`, so the money
+trail survives the assignment itself being removed (same policy as
+`assignment_audit`).
+| Field | Notes |
+|-------|-------|
+| `id` | PK (identity) |
+| `assignment_id` | **UNIQUE** FK → Assignment (nullable), ON DELETE SET NULL — one per assignment |
+| `tournament_id` | INT NOT NULL |
+| `official_id` | INT (denormalized) |
+| `official_name` | TEXT NOT NULL — denormalized identity, survives assignment deletion |
+| `days_worked` | INT NOT NULL |
+| `no_show_days` | INT NOT NULL, default 0 |
+| `pay` | numeric(10,2) NOT NULL |
+| `mileage` | numeric(10,2), NULL = no distance on file at finalize time |
+| `total` | numeric(10,2) NOT NULL |
+| `rule_version` | TEXT |
+| `detail` | jsonb NOT NULL — frozen day-by-day breakdown |
+| `finalized_at` | timestamptz NOT NULL, default now() |
+| `finalized_by` | TEXT NOT NULL |
+| `paid` | boolean NOT NULL, default false |
+| `paid_at` | date — meaningful only when `paid` |
+| `paid_method` | TEXT, CHECK IN (`check`, `ach`, `cash`, `venmo`, `zelle`, `other`) |
+| `paid_note` | TEXT |
+
+Indexed on `(tournament_id)` (`idx_payroll_tournament`).

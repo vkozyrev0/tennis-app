@@ -5,7 +5,7 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 [vision-summary.md](vision-summary.md) · [audit.md](audit.md) ·
 [data-model.md](data-model.md).
 
-> **Status (2026-06-12):** Phases 0–4 are functionally shipped; Phase 5 is polish
+> **Status (2026-06-13):** Phases 0–4 are functionally shipped; Phase 5 is polish
 > and deploy-time hardening (see *On hold* for the two externally-blocked items).
 > The latest rounds — the **improvement plan** (P1 quick wins + P2 structural
 > refactors), **day-of operations** (official actual status, player check-in,
@@ -20,7 +20,7 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 > drilldowns, Player/Official 360 + exports, rooming list, day-by-day schedule,
 > pay statements, dietary + workload rollups, and self-service availability.
 > Full list in [changelog.md](changelog.md); end-to-end validation in
-> [e2e-findings.md](e2e-findings.md). Suite: **420** green and deterministic;
+> [e2e-findings.md](e2e-findings.md). Suite: **447** green and deterministic;
 > CI builds + publishes `ghcr.io/vkozyrev0/tennis-app:latest` on main pushes.
 
 ---
@@ -229,9 +229,11 @@ pay snapshots).
       official's tournaments (per-tournament breakdown + season totals):
       `GET /api/officials/{id}/pay-summary` (TD) and `/api/me/pay-summary`
       (the official's own, in a self-service "My pay" view).
-- [ ] **Google Maps geocoding** to auto-compute home↔site round-trip distance
+- [~] **Google Maps geocoding** to auto-compute home↔site round-trip distance
       (the primary mileage source), with **manual entry as fallback** when the
-      lookup is unavailable (D3/U2).
+      lookup is unavailable (D3/U2). **Scaffolded** behind `GOOGLE_MAPS_API_KEY`
+      (migration 0047, source `maps`), **blocked on the API key + egress**; the
+      key-free great-circle estimate remains the fallback.
 
 **Done when:** officials self-declare availability and TD assigns from it.
 
@@ -324,7 +326,7 @@ buildable without them is done; revisit when the prerequisite is available.
 
 | Item | Why it's blocked | To unblock |
 |------|------------------|------------|
-| **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), plus a provider seam for Google. | Provide an API key + confirm cost; implement `geocode_address`/driving-distance behind the existing seam (the estimate is the fallback). |
+| **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), and the **driving-distance Distance Matrix call is now scaffolded** (migration 0047, `road_one_way_miles()` behind `GOOGLE_MAPS_API_KEY`, source=`maps`) — still **key-blocked**. | Provide an API key + confirm cost + egress; the driving-distance path is wired (the estimate stays the fallback). |
 | **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | Needs a mail domain + inbound webhook/IMAP infra. POC uses manual paste into the review inbox. | Stand up a forwarding address + ingestion endpoint; dedup by `message_id` already exists. |
 | **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
 | **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS for the *encryption* piece. **Partly shipped** (see `docs/pii-hardening-plan.md`): **H1** ENV-gated boot guard refusing default creds / non-TLS in prod + `sslmode`; **H3** PII erased from `player_history` on delete + an email-body retention-purge endpoint. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption (H2), retention schedule + purge job (H3.1/H3.3). |
@@ -496,53 +498,14 @@ glance, themes delivered through 2026-05-27:
   analytics counts stays per `(player, tournament)` for the CVB number;
   pairing-avoidance validates all members up front then commits as a unit.
 
-## Shipped 2026-06-04 (benchmark-driven improvements)
-A round of fixes + features, merged to `main` (full backend suite: 109 green).
-- **Inbox filing** — fixed bulk-populate's `scheduling` key drift; single-file
-  now **pre-fills the detected player**; a single **email-target registry**
-  (`app/email_targets.py`, `GET /api/emails/targets`) is the source of truth for
-  both single-file + bulk (drift-guarded by a test); **local field extraction**
-  (age division, events, scheduling day/time) surfaced on the email + filled into
-  the forms and bulk; filing uses the **email's own tournament** (no re-homing).
-- **Assignments** — cross-tournament **double-booking detection**: a card chip +
-  per-day marker, a report count, and a confirm before adding a clashing day.
-- **Officials pay** — fixed a player-PUT **optimistic-concurrency false-409**
-  (compare parsed instants, not raw timestamp strings).
-- **Auto-distance** — great-circle **estimate** fallback + geocoder seam (above).
-- **PII hardening** — plan doc + **H1** (boot guard/TLS) + **H3**
-  (history erasure on delete, email-body purge) (above).
+## Shipped — recent rounds
+Granular shipped detail lives in [changelog.md](changelog.md). Recent: payroll
+finalization + CSV export, inbox Player 1/2 cells, soft-delete + Trash, the Maps
+driving-distance scaffold, the auth/state/player_list extractions, and the
+html`` helper sweep. The improvement-plan item-by-item record is in
+[improvement-plan.md](improvement-plan.md).
 
-## Shipped 2026-06-10 → 06-12 (improvement-plan rounds + day-of operations + inbox detection)
-Three threads landed in quick succession (suite now **420** green); the
-item-by-item record lives in [improvement-plan.md](improvement-plan.md).
-- **P1 quick wins (all seven)** — empty-state guidance, terminology pass,
-  in-grid edit feedback, uniform 409s, pagination helper, `mark_email_filed`
-  unification, delegated combobox listeners (commit 367868d).
-- **P2 structural refactors** — assignment money/flag calc extracted into a
-  unit-tested `app/assignment_calc.py` (#8); pure email-text extractors into
-  `app/email_extract.py` (#9 phase 1); per-row **savepoints for bulk writes**,
-  which surfaced and fixed a real silent-data-loss bug (#10); Tabulator grid
-  factories extracted into `frontend/app/grids.js` (#11a); API **contract
-  tests** — response shapes + query-count ceilings (#14).
-- **Day-of operations (P4)** — official **actual status**
-  (planned/worked/no_show/early_departure; no-shows drop out of pay + the .ics
-  feed) and **player check-in** (P4-1/2); a tournament **incident log** with
-  quick-log + resolve flow (P4-3); an append-only **assignment change audit**
-  (who/when/what, History modal on each card) (P4-5); **payroll finalization**
-  — freeze each official's computed pay into an immutable record, mark-paid
-  settlement, drift detection, idempotent finalize-all, Payroll tab (P4-4,
-  migration 0045). All day-of items are now shipped.
-- **Inbox detection wave (Part B)** — **doubles partner** detection (both
-  players on a doubles email) and **pairing-avoidance group** detection (every
-  named player); **USTA-number extraction** covering one/both/neither numbers,
-  number-before-name and name-before-number orders, and (name, USTA #) pair
-  extraction — exercised against the real email corpus, plus a **real-PDF
-  email-import fixture** with pair detection on PDF import.
-- **Inbox grid: manual player assignment** — editable **Player 1 / Player 2**
-  column groups on the inbox grid, so when detection can't match, the TD
-  assigns players by roster dropdown or a typed USTA # right in the grid.
-
-## Open work (as of 2026-06-12)
+## Open work (as of 2026-06-13)
 - **Google Maps *driving* distance** (Phase 2) — ⚙️ **scaffolded** (2026-06-13):
   `road_one_way_miles()` calls the Distance Matrix API behind
   `GOOGLE_MAPS_API_KEY` (source `maps`) and `/distances/auto` stamps it; still
@@ -555,7 +518,8 @@ item-by-item record lives in [improvement-plan.md](improvement-plan.md).
   call first**.
 - **PII H2 (encryption at rest)** + **least-priv DB role** + **scheduler wiring**
   for the retention sweep — tied to the post-POC deployment switch (see
-  `docs/pii-hardening-plan.md`). *(H3 retention **policy + sweep job** with
+  `docs/pii-hardening-plan.md` and the key-management/rotation design in
+  `docs/pii-h2-key-management.md`). *(H3 retention **policy + sweep job** with
   dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
 - ~~**Payroll CSV batch export**~~ — ✅ **shipped** (2026-06-13):
   `GET /tournaments/{id}/payroll/export.csv` + an Export CSV button on the

@@ -233,9 +233,13 @@ but the app has no live-operations surface:
    `tournament_incident`; Tournament → Incidents tab with a quick-log form and
    a resolve-by-typing-the-resolution grid; demo seeds a resolved rain delay +
    an open facility issue.
-4. **Payroll finalization** (M) — an approved/paid state over the existing pay
-   statements + a payroll CSV batch export; today statements print but nothing
-   records that they were settled.
+4. ✅ **SHIPPED (2026-06-13) — Payroll finalization** — migration 0045
+   `payroll_record` (one immutable record per assignment, freezes the computed
+   pay at event close); `routers/payroll.py` finalize/unfinalize +
+   mark-paid/unpaid (method + note) with drift detection when post-finalize
+   edits would change the amount; idempotent finalize-all; a payroll CSV batch
+   export of the settled records for the bookkeeper. Covered by
+   `test_zz_payroll`.
 5. ✅ **SHIPPED (2026-06-12) — Assignment change audit** — migration 0044
    `assignment_audit` (append-only, survives deletion via denormalized
    identity); every mutating endpoint records actor + action + detail (the

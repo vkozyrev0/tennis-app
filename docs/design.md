@@ -41,7 +41,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 4 small helper modules; **Tabulator 6.3.1** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 8 small helper modules (`util, shirts, roster_prefill, grids, auth, state, player_list, html`); **Tabulator 6.3.1** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -72,14 +72,16 @@ backend/
     email_targets.py   # single source of truth: classification -> target list registry
     playerops.py       # upsert_player, mark_email_filed (shared helpers)
     shirtops.py        # t-shirt size normalization
-    geocode.py         # great-circle mileage estimate (+ seam for a real provider)
+    geocode.py         # great-circle mileage estimate; also the Google Maps Distance Matrix
+                       # driving-distance path when GOOGLE_MAPS_API_KEY is set
+                       # (stamps distance_source='maps', else 'geocoded')
     retention.py       # PII retention sweep helpers (H3)
     ical.py            # RFC 5545 builder: an official's schedule as .ics (admin + portal)
     models.py          # re-exports the Pydantic models from the _models_* files
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0044_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0047_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
@@ -91,6 +93,10 @@ frontend/
   app.js               # ~7.3k lines: all behaviour (ES module)
   app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
   app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a)
+  app/auth.js          # login + session view (sign-in/out, change-password, role-split header)
+  app/state.js         # active-tournament state + change event
+  app/player_list.js   # Part B list-page factory (wirePlayerList)
+  app/html.js          # auto-escaping html`` / hstr tagged-template helper
   styles.css, tokens.css
   vendor/tabulator.*   # vendored grid lib
 scripts/
@@ -194,13 +200,16 @@ workspace vs Part B vs reporting:
   (per-tournament + cross-tournament digest/deadlines + readiness), `reports`
   (staffing plan, coverage, schedule, rooming list, dietary, missing-distance,
   officials-without-login), `incidents` (day-of incident log: weather, injury,
-  dispute, facility, conduct — logged as one-liners, optionally resolved later).
+  dispute, facility, conduct — logged as one-liners, optionally resolved later),
+  `payroll` (payroll finalization + mark-paid + CSV export; freezes computed pay
+  into an immutable `payroll_record`, migration 0045).
 - **Part B inbox:** `emails` (the review inbox: list/search/status, triage =
   classify→detect→populate, aging, unmatched), and the per-classification list
   routers `late_entries`, `withdrawals`, `doubles`, `pairing_avoidances`,
   `player_hotels`, `adult_lists` (scheduling avoidance + division flex),
   `imports` (staged spreadsheet import for every type).
-- **Other:** `health`, `retention` (PII purge sweep).
+- **Other:** `health`, `retention` (PII purge sweep), `trash` (Trash list +
+  restore for soft-deleted tournaments + incidents; migration 0046).
 
 **Shared domain helpers** (not routers): `playerops.upsert_player` (the single
 player-identity path, keyed by USTA #), `playerops.mark_email_filed`,
@@ -278,16 +287,33 @@ tournament-emails PDF into staged email rows.
 **Point-in-time names.** Player names are versioned (`player_history`); the roster
 resolves the name valid as of the tournament's play-start date.
 
+**Payroll finalization (`payroll.py`, migration 0045).** At event close the TD
+**freezes** each official's computed pay into an immutable `payroll_record` so the
+figure can't drift when rates/distances change afterward; records can be
+**marked paid** (settlement) and unfinalized/unpaid to correct. Finalize-all is
+idempotent and detects drift against the live calc. The assignment-change
+audit-action enum gains `finalized` / `unfinalized` / `paid` / `unpaid`.
+
+**Soft-delete (`trash.py`, migration 0046).** `tournament` and
+`tournament_incident` carry a `deleted_at` column (NULL = active); list queries
+filter `deleted_at IS NULL` (partial indexes back the common path), and the Trash
+view restores a soft-deleted row. This is **deliberately scoped to tournaments +
+incidents only** — players, officials, and emails are *not* soft-deleted: minors'
+PII is hard-erased on delete (COPPA), so a recoverable trash there would defeat
+the erasure guarantee.
+
 ---
 
 ## 8. Frontend design
 
 **No build, one page, one big module.** `index.html` contains every panel
 (hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~7.3k lines,
-loaded as `<script type="module">`) holds all behaviour; four ESM helpers under
+loaded as `<script type="module">`) holds all behaviour; eight ESM helpers under
 `app/` split out logic (`util.js` formatting/CSV, `shirts.js` size
-normalisation, `roster_prefill.js`, and `grids.js` — see below). Tabulator is
-vendored.
+normalisation, `roster_prefill.js`, `grids.js` — see below — plus `auth.js`
+login/session view, `state.js` active-tournament state, `player_list.js` the
+Part B list-page factory, and `html.js` the auto-escaping `html``/`hstr` helper).
+Tabulator is vendored.
 
 **Grid factories live in `app/grids.js`** (P2 #11a):
 `createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,
@@ -299,19 +325,22 @@ deliberately coupled to the app's toast/message/modal conventions, so only the
 construction seam is new; the moved bodies are unchanged. `makeReadGrid`
 supports opt-in in-grid editing via `opts.editable` (the `editTriggerEvent`,
 e.g. `"dblclick"` so single-click links keep working in editable cells) +
-`opts.onCellEdited`. `wirePlayerList` (the Part B list-page factory) remains in
-`app.js`.
+`opts.onCellEdited`. `wirePlayerList` (the Part B list-page factory) has moved to
+`app/player_list.js`.
 
 **Structure (rough sections, headers in the file):** theme + small helpers →
 keyboard shortcuts → searchable comboboxes → caches/labels/tabs/menu → active-
 tournament state → **GRIDS registry + grid factories** (constructed from
-`app/grids.js`; `wirePlayerList` local) → workspace pages → Setup entity
+`app/grids.js`; `wirePlayerList` from `app/player_list.js`) → workspace pages → Setup entity
 configs → CSV/print exporters → Player/Official 360 → dashboards.
 
 **Conventions:**
 - `api(path, opts)` wrapper — prefixes `/api`, sends cookies, runs a progress
   bar, humanises 422 detail arrays, raises on non-2xx.
-- `esc()` for all HTML interpolation; `toast(text, ok, {label,onClick})` for
+- The `html``/`hstr` tagged-template helper (`app/html.js`) is the **preferred
+  auto-escaping path** for building markup — interpolations are HTML-escaped by
+  default — over hand-calling `esc()`; `esc()` remains for the cases not yet
+  migrated and for one-off interpolation. `toast(text, ok, {label,onClick})` for
   feedback; `setMsg(id, text, ok)` for inline form messages;
   `confirmDialog(msg, okLabel, kind)` for confirms.
 - Cache-busting: `app.js?v=N` + `styles.css?v=N` bumped on every change.
@@ -415,6 +444,8 @@ regenerating equivalent DDL) then rebuilding the routers per the patterns above.
 **If scaling past the POC:** add a connection pool; replace the no-cache
 middleware with hashed asset filenames; move the login throttle + session store
 to Redis; consider an LLM (with an explicit cloud-PII decision) behind the
-`triage.classify` seam; swap the great-circle estimate for a real driving-distance
-provider behind the `geocode` seam; split `app.js` into modules if it keeps
-growing. None of these are needed for a single-TD POC.
+`triage.classify` seam; the Google Maps driving-distance provider behind the
+`geocode` seam is already **scaffolded** (migration 0047, key-gated on
+`GOOGLE_MAPS_API_KEY`, source `maps`) with the great-circle estimate as the
+key-free fallback — finishing it just needs the key + egress + cost sign-off;
+split `app.js` into modules if it keeps growing. None of these are needed for a single-TD POC.

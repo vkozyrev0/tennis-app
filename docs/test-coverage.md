@@ -32,7 +32,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
-| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`. |
+| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`, `login_enum`, `extract_robustness`. |
 
 **Frontend unit check (JS):** the one piece of pure frontend logic that's
 risky to verify only through the live grid — seeding the roster add-form from an
@@ -391,7 +391,17 @@ unfinalize-unless-paid, mark-paid lifecycle/defaults, idempotent finalize-all,
 audit-trail landing, 404s; multiple orphaned (deleted-assignment) records all
 survive the summary; CSV export shape + 404.
 
-`test_zz_soft_delete.py` (5) — soft-delete (P2 #13): tournament trash hides it
+`test_zz_soft_delete.py` (7) — soft-delete (P2 #13): tournament trash hides it
 from the list + shows in `/trash` + restores; double-delete 404 and
 restore-requires-trashed; a trashed tournament's roster survives the round-trip
-(no cascade); incident trash/restore with tournament-name context + double-delete 404.
+(no cascade); incident trash/restore with tournament-name context + double-delete 404;
+a trashed tournament also drops out of the dashboard digest and the deadlines list
+(`deleted_at IS NULL` filters).
+
+`test_zz_login_enum.py` (2) — login user-enumeration timing defense: a wrong
+password and an unknown username take comparable time (no early-out that leaks
+which usernames exist).
+
+`test_zz_extract_robustness.py` (2) — extractor ReDoS/crash robustness: pathological
+and malformed inputs to the email extractor return cleanly without catastrophic
+backtracking or exceptions.
