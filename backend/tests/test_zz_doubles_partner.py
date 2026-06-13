@@ -218,3 +218,58 @@ def test_first_mentioned_number_is_primary(duo):
     det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
     assert det["detected_player_id"] == p2["id"]
     assert det["detected_partner_id"] == p1["id"]
+
+
+# ---- manual assignment from the inbox grid (Player 2 / USTA #2 columns) ------
+
+def test_manual_partner_assignment_persists(duo):
+    t, (p1, p2) = duo
+    em = _email(t, "Doubles request but no names the detector can use.")
+    upd = _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles", "status": "new",
+        "detected_player_id": p1["id"], "detected_partner_id": p2["id"]}), 200)
+    assert upd["detected_player_id"] == p1["id"]
+    assert upd["detected_partner_id"] == p2["id"]
+    rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
+    row = next(r for r in rows if r["id"] == em["id"])
+    assert row["detected_partner_id"] == p2["id"]
+    assert row["detected_partner_name"] == f"{p2['first_name']} {p2['last_name']}"
+    assert row["detected_partner_usta"] == p2["usta_number"]
+
+
+def test_manual_partner_survives_any_classification(duo):
+    # The TD's manual pick wins even off the doubles classification — e.g. a
+    # withdrawal email naming two players. Only clearing the primary clears it.
+    t, (p1, p2) = duo
+    em = _email(t, "two players withdrawing", classification="withdrawal")
+    upd = _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal", "status": "new",
+        "detected_player_id": p1["id"], "detected_partner_id": p2["id"]}), 200)
+    assert upd["detected_partner_id"] == p2["id"]
+
+
+def test_clearing_primary_clears_manual_partner(duo):
+    t, (p1, p2) = duo
+    em = _email(t, "doubles, both manually assigned")
+    _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles", "status": "new",
+        "detected_player_id": p1["id"], "detected_partner_id": p2["id"]}), 200)
+    upd = _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles", "status": "new",
+        "detected_player_id": None, "detected_partner_id": p2["id"]}), 200)
+    assert upd["detected_player_id"] is None
+    assert upd["detected_partner_id"] is None
+
+
+def test_put_without_partner_field_clears_it(duo):
+    # Old clients / the detail pane always send the partner explicitly; a body
+    # that omits it behaves like the other detected_* fields (reset to NULL).
+    t, (p1, p2) = duo
+    em = _email(t, "doubles, both manually assigned")
+    _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles", "status": "new",
+        "detected_player_id": p1["id"], "detected_partner_id": p2["id"]}), 200)
+    upd = _ok(client.put(f"/api/emails/{em['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles", "status": "new",
+        "detected_player_id": p1["id"]}), 200)
+    assert upd["detected_partner_id"] is None

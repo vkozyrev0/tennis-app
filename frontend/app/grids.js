@@ -100,7 +100,12 @@ export function createGridFactories(ctx) {
       columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
       ...(opts.index ? { index: opts.index } : {}),
       ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
+      // opt-in editing (e.g. the inbox's manual player/USTA assignment) —
+      // opts.editable is the trigger event; "dblclick" keeps single-click
+      // links (p360, Detect) working in editable cells.
+      ...(opts.editable ? { editTriggerEvent: opts.editable === true ? "click" : opts.editable } : {}),
     });
+    if (opts.onCellEdited) grid.on("cellEdited", (cell) => opts.onCellEdited(cell));
     const _onBuilt = () => {
       built = true;
       if (pending) { grid.setData(pending); pending = null; }

@@ -3501,20 +3501,67 @@ async function verifyEmailTargets() {
 
 // Inbox grid. Classification is an inline list-editor (double-click); the per-row
 // File-target picker + File / Suggest / Delete buttons live in the actions column.
-async function _inboxPutClass(m, classification) {
-  // Preserve the detected player on a classification-only change — the PUT
-  // overwrites detected_player_id with whatever we send, so omitting it would
-  // silently unlink the player (and clear its match_kind).
+async function _inboxPut(m, patch = {}) {
+  // Full-body PUT: the endpoint overwrites detected_player_id/partner with
+  // whatever we send, so every call carries the row's current links and the
+  // caller overrides just the field it changed — omitting one would silently
+  // unlink that player.
   await api(`/emails/${m.id}`, { method: "PUT", body: JSON.stringify({
     // Preserve the email's OWN tournament — the inbox is cross-tournament, so
     // forcing active.id here silently re-homed an email belonging to another
     // tournament whenever its classification was changed/suggested. Only fall
     // back to the active workspace for an as-yet-unassigned email.
     tournament_id: m.tournament_id ?? (active && active.id) ?? null,
-    classification, status: m.status,
+    classification: m.classification, status: m.status,
     detected_player_id: m.detected_player_id ?? null,
+    detected_partner_id: m.detected_partner_id ?? null,
+    ...patch,
   }) });
 }
+async function _inboxPutClass(m, classification) { await _inboxPut(m, { classification }); }
+
+// What the two "Player N" column groups display for a row, resolved in priority
+// order per slot: roster-matched player (auto-detected OR manually assigned) →
+// (name, USTA#) parsed straight from the email text (✉, not rostered yet) →
+// a bare email-text USTA #. Pairing-avoidance groups put the primary in slot 0
+// and the rest of the group in slot 1.
+function _inboxSlots(m) {
+  const slots = [{}, {}];
+  const pairs = m.detected_name_pairs || [];
+  const matched = [m.detected_usta, m.detected_partner_usta].filter(Boolean);
+  const text = (m.detected_usta_text || "").split(",").map((s) => s.trim())
+    .filter((n) => n && !matched.includes(n));
+  if (m.detected_player_name) {
+    slots[0] = { id: m.detected_player_id, name: m.detected_player_name,
+                 usta: m.detected_usta, matched: true, kind: m.detected_match_kind };
+  } else if (pairs[0]) slots[0] = { name: pairs[0].name, usta: pairs[0].usta || text[0] };
+  else if (text[0]) slots[0] = { usta: text[0] };
+  if (m.detected_partner_name) {
+    slots[1] = { id: m.detected_partner_id, name: m.detected_partner_name,
+                 usta: m.detected_partner_usta, matched: true };
+  } else if ((m.detected_member_names || []).length > 1) {
+    slots[1] = { ids: (m.detected_member_ids || []).slice(1),
+                 names: m.detected_member_names.slice(1), matched: true, group: true };
+  } else if (pairs[1]) {
+    slots[1] = { name: pairs[1].name,
+                 usta: pairs[1].usta || (text[1] !== slots[0].usta ? text[1] : undefined) };
+  } else if (text[1] && text[1] !== slots[0].usta) slots[1] = { usta: text[1] };
+  return slots;
+}
+const _MAIL_MARK = ' <span class="muted" title="parsed from the email; not matched to the roster yet">✉</span>';
+const _p360 = (pid, name) => pid
+  ? `<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${esc(name)}</span>`
+  : esc(name);
+// Roster dropdown for the manual player/partner pickers (typeahead list).
+const _playerPickValues = () => Object.values(playersById)
+  .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
+  .map((p) => ({ label: playerLabel(p), value: String(p.id) }));
+const _PLAYER_EDITOR = {
+  editor: "list", cssClass: "editable-cell",
+  editorParams: () => ({ values: _playerPickValues(), autocomplete: true,
+    clearable: true, listOnEmpty: true, placeholderEmpty: "no roster match" }),
+};
+const _USTA_EDITOR = { editor: "input", cssClass: "editable-cell" };
 const inboxGrid = makeReadGrid("inbox-table", [
   // Mass-select column: master checkbox in header + per-row toggle. Drives
   // the bulk-action toolbar shown above the grid.
@@ -3548,24 +3595,23 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
       return esc(m.subject || "") + corr + sup;
     } },
-  // Detected player — name + USTA from the LEFT JOIN. Click-to-edit lands
-  // in the detail pane's player picker.
-  { title: "Player", field: "detected_player_name", width: 160,
-    formatter: (cell) => {
-      const m = cell.getData(); const row = cell.getRow();
-      // Doubles/pairing whose players aren't rostered: the email itself names
-      // them — show the parsed (name, USTA#) pairs with the ✉ mark instead of
-      // a bare Detect link.
-      if (!m.detected_player_name && (m.detected_name_pairs || []).length) {
-        const names = m.detected_name_pairs.map((p) => esc(p.name)).join(" + ");
-        return `${names} <span class="muted" title="parsed from the email; not matched to the roster yet">✉</span>`;
-      }
-      // I-4: empty cell offers an inline "Detect" link instead of a dead "—".
-      if (!m.detected_player_name) {
+  // Two player-related column GROUPS — Player/USTA # and Player 2/USTA #2.
+  // Each cell is double-click editable so the TD can manually assign a player
+  // when detection can't: pick from the roster dropdown (name cell) or type a
+  // USTA # (number cell). Display priority per slot: matched roster player →
+  // (name, USTA#) parsed from the email text (✉) → bare email-text number.
+  { title: "Player 1", columns: [
+    { title: "Player", field: "detected_player_name", width: 150, ..._PLAYER_EDITOR,
+      formatter: (cell) => {
+        const m = cell.getData(); const row = cell.getRow();
+        const s = _inboxSlots(m)[0];
+        if (s.matched) return _p360(s.id, s.name) + matchHint(s.kind);
+        if (s.name) return esc(s.name) + _MAIL_MARK;
+        // I-4: empty cell offers an inline "Detect" link instead of a dead "—".
         const wrap = document.createElement("span");
         const btn = document.createElement("button");
         btn.type = "button"; btn.className = "btn-link inline-detect"; btn.textContent = "Detect";
-        btn.title = "Detect the player this email is about";
+        btn.title = "Detect the player this email is about (or double-click to pick one)";
         btn.addEventListener("click", async (ev) => {
           ev.stopPropagation();
           try {
@@ -3591,47 +3637,45 @@ const inboxGrid = makeReadGrid("inbox-table", [
         });
         wrap.appendChild(btn);
         return wrap;
-      }
-      // A matched player's name is a 360 link (open the full player view).
-      const link = (pid, name) => pid
-        ? `<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${esc(name)}</span>`
-        : esc(name);
-      let nm = link(m.detected_player_id, m.detected_player_name);
-      // Doubles name TWO players — show the detected partner alongside.
-      if (m.detected_partner_name) nm += " + " + link(m.detected_partner_id, m.detected_partner_name);
-      // Pairing-avoidance groups name 2+ — show the whole detected group
-      // (ids/names are parallel arrays, primary first; skip slot 0 = primary).
-      else if (m.detected_member_names && m.detected_member_names.length > 1) {
-        nm = m.detected_member_names
-          .map((n, i) => link((m.detected_member_ids || [])[i], n)).join(" + ");
-      }
-      return nm + matchHint(m.detected_match_kind);
-    },
-    headerFilter: "input",
-    headerFilterFunc: (term, _v, e) =>
-      ((e.detected_player_name || "") + " " + (e.detected_partner_name || "") + " " +
-       (e.detected_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
-  // USTA # — the matched player's number when a player is detected, otherwise the
-  // number parsed straight from the email text (PDF import etc.). The ✉ glyph
-  // marks an email-only number (no roster player matched yet), so the TD can add
-  // the player. Filterable by digits.
-  { title: "USTA #", field: "detected_usta_text", width: 130,
-    formatter: (c) => {
-      const m = c.getData();
-      // Matched players' numbers come from their ROSTER records; numbers parsed
-      // from the email text that didn't match anyone render with ✉. Emails may
-      // carry a USTA # for one player, both, or neither.
-      const matched = [m.detected_usta, m.detected_partner_usta].filter(Boolean);
-      const fromText = (m.detected_usta_text || "").split(",").map((s) => s.trim())
-        .filter((n) => n && !matched.includes(n));
-      if (!matched.length && !fromText.length) return '<span class="muted">—</span>';
-      const mark = ' <span class="muted" title="parsed from the email; no roster player matched yet">✉</span>';
-      return [...matched.map(esc), ...fromText.map((n) => esc(n) + mark)].join("<br>");
-    },
-    headerFilter: "input",
-    headerFilterFunc: (term, _v, e) =>
-      ((e.detected_usta || e.detected_usta_text || "") + " " + (e.detected_partner_usta || ""))
-        .includes(String(term).trim()) },
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_player_name || "") + " " + (e.detected_usta || ""))
+          .toLowerCase().includes(String(term).toLowerCase()) },
+    { title: "USTA #", field: "detected_usta", width: 115, ..._USTA_EDITOR,
+      formatter: (c) => {
+        const s = _inboxSlots(c.getData())[0];
+        if (!s.usta) return '<span class="muted">—</span>';
+        return esc(s.usta) + (s.matched ? "" : _MAIL_MARK);
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_usta || "") + " " + (e.detected_usta_text || ""))
+          .includes(String(term).trim()) },
+  ] },
+  { title: "Player 2", columns: [
+    { title: "Player", field: "detected_partner_name", width: 150, ..._PLAYER_EDITOR,
+      formatter: (cell) => {
+        const s = _inboxSlots(cell.getData())[1];
+        // Pairing-avoidance: everyone past the primary lives in this slot.
+        if (s.group) return s.names.map((n, i) => _p360(s.ids[i], n)).join(" + ");
+        if (s.matched) return _p360(s.id, s.name);
+        if (s.name) return esc(s.name) + _MAIL_MARK;
+        return '<span class="muted">—</span>';
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_partner_name || "") + " " + ((e.detected_member_names || []).slice(1).join(" ")) + " " +
+         (e.detected_partner_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
+    { title: "USTA #", field: "detected_partner_usta", width: 115, ..._USTA_EDITOR,
+      formatter: (c) => {
+        const s = _inboxSlots(c.getData())[1];
+        if (!s.usta) return '<span class="muted">—</span>';
+        return esc(s.usta) + (s.matched ? "" : _MAIL_MARK);
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) => (e.detected_partner_usta || "").includes(String(term).trim()) },
+  ] },
   { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
     formatter: (c) => classChip(c.getValue()),
     editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
@@ -3836,18 +3880,54 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id" });
-// Persist an inline classification edit (double-click the cell).
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "dblclick" });
+// Persist inline edits (double-click a cell): classification, manual player /
+// partner picks (the list editor's value is a player id), and typed USTA #s
+// (resolved against the roster cache; unknown numbers revert with a toast).
 inboxGrid.grid.on("cellEdited", async (cell) => {
-  if (cell.getField() !== "classification" || cell.getValue() === cell.getOldValue()) return;
-  try { await _inboxPutClass(cell.getData(), cell.getValue()); cell.getRow().reformat(); }
-  catch (e) { setMsg("email-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} }
+  const f = cell.getField(); const m = cell.getData();
+  if (cell.getValue() === cell.getOldValue()) return;
+  const revert = () => { try { cell.restoreOldValue(); } catch (_) {} };
+  try {
+    if (f === "classification") {
+      await _inboxPutClass(m, cell.getValue()); cell.getRow().reformat(); return;
+    }
+    if (f === "detected_player_name" || f === "detected_partner_name") {
+      const v = cell.getValue();
+      const pid = (v === "" || v == null) ? null : Number(v);
+      if (pid != null && !playersById[pid]) { revert(); return; }
+      if (f === "detected_partner_name") {
+        // the backend ties the partner to a primary — there's no partner-only row
+        if (pid != null && !m.detected_player_id) { toast("Pick Player 1 first", false); revert(); return; }
+        await _inboxPut(m, { detected_partner_id: pid });
+      } else {
+        // clearing the primary clears the partner too (server does the same)
+        await _inboxPut(m, { detected_player_id: pid, ...(pid == null ? { detected_partner_id: null } : {}) });
+      }
+      await loadInbox(); return;
+    }
+    if (f === "detected_usta" || f === "detected_partner_usta") {
+      const typed = String(cell.getValue() || "").replace(/\D/g, "");
+      if (!typed) { revert(); return; }
+      const hit = Object.values(playersById).find((p) => String(p.usta_number || "") === typed);
+      if (!hit) { toast(`No player with USTA # ${typed} — add them via Players first`, false); revert(); return; }
+      if (f === "detected_partner_usta") {
+        if (!m.detected_player_id) { toast("Pick Player 1 first", false); revert(); return; }
+        await _inboxPut(m, { detected_partner_id: hit.id });
+      } else {
+        await _inboxPut(m, { detected_player_id: hit.id });
+      }
+      toast(`Assigned ${playerLabel(hit)}`, true);
+      await loadInbox(); return;
+    }
+  } catch (e) { setMsg("email-msg", e.message, false); revert(); }
 });
 
 // Detail pane: clicking a row opens it below the grid. Lets the TD read the
 // full email body and override the classification or status.
 let _inboxDetailId = null;
 let _inboxDetailTid = null;  // the open email's own tournament_id (preserved on save)
+let _inboxDetailPartnerId = null;  // detected partner — preserved on save (the pane has no partner picker)
 function _populateInboxClassSelect() {
   const sel = document.getElementById("inbox-detail-classification");
   if (!sel || sel.options.length) return;
@@ -3905,6 +3985,7 @@ function _openInboxDetail(m) {
   _populateInboxClassSelect();
   _inboxDetailId = m.id;
   _inboxDetailTid = m.tournament_id ?? null;  // preserve on save (don't re-home to active)
+  _inboxDetailPartnerId = m.detected_partner_id ?? null;
   const box = document.getElementById("inbox-detail");
   box.hidden = false;
   document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
@@ -4032,6 +4113,9 @@ document.getElementById("inbox-detail-save").addEventListener("click", async () 
         tournament_id: _inboxDetailTid ?? (active && active.id) ?? null,
         classification: cls, status,
         detected_player_id,
+        // keep the detected partner unless the primary was cleared (the pane
+        // has no partner picker; the inbox grid's Player 2 column does)
+        detected_partner_id: detected_player_id == null ? null : _inboxDetailPartnerId,
       }),
     });
     setMsg("inbox-detail-msg", "saved", true);

@@ -258,10 +258,12 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
                 detected_player_id = %(detected_player_id)s,
                 -- partner only makes sense on doubles emails; a re-classification
                 -- away from doubles (or clearing the player) drops it
+                -- manual partner assignment wins (the TD typed/picked it);
+                -- clearing the player clears the partner too. Auto-detection
+                -- still only FILLS this for doubles emails.
                 detected_partner_id = CASE
-                    WHEN %(classification)s <> 'doubles' THEN NULL
                     WHEN %(detected_player_id)s::int IS NULL THEN NULL
-                    ELSE detected_partner_id END,
+                    ELSE %(detected_partner_id)s::int END,
                 detected_member_ids = CASE
                     WHEN %(classification)s <> 'pairing_avoidance' THEN NULL
                     WHEN %(detected_player_id)s::int IS NULL THEN NULL

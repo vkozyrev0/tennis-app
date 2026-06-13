@@ -25,6 +25,9 @@ class EmailUpdate(BaseModel):
     # NULL clears the link to a player; a real id assigns it. Set by the
     # auto-detection endpoint or the manual override picker in the detail pane.
     detected_player_id: Optional[int] = None
+    # Second slot (doubles partner) — manually assignable from the inbox grid
+    # when detection can't resolve it. Omitting it clears (same as player).
+    detected_partner_id: Optional[int] = None
 
 
 class EmailOut(BaseModel):
