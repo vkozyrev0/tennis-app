@@ -28,6 +28,12 @@
   --field-bg: #ffffff;   /* input/select/textarea background */
   --zebra: #f7f9fa;      /* even table rows */
   --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
+  /* These were previously only literal fallbacks inside styles.css (var(--btn-bg,
+     #eef1f5) etc.), so dark mode inherited LIGHT values — small buttons and the
+     digest panel rendered near-invisible. Defined per-theme now. */
+  --line: #d9e0e6;       /* subtle separators / secondary-control borders */
+  --btn-bg: #eef1f5;     /* small secondary buttons (.btn-small) */
+  --panel: #f7f9fb;      /* inset panels, e.g. the dashboard digest */
   color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
 }
 
@@ -54,6 +60,9 @@
   --field-bg: #11161b;
   --zebra: #1f262e;
   --elev: #1e252d;
+  --line: #2d363f;       /* = --border; was inheriting the light #d9e0e6 fallback */
+  --btn-bg: #2a323b;     /* dark raised surface so .btn-small text (--ink) is legible */
+  --panel: #1a2027;      /* = --card; the digest panel was rendering near-white */
   color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
 }
 
