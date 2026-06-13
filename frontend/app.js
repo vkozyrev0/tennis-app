@@ -3692,6 +3692,122 @@ const _PLAYER_EDITOR = {
     clearable: true, listOnEmpty: true, placeholderEmpty: "no roster match" }),
 };
 const _USTA_EDITOR = { editor: "input", cssClass: "editable-cell" };
+// Small inline affordance button for the player cells (✎ edit / × clear / ＋ add).
+// stopPropagation so the click does its own thing instead of opening the cell
+// editor (the grid edits on a single click — see `editable: "click"` below).
+function _iconBtn(glyph, title, onClick, extraClass) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "btn-icon inbox-affordance" + (extraClass ? " " + extraClass : "");
+  b.textContent = glyph; b.title = title; b.setAttribute("aria-label", title);
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); onClick(ev); });
+  return b;
+}
+// Unassign a slot. Clearing Player 1 clears Player 2 too (the partner is tied to
+// a primary — the server enforces the same).
+async function _inboxClearSlot(m, slot) {
+  try {
+    await _inboxPut(m, slot === 0
+      ? { detected_player_id: null, detected_partner_id: null }
+      : { detected_partner_id: null });
+    await loadInbox();
+  } catch (e) { toast(e.message, false); }
+}
+// Open the roster form pre-filled from this email (USTA #, name, division) —
+// the same plan the ⋯ menu uses, surfaced directly on a parsed-but-unrostered
+// (✉) player cell. rosterPrefillFromEmail is pure + unit-tested.
+function _inboxAddToRoster(m) {
+  const plan = rosterPrefillFromEmail(m);
+  document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
+  rosterShowNew();
+  _rosterFromEmailId = m.id;   // re-detect this email after the save links it
+  rosterSetMode(plan.mode);
+  if (plan.mode === "pick") {
+    const picker = rosterForm.elements.player_id;
+    if (picker) { picker.value = plan.player_id; if (typeof picker._comboSync === "function") picker._comboSync(); }
+    refreshDivisionLists(_inferFormGender(rosterForm));
+  } else {
+    if (plan.gender && rosterForm.elements.gender) rosterForm.elements.gender.value = plan.gender;
+    refreshDivisionLists(plan.gender || _inferFormGender(rosterForm));
+    rosterForm.elements.usta_number.value = plan.usta_number;
+    if (plan.first_name) rosterForm.elements.first_name.value = plan.first_name;
+    if (plan.last_name) rosterForm.elements.last_name.value = plan.last_name;
+    const g = rosterForm.elements.gender;
+    if (g && typeof g._comboSync === "function") g._comboSync();
+  }
+  const div = rosterForm.elements.age_division;
+  if (div && plan.age_division && [...div.options].some((o) => o.value === plan.age_division)) {
+    div.value = plan.age_division;
+    if (typeof div._comboSync === "function") div._comboSync();
+  }
+  rosterOpenModal();
+  scheduleComboSync();
+  toast(plan.offRoster
+    ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
+    : "Pre-filled from the email — confirm gender/division, add the name, then Save", true);
+}
+// Run player detection for one email and fold the result back into the row.
+async function _inboxDetectInto(m, row) {
+  try {
+    const det = await api(`/emails/${m.id}/detect-player`, { method: "POST" });
+    row.update({
+      detected_player_id: det.detected_player_id, detected_usta: det.detected_usta,
+      detected_player_name: det.detected_player_name, detected_match_kind: det.match_kind,
+      detected_partner_id: det.detected_partner_id, detected_partner_name: det.detected_partner_name,
+      detected_member_ids: det.detected_member_ids, detected_member_names: det.detected_member_names,
+    });
+    row.reformat();
+    const who = (det.detected_member_names && det.detected_member_names.length > 1)
+      ? det.detected_member_names.join(" + ")
+      : det.detected_player_name
+        ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+        : null;
+    toast(who ? `Detected: ${who}` : "No player match", !!who);
+  } catch (e) { toast(e.message, false); }
+}
+// Builds a "Player N" cell: matched roster player (360 link + ✎ change + × clear),
+// a parsed-but-unrostered name (✉ + ✎ pick + ＋ add to roster), a pairing-group
+// list, or an empty cell (Detect + ✎ pick for slot 0; ✎ for slot 1).
+function _inboxNameCell(cell, slotIdx) {
+  const m = cell.getData(); const row = cell.getRow();
+  const s = _inboxSlots(m)[slotIdx];
+  const wrap = document.createElement("span");
+  wrap.className = "inbox-name-cell";
+  const editBtn = (title) => _iconBtn("✎", title || "Change — pick a roster player", () => cell.edit(true));
+
+  if (s.group) {           // pairing-avoidance: the rest of the group (slot 1)
+    wrap.innerHTML = s.names.map((n, i) => _p360(s.ids[i], n)).join(" + ");
+    return wrap;
+  }
+  if (s.matched) {
+    const nameSpan = document.createElement("span");
+    nameSpan.innerHTML = _p360(s.id, s.name) + (slotIdx === 0 ? matchHint(s.kind) : "");
+    wrap.append(nameSpan, editBtn(),
+      _iconBtn("×", "Remove this player", () => _inboxClearSlot(m, slotIdx), "danger"));
+    return wrap;
+  }
+  if (s.name) {            // parsed from the email text, not on the roster yet
+    const nameSpan = document.createElement("span");
+    nameSpan.innerHTML = esc(s.name) + _MAIL_MARK;
+    wrap.append(nameSpan, editBtn());
+    if (rosterPrefillFromEmail(m).canAdd) {
+      wrap.append(_iconBtn("＋", "Add this player to the roster (pre-filled from the email)",
+        () => _inboxAddToRoster(m)));
+    }
+    return wrap;
+  }
+  if (slotIdx === 0) {     // empty primary — offer Detect + pick
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "btn-link inline-detect"; btn.textContent = "Detect";
+    btn.title = "Detect the player this email is about";
+    btn.addEventListener("click", (ev) => { ev.stopPropagation(); _inboxDetectInto(m, row); });
+    wrap.append(btn, editBtn("Pick a roster player"));
+    return wrap;
+  }
+  // empty partner slot
+  const dash = document.createElement("span"); dash.className = "muted"; dash.textContent = "—";
+  wrap.append(dash, editBtn("Add a second player"));
+  return wrap;
+}
 const inboxGrid = makeReadGrid("inbox-table", [
   // Mass-select column: master checkbox in header + per-row toggle. Drives
   // the bulk-action toolbar shown above the grid.
@@ -3731,43 +3847,8 @@ const inboxGrid = makeReadGrid("inbox-table", [
   // USTA # (number cell). Display priority per slot: matched roster player →
   // (name, USTA#) parsed from the email text (✉) → bare email-text number.
   { title: "Player 1", columns: [
-    { title: "Player", field: "detected_player_name", width: 150, ..._PLAYER_EDITOR,
-      formatter: (cell) => {
-        const m = cell.getData(); const row = cell.getRow();
-        const s = _inboxSlots(m)[0];
-        if (s.matched) return _p360(s.id, s.name) + matchHint(s.kind);
-        if (s.name) return esc(s.name) + _MAIL_MARK;
-        // I-4: empty cell offers an inline "Detect" link instead of a dead "—".
-        const wrap = document.createElement("span");
-        const btn = document.createElement("button");
-        btn.type = "button"; btn.className = "btn-link inline-detect"; btn.textContent = "Detect";
-        btn.title = "Detect the player this email is about (or double-click to pick one)";
-        btn.addEventListener("click", async (ev) => {
-          ev.stopPropagation();
-          try {
-            const det = await api(`/emails/${m.id}/detect-player`, { method: "POST" });
-            row.update({
-              detected_player_id: det.detected_player_id,
-              detected_usta: det.detected_usta,
-              detected_player_name: det.detected_player_name,
-              detected_match_kind: det.match_kind,
-              detected_partner_id: det.detected_partner_id,
-              detected_partner_name: det.detected_partner_name,
-              detected_member_ids: det.detected_member_ids,
-              detected_member_names: det.detected_member_names,
-            });
-            row.reformat();
-            const who = (det.detected_member_names && det.detected_member_names.length > 1)
-              ? det.detected_member_names.join(" + ")
-              : det.detected_player_name
-                ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
-                : null;
-            toast(who ? `Detected: ${who}` : "No player match", !!who);
-          } catch (e) { toast(e.message, false); }
-        });
-        wrap.appendChild(btn);
-        return wrap;
-      },
+    { title: "Player", field: "detected_player_name", width: 165, ..._PLAYER_EDITOR,
+      formatter: (cell) => _inboxNameCell(cell, 0),
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) =>
         ((e.detected_player_name || "") + " " + (e.detected_usta || ""))
@@ -3784,15 +3865,8 @@ const inboxGrid = makeReadGrid("inbox-table", [
           .includes(String(term).trim()) },
   ] },
   { title: "Player 2", columns: [
-    { title: "Player", field: "detected_partner_name", width: 150, ..._PLAYER_EDITOR,
-      formatter: (cell) => {
-        const s = _inboxSlots(cell.getData())[1];
-        // Pairing-avoidance: everyone past the primary lives in this slot.
-        if (s.group) return s.names.map((n, i) => _p360(s.ids[i], n)).join(" + ");
-        if (s.matched) return _p360(s.id, s.name);
-        if (s.name) return esc(s.name) + _MAIL_MARK;
-        return '<span class="muted">—</span>';
-      },
+    { title: "Player", field: "detected_partner_name", width: 165, ..._PLAYER_EDITOR,
+      formatter: (cell) => _inboxNameCell(cell, 1),
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) =>
         ((e.detected_partner_name || "") + " " + ((e.detected_member_names || []).slice(1).join(" ")) + " " +
@@ -3961,47 +4035,17 @@ const inboxGrid = makeReadGrid("inbox-table", [
       };
       // "Add to roster" — what to pre-fill is decided by the pure, unit-tested
       // rosterPrefillFromEmail(m) (see app/roster_prefill.js + its node test);
-      // this handler just APPLIES that plan to the live form.
+      // _inboxAddToRoster (module scope) APPLIES that plan and is also wired to
+      // the ＋ affordance on a parsed-but-unrostered player cell.
       const _rosterPlan = rosterPrefillFromEmail(m);
       const offRoster = _rosterPlan.offRoster;
-      const doAddToRoster = () => {
-        const plan = _rosterPlan;
-        document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
-        rosterShowNew();
-        _rosterFromEmailId = m.id;   // re-detect this email after the save links it
-        rosterSetMode(plan.mode);
-        if (plan.mode === "pick") {
-          const picker = rosterForm.elements.player_id;
-          if (picker) { picker.value = plan.player_id; if (typeof picker._comboSync === "function") picker._comboSync(); }
-          refreshDivisionLists(_inferFormGender(rosterForm));
-        } else {
-          if (plan.gender && rosterForm.elements.gender) rosterForm.elements.gender.value = plan.gender;
-          // populate the division options for that gender before setting a value
-          refreshDivisionLists(plan.gender || _inferFormGender(rosterForm));
-          rosterForm.elements.usta_number.value = plan.usta_number;
-          if (plan.first_name) rosterForm.elements.first_name.value = plan.first_name;
-          if (plan.last_name) rosterForm.elements.last_name.value = plan.last_name;
-          const g = rosterForm.elements.gender;
-          if (g && typeof g._comboSync === "function") g._comboSync();
-        }
-        const div = rosterForm.elements.age_division;
-        if (div && plan.age_division && [...div.options].some((o) => o.value === plan.age_division)) {
-          div.value = plan.age_division;
-          if (typeof div._comboSync === "function") div._comboSync();
-        }
-        rosterOpenModal();
-        scheduleComboSync();
-        toast(offRoster
-          ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
-          : "Pre-filled from the email — confirm gender/division, add the name, then Save", true);
-      };
       const canAddToRoster = _rosterPlan.canAdd;
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
         { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
           title: fileable ? "" : "Pick a fileable classification first", onClick: () => { if (fileable) doFile(); } },
         ...(canAddToRoster ? [{ label: offRoster ? "Add to roster (player exists)" : "Add player to roster",
-          title: offRoster ? "Add this existing player to the tournament roster" : "Open the roster form pre-filled with this email's USTA # + division", onClick: doAddToRoster }] : []),
+          title: offRoster ? "Add this existing player to the tournament roster" : "Open the roster form pre-filled with this email's USTA # + division", onClick: () => _inboxAddToRoster(m) }] : []),
         ...(m.amends_email_id ? [{ label: "Apply correction → update filed row",
           title: "Re-point the amended email's filed row to this one and re-apply the parsed fields", onClick: doApplyCorrection }] : []),
         { separator: true },
@@ -4010,10 +4054,12 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "dblclick" });
-// Persist inline edits (double-click a cell): classification, manual player /
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click" });
+// Persist inline edits (single click a cell): classification, manual player /
 // partner picks (the list editor's value is a player id), and typed USTA #s
 // (resolved against the roster cache; unknown numbers revert with a toast).
+// The 360 link, Detect, and the ✎/×/＋ affordances stopPropagation so they act
+// instead of opening the editor.
 inboxGrid.grid.on("cellEdited", async (cell) => {
   const f = cell.getField(); const m = cell.getData();
   if (cell.getValue() === cell.getOldValue()) return;

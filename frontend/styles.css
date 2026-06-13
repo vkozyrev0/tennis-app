@@ -1126,6 +1126,18 @@ td.toggle { white-space: nowrap; }
 .inline-help > summary::-webkit-details-marker { display: none; }
 .inline-help[open] { display: block; margin-top: 0.3rem; }
 .inline-detect { font-size: 0.82em; }
+/* Inbox Player 1/2 cells: name + compact ✎/×/＋ affordances. The affordances
+   stay quiet (faded) until the row is hovered so the names read cleanly, then
+   surface for single-click edit / clear / add-to-roster. */
+.inbox-name-cell { display: inline-flex; align-items: center; gap: 0.15rem; max-width: 100%; }
+.inbox-name-cell > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.btn-icon.inbox-affordance {
+  min-width: 1.35rem; min-height: 1.35rem; padding: 0 0.15rem; font-size: 0.9rem;
+  opacity: 0; transition: opacity 0.1s ease; flex: 0 0 auto;
+}
+.tabulator-row:hover .btn-icon.inbox-affordance,
+.btn-icon.inbox-affordance:focus-visible { opacity: 0.75; }
+.btn-icon.inbox-affordance:hover { opacity: 1; }
 
 /* Toast inline action ("View …") — link-style button beside the toast text. */
 .toast-action {

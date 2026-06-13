@@ -5,6 +5,21 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Inbox Player 1/2 cells — single-click edit + clear + add-to-roster (2026-06-13)
+UX round on the manual-assignment grid (built 2026-06-12).
+
+- **Single-click editing** — the four player/USTA cells open their editor on one
+  click (`makeReadGrid` `editable: "click"`); the 360 link, Detect, and the new
+  affordances `stopPropagation` so they act instead of editing.
+- **Clear affordance** — a faded `×` on a matched cell unassigns the player
+  (clearing Player 1 clears Player 2, matching the server). The cell then falls
+  back to the parsed-from-email (✉) display.
+- **Add-to-roster from a ✉ cell** — a `＋` on a parsed-but-unrostered name opens
+  the roster form pre-filled from the email (same `rosterPrefillFromEmail` plan
+  as the ⋯ menu, now also surfaced inline).
+- Affordances (`✎` edit / `×` clear / `＋` add) stay hidden until the row is
+  hovered so the names read cleanly; matched names remain 360 links.
+
 ## Payroll finalization — P4-4, the last day-of gap (2026-06-13)
 Closes the final open day-of item. The live pay/mileage/total numbers always
 recompute from current rows — right while the event runs, wrong the moment the
