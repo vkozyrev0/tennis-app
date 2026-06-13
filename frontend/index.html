@@ -91,6 +91,7 @@
       <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
       <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
+        <button type="button" id="trash-btn" title="Restore trashed tournaments or incidents">🗑 Trash</button>
         <button type="button" id="change-pw-btn">Change password</button>
         <button type="button" id="logout-btn">Log out</button></span>
     </h1>
@@ -1363,6 +1364,16 @@
       </form>
     </div>
   </div>
+  <!-- Trash (P2 #13): soft-deleted tournaments + incidents, with Restore. -->
+  <div id="trash-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="trash-title">
+    <div class="modal-box modal-box--wide">
+      <h3 id="trash-title">Trash <span class="h3-subtitle">(restore a soft-deleted tournament or incident)</span></h3>
+      <div id="trash-body" style="max-height:60vh;overflow:auto"></div>
+      <div class="modal-actions">
+        <button type="button" id="trash-close" class="cancel">Close</button>
+      </div>
+    </div>
+  </div>
   <!-- Shared lookup lists for division + events. JS repopulates based on the
        active tournament's type (junior vs adult). Inputs reference them via
        `list="divisions-list"` / `list="events-list"` — datalists let the TD
@@ -1381,6 +1392,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=156"></script>
+  <script type="module" src="/app.js?v=157"></script>
 </body>
 </html>

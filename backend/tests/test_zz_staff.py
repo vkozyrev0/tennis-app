@@ -123,11 +123,18 @@ def test_staff_daily_rate_pay_in_report():
     assert rep2["totals"]["staff_pay"] == 450.0  # unchanged
 
 
-def test_staff_cascades_on_tournament_delete():
+def test_staff_survives_tournament_soft_delete():
+    # Tournament delete is now SOFT (P2 #13): the row is flagged, not cascaded
+    # away, so its staff is preserved for restore — the opposite of the old
+    # hard-delete cascade. (A hard purge of trashed data is a separate concern.)
     t = _tournament()
     s = _ok(client.post(f"/api/tournaments/{t['id']}/staff",
-                        json={"name": "Gone", "role": "other"}))
+                        json={"name": "Keep", "role": "other"}))
     assert client.delete(f"/api/tournaments/{t['id']}").status_code == 204
-    # the staff row is gone with the tournament (FK ON DELETE CASCADE)
+    # the staff row survives the trashed tournament
     assert client.put(f"/api/staff/{s['id']}", json={
-        "name": "Gone", "role": "other"}).status_code == 404
+        "name": "Keep", "role": "other"}).status_code == 200
+    # restoring the tournament brings its staff list back intact
+    _ok(client.post(f"/api/tournaments/{t['id']}/restore"), 200)
+    names = [x["name"] for x in _ok(client.get(f"/api/tournaments/{t['id']}/staff"), 200)]
+    assert "Keep" in names

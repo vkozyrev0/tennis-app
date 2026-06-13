@@ -29,7 +29,7 @@ def _tournament_or_404(cur, tournament_id: int) -> None:
 def list_incidents(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         _tournament_or_404(cur, tournament_id)
-        cur.execute(_SELECT + " WHERE i.tournament_id = %s "
+        cur.execute(_SELECT + " WHERE i.tournament_id = %s AND i.deleted_at IS NULL "
                     "ORDER BY i.resolved, i.occurred_at DESC", (tournament_id,))
         return cur.fetchall()
 
@@ -73,8 +73,21 @@ def update_incident(incident_id: int, body: IncidentUpdate, conn=Depends(db_dep)
 
 @router.delete("/api/incidents/{incident_id}", status_code=204)
 def delete_incident(incident_id: int, conn=Depends(db_dep)):
+    """Soft-delete (P2 #13): flag deleted_at; restore from Trash."""
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM tournament_incident WHERE id = %s", (incident_id,))
+        cur.execute("UPDATE tournament_incident SET deleted_at = now() "
+                    "WHERE id = %s AND deleted_at IS NULL", (incident_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="incident not found")
     return Response(status_code=204)
+
+
+@router.post("/api/incidents/{incident_id}/restore", response_model=IncidentOut)
+def restore_incident(incident_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("UPDATE tournament_incident SET deleted_at = NULL "
+                    "WHERE id = %s AND deleted_at IS NOT NULL", (incident_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="no trashed incident with that id")
+        cur.execute(_SELECT + " WHERE i.id = %s", (incident_id,))
+        return cur.fetchone()

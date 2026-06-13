@@ -16,7 +16,9 @@ _SITE_COLS = "id, code, name, street, city, state, zip, lat, lng"
 @router.get("", response_model=list[TournamentOut])
 def list_tournaments(conn=Depends(db_dep)):
     with conn.cursor() as cur:
-        cur.execute(f"SELECT {_COLS} FROM tournament ORDER BY id")
+        # Soft-deleted (trashed) tournaments are hidden here (and from the active
+        # picker that reads this); they live in /api/trash until restored/purged.
+        cur.execute(f"SELECT {_COLS} FROM tournament WHERE deleted_at IS NULL ORDER BY id")
         return cur.fetchall()
 
 
@@ -78,11 +80,28 @@ def update_tournament(tournament_id: int, body: TournamentCreate, conn=Depends(d
 
 @router.delete("/{tournament_id}", status_code=204)
 def delete_tournament(tournament_id: int, conn=Depends(db_dep)):
+    """Soft-delete (P2 #13): flag deleted_at instead of cascading the whole
+    event away. Hidden from the lists; restore from Trash. A second delete of an
+    already-trashed tournament 404s (it's no longer in the active set)."""
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("UPDATE tournament SET deleted_at = now() "
+                    "WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="tournament not found")
     return Response(status_code=204)
+
+
+@router.post("/{tournament_id}/restore", response_model=TournamentOut)
+def restore_tournament(tournament_id: int, conn=Depends(db_dep)):
+    """Undo a soft-delete — bring a trashed tournament (and all the roster /
+    assignments / emails that were preserved with it) back into the active set."""
+    with conn.cursor() as cur:
+        cur.execute("UPDATE tournament SET deleted_at = NULL "
+                    "WHERE id = %s AND deleted_at IS NOT NULL", (tournament_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="no trashed tournament with that id")
+        cur.execute(f"SELECT {_COLS} FROM tournament WHERE id = %s", (tournament_id,))
+        return cur.fetchone()
 
 
 # ---------- Tournament <-> Site (M2M) ----------

@@ -26,7 +26,7 @@ def upcoming_deadlines(within_days: int = 14, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, play_start_date, registration_deadline, late_entry_deadline "
-            "FROM tournament WHERE play_end_date >= CURRENT_DATE "
+            "FROM tournament WHERE play_end_date >= CURRENT_DATE AND deleted_at IS NULL "
             "ORDER BY play_start_date"
         )
         rows = cur.fetchall()
@@ -60,7 +60,8 @@ def digest(conn=Depends(db_dep)):
         cur.execute(
             "SELECT id, name, play_start_date, play_end_date, "
             "       registration_deadline, late_entry_deadline "
-            "FROM tournament WHERE play_end_date >= CURRENT_DATE ORDER BY play_start_date"
+            "FROM tournament WHERE play_end_date >= CURRENT_DATE AND deleted_at IS NULL "
+            "ORDER BY play_start_date"
         )
         tours = cur.fetchall()
         ids = [t["id"] for t in tours]

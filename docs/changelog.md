@@ -5,6 +5,29 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## Soft-delete + Trash restore — tournaments & incidents (P2 #13, 2026-06-13)
+Recoverable delete for the two non-PII, high-recoverability entities. **Scoped
+deliberately:** NOT players/officials/emails — `delete_player` is a COPPA
+PII-erasure (it nulls the minor's PII from `player_history`), and soft-delete
+there would regress that privacy guarantee, so those stay hard-delete.
+
+- **Migration 0046** adds `deleted_at timestamptz` (NULL = active) to `tournament`
+  and `tournament_incident`, with partial indexes on the active rows.
+- DELETE on both now flags `deleted_at = now()` instead of removing the row; the
+  cascade is deferred, so a trashed tournament keeps its roster / assignments /
+  emails for restore. List queries (`GET /tournaments`, the dashboard
+  deadlines+digest, the official self-service picker, the incident list) filter
+  `deleted_at IS NULL`, so trashed rows leave every list.
+- New `POST /tournaments/{id}/restore`, `POST /incidents/{id}/restore`, and
+  `GET /trash` (a `trash.py` router) listing what's trashed.
+- **Trash** button in the header opens a modal (built with the new `html``
+  helper) listing trashed tournaments + incidents with per-row Restore;
+  restoring a tournament refreshes the Setup list + active picker.
+- 5 tests (`test_zz_soft_delete.py`): hide-from-list, restore round-trip,
+  double-delete 404, restore-requires-trashed, children survive the trip,
+  incident trash/restore. Suite **436** green. Verified live: trash a
+  tournament → leaves the picker → appears in Trash → Restore → back in picker.
+
 ## html`` template helper for card builders (P2 #12, 2026-06-13)
 The big card builders (`renderAssignment` et al.) are long string-concat blocks
 that hand-call `esc()` on every interpolation — one forgotten call is an XSS,

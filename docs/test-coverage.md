@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 431 tests, all passing (migrations through 0045) — deterministic
+**Status:** 436 tests, all passing (migrations through 0046) — deterministic
 (login-throttle state leak fixed). CI runs the suite against a Postgres 16
 service on every push/PR and gates the Docker image build on it
 (`.github/workflows/docker.yml`).
@@ -204,7 +204,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (431)
+python -m pytest -q                                    # the whole suite (436)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -384,9 +384,14 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **431 tests, all passing** (see the status line at the top).
+Total suite count: **436 tests, all passing** (see the status line at the top).
 `test_zz_payroll.py` (11) — payroll finalization (P4-4): freeze the computed
 summary, double-finalize 409, drift after a post-finalize no-show,
 unfinalize-unless-paid, mark-paid lifecycle/defaults, idempotent finalize-all,
 audit-trail landing, 404s; multiple orphaned (deleted-assignment) records all
 survive the summary; CSV export shape + 404.
+
+`test_zz_soft_delete.py` (5) — soft-delete (P2 #13): tournament trash hides it
+from the list + shows in `/trash` + restores; double-delete 404 and
+restore-requires-trashed; a trashed tournament's roster survives the round-trip
+(no cascade); incident trash/restore with tournament-name context + double-delete 404.

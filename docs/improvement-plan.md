@@ -124,11 +124,16 @@ adult_lists) one endpoint at a time.
     / hotel / diet auto-escape now) and verified the card renders identically.
     Broader adoption across the other builders is incremental, low-risk follow-on.
 
-13. **Soft-delete for Officials / Players / Sites** (M, backend+frontend) —
-    hard DELETE loses assignment/pay/distance history on a misclick; the
-    confirm dialog doesn't preview cascades. Add `deleted_at`, default-filter
-    it, relabel the UI "Archive", add an archived view with restore. Aligns
-    with the existing provenance/audit philosophy (pay_audit, player_history).
+13. ✅ **SHIPPED (2026-06-13, scoped) — Soft-delete + Trash restore.**
+    `deleted_at` on `tournament` + `tournament_incident` (migration 0046);
+    DELETE flags instead of cascading, list queries filter it, restore endpoints
+    + `GET /trash` + a header Trash modal. 5 tests; suite 436.
+    **Scope decision:** deliberately NOT players/officials/emails — `delete_player`
+    is a COPPA PII-erasure (nulls the minor's PII from `player_history`), and
+    soft-delete would regress that privacy guarantee. The originally-listed
+    Officials/Players/Sites targets are intentionally out; tournaments (a delete
+    cascades the whole event) + incidents are the high-recoverability, non-PII
+    entities where soft-delete is correct.
 
 14. ✅ **SHIPPED (2026-06-10) — Response-shape + query-count tests** —
     `test_zz_contracts.py`: shape assertions on the no-response_model endpoints

@@ -73,7 +73,7 @@ def my_tournaments(user=Depends(get_current_user), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, type, play_start_date, play_end_date "
-            "FROM tournament ORDER BY play_start_date DESC"
+            "FROM tournament WHERE deleted_at IS NULL ORDER BY play_start_date DESC"
         )
         return cur.fetchall()
 
