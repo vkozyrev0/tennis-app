@@ -76,11 +76,14 @@
 }
 .toast-close:hover { opacity: 1; background: rgba(255,255,255,0.15); }
 
-/* Confirm modal. z-index sits ABOVE the edit overlay layers (.detail-backdrop
-   1550, .detail-pane 1600, .combo-list 1700) because a confirm dialog can be
-   raised from inside an open edit overlay (e.g. its Delete button) — at a lower
-   z-index it would render hidden behind that overlay. */
+/* Dialog overlay base. Sits above the edit layers (.detail-backdrop 1550,
+   .detail-pane 1600) but BELOW .combo-list (1850) so a modal that contains a
+   player/division combo (inbox-filing dialogs) shows its dropdown on top. */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1800; }
+/* The confirm dialog is the exception: it must clear .combo-list (1850) because
+   a Delete confirm can be raised from inside an open edit overlay while a combo
+   is open — at a lower z it would render hidden behind the combo/overlay. */
+#confirm-modal { z-index: 1900; }
 .modal[hidden] { display: none; }
 .modal-box { background: var(--card); border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
 .modal-box p { margin: 0 0 0.5rem; }
@@ -222,14 +225,18 @@ header h1 > #health { margin-left: auto; }
   background: rgba(255, 255, 255, 0.95); color: var(--accent); border: 0;
   box-shadow: none; padding: 0 0.3rem; font-size: 0.7rem; font-weight: 700;
 }
-#user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; }
-#logout-btn {
+#user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem; }
+/* All three user-box buttons share the header-control style so they line up at
+   one height with the theme/shortcuts buttons (previously only #logout-btn was
+   styled, leaving Trash + Change password at browser-default height). */
+#trash-btn, #change-pw-btn, #logout-btn {
   /* a11y 8th-pass #2: translucent-black overlay so white text clears AA on
      the green header (the old white .2 overlay rendered ~2.9:1). */
   background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; border-radius: 5px;
-  padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.3rem;
+  padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem;
   min-height: 2.5rem;   /* a11y #7 */
 }
+#trash-btn:hover, #change-pw-btn:hover, #logout-btn:hover { background: rgba(255, 255, 255, 0.32); }
 .login-card {
   max-width: 360px; margin: 3rem auto; background: var(--card);
   border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem;
@@ -450,9 +457,13 @@ input, select, textarea {
 .combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
 .combo-list {
   /* position:fixed coordinates are set inline by positionList() at open time;
-     the list is portaled to <body>, so this z-index must clear the modal layers
-     (.detail-backdrop 1550, .detail-pane 1600, .modal 1500). */
-  position: fixed; z-index: 1700;
+     the list is portaled to <body>, so this z-index must clear every dialog it
+     can open inside: .detail-backdrop 1550, .detail-pane 1600, AND .modal 1800
+     (some inbox-filing dialogs are modals with player/division combos — at a
+     lower z the dropdown rendered hidden behind the modal). The confirm dialog
+     (#confirm-modal 1900) deliberately sits ABOVE this so a Delete confirm can
+     still appear over an open combo. */
+  position: fixed; z-index: 1850;
   max-height: 240px; overflow-y: auto;
   background: var(--elev); color: var(--ink);
   border: 1px solid var(--border); border-radius: 6px;

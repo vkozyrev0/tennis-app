@@ -5,6 +5,27 @@ and status live in [roadmap.md](roadmap.md); this file is the granular log.
 
 ---
 
+## UI fixes: nav icons regression, header heights, modal dropdowns (2026-06-13)
+Three issues reported from a screenshot.
+
+- **Nav tab icons missing (regression).** The dead-code sweep removed the 7 nav
+  `<symbol>` defs as "unreferenced", but the group buttons reference them
+  *dynamically* — `app.js` builds `<use href="#i-${group}">` via
+  `createElementNS`, which the literal-`<use href>` audit grep didn't catch.
+  Restored all 7 symbols and added a comment warning they're referenced
+  dynamically. (Lesson: createElementNS/setAttributeNS refs evade text greps.)
+- **Uneven header button heights.** `#trash-btn` and `#change-pw-btn` had no
+  styling (browser-default ~21–24px) while their `#logout-btn` sibling and the
+  theme/shortcuts buttons were 40px. Folded all three user-box buttons into one
+  styled rule (`min-height: 2.5rem`) so the header controls line up.
+- **Dropdowns hidden behind edit dialogs.** The inbox-filing dialog
+  (`#inbox-detail`, a `.modal` at z-1800) contains player/division combos, but
+  `.combo-list` was z-1700 — so the dropdown rendered *behind* the modal. Raised
+  `.combo-list` to 1850 (above `.modal` 1800) and `#confirm-modal` to 1900 (above
+  the combo, preserving confirm-over-open-combo). Fixed the stale z-index
+  comments that still said `.modal` was 1500. Verified: combos resolve, header
+  buttons all 40px, and a z-1850 layer paints over z-1800.
+
 ## CI Node 24 opt-in + coverage-gap nudge (2026-06-13)
 - **CI Node 24.** GitHub deprecated the Node 20 Actions runtime (forced
   2026-06-16, removed 2026-09-16). Set `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
