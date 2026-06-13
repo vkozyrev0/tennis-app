@@ -5431,15 +5431,12 @@ async function _renderDeadlines() {
   try { data = await api("/dashboard/deadlines"); } catch (_) { el.hidden = true; return; }
   const items = data.deadlines || [];
   if (!items.length) { el.hidden = true; el.innerHTML = ""; return; }
-  const urgency = (n) => n < 0 ? `<span class="resp-bad">${Math.abs(n)}d ago</span>`
-    : (n === 0 ? '<span class="resp-bad">today</span>'
-      : `<span class="${n <= 7 ? "warn" : "muted"}">in ${n}d</span>`);
+  const urgency = (n) => n < 0 ? html`<span class="resp-bad">${Math.abs(n)}d ago</span>`
+    : (n === 0 ? html`<span class="resp-bad">today</span>`
+      : html`<span class="${n <= 7 ? "warn" : "muted"}">in ${n}d</span>`);
   el.hidden = false;
-  el.innerHTML = `<div class="dash-dl-head">⏰ ${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div>` +
-    `<ul class="dash-dl-list">` + items.map((x) =>
-      `<li class="dash-dl-item" data-tid="${x.tournament_id}" tabindex="0" role="button">` +
-      `<strong>${esc(x.tournament_name)}</strong> — ${esc(_DEADLINE_LABEL[x.kind] || x.kind)} ` +
-      `${esc(_fmtMDY(x.date))} · ${urgency(x.days_until)}</li>`).join("") + `</ul>`;
+  el.innerHTML = html`<div class="dash-dl-head">⏰ ${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div><ul class="dash-dl-list">${items.map((x) =>
+    html`<li class="dash-dl-item" data-tid="${x.tournament_id}" tabindex="0" role="button"><strong>${x.tournament_name}</strong> — ${_DEADLINE_LABEL[x.kind] || x.kind} ${_fmtMDY(x.date)} · ${urgency(x.days_until)}</li>`)}</ul>`;
   el.querySelectorAll(".dash-dl-item").forEach((li) => {
     const go = () => setActive(Number(li.dataset.tid));
     li.addEventListener("click", go);
@@ -5468,21 +5465,16 @@ async function _renderDigest() {
     const n = nd.days_until;
     const when = n < 0 ? `${Math.abs(n)}d ago` : (n === 0 ? "today" : `in ${n}d`);
     const cls = n <= 0 ? "resp-bad" : (n <= 7 ? "warn" : "muted");
-    return ` · <span class="${cls}">${esc(_DEADLINE_LABEL[nd.kind] || nd.kind)} ${when}</span>`;
+    return html` · <span class="${cls}">${_DEADLINE_LABEL[nd.kind] || nd.kind} ${when}</span>`;
   };
   const t = dg.totals;
   el.hidden = false;
-  el.innerHTML =
-    `<div class="dash-dg-head">📋 ${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div>` +
-    `<ul class="dash-dg-list">` + rows.map((r) => {
+  el.innerHTML = html`<div class="dash-dg-head">📋 ${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div><ul class="dash-dg-list">${rows.map((r) => {
       const chips = _DIGEST_TASKS.filter(([k]) => r.tasks[k] > 0).map(([k, label, go]) =>
-        `<button type="button" class="dash-dg-chip" data-go-group="${go[0]}" data-go-tab="${go[1]}" data-tid="${r.tournament_id}">` +
-        `${r.tasks[k]} ${esc(label)}</button>`).join("");
-      const clean = r.open_tasks === 0 ? '<span class="dash-dg-clean">✓ all clear</span>' : "";
-      return `<li class="dash-dg-row"><span class="dash-dg-name" data-tid="${r.tournament_id}" tabindex="0" role="button">` +
-        `<strong>${esc(r.tournament_name)}</strong>${due(r.next_deadline)}</span>` +
-        `<span class="dash-dg-chips">${chips}${clean}</span></li>`;
-    }).join("") + `</ul>`;
+        html`<button type="button" class="dash-dg-chip" data-go-group="${go[0]}" data-go-tab="${go[1]}" data-tid="${r.tournament_id}">${r.tasks[k]} ${label}</button>`);
+      const clean = r.open_tasks === 0 ? html`<span class="dash-dg-clean">✓ all clear</span>` : "";
+      return html`<li class="dash-dg-row"><span class="dash-dg-name" data-tid="${r.tournament_id}" tabindex="0" role="button"><strong>${r.tournament_name}</strong>${due(r.next_deadline)}</span><span class="dash-dg-chips">${chips}${clean}</span></li>`;
+    })}</ul>`;
   // chip → set that tournament active AND jump to the relevant tab.
   el.querySelectorAll(".dash-dg-chip").forEach((b) => b.addEventListener("click", () => {
     setActive(Number(b.dataset.tid));
@@ -5510,16 +5502,9 @@ async function _renderWorkload() {
     const bar = `<span class="wl-bar" style="width:${Math.round((o.days / maxDays) * 100)}%"></span>`;
     const mix = o.assignments
       ? `<span class="muted">${o.accepted}✓ ${o.pending}⏳ ${o.declined}✗</span>` : "";
-    return `<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${esc(o.official_name)}</span></td>` +
-      `<td class="num">${o.days}</td><td class="num">${o.assignments}</td>` +
-      `<td class="num">${o.tournaments}</td><td class="wl-barcell">${bar}</td><td>${mix}</td></tr>`;
-  }).join("");
-  box.innerHTML =
-    `<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)` +
-    `${t.unused ? ` · <span class="warn">${t.unused} unused</span>` : ""}.</p>` +
-    `<table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th>` +
-    `<th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>`;
+    return html`<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${o.official_name}</span></td><td class="num">${o.days}</td><td class="num">${o.assignments}</td><td class="num">${o.tournaments}</td><td class="wl-barcell">${raw(bar)}</td><td>${raw(mix)}</td></tr>`;
+  });
+  box.innerHTML = html`<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)${t.unused ? html` · <span class="warn">${t.unused} unused</span>` : ""}.</p><table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th><th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead><tbody>${rows}</tbody></table>`;
   box.querySelectorAll(".wl-off-link[data-oid]").forEach((el) =>
     el.addEventListener("click", () => openOfficial360(Number(el.dataset.oid))));
 }
@@ -5533,19 +5518,14 @@ async function loadDashboard() {
   try { tournaments = await api("/tournaments"); } catch (_) {}
   const body = document.querySelector("#dash-overview-table tbody");
   body.innerHTML = tournaments.length
-    ? tournaments.slice().sort((a, b) => String(a.play_start_date).localeCompare(String(b.play_start_date)))
+    ? html`${tournaments.slice().sort((a, b) => String(a.play_start_date).localeCompare(String(b.play_start_date)))
         .map((t) => {
           const su = _daysUntil(t.play_start_date);
-          const startsIn = su === null ? "" : (su < 0 ? '<span class="muted">started / past</span>'
-            : (su === 0 ? '<span class="warn">today</span>' : `in ${su}d`));
+          const startsIn = su === null ? "" : (su < 0 ? html`<span class="muted">started / past</span>`
+            : (su === 0 ? html`<span class="warn">today</span>` : html`in ${su}d`));
           const isActive = active && active.id === t.id;
-          return `<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button">` +
-            `<td>${esc(t.name)}${isActive ? ' <span class="badge badge-ok">active</span>' : ""}</td>` +
-            `<td>${esc(t.type)}</td>` +
-            `<td>${esc(_fmtMDY(t.play_start_date))} – ${esc(_fmtMDY(t.play_end_date))}</td>` +
-            `<td>${startsIn}</td><td>${_deadlineCell(t.registration_deadline)}</td>` +
-            `<td>${_deadlineCell(t.late_entry_deadline)}</td></tr>`;
-        }).join("")
+          return html`<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button"><td>${t.name}${isActive ? raw(' <span class="badge badge-ok">active</span>') : ""}</td><td>${t.type}</td><td>${_fmtMDY(t.play_start_date)} – ${_fmtMDY(t.play_end_date)}</td><td>${startsIn}</td><td>${raw(_deadlineCell(t.registration_deadline))}</td><td>${raw(_deadlineCell(t.late_entry_deadline))}</td></tr>`;
+        })}`
     : `<tr><td class="empty" colspan="6">No tournaments yet — add one in Setup → Tournaments.</td></tr>`;
   body.querySelectorAll(".dash-trow").forEach((tr) => {
     const pick = () => setActive(Number(tr.dataset.tid));
@@ -5567,9 +5547,7 @@ async function loadDashboard() {
   catch (_) { tiles.hidden = true; return; }
   const tile = (label, n, opts = {}) => {
     const alert = opts.alert && n > 0;
-    return `<button type="button" class="dash-tile${alert ? " alert" : ""}" ` +
-      `data-go-group="${opts.go[0]}" data-go-tab="${opts.go[1]}">` +
-      `<span class="dash-num">${n}</span><span class="dash-label">${esc(label)}</span></button>`;
+    return hstr`<button type="button" class="dash-tile${alert ? " alert" : ""}" data-go-group="${opts.go[0]}" data-go-tab="${opts.go[1]}"><span class="dash-num">${n}</span><span class="dash-label">${label}</span></button>`;
   };
   tiles.hidden = false;
   tiles.innerHTML =
@@ -5609,13 +5587,8 @@ async function _renderReadiness() {
     ? `✗ Not ready — ${s.fail} blocker${s.fail === 1 ? "" : "s"}${s.warn ? `, ${s.warn} warning${s.warn === 1 ? "" : "s"}` : ""}`
     : (s.warn ? `▲ Ready with ${s.warn} warning${s.warn === 1 ? "" : "s"}` : "✓ Ready — all checks pass");
   box.hidden = false;
-  box.innerHTML =
-    `<div class="rdy-head ${headClass}">${headText}</div>` +
-    `<ul class="rdy-list">` + r.checks.map((c) =>
-      `<li class="rdy-row rdy-${c.status}" data-key="${c.key}" tabindex="0" role="button">` +
-      `<span class="rdy-icon">${_READY_ICON[c.status]}</span>` +
-      `<span class="rdy-label">${esc(c.label)}</span>` +
-      `<span class="rdy-detail">${esc(c.detail)}</span></li>`).join("") + `</ul>`;
+  box.innerHTML = html`<div class="rdy-head ${headClass}">${headText}</div><ul class="rdy-list">${r.checks.map((c) =>
+    html`<li class="rdy-row rdy-${c.status}" data-key="${c.key}" tabindex="0" role="button"><span class="rdy-icon">${_READY_ICON[c.status]}</span><span class="rdy-label">${c.label}</span><span class="rdy-detail">${c.detail}</span></li>`)}</ul>`;
   box.querySelectorAll(".rdy-row").forEach((row) => {
     const go = _READY_GO[row.dataset.key];
     if (!go) return;
@@ -5640,14 +5613,10 @@ async function _renderDeclinedAlert(declinedCount) {
   const item = (r) => {
     const slot = [r.site_label, r.day_count ? `${r.day_count} day${r.day_count === 1 ? "" : "s"}` : ""]
       .filter(Boolean).join(" · ");
-    return `<li class="dash-dec-item"><span class="dash-dec-name">${esc(r.official_name)}</span>` +
-      (slot ? ` <span class="dash-dec-slot">${esc(slot)}</span>` : "") + `</li>`;
+    return html`<li class="dash-dec-item"><span class="dash-dec-name">${r.official_name}</span>${slot ? html` <span class="dash-dec-slot">${slot}</span>` : ""}</li>`;
   };
   box.hidden = false;
-  box.innerHTML =
-    `<div class="dash-dec-head">✗ ${d.count} declined — needs re-staffing</div>` +
-    `<ul class="dash-dec-list">${d.declined.map(item).join("")}</ul>` +
-    `<button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments →</button>`;
+  box.innerHTML = html`<div class="dash-dec-head">✗ ${d.count} declined — needs re-staffing</div><ul class="dash-dec-list">${d.declined.map(item)}</ul><button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments →</button>`;
   document.getElementById("dash-dec-go")?.addEventListener("click", () => {
     _dashGo("staffing", "panel-t-assignments");
     // pre-filter the assignments list to declined so the TD lands on the work.
