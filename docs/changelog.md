@@ -54,6 +54,17 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 3 (validated against the real `tests/fixtures/tournament_emails.pdf`
+corpus): ran detection over every doubles email in the export. Both players now
+auto-resolve on **15 of 19** (the rest are a parser-truncated body, a
+first-name-only partner, a "still looking for a partner" note, and a non-pair
+thread reply). Two precision fixes fell out of the corpus: the connected-pair
+extractor now requires a doubles/partner/pair keyword **near** the two names
+(so an email signature like "David Pantovic ATP & WTA Tour Coach" or
+"Simplicity Investments, Member FINRA" can't pose as a pair), drops the noisy
+comma connector, trims credential/org tokens (ATP/WTA/PhD/CEO/…) off captured
+names, and accepts a short "…is partnering **with**…" filler clause. +3 tests.
+
 Follow-up 2 (the real corpus): most doubles requests name the two players with
 **no USTA # at all** — "Mia Langone and Chelsea Ie would like to pair up",
 "pair Ankush Kotti with Watts Goodman". New `extract_doubles_pair()` finds the

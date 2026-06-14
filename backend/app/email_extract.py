@@ -150,15 +150,34 @@ def extract_names(subject: str | None, body: str | None, limit: int = 8) -> list
     return out
 
 
+# Credential / org / role tokens that ride next to a name in an email signature
+# ("David Pantovic ATP & WTA Tour Coach", "…Mehendiratta, PhD Founder and CEO").
+# Trimmed off the ends of a captured name so the signature can't read as a
+# player — and a span made of nothing but these collapses to <2 tokens and is
+# rejected outright.
+_NONNAME_TOKENS = {
+    "atp", "wta", "itf", "usta", "ptr", "ptra", "phd", "md", "dds", "esq",
+    "ceo", "cfo", "coo", "cto", "vp", "founder", "president", "regional",
+    "vice", "director", "manager", "coach", "tour", "team", "usa", "inc",
+    "inc.", "llc", "ltd", "co", "co.", "member", "finra", "sipc",
+    "investments", "securities", "academy", "university", "college", "club",
+    "association", "associates", "mail", "yahoo", "outlook", "gmail",
+}
+
+
 def _clean_name(raw: str) -> str | None:
     """Trim sentence leakage off a captured name: a leading token that ends a
     previous sentence ("Macon. Ava Wright"), a trailing pronoun ("… Bondo. His"),
-    or a trailing possessive ("Declan Finley. Declan's"). Needs 2+ tokens left."""
+    a trailing possessive ("Declan Finley. Declan's"), or a credential/org token
+    bleeding in from a signature ("David Pantovic ATP"). Needs 2+ tokens left."""
     tokens = raw.replace('"', " ").replace("“", " ").replace("”", " ").split()
-    while tokens and (tokens[0].endswith(".") or tokens[0] in _NAME_STOPWORDS):
+
+    def _drop(tok: str) -> bool:
+        return (tok in _NAME_STOPWORDS or tok.rstrip(".").lower() in _NONNAME_TOKENS)
+
+    while tokens and (tokens[0].endswith(".") or _drop(tokens[0])):
         tokens.pop(0)
-    while tokens and (tokens[-1] in _NAME_STOPWORDS
-                      or tokens[-1].endswith(("'s", "’s"))):
+    while tokens and (_drop(tokens[-1]) or tokens[-1].endswith(("'s", "’s"))):
         tokens.pop()
     tokens = [t.rstrip(".") for t in tokens]
     return " ".join(tokens) if len(tokens) >= 2 else None
@@ -166,32 +185,51 @@ def _clean_name(raw: str) -> str | None:
 
 # Two player names joined by a pairing connector — the doubles shape that
 # carries NO USTA # at all ("Mia Langone and Chelsea Ie", "pair Ankush Kotti
-# with Watts Goodman"). Connectors: and / with / plus / & / + / / / comma. A
-# hyphen is deliberately NOT a connector (it sits in sign-offs like
-# "Leilei - Mia's mom"). Glue words can't be a name token (see _PERSON_TOKEN),
-# so the two captured groups are clean name spans.
+# with Watts Goodman"). Connectors: and / with / plus / & / + / slash. A hyphen
+# is deliberately NOT a connector (it sits in sign-offs like "Leilei - Mia's
+# mom"), and neither is a comma — both are far too common in the business
+# signatures these emails carry ("Simplicity Investments, Member FINRA"). Glue
+# words can't be a name token (see _PERSON_TOKEN), so the captured groups are
+# clean name spans.
 _PERSON_NAME = _PERSON_TOKEN + r"(?:\s+" + _PERSON_TOKEN + r"){1,2}"
-_PAIR_CONNECTOR = r"\s*(?:&|\+|/|,|\band\b|\bwith\b|\bplus\b)\s*"
+# Connector between the two names. Besides the bare joiners (& + / and plus), a
+# "with" clause may carry a few lowercase filler words — "X is partnering with
+# Y", "X would like to pair with Y", "X to play with Y". The filler is
+# lowercase-only so it can't swallow the second name.
+_PAIR_CONNECTOR = (r"\s*(?:&|\+|/|\band\b|\bplus\b|"
+                   r"(?:[a-z]+\s+){0,4}?\bwith\b)\s*")
 _DOUBLES_PAIR_RE = re.compile("(" + _PERSON_NAME + ")" + _PAIR_CONNECTOR
                               + "(" + _PERSON_NAME + ")")
+# A connected name pair only counts as PLAYERS when a doubles/pairing word sits
+# nearby — otherwise an email's signature ("David Pantovic ATP & WTA Tour
+# Coach", "Founder and CEO") would masquerade as a pair. The real requests
+# always say it ("…would like to pair up for doubles", "Doubles partners L3").
+_PAIR_CONTEXT = re.compile(
+    r"\b(doubles?|partners?|partnering|pair|paired|pairing|together)\b", re.I)
+_PAIR_CONTEXT_WINDOW = 60
 
 
 def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
     """The TWO player names in a doubles request that names them but gives no
-    USTA # — found by the pairing connector between two name spans. Returns
-    [name1, name2] (requester first, as written) or [] when no connected pair is
-    present. This is what lets a name-only doubles email still surface BOTH
-    players for the TD to confirm / add to the roster."""
+    USTA # — two name spans joined by a pairing connector AND sitting within a
+    short window of a doubles/partner/pair keyword (so a business signature
+    can't pose as a pair). Returns [name1, name2] (requester first, as written)
+    or [] when no qualifying pair is present. This is what lets a name-only
+    doubles email still surface BOTH players for the TD to confirm / add."""
     text = f"{subject or ''}\n{body or ''}"
-    m = _DOUBLES_PAIR_RE.search(text)
-    if not m:
-        return []
-    out: list[str] = []
-    for g in (m.group(1), m.group(2)):
-        nm = _clean_name(g)
-        if nm and nm not in out:
-            out.append(nm)
-    return out
+    for m in _DOUBLES_PAIR_RE.finditer(text):
+        lo = max(0, m.start() - _PAIR_CONTEXT_WINDOW)
+        hi = min(len(text), m.end() + _PAIR_CONTEXT_WINDOW)
+        if not _PAIR_CONTEXT.search(text, lo, hi):
+            continue  # a connected pair with no pairing context — signature noise
+        out: list[str] = []
+        for g in (m.group(1), m.group(2)):
+            nm = _clean_name(g)
+            if nm and nm not in out:
+                out.append(nm)
+        if len(out) == 2:
+            return out
+    return []
 
 
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:

@@ -167,6 +167,39 @@ def test_extract_doubles_pair_name_only_real_shapes():
     assert D("", "Thanks, Leilei - Mia's mom") == []
 
 
+def test_extract_doubles_pair_corpus_phrasings():
+    """Shapes pulled straight from the real email corpus (the fixture PDF)."""
+    from app.email_extract import extract_doubles_pair as D
+    assert D("", "Everly Cogdell and Zaria Wadawu\nDoubles partners L3 Macon") == \
+        ["Everly Cogdell", "Zaria Wadawu"]
+    assert D("Doubles partner",
+             "Katelyn DuRant is partnering with Dargan Alexander for girls 14 doubles") == \
+        ["Katelyn DuRant", "Dargan Alexander"]
+    assert D("", "Tom Reed would like to pair with Sam Ng for doubles") == \
+        ["Tom Reed", "Sam Ng"]
+    # when each name carries its own USTA # ("Name (USTA ####) and Name (USTA
+    # ####)") the name+number extractor owns it — both players, with numbers.
+    from app.email_extract import extract_name_usta_pairs as P
+    assert P("Macon L3 - G14 doubles",
+             "Alexandra Dimitrov (USTA 2018522196) and Casey Davis (USTA 2018389707) "
+             "will partner in G14 doubles") == [
+        {"name": "Alexandra Dimitrov", "usta": "2018522196"},
+        {"name": "Casey Davis", "usta": "2018389707"}]
+
+
+def test_extract_doubles_pair_ignores_business_signatures():
+    """A connected name pair only counts when a pairing keyword is nearby AND the
+    tokens aren't credential/org words — so email signatures never pose as a
+    doubles pair (these regressed real imports)."""
+    from app.email_extract import extract_doubles_pair as D
+    assert D("", "Securities offered through Simplicity Investments, Member FINRA/SIPC") == []
+    assert D("Vera Pantovic",
+             "We will find a partner. Sincerely,\nDavid Pantovic ATP & WTA Tour Coach\nTeam USA") == []
+    # a real pair still wins even with a signature elsewhere in the email
+    assert D("", "Kai Hosch and Gabriel Zingman would like to pair for doubles.\n"
+                 "Trevor\nSent from my iPhone") == ["Kai Hosch", "Gabriel Zingman"]
+
+
 def test_name_usta_pairs_permissive_separators_both_directions():
     """The doubles fix: a name and its USTA # bind across whatever 'skip' glue a
     PDF/roster puts between them — double dashes + label, parens, a line break,
