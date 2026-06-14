@@ -161,6 +161,31 @@ def digest(conn=Depends(db_dep)):
     return {"tournaments": out, "totals": totals}
 
 
+# IA cleanup (P0 #2): one cheap call returning how many rows sit behind each
+# per-tournament list tab, so the nav can show count badges. The TD sees where
+# work is waiting without clicking into all seven Player-list tabs and the
+# Inbox. Scalar subqueries → one round-trip; all COUNT(*), no row fetch.
+@router.get("/api/tournaments/{tournament_id}/nav-counts")
+def nav_counts(tournament_id: int, conn=Depends(db_dep)):
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute(
+            "SELECT "
+            " (SELECT count(*) FROM email_message WHERE tournament_id = %(t)s AND status = 'new') AS inbox_unfiled,"
+            " (SELECT count(*) FROM late_entry WHERE tournament_id = %(t)s) AS late_entries,"
+            " (SELECT count(*) FROM withdrawal WHERE tournament_id = %(t)s) AS withdrawals,"
+            " (SELECT count(*) FROM scheduling_avoidance WHERE tournament_id = %(t)s) AS scheduling,"
+            " (SELECT count(*) FROM division_flexibility WHERE tournament_id = %(t)s) AS div_flex,"
+            " (SELECT count(*) FROM pairing_avoidance WHERE tournament_id = %(t)s) AS pairing,"
+            " (SELECT count(*) FROM doubles_request WHERE tournament_id = %(t)s) AS doubles,"
+            " (SELECT count(*) FROM player_hotel_stay WHERE tournament_id = %(t)s) AS player_hotels",
+            {"t": tournament_id},
+        )
+        return dict(cur.fetchone())
+
+
 @router.get("/api/tournaments/{tournament_id}/dashboard")
 def dashboard(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

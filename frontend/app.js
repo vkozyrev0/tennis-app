@@ -1043,7 +1043,53 @@ function activateGroup(key) {
     const first = [...grp.querySelectorAll(".tab")].find((t) => !t.classList.contains("disabled"));
     if (first) first.click();
   }
+  // Entering Inbox or the merged Player-lists group is a natural moment to
+  // re-pull the badge counts so they reflect any changes made elsewhere.
+  if (key === "playerlists" || key === "inbox") refreshNavCounts();
   sizeLists();
+}
+
+// IA cleanup (P0 #2): per-tab count badges. One cheap /nav-counts call maps to
+// the seven Player-list tabs plus the Inbox (tab + L1 group button). Hidden at
+// zero so a clean list carries no chip — only waiting work draws the eye.
+const NAV_COUNT_TABS = {
+  "panel-t-inbox": "inbox_unfiled",
+  "panel-t-late": "late_entries",
+  "panel-t-withdrawals": "withdrawals",
+  "panel-t-sched": "scheduling",
+  "panel-t-divflex": "div_flex",
+  "panel-t-pairing": "pairing",
+  "panel-t-doubles": "doubles",
+  "panel-t-photels": "player_hotels",
+};
+function _setNavBadge(el, n) {
+  if (!el) return;
+  let b = el.querySelector(":scope > .tab-badge");
+  if (!n) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement("span");
+    b.className = "tab-badge";
+    el.appendChild(b);
+  }
+  b.textContent = n > 99 ? "99+" : String(n);
+}
+async function refreshNavCounts() {
+  const inboxBtn = _groupsEl.querySelector('.gbtn[data-group="inbox"]');
+  if (!active) {
+    Object.keys(NAV_COUNT_TABS).forEach((pid) =>
+      _setNavBadge(document.querySelector(`.tab[data-target="${pid}"]`), 0));
+    _setNavBadge(inboxBtn, 0);
+    return;
+  }
+  let counts;
+  try { counts = await api(`/tournaments/${active.id}/nav-counts`); }
+  catch (_) { return; }  // non-fatal: leave the last-known badges in place
+  for (const [pid, key] of Object.entries(NAV_COUNT_TABS)) {
+    _setNavBadge(document.querySelector(`.tab[data-target="${pid}"]`), counts[key] || 0);
+  }
+  // The L1 Inbox group button mirrors the unfiled count — the global "mail is
+  // waiting" signal visible from any tab.
+  _setNavBadge(inboxBtn, counts.inbox_unfiled || 0);
 }
 
 // Prerequisite callout (plan P1 #1): when a workspace page depends on an EMPTY
@@ -1159,6 +1205,9 @@ _menuEl.addEventListener("click", (e) => {
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-import") buildImportPage();
+  // Opening any counted list (or the Inbox) re-pulls badge counts so a chip
+  // can't read stale after the user adds/removes rows on a sibling tab.
+  if (active && NAV_COUNT_TABS[tab.dataset.target]) refreshNavCounts();
   // Tabulator can't lay out columns while hidden — redraw the grid(s) when shown.
   _redrawPanelGrids(tab.dataset.target);
   sizeLists();
@@ -1346,6 +1395,7 @@ _tstate.onChange(({ active: next, prev }) => {
   document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
   if (next) toast(`Switched to ${next.name}`, true);
   else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
+  refreshNavCounts();  // repaint the per-tab + Inbox badges for the new tournament
 });
 
 function fillActiveSelect(rows) {
@@ -5693,7 +5743,7 @@ async function loadDashboard() {
     tile("rooms unused", d.rooms.unused, { alert: true, go: ["staffing", "panel-t-reports"] }) +
     tile("on roster", d.roster.selected, { go: ["tournament", "panel-t-roster"] }) +
     tile("alternates", d.roster.alternate, { go: ["tournament", "panel-t-roster"] }) +
-    tile("withdrawn", d.roster.withdrawn, { go: ["requests", "panel-t-withdrawals"] });
+    tile("withdrawn", d.roster.withdrawn, { go: ["playerlists", "panel-t-withdrawals"] });
   tiles.querySelectorAll("[data-go-group]").forEach((b) =>
     b.addEventListener("click", () => _dashGo(b.dataset.goGroup, b.dataset.goTab)));
   _renderDeclinedAlert(d.officials.declined);

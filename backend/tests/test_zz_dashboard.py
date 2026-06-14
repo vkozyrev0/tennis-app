@@ -114,3 +114,30 @@ def test_dashboard_room_pickup_excludes_declined(tmp_path=None):
 
 def test_dashboard_404_for_unknown_tournament():
     assert client.get("/api/tournaments/99999999/dashboard").status_code == 404
+
+
+# IA cleanup: nav-counts feeds the per-tab + Inbox badges.
+_NAV_KEYS = {"inbox_unfiled", "late_entries", "withdrawals", "scheduling",
+             "div_flex", "pairing", "doubles", "player_hotels"}
+
+
+def test_nav_counts_empty_is_zeroed():
+    t = _tournament()
+    c = _ok(client.get(f"/api/tournaments/{t['id']}/nav-counts"), 200)
+    assert set(c) == _NAV_KEYS
+    assert all(v == 0 for v in c.values())
+
+
+def test_nav_counts_reflects_unfiled_inbox():
+    t = _tournament()
+    _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"], "subject": "hi", "body": "b", "from_address": "x@y.com"}))
+    c = _ok(client.get(f"/api/tournaments/{t['id']}/nav-counts"), 200)
+    assert c["inbox_unfiled"] == 1
+    # counts are tournament-scoped — a sibling event stays at zero
+    other = _tournament()
+    assert _ok(client.get(f"/api/tournaments/{other['id']}/nav-counts"), 200)["inbox_unfiled"] == 0
+
+
+def test_nav_counts_404_for_unknown_tournament():
+    assert client.get("/api/tournaments/99999999/nav-counts").status_code == 404

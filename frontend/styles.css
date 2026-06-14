@@ -316,8 +316,7 @@ header h1 > #health { margin-left: auto; }
 .gbtn[data-group="tournament"]  .gicon { color: #ffb74d; }  /* amber — Tournament (trophy) */
 .gbtn[data-group="staffing"]    .gicon { color: #4cc9f0; }  /* cyan — Staffing (clipboard) */
 .gbtn[data-group="inbox"]       .gicon { color: #f78fb3; }  /* pink — Inbox (envelope) */
-.gbtn[data-group="requests"]    .gicon { color: #ff8c42; }  /* orange — Player requests (list) */
-.gbtn[data-group="preferences"] .gicon { color: #c8a8ff; }  /* lavender — Preferences (sliders) */
+.gbtn[data-group="playerlists"] .gicon { color: #ff8c42; }  /* orange — Player lists (requests + prefs) */
 .gbtn:hover .gicon, .gbtn.active .gicon { filter: brightness(1.15) saturate(1.2); }
 @media (max-width: 480px) {
   /* On phones, drop the label and show icon-only — saves horizontal real
@@ -351,6 +350,28 @@ header h1 > #health { margin-left: auto; }
 .tab:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
 .tab.active { background: var(--bg); color: var(--ink); font-weight: 600; }
 .tab.disabled { opacity: 0.45; }
+
+/* IA cleanup (P0 #2): count chip on the Player-list tabs and the Inbox L1
+   button. Small accent pill that reads on both the green nav bar (inactive
+   tab) and the light active tab. The JS removes the node at zero, so only
+   waiting work draws a chip. */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  margin-left: 0.35rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+.gbtn .tab-badge { margin-left: 0.15rem; }
 
 /* Use the full window width (back-office data app) — no centered narrow column. */
 main { padding: 1.25rem 1.75rem; max-width: 1440px; margin: 0 auto; }

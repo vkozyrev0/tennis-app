@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=77" />
+  <link rel="stylesheet" href="/styles.css?v=78" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -54,23 +54,17 @@
         <rect x="2" y="4" width="20" height="16" rx="2"/>
         <path d="m22 7-10 6L2 7"/>
       </symbol>
-      <!-- document with lines — Player requests (late entries + withdrawals) -->
-      <symbol id="i-requests" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      <!-- document with lines — "Player lists" L1 group (the merged Player
+           requests + preferences group). NOTE: this id is referenced
+           dynamically as `#i-${group}` in app.js via createElementNS, so a
+           literal-`href` grep won't find the usage — keep the id in sync with
+           the data-group="playerlists" nav group. -->
+      <symbol id="i-playerlists" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <rect x="4" y="3" width="16" height="18" rx="2"/>
         <line x1="8" y1="8" x2="16" y2="8"/>
         <line x1="8" y1="12" x2="16" y2="12"/>
         <line x1="8" y1="16" x2="13" y2="16"/>
-      </symbol>
-      <!-- sliders — Player preferences -->
-      <symbol id="i-preferences" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="4" y1="6" x2="20" y2="6"/>
-        <line x1="4" y1="12" x2="20" y2="12"/>
-        <line x1="4" y1="18" x2="20" y2="18"/>
-        <circle cx="9" cy="6" r="2.5" fill="currentColor"/>
-        <circle cx="15" cy="12" r="2.5" fill="currentColor"/>
-        <circle cx="7" cy="18" r="2.5" fill="currentColor"/>
       </symbol>
       <!-- tennis ball — app brand icon. Filled ball with the classic curved
            seam (two arcs) so it reads as a tennis ball even at 18 px. -->
@@ -147,10 +141,13 @@
     </div>
     <div class="menu-group tgroup" data-group="tournament">
       <span class="menu-label">Tournament</span>
-      <button class="tab needs-active" data-target="panel-t-sites">Sites</button>
+      <!-- IA cleanup (P0 #1): these were literally "Sites" and "T-shirts",
+           colliding with the Setup *catalog* tabs of the same name. Renamed to
+           the event scope so the duplication reads as catalog-vs-event. -->
+      <button class="tab needs-active" data-target="panel-t-sites">Event sites</button>
       <button class="tab needs-active" data-target="panel-t-roster">Roster</button>
       <button class="tab needs-active" data-target="panel-t-availability">Availability</button>
-      <button class="tab needs-active" data-target="panel-t-tshirt-order">T-shirts</button>
+      <button class="tab needs-active" data-target="panel-t-tshirt-order">Shirt order</button>
     </div>
     <div class="menu-group tgroup" data-group="staffing">
       <span class="menu-label">Staffing</span>
@@ -167,13 +164,16 @@
       <span class="menu-label">Inbox</span>
       <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
     </div>
-    <div class="menu-group tgroup" data-group="requests">
-      <span class="menu-label">Player requests</span>
+    <!-- IA cleanup (P0 #1): "Player requests" and "Player preferences" were two
+         separate top-level groups, both holding per-player data lists. Merged
+         into one "Player lists" group (requests first, then preferences) so the
+         L1 bar carries six groups instead of seven and the TD has one place to
+         look for anything player-list-shaped. Per-tab count badges (populated by
+         refreshNavCounts) show where rows are waiting without clicking in. -->
+    <div class="menu-group tgroup" data-group="playerlists">
+      <span class="menu-label">Player lists</span>
       <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
       <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
-    </div>
-    <div class="menu-group tgroup" data-group="preferences">
-      <span class="menu-label">Player preferences</span>
       <button class="tab needs-active" data-target="panel-t-sched">Scheduling</button>
       <button class="tab needs-active" data-target="panel-t-divflex">Div. flex</button>
       <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoid.</button>
@@ -1409,6 +1409,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=191"></script>
+  <script type="module" src="/app.js?v=192"></script>
 </body>
 </html>
