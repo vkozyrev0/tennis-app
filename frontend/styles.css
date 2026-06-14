@@ -600,11 +600,13 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
 }
 /* Responsive-collapse (mobile): the ▸ toggle column + the per-row expand panel
    that holds columns folded away on narrow screens. Themed for light + dark. */
-.tabulator .tabulator-responsive-collapse-toggle {
-  width: 1.05rem; height: 1.05rem; border-radius: 4px; background: var(--btn-bg);
-  color: var(--ink); display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700; cursor: pointer; border: 1px solid var(--line);
+/* The toggle is a small circle with a white +/− glyph, so it needs a colored
+   fill (a light surface would hide the white glyph). Brand accent, on both
+   themes; high specificity to beat Tabulator's default #666. */
+.tabulator .tabulator-cell .tabulator-responsive-collapse-toggle {
+  background: var(--accent); opacity: 0.9;
 }
+.tabulator .tabulator-cell .tabulator-responsive-collapse-toggle:hover { opacity: 1; }
 .tabulator .tabulator-responsive-collapse {
   padding: 0.45rem 0.6rem; border-top: 1px solid var(--border); background: var(--zebra);
 }

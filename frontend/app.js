@@ -3150,7 +3150,7 @@ const payrollGrid = makeReadGrid("payroll-table", [
       });
       return cb;
     } },
-  { title: "Official", field: "official_name", headerFilter: "input",
+  { title: "Official", field: "official_name", headerFilter: "input", responsive: 0,  // identity — keep visible when collapsed
     formatter: (c) => hstr`${c.getValue()}${c.getData().orphaned
       ? raw(' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>') : ""}` },
   { title: "Days", field: "days_worked", width: 80, hozAlign: "right",
@@ -4180,7 +4180,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false });
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false });
 // Persist inline edits (single click a cell): classification, manual player /
 // partner picks (the list editor's value is a player id), and typed USTA #s
 // (resolved against the roster cache; unknown numbers revert with a toast).

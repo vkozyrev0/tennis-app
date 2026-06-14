@@ -25,6 +25,24 @@ export function createGridFactories(ctx) {
     }
     return cols;
   }
+  // Enable mobile responsive-collapse on a column set: pin the interactive
+  // columns (actions, selection checkbox) always-visible, then prepend the ▸
+  // toggle (Tabulator doesn't auto-add it under fitColumns + renderVertical:basic,
+  // so collapsed columns would otherwise be unreachable). Returns the same array.
+  function _withResponsiveCollapse(cols) {
+    cols.forEach((c) => {
+      const cls = typeof c.cssClass === "string" ? c.cssClass : "";
+      if (c.field === "_act" || c.field === "_sel" || cls.includes("grid-actions")) c.responsive = 0;
+    });
+    cols.unshift({
+      formatter: "responsiveCollapse", width: 32, minWidth: 32, widthGrow: 0, hozAlign: "center",
+      resizable: false, headerSort: false, responsive: 0, cssClass: "rcollapse-col",
+    });
+    return cols;
+  }
+  // Grid options that turn overflow columns into a tap-to-expand ▸ row on phones.
+  const RESPONSIVE_OPTS = { responsiveLayout: "collapse", responsiveLayoutCollapseStartOpen: false };
+
   function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited, exportCols) {
     // Import/export #3: exportCols (when given) drives a *re-importable* CSV
     // export with snake_case headers, not just the visible Tabulator columns.
@@ -72,7 +90,8 @@ export function createGridFactories(ctx) {
       // Sort only — filter persistence would fight grids that set load-time
       // filter defaults (e.g. the inbox). Bump the v1 key if columns change.
       persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId,
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: cols,
+      ...RESPONSIVE_OPTS,
+      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _withResponsiveCollapse(cols),
     });
     const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
     grid.on("tableBuilt", _onBuilt);
@@ -105,7 +124,11 @@ export function createGridFactories(ctx) {
       // opts.persist === false (the inbox does, to keep its load-time filter
       // behaviour predictable).
       ...(opts.persist === false ? {} : { persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId }),
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
+      // Mobile responsive-collapse by default; opt out (opts.responsive === false)
+      // for grids with column GROUPS or heavy in-cell editing (the inbox).
+      ...(opts.responsive === false ? {} : RESPONSIVE_OPTS),
+      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
+      columns: opts.responsive === false ? _autoHeaderFilters(columns) : _withResponsiveCollapse(_autoHeaderFilters(columns)),
       ...(opts.index ? { index: opts.index } : {}),
       ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
       // opt-in editing (e.g. the inbox's manual player/USTA assignment) —
