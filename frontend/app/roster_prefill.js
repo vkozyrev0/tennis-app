@@ -19,6 +19,25 @@ export function resolveFilePlayerId(m, players) {
   return null;
 }
 
+// Seed a roster add from a single parsed NAME (and optional USTA #) — used for
+// the inbox "＋ add" affordance on a parsed-but-unrostered player, including the
+// common doubles shape that names both players with NO number ("Mia Langone and
+// Chelsea Ie"). Each Player-1/2 cell passes its own name, so both halves of a
+// pair can be added. Always "new" mode; the USTA # may be blank (the TD fills
+// it before saving). Returns { canAdd:false } when there's no usable name.
+export function rosterPrefillFromName(name, usta, division) {
+  const nm = String(name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!nm.length) return { canAdd: false, offRoster: false };
+  return {
+    canAdd: true, offRoster: false, mode: "new",
+    usta_number: usta || "",
+    first_name: nm[0] || "",
+    last_name: nm.slice(1).join(" ") || "",
+    gender: genderFromDivision(division),
+    age_division: division || "",
+  };
+}
+
 // Junior division codes are gendered (B14 → male, G12 → female). Returns "" for
 // anything else (adult divisions, blank) so the TD picks gender manually.
 export function genderFromDivision(div) {

@@ -8,7 +8,7 @@ import {
   SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
   SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
 } from "./app/shirts.js";
-import { rosterPrefillFromEmail, resolveFilePlayerId } from "./app/roster_prefill.js";
+import { rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId } from "./app/roster_prefill.js";
 import { createGridFactories } from "./app/grids.js";
 import { createAuth } from "./app/auth.js";
 import { createTournamentState } from "./app/state.js";
@@ -4122,8 +4122,8 @@ async function _inboxClearSlot(m, slot) {
 // Open the roster form pre-filled from this email (USTA #, name, division) —
 // the same plan the ⋯ menu uses, surfaced directly on a parsed-but-unrostered
 // (✉) player cell. rosterPrefillFromEmail is pure + unit-tested.
-function _inboxAddToRoster(m) {
-  const plan = rosterPrefillFromEmail(m);
+function _inboxAddToRoster(m, plan) {
+  plan = plan || rosterPrefillFromEmail(m);
   document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
   rosterShowNew();
   _rosterFromEmailId = m.id;   // re-detect this email after the save links it
@@ -4148,9 +4148,10 @@ function _inboxAddToRoster(m) {
   }
   rosterOpenModal();
   scheduleComboSync();
+  const who = [plan.first_name, plan.last_name].filter(Boolean).join(" ");
   toast(plan.offRoster
     ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
-    : "Pre-filled from the email — confirm gender/division, add the name, then Save", true);
+    : `Pre-filled ${who || "from the email"} — ${plan.usta_number ? "confirm gender/division" : "add the USTA #, gender/division"}, then Save`, true);
 }
 // Run player detection for one email and fold the result back into the row.
 async function _inboxDetectInto(m, row) {
@@ -4196,9 +4197,13 @@ function _inboxNameCell(cell, slotIdx) {
     const nameSpan = document.createElement("span");
     nameSpan.innerHTML = hstr`${s.name}${raw(_MAIL_MARK)}`;
     wrap.append(nameSpan, editBtn());
-    if (rosterPrefillFromEmail(m).canAdd) {
+    // Pre-fill the roster add-form from THIS cell's name (+ USTA # if the email
+    // gave one) — so both halves of a name-only doubles pair ("Mia Langone and
+    // Chelsea Ie") each get a ＋, not just a player carrying a number.
+    const plan = rosterPrefillFromName(s.name, s.usta, m.detected_division);
+    if (plan.canAdd) {
       wrap.append(_iconBtn("＋", "Add this player to the roster (pre-filled from the email)",
-        () => _inboxAddToRoster(m)));
+        () => _inboxAddToRoster(m, plan)));
     }
     return wrap;
   }

@@ -648,6 +648,30 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             "detected_player_name": None, "match_kind": None}
 
 
+def _unique_firstname_match(cur, tournament_id, subject, body, exclude_ids):
+    """Last-resort partner finder: in a doubles email the partner is sometimes
+    referenced by FIRST name only ("…I don't have Mia's parent confirmation yet
+    to pair them"). Match a roster first name that appears in the text — but ONLY
+    when exactly one roster player qualifies (never guess between two), and
+    case-SENSITIVELY so a name that doubles as a common word ("Will", "Grace",
+    "May") doesn't match its lowercase use. Doubles-partner scoped (the caller
+    only invokes it for that), so the precision bar can be lower than the general
+    detector."""
+    text = f"{subject or ''}\n{body or ''}"
+    cur.execute(
+        "SELECT p.id, p.usta_number, p.first_name, "
+        "       TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) AS name "
+        "FROM player p JOIN tournament_entry e ON e.player_id = p.id "
+        "WHERE e.tournament_id = %s",
+        (tournament_id,),
+    )
+    hits = [r for r in cur.fetchall()
+            if r["id"] not in exclude_ids and r["first_name"]
+            and re.search(rf"\b{re.escape(r['first_name'])}\b", text)]
+    ids = {r["id"] for r in hits}
+    return hits[0] if len(ids) == 1 else None
+
+
 def _detect_pair_for(cur, tournament_id, subject, body, from_address, classification):
     """Multi-player detection for the classifications that name several players.
 
@@ -668,6 +692,16 @@ def _detect_pair_for(cur, tournament_id, subject, body, from_address, classifica
                        "detected_partner_name": p["detected_player_name"],
                        "detected_partner_usta": p["detected_usta"],
                        "partner_match_kind": p["match_kind"]}
+        else:
+            # The layered detector found no second full name / USTA #. Fall back
+            # to a UNIQUE roster first name in the text — the partner is often
+            # named only by first name ("…to pair them with Mia").
+            fp = _unique_firstname_match(
+                cur, tournament_id, subject, body, frozenset({d["detected_player_id"]}))
+            if fp:
+                partner = {"detected_partner_id": fp["id"], "detected_partner_name": fp["name"],
+                           "detected_partner_usta": fp["usta_number"],
+                           "partner_match_kind": "firstname"}
     elif classification == "pairing_avoidance" and d["detected_player_id"]:
         found = [d["detected_player_id"]]
         while len(found) < 6:

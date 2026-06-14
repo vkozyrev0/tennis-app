@@ -54,6 +54,18 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 4 (corpus-driven polish, full pipeline re-validated): a regression
+**smoke test** now parses the fixture PDF and pins the parser→classifier→pair
+counts (30 emails, 11 withdrawal / 19 doubles, ≥13 with an extractable pair).
+Two adds raise both-players coverage to **16/19**: a unique-roster-**first-name**
+partner fallback (so "…to pair them with Mia" resolves the partner when she's
+named only by first name — case-sensitive + uniqueness-gated, never guesses
+between two), and an inbox **＋ add-to-roster on each Player 1/2 cell for
+name-only pairs** (`rosterPrefillFromName`) — both halves of "Mia Langone and
+Chelsea Ie" now get a pre-filled add button, not just a player carrying a USTA #.
+The 3 remaining misses are correct/unfixable (a PDF-truncated body, a "still
+looking for a partner" note, a non-pair thread reply). +9 tests.
+
 Follow-up 3 (validated against the real `tests/fixtures/tournament_emails.pdf`
 corpus): ran detection over every doubles email in the export. Both players now
 auto-resolve on **15 of 19** (the rest are a parser-truncated body, a

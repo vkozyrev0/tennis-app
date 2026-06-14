@@ -1,7 +1,7 @@
 // Deterministic unit test for the roster-prefill logic (DOM-free).
 // Run: node frontend/app/roster_prefill.test.mjs
 import assert from "node:assert/strict";
-import { genderFromDivision, rosterPrefillFromEmail, resolveFilePlayerId } from "./roster_prefill.js";
+import { genderFromDivision, rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId } from "./roster_prefill.js";
 
 let passed = 0;
 function test(name, fn) { fn(); passed++; console.log("  ok -", name); }
@@ -77,6 +77,28 @@ test("already-on-roster match → cannot add", () => {
 test("no USTA #, no player → cannot add", () => {
   assert.equal(rosterPrefillFromEmail({}).canAdd, false);
   assert.equal(rosterPrefillFromEmail({ detected_player_name: "Someone" }).canAdd, false);
+});
+
+// --- rosterPrefillFromName (per-cell add for name-only doubles pairs) -------
+test("name-only player → new mode, name split, no USTA # required", () => {
+  const plan = rosterPrefillFromName("Chelsea Ie", "", "G14");
+  assert.equal(plan.canAdd, true);
+  assert.equal(plan.mode, "new");
+  assert.equal(plan.first_name, "Chelsea");
+  assert.equal(plan.last_name, "Ie");
+  assert.equal(plan.usta_number, "");          // name-only emails carry no number
+  assert.equal(plan.gender, "female");          // inferred from G14
+  assert.equal(plan.age_division, "G14");
+});
+test("name + USTA # → both pre-filled", () => {
+  const plan = rosterPrefillFromName("Kate Hampton", "2018840232", "G14");
+  assert.equal(plan.usta_number, "2018840232");
+  assert.equal(plan.first_name, "Kate");
+  assert.equal(plan.last_name, "Hampton");
+});
+test("blank name → cannot add", () => {
+  assert.equal(rosterPrefillFromName("", "", "G14").canAdd, false);
+  assert.equal(rosterPrefillFromName(null).canAdd, false);
 });
 
 // --- resolveFilePlayerId (player for the "File" forms) ----------------------

@@ -274,6 +274,50 @@ def test_doubles_name_only_surfaces_both_even_when_partner_unrostered():
     assert f"Chelsea Ie{tag}" in names                    # the unrostered partner still shows
 
 
+def _solo_tournament(tag):
+    return _ok(client.post("/api/tournaments", json={
+        "name": "FN " + tag, "type": "junior",
+        "play_start_date": "2026-05-01", "play_end_date": "2026-05-03"}))
+
+
+def _roster(tid, first, last):
+    p = _ok(client.post("/api/players", json={
+        "usta_number": str(uuid.uuid4().int)[:10],
+        "first_name": first, "last_name": last, "gender": "female"}))
+    _ok(client.post(f"/api/tournaments/{tid}/players", json={
+        "player_id": p["id"], "selection_status": "selected"}))
+    return p
+
+
+def test_doubles_partner_matched_by_unique_first_name():
+    # The partner is referenced by FIRST name only ("…to pair them with Mia") —
+    # a UNIQUE roster first name resolves them as the partner (the EXTERNAL-thread
+    # shape from the real corpus).
+    tag = uuid.uuid4().hex[:6]
+    t = _solo_tournament(tag)
+    chelsea = _roster(t["id"], "Chelsea", f"Ie{tag}")
+    mia = _roster(t["id"], "Mia", f"Langone{tag}")
+    em = _email(t, f"I do not have Mia's parent confirmation yet to pair them "
+                   f"with Chelsea Ie{tag}.")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert {det["detected_player_id"], det["detected_partner_id"]} == {chelsea["id"], mia["id"]}
+    assert det["partner_match_kind"] == "firstname"
+
+
+def test_doubles_no_first_name_guess_when_ambiguous():
+    # Two roster players share the first name "Mia" → the fallback must NOT guess
+    # a partner (uniqueness required; never pick between two).
+    tag = uuid.uuid4().hex[:6]
+    t = _solo_tournament(tag)
+    chelsea = _roster(t["id"], "Chelsea", f"Ie{tag}")
+    _roster(t["id"], "Mia", f"Langone{tag}")
+    _roster(t["id"], "Mia", f"Smith{tag}")
+    em = _email(t, f"Please pair them with Chelsea Ie{tag}. Mia will confirm.")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == chelsea["id"]
+    assert det["detected_partner_id"] is None
+
+
 def test_doubles_pair_across_lines_with_labels(duo):
     """The TD's real PDF shape: each player on a line as '<name> <skip> USTA# <n>'.
     Both numbers bind to their names across the line breaks + labels, so both
