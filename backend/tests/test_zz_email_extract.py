@@ -7,6 +7,7 @@ from app.email_extract import (
     extract_avoid_day,
     extract_avoid_time,
     extract_events,
+    extract_names,
     extract_usta,
     extract_withdrawal_reason,
 )
@@ -137,3 +138,21 @@ def test_name_first_eight_digit_unlabeled_qualifies():
     from app.email_extract import usta_candidates
     assert usta_candidates("", "Kate Hampton 20188402 wants doubles") == ["20188402"]
     assert usta_candidates("", "ref 20260609 says nothing") == []
+
+
+def test_extract_names_pulls_both_partners_name_only():
+    """A doubles email that only NAMES the two players (no USTA #s) — both spans
+    surface, in order, and the glue words ('and', 'with', 'partner') are not
+    swallowed into a name."""
+    assert extract_names("Doubles request",
+                         "Maya Quintero would like to partner with Zara Hollis.") == \
+        ["Maya Quintero", "Zara Hollis"]
+    assert extract_names("", "Pairing Kate Hampton & Mia Lopez for the weekend") == \
+        ["Kate Hampton", "Mia Lopez"]
+
+
+def test_extract_names_keeps_middle_initial_and_dedupes():
+    assert extract_names("", "Maya R. Quintero and Maya R. Quintero again") == \
+        ["Maya R Quintero"]
+    # a lone capitalized first name (1 token) is not a name span
+    assert extract_names("", "just Maya here") == []

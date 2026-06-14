@@ -88,6 +88,48 @@ def test_single_name_doubles_email_has_no_partner(duo):
     assert det["detected_partner_id"] is None
 
 
+def test_doubles_partner_with_middle_initial_is_matched(duo):
+    # Middle initials break the exact-substring layers ("Maya R. Quintero" does
+    # NOT contain "Maya Quintero"); the normalized fuzzy layer still pairs both.
+    t, (p1, p2) = duo
+    em = _email(t, f"Doubles: {p1['first_name']} R. {p1['last_name']} "
+                   f"& {p2['first_name']} M. {p2['last_name']}, thanks!")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_partner_id"] == p2["id"]
+
+
+def test_doubles_partner_last_first_inversion_is_matched(duo):
+    # "Surname, First" for BOTH players, no USTA #s — order-independent fuzzy
+    # tokens resolve each side.
+    t, (p1, p2) = duo
+    em = _email(t, f"Doubles pairing — {p1['last_name']}, {p1['first_name']} "
+                   f"and {p2['last_name']}, {p2['first_name']}.")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert {det["detected_player_id"], det["detected_partner_id"]} == {p1["id"], p2["id"]}
+
+
+def test_doubles_partner_accented_and_apostrophe_names():
+    # Roster carries accents + an apostrophe; the email writes the de-accented,
+    # apostrophe-free forms (how a parent often types them). Fuzzy folds both.
+    tag = uuid.uuid4().hex[:6]
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "DPa " + tag, "type": "junior",
+        "play_start_date": "2026-10-01", "play_end_date": "2026-10-03"}))
+    ids = []
+    for first, last in (("Renée", f"O'Brien{tag}"), ("Zoë", f"Müller{tag}")):
+        p = _ok(client.post("/api/players", json={
+            "usta_number": str(uuid.uuid4().int)[:10],
+            "first_name": first, "last_name": last, "gender": "female"}))
+        _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+            "player_id": p["id"], "selection_status": "selected"}))
+        ids.append(p["id"])
+    em = _email(t, f"Doubles request: Renee OBrien{tag} would like to play "
+                   f"with Zoe Muller{tag} this weekend.")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert {det["detected_player_id"], det["detected_partner_id"]} == set(ids)
+
+
 def test_reclassifying_away_from_doubles_clears_partner(duo):
     t, (p1, p2) = duo
     em = _email(t, f"{p1['first_name']} {p1['last_name']} with "

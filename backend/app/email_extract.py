@@ -100,7 +100,52 @@ def extract_name_usta_pairs(subject: str | None, body: str | None,
     return out[:limit]
 
 
-_NAME_STOPWORDS = {"His", "Her", "Their", "The", "He", "She", "Hello", "Hi"}
+_NAME_STOPWORDS = {"His", "Her", "Their", "The", "He", "She", "Hello", "Hi",
+                   # connector / glue words that ride between two partner names
+                   # ("Kate Hampton And Mia Lopez") — trimmed so each side cleans
+                   # to a real 2-token name.
+                   "And", "Or", "With", "Amp", "Partner", "Partnering",
+                   "Please", "Thanks", "Thank", "Regards", "Best", "From"}
+
+# A plausible person-name span: 2–3 capitalized tokens, independent of any USTA
+# number — so a doubles email that merely *names* both players ("Kate Hampton
+# and Mia Lopez", "partnering with Mia Lopez") still surfaces who to match.
+# `\w` is Unicode by default for str patterns in Python 3, so accented letters
+# inside a token are kept. The negative lookahead keeps glue words (USTA, And,
+# With, …) from being swallowed as a name token mid-run.
+# Words that are capitalized in these emails but are never part of a player's
+# name — glue between two partners, or a sentence/subject lead-in. Excluded from
+# name tokens so a span starts at the real name ("Pairing Kate Hampton" → the
+# span is just "Kate Hampton").
+_NAME_GLUE = (r"(?:USTA|And|Or|With|The|Please|Thanks|Thank|Regards|Best|From|"
+              r"Partner|Partnering|Pairing|Pair|Doubles|Singles|Mixed|Request|"
+              r"Requesting|Dear|Subject|Hello|Hi|Hey|Team|Good|Morning|"
+              r"Afternoon|Evening|Re|Fwd|Fw)\b")
+_PERSON_TOKEN = r"(?:(?!" + _NAME_GLUE + r")[A-Z][\w'’.]*(?:-[A-Z][\w'’.]*)*)"
+_PERSON_NAME_RE = re.compile(_PERSON_TOKEN + r"(?:\s+" + _PERSON_TOKEN + r"){1,2}")
+
+
+def extract_names(subject: str | None, body: str | None, limit: int = 8) -> list[str]:
+    """Ordered person-name spans (2–3 capitalized tokens) parsed from the text,
+    regardless of any USTA #. This is the name-only signal the doubles detector
+    falls back to when a partner is named but carries no number — e.g.
+    "Maya Quintero would like to partner with Zara Hollis". Cleaned + de-duped
+    (case-insensitive), first mention wins."""
+    text = f"{subject or ''}\n{body or ''}"
+    out: list[str] = []
+    seen: set[str] = set()
+    for m in _PERSON_NAME_RE.finditer(text):
+        cleaned = _clean_name(m.group(0))
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(cleaned)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _clean_name(raw: str) -> str | None:

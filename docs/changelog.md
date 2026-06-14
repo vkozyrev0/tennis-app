@@ -35,6 +35,18 @@ returns `last_nudged_at`; the Needs-attention list shows "nudged today" /
   of the seven Player-list tabs plus the Inbox tab and L1 button — hidden at
   zero, refreshed on tournament switch / group entry / counted-tab open.
 
+### Doubles detection — find BOTH players with more methods
+A doubles email names two players, but the partner often went unmatched because
+player matching was exact-substring only. Added a normalized **fuzzy name**
+fallback layer (L8) to the roster detector + a name-only span extractor
+(`extract_names`), so detection now also resolves: `Surname, First` inversions,
+a middle name/initial (`Maya R. Quintero`), accents and apostrophes
+(`Renée O'Brien` ↔ `Renee OBrien`), multi-word surnames, and partners named
+without a USTA # (`…partner with Zara Hollis`). The fuzzy layer fires only after
+the precise layers (L1–L7) come up empty and requires a *unique* roster hit, so
+existing high-precision matches are unchanged. Flows through the PDF-import
+auto-detect path too. +5 tests.
+
 ### Day-of mode — the on-site venue view (full first cut)
 A new **Day-of** L1 group (promoted near the top — it's where the TD lives once
 play starts) with a tablet-friendly venue view for one calendar day. `GET

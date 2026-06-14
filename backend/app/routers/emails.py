@@ -1,5 +1,6 @@
 """Part B review inbox: inbound parent/player email, filed by a human (D5/§5.1)."""
 import re
+import unicodedata
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -12,6 +13,7 @@ from ..db import db_dep
 # import them from this module).
 from ..email_extract import (
     extract_name_usta_pairs,
+    extract_names,    # name-only spans (the doubles partner fallback signal)
     usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
     extract_avoid_day,
@@ -432,6 +434,60 @@ _USTA_SUBJECT_RE = re.compile(
     r"withdrawal\s+request\s*[:\-]\s*([A-Za-z][\w'\-]+)\s*,\s*(boys|girls)\b[^\d]*?(\d+)", re.I)
 
 
+def _norm_name(s: str) -> str:
+    """Fold a name to a comparable form: strip accents/diacritics, drop
+    apostrophes ("O'Brien" == "OBrien"), lowercase, and reduce any other
+    punctuation/whitespace run to single spaces. 'Renée O'Brien' and
+    'Renee OBrien' both fold to 'renee obrien'."""
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.lower().replace("'", "").replace("’", "")
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+def _fuzzy_name_match(roster: list, name: str, exclude_ids: frozenset = frozenset()):
+    """Resolve a parsed name STRING to a UNIQUE roster player by normalized,
+    order-independent token matching — so 'Quintero, Maya', 'Maya R. Quintero',
+    'Renée O'Brien' (vs 'Renee OBrien'), and a multi-word surname ('Van Der
+    Berg') all land on the same player. Two passes, each requiring a single hit
+    (ambiguous → None, never guess):
+
+      1. every token of the roster first AND last name appears among the parsed
+         tokens (subset match — tolerant of a middle name/initial in between)
+      2. the full last name is present and the first *initial* matches (handles
+         'K. Hampton' vs a roster 'Katherine Hampton')
+    """
+    toks = set(_norm_name(name).split())
+    if len(toks) < 2:
+        return None
+
+    def _candidates(initial_only: bool):
+        out = []
+        for r in roster:
+            if r["id"] in exclude_ids:
+                continue
+            ftoks = set(_norm_name(r["first_name"] or "").split())
+            ltoks = set(_norm_name(r["last_name"] or "").split())
+            if not ftoks or not ltoks or not ltoks <= toks:
+                continue  # the whole surname must be present
+            if ftoks <= toks:
+                out.append(r)
+            elif initial_only:
+                fi = "".join(sorted(ftoks))[:1]  # a stable first char of the given name
+                if fi and any(t[:1] == fi for t in (toks - ltoks)):
+                    out.append(r)
+        return out
+
+    exact = _candidates(initial_only=False)
+    if len(exact) == 1:
+        return exact[0]
+    if not exact:
+        loose = _candidates(initial_only=True)
+        if len(loose) == 1:
+            return loose[0]
+    return None
+
+
 def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
                        from_address: str = "", exclude_ids: frozenset = frozenset()) -> dict:
     """Best-effort "which player is this email about" detector.
@@ -532,7 +588,26 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
     if len(text_last) == 1:
         return ret(text_last[0], "lastname")
 
-    # L8 — OFF-ROSTER USTA match: the email's USTA # belongs to a player who
+    # L8 — fuzzy full-name match (normalized, order-independent) over every
+    # person-name span the text mentions. Catches what the exact-substring
+    # layers above miss: "Quintero, Maya" inversion, a middle name/initial
+    # ("Maya R. Quintero"), accents ("Renée O'Brien"), or odd spacing — the
+    # common reasons a doubles PARTNER goes unmatched. Names parsed alongside a
+    # USTA # (extract_name_usta_pairs) are included too. Order of appearance, so
+    # the requester (named first) still wins the primary slot; unique hit only.
+    seen_norm = set()
+    name_cands = list(extract_names(subject, body))
+    name_cands += [p["name"] for p in extract_name_usta_pairs(subject, body)]
+    for nm in name_cands:
+        key = _norm_name(nm)
+        if key in seen_norm:
+            continue
+        seen_norm.add(key)
+        r = _fuzzy_name_match(roster, nm)
+        if r:
+            return ret(r, "fuzzy_name")
+
+    # L9 — OFF-ROSTER USTA match: the email's USTA # belongs to a player who
     # exists in the system but isn't entered in THIS tournament (so L1 missed
     # them). USTA #s are unique → high confidence; we never off-roster-match on a
     # bare name (too many collisions system-wide). The distinct `usta_offroster`
