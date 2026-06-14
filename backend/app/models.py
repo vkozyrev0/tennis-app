@@ -77,6 +77,7 @@ from ._models_inbox import (  # noqa: F401
     DivFlexCreate,
     DivFlexOut,
     DivFlexUpdate,
+    DoublesPairCreate,
     DoublesPairUpdate,
     DoublesRequestCreate,
     DoublesRequestUpdate,

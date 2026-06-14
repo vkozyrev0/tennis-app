@@ -7,7 +7,12 @@ the next random request pairs with the longest-waiting one; binding once made.
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..models import DoublesPairUpdate, DoublesRequestCreate, DoublesRequestUpdate
+from ..models import (
+    DoublesPairCreate,
+    DoublesPairUpdate,
+    DoublesRequestCreate,
+    DoublesRequestUpdate,
+)
 from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["doubles"])
@@ -126,6 +131,39 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
         cur.execute(_REQ + " WHERE r.id = %s", (req_id,))
         request = cur.fetchone()
     return {"request": request, "paired": paired_id is not None}
+
+
+@router.post("/api/tournaments/{tournament_id}/doubles-pairs", status_code=201)
+def create_doubles_pair(tournament_id: int, body: DoublesPairCreate, conn=Depends(db_dep)):
+    """File a CONFIRMED pair in one step — the inbox "File pair" action. The TD
+    has both players from a doubles email, so record the verified mutual pair
+    directly (no reciprocal-request wait). Idempotent: re-filing the same two
+    players returns the existing pair instead of duplicating it. Both must be on
+    this tournament's roster (enforced by _make_pair)."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        ids = {}
+        for usta in (body.usta_number.strip(), body.partner_usta.strip()):
+            cur.execute("SELECT id FROM player WHERE usta_number = %s", (usta,))
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=400, detail=f"no player with USTA # {usta}")
+            ids[usta] = row["id"]
+        p1, p2 = ids[body.usta_number.strip()], ids[body.partner_usta.strip()]
+        # Idempotent: a pair of these two (either order) already on file → reuse.
+        cur.execute(
+            "SELECT id FROM doubles_pair WHERE tournament_id = %s "
+            "AND ((player1_id = %s AND player2_id = %s) OR (player1_id = %s AND player2_id = %s))",
+            (tournament_id, p1, p2, p2, p1),
+        )
+        existing = cur.fetchone()
+        pair_id = existing["id"] if existing else _make_pair(
+            cur, tournament_id, body.age_division, p1, p2, "mutual")
+        mark_email_filed(cur, body.source_email_id, "doubles")
+        cur.execute(_PAIR + " WHERE d.id = %s", (pair_id,))
+        return {"pair": cur.fetchone(), "already_existed": existing is not None}
 
 
 @router.put("/api/doubles-requests/{req_id}")

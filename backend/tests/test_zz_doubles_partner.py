@@ -318,6 +318,50 @@ def test_doubles_no_first_name_guess_when_ambiguous():
     assert det["detected_partner_id"] is None
 
 
+def test_surname_signature_does_not_false_match():
+    # A signature where the roster SURNAME is actually a different person's first
+    # name + middle initial ("Alexander R. Jordan") must NOT match the player
+    # whose surname is 'Alexander' via the last-resort L7 surname layer.
+    tag = uuid.uuid4().hex[:6]
+    t = _solo_tournament(tag)
+    dargan = _roster(t["id"], "Dargan", f"Alexander{tag}")
+    em = _email(t, f"Thanks!\nSara Hudgens\nPartnership with Sandy Jordan\n"
+                   f"Alexander{tag} R. Jordan\nRegional Vice President", classification="doubles")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] is None  # signature first-name+initial, not the player
+
+    # control: the SAME surname used normally ("<First> Alexander") still matches
+    em2 = _email(t, f"Please withdraw Dargan Alexander{tag} from doubles.", classification="doubles")
+    det2 = _ok(client.post(f"/api/emails/{em2['id']}/detect-player"), 200)
+    assert det2["detected_player_id"] == dargan["id"]
+
+
+def test_file_confirmed_pair_one_click():
+    # The inbox "File pair" action: both players known → record the verified
+    # pair directly, idempotently.
+    tag = uuid.uuid4().hex[:6]
+    t = _solo_tournament(tag)
+    a = _roster(t["id"], "Mia", f"Lang{tag}")
+    b = _roster(t["id"], "Chelsea", f"Ie{tag}")
+    r = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-pairs", json={
+        "usta_number": a["usta_number"], "partner_usta": b["usta_number"],
+        "age_division": "G14"}), 201)
+    assert r["already_existed"] is False
+    assert {r["pair"]["player1_id"], r["pair"]["player2_id"]} == {a["id"], b["id"]}
+    # re-filing (even swapped) reuses the pair — no duplicate
+    r2 = _ok(client.post(f"/api/tournaments/{t['id']}/doubles-pairs", json={
+        "usta_number": b["usta_number"], "partner_usta": a["usta_number"]}), 201)
+    assert r2["already_existed"] is True
+    assert len(client.get(f"/api/tournaments/{t['id']}/doubles").json()["pairs"]) == 1
+    # guards
+    assert client.post(f"/api/tournaments/{t['id']}/doubles-pairs", json={
+        "usta_number": a["usta_number"], "partner_usta": "9999999999"}).status_code == 400
+    assert client.post(f"/api/tournaments/{t['id']}/doubles-pairs", json={
+        "usta_number": a["usta_number"], "partner_usta": a["usta_number"]}).status_code == 422
+    assert client.post("/api/tournaments/99999999/doubles-pairs", json={
+        "usta_number": a["usta_number"], "partner_usta": b["usta_number"]}).status_code == 404
+
+
 def test_doubles_pair_across_lines_with_labels(duo):
     """The TD's real PDF shape: each player on a line as '<name> <skip> USTA# <n>'.
     Both numbers bind to their names across the line breaks + labels, so both

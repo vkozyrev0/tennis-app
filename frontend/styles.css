@@ -683,6 +683,8 @@ kbd {
   transition: background 0.12s;
 }
 .btn-icon:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* Compact labeled variant — the inbox "＋ both" (add a whole doubles pair). */
+.btn-icon.addboth { min-width: auto; font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.4rem; white-space: nowrap; }
 .btn-icon.danger { color: var(--bad); }
 .btn-icon.danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

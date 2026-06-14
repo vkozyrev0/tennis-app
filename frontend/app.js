@@ -1976,6 +1976,10 @@ function _setMultiSelect(sel, csv) {
 // this holds that email's id so a successful save can re-run detection and link
 // the email to the just-added player. Cleared on any other form open.
 let _rosterFromEmailId = null;
+// "Add both" (a name-only doubles pair) opens the add-form once per player; the
+// second player's prefill waits here and is opened after the first SAVE. Cleared
+// if the TD cancels (so a half-finished pair doesn't pop the second form).
+let _rosterAddQueue = [];
 function rosterShowNew() {
   rosterEditId = null; _rosterFromEmailId = null; rosterForm.reset();
   rosterTitle.textContent = "New roster entry";
@@ -2080,10 +2084,15 @@ onSubmit(rosterForm, async () => {
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();
     rosterCloseModal();
+    // "Add both": after the first player saves, open the form for the second.
+    if (_rosterAddQueue.length) {
+      const nxt = _rosterAddQueue.shift();
+      setTimeout(() => _inboxAddToRoster(nxt.m, nxt.plan), 60);
+    }
   } catch (err) { setMsg("roster-msg", err.message, false); markInvalid(rosterForm, err.message); }
 });
 rosterForm.querySelector(".cancel").textContent = "Cancel";
-rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
+rosterForm.querySelector(".cancel").addEventListener("click", () => { _rosterAddQueue = []; rosterCloseModal(); });
 document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
 document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
@@ -4153,6 +4162,15 @@ function _inboxAddToRoster(m, plan) {
     ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
     : `Pre-filled ${who || "from the email"} — ${plan.usta_number ? "confirm gender/division" : "add the USTA #, gender/division"}, then Save`, true);
 }
+// "Add both" for a name-only doubles pair: open the add-form for the first
+// player now, queue the second so it opens after the first SAVE. Each player
+// still gets a confirm step (the TD supplies the USTA # the email lacked).
+function _inboxAddBothToRoster(m, plan0, plan1) {
+  _rosterAddQueue = [{ m, plan: plan1 }];
+  _inboxAddToRoster(m, plan0);
+  const who1 = [plan1.first_name, plan1.last_name].filter(Boolean).join(" ");
+  toast(`Adding both — confirm this player, then ${who1 || "the partner"} opens next`, true);
+}
 // Run player detection for one email and fold the result back into the row.
 async function _inboxDetectInto(m, row) {
   try {
@@ -4197,11 +4215,21 @@ function _inboxNameCell(cell, slotIdx) {
     const nameSpan = document.createElement("span");
     nameSpan.innerHTML = hstr`${s.name}${raw(_MAIL_MARK)}`;
     wrap.append(nameSpan, editBtn());
-    // Pre-fill the roster add-form from THIS cell's name (+ USTA # if the email
-    // gave one) — so both halves of a name-only doubles pair ("Mia Langone and
-    // Chelsea Ie") each get a ＋, not just a player carrying a number.
+    // Pre-fill the roster add-form from THIS cell's name (+ USTA # if present).
     const plan = rosterPrefillFromName(s.name, s.usta, m.detected_division);
-    if (plan.canAdd) {
+    // When BOTH players of a name-only pair are unrostered, collapse the two
+    // per-cell ＋ into a single "Add both" on the primary cell (it opens each
+    // player's form in turn); otherwise just this cell's ＋.
+    const all = _inboxSlots(m);
+    const other = all[slotIdx === 0 ? 1 : 0];
+    const otherPlan = other && other.name && !other.matched
+      ? rosterPrefillFromName(other.name, other.usta, m.detected_division) : { canAdd: false };
+    if (plan.canAdd && otherPlan.canAdd) {
+      if (slotIdx === 0) {
+        wrap.append(_iconBtn("＋ both", "Add BOTH players to the roster (pre-filled; confirm each in turn)",
+          () => _inboxAddBothToRoster(m, plan, otherPlan), "addboth"));
+      }   // slot 1: covered by the "＋both" on the primary cell — no button here
+    } else if (plan.canAdd) {
       wrap.append(_iconBtn("＋", "Add this player to the roster (pre-filled from the email)",
         () => _inboxAddToRoster(m, plan)));
     }
@@ -4452,8 +4480,28 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const _rosterPlan = rosterPrefillFromEmail(m);
       const offRoster = _rosterPlan.offRoster;
       const canAddToRoster = _rosterPlan.canAdd;
+      // One-click "File pair": both doubles players matched (with USTA #s) →
+      // record the confirmed pair directly, no manual partner-USTA entry.
+      const canFilePair = m.classification === "doubles" && m.detected_player_id
+        && m.detected_partner_id && m.detected_usta && m.detected_partner_usta;
+      const doFilePair = async () => {
+        try {
+          if (m.tournament_id && (!active || m.tournament_id !== active.id)) setActive(String(m.tournament_id));
+          const r = await api(`/tournaments/${m.tournament_id || active.id}/doubles-pairs`, {
+            method: "POST",
+            body: JSON.stringify({ usta_number: m.detected_usta, partner_usta: m.detected_partner_usta,
+              age_division: m.detected_division || null, source_email_id: m.id }),
+          });
+          toast(r.already_existed
+            ? `${m.detected_player_name} + ${m.detected_partner_name} are already paired`
+            : `Filed pair: ${m.detected_player_name} + ${m.detected_partner_name}`, true);
+          loadInbox();
+        } catch (e) { toast(e.message, false); }
+      };
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
+        ...(canFilePair ? [{ label: "File pair (both players)",
+          title: "Record the confirmed doubles pair for both detected players", onClick: doFilePair }] : []),
         { label: fileable ? `File as ${FILE_TARGETS[m.classification].label}` : "File (set a classification first)",
           title: fileable ? "" : "Pick a fileable classification first", onClick: () => { if (fileable) doFile(); } },
         ...(canAddToRoster ? [{ label: offRoster ? "Add to roster (player exists)" : "Add player to roster",

@@ -54,6 +54,25 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 5 (inbox doubles workflow): four more from the corpus pass.
+- **L7 surname guard** — a signature where a roster surname is actually someone
+  else's first name + middle initial ("Alexander R. Jordan") no longer
+  false-matches the player whose surname is 'Alexander'. Narrow: an occurrence
+  followed by "<Initial>." doesn't count; "<First> Alexander" / "Smith
+  Withdrawal" still do.
+- **CC/sender:** confirmed already covered — CC lines ("C: Sean Pfifer") live in
+  the body, which detection already scans; the From *display name* is the parent
+  (not a player), so it's deliberately NOT used as a player signal.
+- **One-click "File pair"** — `POST …/doubles-pairs` records a CONFIRMED mutual
+  pair from two rostered players in one step (idempotent — re-filing reuses the
+  pair), and an inbox row action "File pair (both players)" calls it when both
+  are detected with USTA #s. No more manual partner-USTA entry.
+- **Single "＋ both"** — when both players of a name-only pair are unrostered,
+  the two per-cell ＋ collapse into one "＋ both" on the primary cell that opens
+  each player's pre-filled add-form in turn (`_rosterAddQueue`).
++8 tests (surname guard, file-pair endpoint incl. idempotency/guards, add-both).
+Backend suite 488 → 489 green.
+
 Follow-up 4 (corpus-driven polish, full pipeline re-validated): a regression
 **smoke test** now parses the fixture PDF and pins the parser→classifier→pair
 counts (30 emails, 11 withdrawal / 19 doubles, ≥13 with an extractable pair).

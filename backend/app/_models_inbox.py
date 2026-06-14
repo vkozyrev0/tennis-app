@@ -237,6 +237,24 @@ class DoublesPairUpdate(BaseModel):
     age_division: Optional[str] = None
 
 
+class DoublesPairCreate(BaseModel):
+    """File a CONFIRMED doubles pair in one step — the TD has both players from a
+    doubles email (detected + verified), so skip the request/reciprocal dance and
+    record the verified pair directly."""
+    usta_number: str
+    partner_usta: str
+    age_division: Optional[str] = None
+    source_email_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def _distinct(self):
+        if (self.usta_number or "").strip() == (self.partner_usta or "").strip():
+            raise ValueError("partner_usta must differ from the requester's own USTA #")
+        if not (self.usta_number or "").strip() or not (self.partner_usta or "").strip():
+            raise ValueError("both usta_number and partner_usta are required")
+        return self
+
+
 # ---------- Pairing avoidance ----------
 class PairingMemberIn(BaseModel):
     usta_number: str

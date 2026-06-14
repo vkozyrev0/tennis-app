@@ -590,16 +590,14 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             return ret(cands[0], "usta_subject")
 
     # L6 — unique surname in the SUBJECT.
-    subj_last = [r for r in roster if r["last_name"]
-                 and re.search(rf"\b{re.escape(r['last_name'])}\b", subject, re.IGNORECASE)]
+    subj_last = [r for r in roster if r["last_name"] and _surname_present(r["last_name"], subject)]
     if len(subj_last) == 1:
         return ret(subj_last[0], "lastname_subject")
 
     # L7 — unique surname anywhere (subject + body + sender). Last resort; only
     # fires when exactly one roster surname appears, so club/parent senders that
     # share a player's surname resolve to that lone player.
-    text_last = [r for r in roster if r["last_name"]
-                 and re.search(rf"\b{re.escape(r['last_name'])}\b", text, re.IGNORECASE)]
+    text_last = [r for r in roster if r["last_name"] and _surname_present(r["last_name"], text)]
     if len(text_last) == 1:
         return ret(text_last[0], "lastname")
 
@@ -646,6 +644,21 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
 
     return {"detected_player_id": None, "detected_usta": None,
             "detected_player_name": None, "match_kind": None}
+
+
+def _surname_present(surname: str, text: str) -> bool:
+    """Whether `surname` appears in `text` as a SURNAME — used by the last-resort
+    unique-surname layers (L6/L7). Rejects the one false-positive shape the real
+    corpus produced: a signature where the roster surname is actually someone
+    else's FIRST name followed by a middle initial — "Alexander R. Jordan" must
+    not match the roster player whose surname is 'Alexander'. So an occurrence
+    immediately followed by a middle initial ("<word> R.") doesn't count; the
+    surname qualifies only if it appears at least once NOT in that position.
+    Plain "Smith Withdrawal" or "<First> Alexander" still qualify."""
+    for m in re.finditer(rf"\b{re.escape(surname)}\b", text, re.IGNORECASE):
+        if not re.match(r"\s+[A-Z]\.", text[m.end():m.end() + 6]):
+            return True
+    return False
 
 
 def _unique_firstname_match(cur, tournament_id, subject, body, exclude_ids):
