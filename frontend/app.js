@@ -1975,8 +1975,8 @@ document.getElementById("roster-mode-new").addEventListener("click", () => roste
 });
 // Prev/Next record navigation (parity with the Setup master/detail forms).
 const rosterNav = document.createElement("div"); rosterNav.className = "detail-nav";
-const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn"; rosterPrev.textContent = "‹ Prev";
-const rosterNext = document.createElement("button"); rosterNext.type = "button"; rosterNext.className = "nav-btn"; rosterNext.textContent = "Next ›";
+const rosterPrev = document.createElement("button"); rosterPrev.type = "button"; rosterPrev.className = "nav-btn nav-btn--icon"; rosterPrev.textContent = "‹"; rosterPrev.title = "Previous record"; rosterPrev.setAttribute("aria-label", "Previous record");
+const rosterNext = document.createElement("button"); rosterNext.type = "button"; rosterNext.className = "nav-btn nav-btn--icon"; rosterNext.textContent = "›"; rosterNext.title = "Next record"; rosterNext.setAttribute("aria-label", "Next record");
 const rosterPos = document.createElement("span"); rosterPos.className = "nav-pos";
 rosterNav.append(rosterPrev, rosterPos, rosterNext);
 rosterTitle.parentNode.insertBefore(rosterNav, rosterTitle);

@@ -414,16 +414,23 @@ input.filter[type="search"] {
 
 .detail-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
 
-/* prev/next record navigation on the detail form */
+/* prev/next record navigation on the detail form. Prev/next + position sit at
+   the LEFT; padding-right reserves the top-right corner for the close (×) so the
+   Next button can never collide with it. */
 .detail-nav {
-  display: flex; align-items: center; gap: 0.5rem;
-  margin-bottom: 0.5rem; padding-bottom: 0.4rem;
+  display: flex; align-items: center; gap: 0.4rem;
+  margin-bottom: 0.5rem; padding-bottom: 0.4rem; padding-right: 2rem;
   border-bottom: 1px solid var(--border);
 }
 .nav-btn {
   appearance: none; border: 1px solid var(--border); background: var(--bg);
   border-radius: 5px; padding: 0.2rem 0.55rem; font: inherit; font-size: 0.78rem;
   cursor: pointer; color: var(--ink);
+}
+/* Icon-only chevron variant (replaces the old "‹ Prev" / "Next ›" text). */
+.nav-btn--icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.9rem; height: 1.7rem; padding: 0; font-size: 1.2rem; line-height: 1;
 }
 .nav-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); }
 .nav-btn:disabled { opacity: 0.4; cursor: default; }

@@ -172,9 +172,11 @@ export function createGridFactories(ctx) {
     const nav = document.createElement("div");
     nav.className = "detail-nav";
     const prevBtn = document.createElement("button");
-    prevBtn.type = "button"; prevBtn.className = "nav-btn"; prevBtn.textContent = "‹ Prev"; prevBtn.title = "Previous record";
+    prevBtn.type = "button"; prevBtn.className = "nav-btn nav-btn--icon"; prevBtn.textContent = "‹";
+    prevBtn.title = "Previous record"; prevBtn.setAttribute("aria-label", "Previous record");
     const nextBtn = document.createElement("button");
-    nextBtn.type = "button"; nextBtn.className = "nav-btn"; nextBtn.textContent = "Next ›"; nextBtn.title = "Next record";
+    nextBtn.type = "button"; nextBtn.className = "nav-btn nav-btn--icon"; nextBtn.textContent = "›";
+    nextBtn.title = "Next record"; nextBtn.setAttribute("aria-label", "Next record");
     const navPos = document.createElement("span");
     navPos.className = "nav-pos";
     nav.append(prevBtn, navPos, nextBtn);
