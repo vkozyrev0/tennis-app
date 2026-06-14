@@ -598,6 +598,20 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
      correct hint; alt: "" is the broadly-supported equivalent. */
   speak: never; alt: "";
 }
+/* Responsive-collapse (mobile): the ▸ toggle column + the per-row expand panel
+   that holds columns folded away on narrow screens. Themed for light + dark. */
+.tabulator .tabulator-responsive-collapse-toggle {
+  width: 1.05rem; height: 1.05rem; border-radius: 4px; background: var(--btn-bg);
+  color: var(--ink); display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; cursor: pointer; border: 1px solid var(--line);
+}
+.tabulator .tabulator-responsive-collapse {
+  padding: 0.45rem 0.6rem; border-top: 1px solid var(--border); background: var(--zebra);
+}
+.tabulator .tabulator-responsive-collapse table { width: 100%; }
+.tabulator .tabulator-responsive-collapse table tr td { padding: 0.12rem 0.4rem; font-size: 0.82rem; vertical-align: top; }
+.tabulator .tabulator-responsive-collapse table tr td:first-child { color: var(--muted); font-weight: 600; white-space: nowrap; width: 1%; }
+
 /* Empty state for hand-built lists (assignments) — matches the Tabulator
    placeholder so all empty states across the app look the same (audit P42). */
 .grid-empty {

@@ -206,6 +206,10 @@ export function createGridFactories(ctx) {
       };
       if (c.hozAlign) col.hozAlign = c.hozAlign;
       if (c.width) col.width = c.width;
+      if (c.minWidth) col.minWidth = c.minWidth;
+      // responsive priority (higher = collapses into the ▸ row sooner on narrow
+      // screens). Omit → Tabulator's default 1. Set 0 to pin a column always-visible.
+      if (c.responsive != null) col.responsive = c.responsive;
       // Narrow, non-growing ID column so fitColumns distributes the extra width
       // to the *meaningful* (name / city / …) columns.
       if (c.key === "id") { col.width = 64; col.widthGrow = 0; }
@@ -231,13 +235,22 @@ export function createGridFactories(ctx) {
       }
       return col;
     });
+    // Explicit responsive-collapse toggle (▸). Tabulator doesn't auto-add it
+    // under fitColumns + renderVertical:basic, so without this the collapsed
+    // columns would be unreachable on a phone. The formatter renders the ▸ only
+    // when a row actually has collapsed cells, so it's empty on desktop.
+    columns.unshift({
+      formatter: "responsiveCollapse", width: 32, minWidth: 32, widthGrow: 0, hozAlign: "center",
+      resizable: false, headerSort: false, responsive: 0, cssClass: "rcollapse-col",
+    });
     columns.push({
       // a11y 6th-pass: column widened so two 44×44 .btn-icon buttons (+ optional
       // rowAction button) fit without clipping. The old 72 px was narrower than
       // 2× 44 px → edit button overflowed left and got clipped by the previous
       // cell's right edge.
       title: "", field: "_act", headerSort: false, widthGrow: 0, width: cfg.rowAction ? 160 : 84,
-      cssClass: "grid-actions-cell",
+      cssClass: "grid-actions-cell", responsive: 0,  // edit/delete never collapse
+
       formatter: (cell) => {
         const item = cell.getData();
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
@@ -255,6 +268,10 @@ export function createGridFactories(ctx) {
     const table = new Tabulator(mount, {
       index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
       placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
+      // On a narrow viewport, columns that don't fit fold into a tap-to-expand ▸
+      // row instead of forcing horizontal scroll (mobile support). Desktop shows
+      // them all. Priorities come from each column's `responsive` (above).
+      responsiveLayout: "collapse", responsiveLayoutCollapseStartOpen: false,
       columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
       editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
       renderVertical: "basic",  // small lists; avoids the virtual-render resize loop

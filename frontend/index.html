@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=74" />
+  <link rel="stylesheet" href="/styles.css?v=75" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -289,7 +289,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" aria-label="Filter officials" /><button type="button" class="new-btn">+ New</button></div>
-          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table></div>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th>Phone</th><th>Email</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -331,7 +331,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" aria-label="Filter players" /><button type="button" class="new-btn">+ New</button></div>
-          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th>Gender</th><th></th></tr></thead><tbody></tbody></table></div>
+          <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th>Gender</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
@@ -1409,6 +1409,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=184"></script>
+  <script type="module" src="/app.js?v=188"></script>
 </body>
 </html>

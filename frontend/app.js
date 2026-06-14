@@ -6792,7 +6792,14 @@ document.getElementById("cert-add-btn").addEventListener("click", async () => {
 
 const officialsCrud = wireEntity({
   path: "/officials", singular: "official", panelId: "panel-officials", formId: "official-form", msgId: "official-msg",
-  columns: [{ key: "id" }, { key: "name", fmt: officialLabel }, { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", ") }],
+  columns: [
+    { key: "id", responsive: 10 },
+    { key: "name", fmt: officialLabel, responsive: 0 },  // identity — never collapse
+    { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", "), responsive: 4 },
+    { key: "phone", responsive: 3 },
+    { key: "email", responsive: 2 },
+    { key: "dietary_restrictions", responsive: 6 },
+  ],
   exportCols: [
     { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
     { header: "street", key: "street" }, { header: "city", key: "city" },
@@ -6841,11 +6848,12 @@ const playersCrud = wireEntity({
   path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
   optimisticConcurrency: true,  // audit M19/M8: send X-If-Updated-At on PUT
   columns: [
-    { key: "id" },
-    { key: "usta_number", edit: { editor: "input" } },
-    { key: "name", fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") },
-    { key: "gender", fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "—",
+    { key: "id", responsive: 10 },
+    { key: "usta_number", responsive: 5, edit: { editor: "input" } },
+    { key: "name", responsive: 0, fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") },
+    { key: "gender", responsive: 3, fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "—",
       edit: { editor: "list", params: { values: [{ label: "Male", value: "male" }, { label: "Female", value: "female" }] } } },
+    { key: "loc", responsive: 4, fmt: (p) => [p.city, p.state].filter(Boolean).join(", ") },
   ],
   exportCols: [
     { header: "usta_number", key: "usta_number" },
