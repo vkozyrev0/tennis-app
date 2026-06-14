@@ -151,6 +151,23 @@ def test_extract_names_pulls_both_partners_name_only():
         ["Kate Hampton", "Mia Lopez"]
 
 
+def test_name_usta_pairs_permissive_separators_both_directions():
+    """The doubles fix: a name and its USTA # bind across whatever 'skip' glue a
+    PDF/roster puts between them — double dashes + label, parens, a line break,
+    em-dash + colon — in EITHER order, and both players come back in order."""
+    from app.email_extract import extract_name_usta_pairs as P, usta_candidates as C
+    samples = [
+        "Kate Hampton -- USTA#:  2018840232 / Mia Lopez | 2018389707",
+        "Doubles: 2018840232 Kate Hampton with 2018389707 Mia Lopez",
+        "Player 1: Kate Hampton (2018840232)\nPlayer 2: Mia Lopez (2018389707)",
+        "Kate Hampton\n2018840232\nMia Lopez\n2018389707",
+    ]
+    for t in samples:
+        assert P("", t) == [{"name": "Kate Hampton", "usta": "2018840232"},
+                            {"name": "Mia Lopez", "usta": "2018389707"}], t
+        assert C("", t) == ["2018840232", "2018389707"], t
+
+
 def test_extract_names_keeps_middle_initial_and_dedupes():
     assert extract_names("", "Maya R. Quintero and Maya R. Quintero again") == \
         ["Maya R Quintero"]

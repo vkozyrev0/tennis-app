@@ -47,6 +47,13 @@ the precise layers (L1–L7) come up empty and requires a *unique* roster hit, s
 existing high-precision matches are unchanged. Flows through the PDF-import
 auto-detect path too. +5 tests.
 
+Follow-up: the name↔USTA-# adjacency now binds across whatever "skip" glue a PDF
+puts between them — multiple symbols, a label, parentheses, **a line break**, no
+space — in **either** order (`<name><skip><number>` / `<number><skip><name>`),
+so both players' numbers are found when the old narrow bridge (single separator
++ required space) missed the second. Letters never ride in the gap, so a number
+can't bind to a name across other words. +3 tests.
+
 ### Day-of mode — the on-site venue view (full first cut)
 A new **Day-of** L1 group (promoted near the top — it's where the TD lives once
 play starts) with a tablet-friendly venue view for one calendar day. `GET

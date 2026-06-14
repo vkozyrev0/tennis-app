@@ -8,27 +8,29 @@ The DB-coupled player DETECTOR (_detect_player_for) stays in the router.
 import re
 
 _USTA_RE = re.compile(r"\b(\d{9,11})\b")
-# Real-world structure (per the TD): the USTA # sometimes comes right BEFORE
-# the player's name — "21043871 Ethan Carter" — in the subject or body. A digit
-# run immediately followed by a capitalized First Last is a high-confidence
-# USTA # even when unlabeled and only 8 digits.
-_USTA_NAME_RE = re.compile(
-    r"\b(\d{8,11})\b\s*[-–:,]?\s+([A-Z][\w'\-]+\s+[A-Z][\w'\-]+)")
-# …and at least as often AFTER it (every doubles email in the real corpus):
-#   "Alexandra Dimitrov (USTA 2018522196)"   "Kai Hosch (2019209285)"
-#   "* Kate Hampton USTA# 2018840232"        "Ava Wright (USTA #2018460819)"
-# Name = 2–3 capitalized tokens (quoted nicknames allowed), then a short
-# bridge (open paren / comma / possessive / USTA label), then the digits.
-# (?!USTA\b) keeps the label itself from being eaten as a name token; hyphens
-# only join letter groups so a dangling "Hello-" doesn't qualify.
+# A name token: 2–3 of these make a name. (?!USTA\b) keeps the label itself from
+# being eaten as a name token; hyphens only join letter groups so a dangling
+# "Hello-" doesn't qualify. `\w` is Unicode by default → accented letters keep.
 _NAME_TOKEN = (r"(?:(?!USTA\b)[A-Z][\w'’.]*(?:-[A-Z][\w'’.]*)*"
                r'|["“][A-Z]' + r"[\w'’.]*" + r'["”])')
+_NAME_GRP = r"(" + _NAME_TOKEN + r"(?:\s+" + _NAME_TOKEN + r"){1,2})"
+# The "symbols to skip" between a name and its USTA # — whitespace (incl. a line
+# break), and the punctuation a roster/PDF puts between fields: dashes, colons,
+# semicolons, commas, dots, #, *, |, /, underscores, parentheses, brackets. NO
+# letters (beyond the optional USTA label below) ride in the gap, so a number
+# never binds to a name on the far side of other words. Bounded length → linear,
+# no pathological backtracking. This is the heart of the doubles fix: real PDFs
+# separate name and number with all sorts of glue ("Kate Hampton -- USTA#:  …",
+# "Kate Hampton\n2018840232", "(2018840232) Kate Hampton").
+_SKIP = r"[ \t\-–—_:;,.#*|/()\[\]\r\n]{0,18}"
+_USTA_LBL = (r"(?i:usta\s*(?:member(?:ship)?\s*)?(?:#|no\.?|number|id)?\s*"
+             r"(?:is\s*)?[:#]?\s*)?")
+# <number> <skip/label> <name>  — "21043871 Ethan Carter", "(2018840232) Kai Hosch"
+_USTA_NAME_RE = re.compile(r"\b(\d{8,11})\b" + _SKIP + _USTA_LBL + _NAME_GRP)
+# <name> <skip/label> <number>  — "Kate Hampton USTA# 2018840232",
+# "Alexandra Dimitrov (USTA 2018522196)", "Ava Wright — 2018460819"
 _NAME_USTA_AFTER_RE = re.compile(
-    r"(" + _NAME_TOKEN + r"(?:\s+" + _NAME_TOKEN + r"){1,2})"      # the name
-    r"(?:'s|’s)?[\s,*\-–—:]{0,3}"                                  # bridge
-    # the label is case-insensitive (scoped) — name tokens must stay [A-Z]
-    r"\(?\s*(?i:usta\s*(?:member(?:ship)?\s*)?(?:#|no\.?|number|id)?\s*(?:is\s*)?[:#]?\s*)?"
-    r"#?\s*(\d{8,11})\b\)?")
+    _NAME_GRP + r"(?:'s|’s)?" + _SKIP + _USTA_LBL + r"#?\s*(\d{8,11})\b")
 # A USTA # explicitly labeled in the text ("USTA #: 1234567890", "membership
 # number 1234567890"). Higher confidence than a bare run of digits, so it wins.
 _USTA_LABELED_RE = re.compile(

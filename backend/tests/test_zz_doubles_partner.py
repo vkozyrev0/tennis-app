@@ -248,6 +248,29 @@ def test_doubles_mixed_one_matched_one_text_only(duo):
     assert "2188800003" in (row["detected_usta_text"] or "")
 
 
+def test_doubles_pair_across_lines_with_labels(duo):
+    """The TD's real PDF shape: each player on a line as '<name> <skip> USTA# <n>'.
+    Both numbers bind to their names across the line breaks + labels, so both
+    players resolve."""
+    t, (p1, p2) = duo
+    em = _email(t, f"Doubles entry\n"
+                   f"Player 1: {p1['first_name']} {p1['last_name']} — USTA#: {p1['usta_number']}\n"
+                   f"Player 2: {p2['first_name']} {p2['last_name']} — USTA#: {p2['usta_number']}\n")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_partner_id"] == p2["id"]
+
+
+def test_doubles_pair_number_first_parenthesized(duo):
+    """'(<number>) <name>' for both, separated only by punctuation/space."""
+    t, (p1, p2) = duo
+    em = _email(t, f"Pairing: ({p1['usta_number']}) {p1['first_name']} {p1['last_name']} "
+                   f"/ ({p2['usta_number']}) {p2['first_name']} {p2['last_name']}")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p1["id"]
+    assert det["detected_partner_id"] == p2["id"]
+
+
 def test_first_mentioned_number_is_primary(duo):
     """The TD's real format: '<usta> <name>' twice — the FIRST-mentioned pair is
     the requester (primary), the second is the partner; roster iteration order
