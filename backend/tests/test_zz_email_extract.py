@@ -151,6 +151,22 @@ def test_extract_names_pulls_both_partners_name_only():
         ["Kate Hampton", "Mia Lopez"]
 
 
+def test_extract_doubles_pair_name_only_real_shapes():
+    """The two players in a name-only doubles request (no USTA #), found by the
+    pairing connector — mirrors the real TD corpus."""
+    from app.email_extract import extract_doubles_pair as D
+    assert D("L3 girls 14U doubles partner",
+             "Mia Langone and Chelsea Ie would like to pair up for doubles please.") == \
+        ["Mia Langone", "Chelsea Ie"]
+    assert D("Ankush Kon - Doubles partner",
+             "Please pair Ankush Kotti with Watts Goodman for the B14d L3 closed.") == \
+        ["Ankush Kotti", "Watts Goodman"]
+    assert D("", "Doubles: Kate Hampton & Mia Lopez") == ["Kate Hampton", "Mia Lopez"]
+    assert D("", "pairing Kate Hampton / Mia Lopez") == ["Kate Hampton", "Mia Lopez"]
+    # a hyphen sign-off is NOT a pairing connector
+    assert D("", "Thanks, Leilei - Mia's mom") == []
+
+
 def test_name_usta_pairs_permissive_separators_both_directions():
     """The doubles fix: a name and its USTA # bind across whatever 'skip' glue a
     PDF/roster puts between them — double dashes + label, parens, a line break,

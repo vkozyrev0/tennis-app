@@ -54,6 +54,16 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 2 (the real corpus): most doubles requests name the two players with
+**no USTA # at all** — "Mia Langone and Chelsea Ie would like to pair up",
+"pair Ankush Kotti with Watts Goodman". New `extract_doubles_pair()` finds the
+two names joined by a pairing connector (`and` / `with` / `&` / `/` / `+` /
+comma — a hyphen is *not* one, so "Leilei - Mia's mom" sign-offs don't pair).
+The detector tries that pair first; and when a player isn't on the roster yet,
+**both names now surface in `detected_name_pairs`** (name + no number) so the
+inbox grid shows the full pair with the ✉ "not rostered" mark for the TD to
+confirm / add — previously a name-only pair surfaced nothing. +2 tests.
+
 ### Day-of mode — the on-site venue view (full first cut)
 A new **Day-of** L1 group (promoted near the top — it's where the TD lives once
 play starts) with a tablet-friendly venue view for one calendar day. `GET

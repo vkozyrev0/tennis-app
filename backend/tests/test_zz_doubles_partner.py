@@ -248,6 +248,32 @@ def test_doubles_mixed_one_matched_one_text_only(duo):
     assert "2188800003" in (row["detected_usta_text"] or "")
 
 
+def test_doubles_name_only_surfaces_both_even_when_partner_unrostered():
+    """The real failing case: a name-only doubles request ("X and Y would like
+    to pair up") where the partner isn't on the roster. The requester matches;
+    the partner can't (not rostered), but BOTH names surface in
+    detected_name_pairs so the grid still shows the pair for the TD to add."""
+    tag = uuid.uuid4().hex[:6]
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "NameOnly " + tag, "type": "junior",
+        "play_start_date": "2026-05-01", "play_end_date": "2026-05-03"}))
+    # only the requester is rostered
+    p = _ok(client.post("/api/players", json={
+        "usta_number": str(uuid.uuid4().int)[:10],
+        "first_name": "Mia", "last_name": f"Langone{tag}", "gender": "female"}))
+    _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+        "player_id": p["id"], "selection_status": "selected"}))
+    em = _email(t, f"Hi there,\nMia Langone{tag} and Chelsea Ie{tag} would like to "
+                   "pair up for doubles please.\nThanks!")
+    det = _ok(client.post(f"/api/emails/{em['id']}/detect-player"), 200)
+    assert det["detected_player_id"] == p["id"]          # requester matched
+    rows = _ok(client.get(f"/api/emails?tournament_id={t['id']}"), 200)
+    row = next(r for r in rows if r["id"] == em["id"])
+    names = [pr["name"] for pr in (row["detected_name_pairs"] or [])]
+    assert f"Mia Langone{tag}" in names
+    assert f"Chelsea Ie{tag}" in names                    # the unrostered partner still shows
+
+
 def test_doubles_pair_across_lines_with_labels(duo):
     """The TD's real PDF shape: each player on a line as '<name> <skip> USTA# <n>'.
     Both numbers bind to their names across the line breaks + labels, so both

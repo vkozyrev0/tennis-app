@@ -14,6 +14,7 @@ from ..db import db_dep
 from ..email_extract import (
     extract_name_usta_pairs,
     extract_names,    # name-only spans (the doubles partner fallback signal)
+    extract_doubles_pair,  # two names joined by a pairing connector (no USTA #)
     usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
     extract_avoid_day,
@@ -139,10 +140,24 @@ def list_emails(response: Response, tournament_id: int | None = None,
                 r["detected_usta_text"] = computed
             # (name, USTA#) pairs parsed from the text — for doubles/pairing
             # emails whose players aren't (yet) rostered, the email itself says
-            # who the numbers belong to; the grid falls back to these.
-            r["detected_name_pairs"] = (
-                extract_name_usta_pairs(r.get("subject"), r.get("body"))
-                if r.get("classification") in ("doubles", "pairing_avoidance") else None)
+            # who the players are; the grid falls back to these. When the email
+            # carries NO USTA # (the common doubles shape — "Mia Langone and
+            # Chelsea Ie would like to pair up"), surface the two NAMES anyway so
+            # both players still show for the TD to confirm / add to the roster.
+            if r.get("classification") in ("doubles", "pairing_avoidance"):
+                pairs = extract_name_usta_pairs(r.get("subject"), r.get("body"))
+                if len(pairs) < 2:
+                    have = {_norm_name(p["name"]) for p in pairs}
+                    names = (extract_doubles_pair(r.get("subject"), r.get("body"))
+                             if r.get("classification") == "doubles"
+                             else extract_names(r.get("subject"), r.get("body")))
+                    for nm in names:
+                        if _norm_name(nm) not in have:
+                            pairs.append({"name": nm, "usta": None})
+                            have.add(_norm_name(nm))
+                r["detected_name_pairs"] = pairs[:4] or None
+            else:
+                r["detected_name_pairs"] = None
             # Day/time only make sense for scheduling-avoidance emails (a weekday in
             # a withdrawal email isn't an "avoid day"), so scope them to that class.
             is_sched = r.get("classification") == "scheduling_avoidance"
@@ -596,7 +611,10 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
     # USTA # (extract_name_usta_pairs) are included too. Order of appearance, so
     # the requester (named first) still wins the primary slot; unique hit only.
     seen_norm = set()
-    name_cands = list(extract_names(subject, body))
+    # The two names joined by a pairing connector are the most likely players —
+    # try them first, then any other name span, then names beside a USTA #.
+    name_cands = list(extract_doubles_pair(subject, body))
+    name_cands += list(extract_names(subject, body))
     name_cands += [p["name"] for p in extract_name_usta_pairs(subject, body)]
     for nm in name_cands:
         key = _norm_name(nm)

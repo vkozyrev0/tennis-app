@@ -164,6 +164,36 @@ def _clean_name(raw: str) -> str | None:
     return " ".join(tokens) if len(tokens) >= 2 else None
 
 
+# Two player names joined by a pairing connector — the doubles shape that
+# carries NO USTA # at all ("Mia Langone and Chelsea Ie", "pair Ankush Kotti
+# with Watts Goodman"). Connectors: and / with / plus / & / + / / / comma. A
+# hyphen is deliberately NOT a connector (it sits in sign-offs like
+# "Leilei - Mia's mom"). Glue words can't be a name token (see _PERSON_TOKEN),
+# so the two captured groups are clean name spans.
+_PERSON_NAME = _PERSON_TOKEN + r"(?:\s+" + _PERSON_TOKEN + r"){1,2}"
+_PAIR_CONNECTOR = r"\s*(?:&|\+|/|,|\band\b|\bwith\b|\bplus\b)\s*"
+_DOUBLES_PAIR_RE = re.compile("(" + _PERSON_NAME + ")" + _PAIR_CONNECTOR
+                              + "(" + _PERSON_NAME + ")")
+
+
+def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
+    """The TWO player names in a doubles request that names them but gives no
+    USTA # — found by the pairing connector between two name spans. Returns
+    [name1, name2] (requester first, as written) or [] when no connected pair is
+    present. This is what lets a name-only doubles email still surface BOTH
+    players for the TD to confirm / add to the roster."""
+    text = f"{subject or ''}\n{body or ''}"
+    m = _DOUBLES_PAIR_RE.search(text)
+    if not m:
+        return []
+    out: list[str] = []
+    for g in (m.group(1), m.group(2)):
+        nm = _clean_name(g)
+        if nm and nm not in out:
+            out.append(nm)
+    return out
+
+
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
     """ALL plausible USTA #s for the multi-player classifications (doubles /
     pairing avoidance) — emails may carry a number for one player, both, or
