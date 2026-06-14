@@ -9,6 +9,50 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-06-14
+
+A UX round driven by a senior-UX usability pass: three builds, smallest-risk
+first, each shipped + CI-verified on its own. The suite grew 460 → **469**
+green; migration 0049 landed.
+
+### Outreach memory — "did I already chase this person?" (migration 0049)
+The dashboard's pending list now remembers when each non-responding official was
+last nudged. `assignment.last_nudged_at` (migration 0049); `POST
+…/assignments/{id}/nudged` marks one and `POST …/tournaments/{id}/pending/nudged`
+stamps every pending row (the "Nudge all" bcc flow). A reply
+(`/api/me/.../respond`) clears the mark so it never reads stale. `/pending`
+returns `last_nudged_at`; the Needs-attention list shows "nudged today" /
+"nudged Nd ago" and records the timestamp on click.
+
+### IA cleanup — organize the nav by where work lives
+- **Disambiguated duplicated tabs.** The Tournament group's `Sites`/`T-shirts`
+  collided with the Setup *catalog* tabs of the same name → renamed to **Event
+  sites** / **Shirt order** so the split reads as catalog-vs-event.
+- **Merged "Player requests" + "Player preferences"** into one **Player lists**
+  L1 group (six groups instead of seven). The `#i-requests` sprite became
+  `#i-playerlists` (referenced dynamically as `#i-${group}`).
+- **Count badges.** `GET …/nav-counts` (one batched query) drives a chip on each
+  of the seven Player-list tabs plus the Inbox tab and L1 button — hidden at
+  zero, refreshed on tournament switch / group entry / counted-tab open.
+
+### Day-of mode — the on-site venue view (full first cut)
+A new **Day-of** L1 group (promoted near the top — it's where the TD lives once
+play starts) with a tablet-friendly venue view for one calendar day. `GET
+…/day-of?on=YYYY-MM-DD` (defaults to today) aggregates everything in one call;
+mutations reuse existing endpoints. Big-touch (≥44px) controls:
+- **Date bar** with ◀/▶ stepper, a *today* badge, *during play / outside play
+  window*, and jump-to-today.
+- **Summary strip** — officials working, checked-in, sites covered, room pickup,
+  player sign-in.
+- **Live coverage gaps** — sites with no official today, plus **quick-assign**
+  (pick a role → certified-and-free candidates from `/coverage-candidates` →
+  one tap fills via `/coverage-fill`).
+- **Officials working** — response chip + big **✓ Present / ✗ No-show** toggles
+  (write `assignment_day.actual_status`), with a name filter.
+- **Incidents** — a one-tap quick-log form + the day's incident list.
+
+---
+
 ## 2026-06-13
 
 A heavy build-and-harden day. Grouped by area below; the per-commit detail lives

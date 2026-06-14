@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=78" />
+  <link rel="stylesheet" href="/styles.css?v=79" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -66,6 +66,14 @@
         <line x1="8" y1="12" x2="16" y2="12"/>
         <line x1="8" y1="16" x2="13" y2="16"/>
       </symbol>
+      <!-- sun — "Day-of" venue view (on-site, during play). Referenced
+           dynamically as #i-${group} in app.js, so keep the id in sync with the
+           data-group="dayof" nav group. -->
+      <symbol id="i-dayof" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
       <!-- tennis ball — app brand icon. Filled ball with the classic curved
            seam (two arcs) so it reads as a tennis ball even at 18 px. -->
       <symbol id="i-brand" viewBox="0 0 24 24">
@@ -119,6 +127,12 @@
     <div class="menu-group group-active" data-group="home">
       <span class="menu-label">Home</span>
       <button class="tab active" data-target="panel-home">Dashboard</button>
+    </div>
+    <!-- Day-of mode (P0 #2): the on-site front door during play. Promoted near
+         the top because it's where the TD lives once the event starts. -->
+    <div class="menu-group tgroup" data-group="dayof">
+      <span class="menu-label">Day-of</span>
+      <button class="tab needs-active" data-target="panel-t-dayof">Venue view</button>
     </div>
     <div class="menu-group" data-group="setup">
       <span class="menu-label">Setup</span>
@@ -633,6 +647,22 @@
     </section>
 
     <!-- T: Assignments -->
+    <!-- Day-of mode (P0 #2): venue view for one calendar day. Lightweight
+         skeleton — loadDayOf() in app.js fills every #dayof-* container from
+         the /day-of aggregate and wires the big-touch controls. -->
+    <section class="panel tpanel" id="panel-t-dayof">
+      <div class="needs-active-note">Select a tournament in the bar above to open the day-of venue view.</div>
+      <div class="t-content">
+        <div class="dayof-head" id="dayof-head"></div>
+        <div class="dayof-summary" id="dayof-summary"></div>
+        <div class="dayof-coverage" id="dayof-coverage"></div>
+        <div class="dayof-grid">
+          <section class="card dayof-col" id="dayof-officials" aria-label="Officials working today"></section>
+          <section class="card dayof-col" id="dayof-incidents" aria-label="Incidents today"></section>
+        </div>
+      </div>
+    </section>
+
     <section class="panel tpanel" id="panel-t-assignments">
       <div class="needs-active-note">Select a tournament in the bar above to manage official assignments.</div>
       <div class="t-content card">
@@ -1409,6 +1439,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=192"></script>
+  <script type="module" src="/app.js?v=193"></script>
 </body>
 </html>

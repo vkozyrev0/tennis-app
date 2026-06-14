@@ -186,6 +186,120 @@ def nav_counts(tournament_id: int, conn=Depends(db_dep)):
         return dict(cur.fetchone())
 
 
+# Day-of mode (P0 #2): a venue view for one calendar day (defaults to today).
+# Returns who's working that day with their check-in (actual_status) + invite
+# (response_status) state, per-site coverage, the day's incidents, room pickup,
+# and the player sign-in tally — one call the on-site TD refreshes from a
+# tablet. Read-only aggregate; every mutation reuses an existing endpoint
+# (PUT /assignment-days/{id}/status, POST /incidents, POST /coverage-fill,
+# PUT /roster/{id}/signin).
+@router.get("/api/tournaments/{tournament_id}/day-of")
+def day_of(tournament_id: int, on: str | None = None, conn=Depends(db_dep)):
+    if on:
+        try:
+            day = date.fromisoformat(on)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="on must be ISO format (YYYY-MM-DD)")
+    else:
+        day = date.today()
+    with conn.cursor() as cur:
+        cur.execute("SELECT play_start_date, play_end_date FROM tournament WHERE id = %s",
+                    (tournament_id,))
+        t = cur.fetchone()
+        if t is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        in_window = t["play_start_date"] <= day <= t["play_end_date"]
+
+        # Officials with a worked day on `day` — the working roster for the venue.
+        cur.execute(
+            "SELECT a.id AS assignment_id, ad.id AS day_id, a.official_id, "
+            "       o.first_name, o.last_name, o.phone, ad.working_as, ad.actual_status, "
+            "       a.response_status, a.site_id, COALESCE(s.code, s.name) AS site_label "
+            "FROM assignment_day ad "
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "JOIN official o ON o.id = a.official_id "
+            "LEFT JOIN site s ON s.id = a.site_id "
+            "WHERE a.tournament_id = %s AND ad.work_date = %s "
+            "ORDER BY o.last_name, o.first_name",
+            (tournament_id, day),
+        )
+        officials = [
+            {"assignment_id": r["assignment_id"], "day_id": r["day_id"],
+             "official_id": r["official_id"],
+             "official_name": f'{r["first_name"]} {r["last_name"]}',
+             "phone": r["phone"], "working_as": r["working_as"],
+             "actual_status": r["actual_status"], "response_status": r["response_status"],
+             "site_id": r["site_id"], "site_label": r["site_label"]}
+            for r in cur.fetchall()
+        ]
+
+        # Per-site coverage for the day: every tournament site + how many officials
+        # work there today. Zero → an uncovered site the TD can quick-assign into.
+        cur.execute(
+            "SELECT s.id, COALESCE(s.code, s.name) AS label, "
+            "  (SELECT count(*) FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
+            "   WHERE a.tournament_id = %(t)s AND a.site_id = s.id AND ad.work_date = %(d)s) AS n "
+            "FROM tournament_site ts JOIN site s ON s.id = ts.site_id "
+            "WHERE ts.tournament_id = %(t)s ORDER BY label",
+            {"t": tournament_id, "d": day},
+        )
+        sites = [{"site_id": r["id"], "site_label": r["label"], "official_count": int(r["n"])}
+                 for r in cur.fetchall()]
+
+        # Incidents logged on `day`.
+        cur.execute(
+            "SELECT i.id, i.occurred_at, i.category, i.severity, i.description, i.resolved, "
+            "       COALESCE(s.code, s.name) AS site_label "
+            "FROM tournament_incident i LEFT JOIN site s ON s.id = i.site_id "
+            "WHERE i.tournament_id = %s AND i.deleted_at IS NULL AND i.occurred_at::date = %s "
+            "ORDER BY i.occurred_at DESC",
+            (tournament_id, day),
+        )
+        incidents = [
+            {"id": r["id"], "occurred_at": r["occurred_at"].isoformat(),
+             "category": r["category"], "severity": r["severity"],
+             "description": r["description"], "resolved": r["resolved"],
+             "site_label": r["site_label"]}
+            for r in cur.fetchall()
+        ]
+
+        # Official room pickup (same calc as the dashboard) + player sign-in tally.
+        cur.execute(
+            "SELECT COALESCE(sum(rb.room_count), 0) AS reserved, "
+            "       COALESCE(sum((SELECT count(*) FROM assignment a "
+            "                     WHERE a.room_block_id = rb.id "
+            "                     AND a.response_status <> 'declined')), 0) AS assigned "
+            "FROM room_block rb WHERE rb.tournament_id = %s AND rb.kind = 'official'",
+            (tournament_id,),
+        )
+        rb = cur.fetchone()
+        reserved, assigned = int(rb["reserved"]), int(rb["assigned"])
+
+        cur.execute(
+            "SELECT count(*) FILTER (WHERE signed_in) AS signed_in, "
+            "       count(*) FILTER (WHERE selection_status = 'selected') AS selected "
+            "FROM tournament_entry WHERE tournament_id = %s",
+            (tournament_id,),
+        )
+        si = cur.fetchone()
+
+    present = sum(1 for o in officials if o["actual_status"] == "worked")
+    return {
+        "date": day.isoformat(),
+        "play_start_date": t["play_start_date"].isoformat(),
+        "play_end_date": t["play_end_date"].isoformat(),
+        "in_window": in_window,
+        "officials": officials,
+        "officials_count": len(officials),
+        "present_count": present,
+        "sites": sites,
+        "uncovered_sites": [s for s in sites if s["official_count"] == 0],
+        "incidents": incidents,
+        "rooms": {"reserved": reserved, "assigned": assigned, "unused": max(reserved - assigned, 0)},
+        "signin": {"signed_in": int(si["signed_in"]), "selected": int(si["selected"])},
+    }
+
+
 @router.get("/api/tournaments/{tournament_id}/dashboard")
 def dashboard(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:

@@ -141,3 +141,45 @@ def test_nav_counts_reflects_unfiled_inbox():
 
 def test_nav_counts_404_for_unknown_tournament():
     assert client.get("/api/tournaments/99999999/nav-counts").status_code == 404
+
+
+# Day-of mode: the venue-view aggregate for one calendar day.
+def _dayof(tid, on=None):
+    r = client.get(f"/api/tournaments/{tid}/day-of", params={"on": on} if on else None)
+    return _ok(r, 200)
+
+
+def test_day_of_empty_is_zeroed():
+    t = _tournament()  # play window 2026-06-01 .. 2026-06-03
+    d = _dayof(t["id"], "2026-06-02")
+    assert d["date"] == "2026-06-02" and d["in_window"] is True
+    assert d["officials"] == [] and d["officials_count"] == 0 and d["present_count"] == 0
+    assert d["incidents"] == []
+    assert d["signin"]["signed_in"] == 0
+
+
+def test_day_of_lists_officials_working_that_date():
+    t = _tournament()
+    o = _official("chair_umpire")
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    _ok(client.post(f"/api/assignments/{a['id']}/days",
+                    json={"work_date": "2026-06-02", "working_as": "chair_umpire"}))
+    # the official shows up on the day they work...
+    d = _dayof(t["id"], "2026-06-02")
+    assert d["officials_count"] == 1
+    row = d["officials"][0]
+    assert row["assignment_id"] == a["id"] and row["working_as"] == "chair_umpire"
+    assert row["actual_status"] == "planned" and row["response_status"] == "pending"
+    # ...and NOT on a different date in the window
+    assert _dayof(t["id"], "2026-06-03")["officials_count"] == 0
+
+
+def test_day_of_out_of_window_flag():
+    t = _tournament()
+    assert _dayof(t["id"], "2025-01-01")["in_window"] is False
+
+
+def test_day_of_bad_date_and_unknown_tournament():
+    t = _tournament()
+    assert client.get(f"/api/tournaments/{t['id']}/day-of", params={"on": "nope"}).status_code == 400
+    assert client.get("/api/tournaments/99999999/day-of").status_code == 404
