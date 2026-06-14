@@ -107,6 +107,37 @@ on active rows); lists filter `deleted_at IS NULL`; new restore endpoints + a
   (`.combo-list` z 1700 → 1850, `#confirm-modal` → 1900) so the inbox-filing
   combos are no longer hidden behind the modal.
 
+### UI polish & mobile support (later same-day)
+A usability/UI review pass plus follow-ups, all frontend-only and verified live
+at desktop + 375px.
+
+- **Dark-mode legibility fix.** `--btn-bg` / `--panel` / `--line` were never
+  defined in `tokens.css` — only as light literal fallbacks in `styles.css` — so
+  dark mode inherited light surfaces and the dashboard nudge-card buttons + the
+  digest panel rendered near-invisible. Defined per-theme (contrast → ~11–14:1).
+- **Touch affordances.** The hover-revealed row controls (editable-cell ✎, the
+  inbox ✎/×/＋) are now always shown under `@media (hover: none)` — they were
+  undiscoverable on a tablet.
+- **Dashboard density.** The named nudge cards (declined / pending / roster /
+  coverage) now flow into a responsive `.dash-attention` grid instead of a tall
+  stack; the **active-tournament** context bar gets a brand-ball accent stripe;
+  and the Home (119→0) + Payroll (157→~3) mobile overflows were fixed (the
+  dashboard tables scroll in a wrapper, the Tabulator grid caps at its card).
+- **Sticky grid sort.** Tabulator sort persists per-table (`persistenceID`
+  `courtops-v1-<table>`); sort-only (filter persistence would fight the inbox's
+  load-time defaults), inbox opted out.
+- **Icon prev/next on edit modals.** The record-nav text buttons ("‹ Prev" /
+  "Next ›") became icon-only chevrons, kept clear of the top-right close ×;
+  applied across all grid edit modals (the 9 `wireEntity` Setup grids + roster).
+- **Richer grids + responsive collapse (mobile).** Added columns to the sparse
+  Setup catalogs (Officials +Phone/Email/Dietary, Players +City/St) and turned
+  on Tabulator **responsive collapse** in the grid factories: extra columns show
+  on desktop and fold into a tap-to-expand **▸** row on phones (no
+  horizontal-squish). A shared helper prepends the ▸ toggle and pins the
+  interactive columns (edit/delete actions, the batch checkbox) + the identity
+  column always-visible. The inbox opts out (its Player 1/2 column groups); the
+  toggle uses the brand accent.
+
 
 ## Inbox doubles intelligence + real-corpus USTA extraction (2026-06-12)
 Driven by the TD's actual "Tournament Emails for CourtOps" PDF (30 real

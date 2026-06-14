@@ -92,7 +92,8 @@ frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
   app.js               # ~7.6k lines: all behaviour (ES module)
   app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
-  app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a)
+  app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a);
+                       #   responsive-collapse for mobile (overflow cols → ▸ tap-to-expand row)
   app/auth.js          # login + session view (sign-in/out, change-password, role-split header)
   app/state.js         # active-tournament state + change event
   app/player_list.js   # Part B list-page factory (wirePlayerList)
