@@ -5788,6 +5788,13 @@ async function _renderPendingNudges(pendingCount) {
   catch (_) { box.hidden = true; return; }
   if (!d.count) { box.hidden = true; return; }
   const tName = active.name || "the tournament";
+  // Outreach memory: "nudged today / Nd ago" so a fresh gap reads differently
+  // from a chased-but-silent one.
+  const ago = (iso) => {
+    if (!iso) return "";
+    const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+    return days <= 0 ? "nudged today" : days === 1 ? "nudged 1d ago" : `nudged ${days}d ago`;
+  };
   const item = (r) => {
     const slot = r.day_count ? `${r.day_count} day${r.day_count === 1 ? "" : "s"}` : "";
     // a pre-filled mailto so the TD can chase a confirmation in one click; only
@@ -5798,10 +5805,11 @@ async function _renderPendingNudges(pendingCount) {
       const body = encodeURIComponent(
         `Hi ${r.first_name || ""},\n\nPlease confirm (accept or decline) your officiating ` +
         `assignment for ${tName}${slot ? ` (${slot})` : ""}.\n\nThanks!`);
-      nudge = html` <a class="dash-pend-nudge" href="mailto:${r.official_email}?subject=${raw(subj)}&body=${raw(body)}">✉ Nudge</a>`;
+      nudge = html` <a class="dash-pend-nudge" data-aid="${String(r.assignment_id)}" href="mailto:${r.official_email}?subject=${raw(subj)}&body=${raw(body)}">✉ Nudge</a>`;
     }
+    const lastNudged = r.last_nudged_at ? html` <span class="dash-pend-ago" title="last contacted">· ${ago(r.last_nudged_at)}</span>` : "";
     return html`<li class="dash-pend-item"><span class="dash-pend-name">${r.official_name}</span>${
-      slot ? html` <span class="dash-pend-slot">${slot}</span>` : ""}${nudge}</li>`;
+      slot ? html` <span class="dash-pend-slot">${slot}</span>` : ""}${nudge}${lastNudged}</li>`;
   };
   box.hidden = false;
   const emails = d.pending.map((p) => p.official_email).filter(Boolean);
@@ -5814,13 +5822,23 @@ async function _renderPendingNudges(pendingCount) {
     _dashGo("staffing", "panel-t-assignments");
     setTimeout(() => { try { _asgRespFilter = "pending"; _renderAsgList(); } catch (_) {} }, 300);
   });
-  document.getElementById("dash-pend-all")?.addEventListener("click", () => {
+  // Per-row ✉: the mailto opens the mail client; we ALSO record the outreach so
+  // the row shows "nudged today" next time (best-effort — never block the mailto).
+  box.querySelectorAll(".dash-pend-nudge[data-aid]").forEach((a) => {
+    a.addEventListener("click", () => {
+      api(`/assignments/${a.dataset.aid}/nudged`, { method: "POST" })
+        .then(() => _renderPendingNudges(d.count)).catch(() => {});
+    });
+  });
+  document.getElementById("dash-pend-all")?.addEventListener("click", async () => {
     // one bcc mailto to the whole pending group (same pattern as bulk invite).
     const subj = encodeURIComponent(`Assignment confirmation — ${tName}`);
     const body = encodeURIComponent(
       `Hi,\n\nOur records show your officiating assignment for ${tName} is still ` +
       `unconfirmed. Please reply to accept or decline.\n\nThanks!`);
     window.open(`mailto:?bcc=${encodeURIComponent(emails.join(","))}&subject=${subj}&body=${body}`, "_blank");
+    // record the bulk outreach, then refresh so every row shows "nudged today".
+    try { await api(`/tournaments/${active.id}/pending/nudged`, { method: "POST" }); _renderPendingNudges(d.count); } catch (_) {}
   });
 }
 

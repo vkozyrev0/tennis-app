@@ -90,3 +90,26 @@ def test_pending_nudge_list():
 
 def test_pending_404_unknown_tournament():
     assert client.get("/api/tournaments/99999999/pending").status_code == 404
+
+
+def test_nudge_records_last_contacted():
+    t = _tournament()
+    o = _official(email="nudge@example.com")
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    # fresh assignment — no outreach yet
+    row = next(p for p in _ok(client.get(f"/api/tournaments/{t['id']}/pending"), 200)["pending"]
+               if p["assignment_id"] == a["id"])
+    assert row["last_nudged_at"] is None
+    # mark it nudged → timestamp set + reflected in /pending
+    marked = _ok(client.post(f"/api/assignments/{a['id']}/nudged"), 200)
+    assert marked["last_nudged_at"]
+    row2 = next(p for p in _ok(client.get(f"/api/tournaments/{t['id']}/pending"), 200)["pending"]
+                if p["assignment_id"] == a["id"])
+    assert row2["last_nudged_at"] is not None
+    # bulk mark (Nudge all) stamps every pending row
+    assert _ok(client.post(f"/api/tournaments/{t['id']}/pending/nudged"), 200)["marked"] >= 1
+
+
+def test_nudge_404s():
+    assert client.post("/api/assignments/99999999/nudged").status_code == 404
+    assert client.post("/api/tournaments/99999999/pending/nudged").status_code == 404

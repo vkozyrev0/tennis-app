@@ -444,7 +444,7 @@ def pending_assignments(tournament_id: int, conn=Depends(db_dep)):
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
-            "SELECT a.id, a.snapshot_at, o.first_name, o.last_name, o.email "
+            "SELECT a.id, a.snapshot_at, a.last_nudged_at, o.first_name, o.last_name, o.email "
             "FROM assignment a "
             "JOIN official o ON o.id = a.official_id "
             "WHERE a.tournament_id = %s AND a.response_status = 'pending' "
@@ -466,9 +466,37 @@ def pending_assignments(tournament_id: int, conn=Depends(db_dep)):
                 "official_name": f'{r["last_name"]}, {r["first_name"]}',
                 "first_name": r["first_name"],
                 "official_email": r["email"],
+                "last_nudged_at": r["last_nudged_at"].isoformat() if r["last_nudged_at"] else None,
                 "day_count": len(days), "days": days,
             })
     return {"tournament_id": tournament_id, "pending": out, "count": len(out)}
+
+
+@router.post("/api/assignments/{assignment_id}/nudged")
+def mark_nudged(assignment_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
+    """Record that the TD just chased this official (outreach memory) — the
+    pending list then shows 'nudged Nd ago' so a fresh gap reads differently from
+    a chased-but-silent one. Idempotent; only the timestamp moves."""
+    with conn.cursor() as cur:
+        cur.execute("UPDATE assignment SET last_nudged_at = now() WHERE id = %s "
+                    "RETURNING last_nudged_at", (assignment_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="assignment not found")
+    return {"assignment_id": assignment_id, "last_nudged_at": row["last_nudged_at"].isoformat()}
+
+
+@router.post("/api/tournaments/{tournament_id}/pending/nudged")
+def mark_all_pending_nudged(tournament_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
+    """Bulk outreach mark for the 'Nudge all' action — stamps every still-pending
+    assignment in the tournament. Returns how many were marked."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        cur.execute("UPDATE assignment SET last_nudged_at = now() "
+                    "WHERE tournament_id = %s AND response_status = 'pending'", (tournament_id,))
+        return {"tournament_id": tournament_id, "marked": cur.rowcount}
 
 
 @router.get("/api/tournaments/{tournament_id}/conflicts")

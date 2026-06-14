@@ -1507,6 +1507,7 @@ td.toggle { white-space: nowrap; }
 .dash-pend-slot { font-size: 0.76rem; color: var(--muted); }
 .dash-pend-nudge { font-size: 0.78rem; color: var(--accent); text-decoration: none; margin-left: 0.3rem; }
 .dash-pend-nudge:hover { text-decoration: underline; }
+.dash-pend-ago { font-size: 0.72rem; color: var(--muted); font-style: italic; }
 /* Cross-tournament digest */
 .dash-digest { margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
   background: var(--panel, #f7f9fb); border: 1px solid var(--line); }

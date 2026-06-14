@@ -127,7 +127,8 @@ def respond_to_assignment(assignment_id: int, body: AssignmentResponse,
             raise HTTPException(status_code=403, detail="not your assignment")
         cur.execute(
             "UPDATE assignment SET response_status = %s, "
-            "responded_at = CASE WHEN %s = 'pending' THEN NULL ELSE now() END "
+            "responded_at = CASE WHEN %s = 'pending' THEN NULL ELSE now() END, "
+            "last_nudged_at = NULL "  # a reply clears the outreach mark (UX: no stale 'nudged' after a response)
             "WHERE id = %s",
             (body.status, body.status, assignment_id),
         )
