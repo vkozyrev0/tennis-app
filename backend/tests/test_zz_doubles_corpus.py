@@ -34,10 +34,12 @@ def test_corpus_parses_every_page():
 def test_corpus_classification_split():
     from collections import Counter
     counts = Counter(classify(r["data"]["subject"], r["data"]["body"]) for r in _ROWS)
-    # The export is all withdrawals + doubles requests. (Two "…Doubles" threads
-    # that merely *mention* a player withdrawing read as doubles, not withdrawal.)
+    # Withdrawals + doubles requests, plus two "…Doubles" threads with no
+    # concrete pairing (an empty confirmation stub and an administrative
+    # "no worries"/pending thread) that read as `other`, not a confident doubles.
     assert counts["withdrawal"] == 9
-    assert counts["doubles"] == 21
+    assert counts["doubles"] == 19
+    assert counts["other"] == 2
 
 
 def test_corpus_doubles_pairs_extractable():
@@ -69,6 +71,17 @@ def test_doubles_pairing_request_mentioning_withdraw_classifies_as_doubles():
     assert classify("L3 Southern - Withdrawal Request",
         "Zeal Reynolds will be unable to participate. Please withdraw her "
         "from singles and doubles.") == "withdrawal"
+
+
+def test_topic_only_doubles_thread_is_unknown_not_doubles():
+    # A doubles-topic thread with no concrete pairing (just an acknowledgement /
+    # pending status) reads as `other`, not a confident doubles.
+    assert classify("RE: **EXTERNAL** Re: L3 Macon - Doubles",
+        "No worries thank you!! I do not have a message from Mia's parent yet. "
+        "I will need the confirmation to pair them. Thanks, Julie") == "other"
+    # a concrete named pairing in the same topic still classifies as doubles
+    assert classify("Re: Macon L3 Doubles",
+        "Kai Hosch and Gabriel Zingman would like to pair together for doubles.") == "doubles"
 
 
 def test_corpus_body_does_not_bleed_into_next_email():

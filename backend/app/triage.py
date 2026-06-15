@@ -10,6 +10,8 @@ needs an explicit cloud-vs-local decision first.
 """
 import re
 
+from .email_extract import extract_doubles_pair, extract_name_usta_pairs
+
 # Order matters: more specific intents first. Each rule entry is either a
 # bare keyword (substring match, lowercased) or a tuple ("re", pattern) for
 # anchored / digit-bounded patterns (audit F12).
@@ -46,6 +48,30 @@ _STRONG = [
 _STRONG_RE = [(label, [re.compile(p) for p in pats]) for label, pats in _STRONG]
 
 
+# "doubles" is a TOPIC word — a thread subject can say "L3 Macon - Doubles"
+# while the body is just an acknowledgement ("No worries thank you") with no
+# actual pairing request. Such emails should read as UNKNOWN (other), not a
+# confident doubles. So a doubles label needs a CONCRETE pairing signal: a named
+# pair, a "doubles partner(s)" phrase, a "pair/play doubles with <Name>" request,
+# two surnames slashed in the subject, or an "add … for doubles" ask.
+_DC_NAME = r"[A-Z][a-z][\w'’.-]*"
+_DOUBLES_CONCRETE = [
+    re.compile(r"\bdoubles?\s+partners?\b|\brandom\s+pair", re.I),
+    re.compile(r"(?i:\b(?:pair\w*|partner\w*|play\s+doubles))\b[^.?!\n]{0,25}"
+               r"\b(?i:with|and|&|up|for)\b\s*" + _DC_NAME),
+    re.compile(_DC_NAME + r"\s*[/&]\s*" + _DC_NAME),
+    re.compile(r"(?i:\b(?:add|enter|sign\s*up|register|put)\b)[^.?!\n]{0,25}"
+               r"\bfor\s+(?:the\s+)?doubles?\b"),
+]
+
+
+def _has_concrete_doubles(subject: str | None, body: str | None) -> bool:
+    text = f"{subject or ''} {body or ''}"
+    if any(p.search(text) for p in _DOUBLES_CONCRETE):
+        return True
+    return bool(extract_doubles_pair(subject, body)) or len(extract_name_usta_pairs(subject, body)) >= 2
+
+
 def _kw_match(text: str, kw) -> bool:
     if isinstance(kw, tuple) and kw[0] == "re":
         return re.search(kw[1], text) is not None
@@ -53,6 +79,17 @@ def _kw_match(text: str, kw) -> bool:
 
 
 def classify(subject: str | None, body: str | None) -> str:
+    label = _classify_raw(subject, body)
+    # A doubles label needs a CONCRETE pairing signal — otherwise a thread whose
+    # only doubles evidence is the topic word ("…L3 Macon - Doubles" with a body
+    # that's just "No worries thank you") reads as UNKNOWN (other), regardless of
+    # which pass suggested doubles.
+    if label == "doubles" and not _has_concrete_doubles(subject, body):
+        return "other"
+    return label
+
+
+def _classify_raw(subject: str | None, body: str | None) -> str:
     subj = (subject or "").lower()
     text = f"{subj} {(body or '').lower()}"
     # 1) Strongest, unambiguous phrases first — resolves competing signals.
