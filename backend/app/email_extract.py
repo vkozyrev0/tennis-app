@@ -177,6 +177,13 @@ def _clean_name(raw: str) -> str | None:
 
     while tokens and (tokens[0].endswith(".") or _drop(tokens[0])):
         tokens.pop(0)
+    # Stop at a sentence-ending WORD ("…21043871 Ethan Carter. Kate Hampton…" →
+    # keep just "Ethan Carter"). A multi-letter token ending in "." closes a
+    # sentence; a single-letter "R." is a middle initial and is kept.
+    for i, t in enumerate(tokens):
+        if t.endswith(".") and len(t.rstrip(".")) > 1:
+            tokens = tokens[:i + 1]
+            break
     while tokens and (_drop(tokens[-1]) or tokens[-1].endswith(("'s", "’s"))):
         tokens.pop()
     tokens = [t.rstrip(".") for t in tokens]
@@ -223,9 +230,14 @@ def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
         if not _PAIR_CONTEXT.search(text, lo, hi):
             continue  # a connected pair with no pairing context — signature noise
         out: list[str] = []
+        seen: set[str] = set()
         for g in (m.group(1), m.group(2)):
             nm = _clean_name(g)
-            if nm and nm not in out:
+            # dedup case-insensitively so two spellings of one person
+            # ("Renée OBrien" / "Renee OBrien") don't fill both slots.
+            key = (nm or "").casefold()
+            if nm and key not in seen:
+                seen.add(key)
                 out.append(nm)
         if len(out) == 2:
             return out

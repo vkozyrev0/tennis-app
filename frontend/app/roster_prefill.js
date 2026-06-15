@@ -26,15 +26,25 @@ export function resolveFilePlayerId(m, players) {
 // pair can be added. Always "new" mode; the USTA # may be blank (the TD fills
 // it before saving). Returns { canAdd:false } when there's no usable name.
 export function rosterPrefillFromName(name, usta, division) {
-  const nm = String(name || "").replace(/,/g, " ").trim().split(/\s+/).filter(Boolean);
-  if (!nm.length) return { canAdd: false, offRoster: false };
+  const s = String(name || "").trim();
+  let first = "", last = "";
+  const comma = s.indexOf(",");
+  if (comma >= 0) {
+    // "Last, First" inversion → don't swap first/last (a parser feeds "First
+    // Last" today, but be correct if a comma form ever arrives).
+    const lt = s.slice(0, comma).trim().split(/\s+/).filter(Boolean);
+    const ft = s.slice(comma + 1).trim().split(/\s+/).filter(Boolean);
+    if (lt.length && ft.length) { first = ft[0]; last = lt.join(" "); }
+  }
+  if (!first && !last) {
+    const nm = s.split(/\s+/).filter(Boolean);
+    first = nm[0] || ""; last = nm.slice(1).join(" ");
+  }
+  if (!first && !last) return { canAdd: false, offRoster: false };
   return {
     canAdd: true, offRoster: false, mode: "new",
-    usta_number: usta || "",
-    first_name: nm[0] || "",
-    last_name: nm.slice(1).join(" ") || "",
-    gender: genderFromDivision(division),
-    age_division: division || "",
+    usta_number: usta || "", first_name: first, last_name: last,
+    gender: genderFromDivision(division), age_division: division || "",
   };
 }
 

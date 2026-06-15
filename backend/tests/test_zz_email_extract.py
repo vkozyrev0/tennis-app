@@ -167,6 +167,37 @@ def test_extract_doubles_pair_name_only_real_shapes():
     assert D("", "Thanks, Leilei - Mia's mom") == []
 
 
+def test_name_usta_pairs_stop_at_sentence_boundary():
+    """A name token must not swallow the next sentence's first word: '21043871
+    Ethan Carter. Kate Hampton USTA# …' → two clean pairs, not 'Ethan Carter
+    Kate'."""
+    from app.email_extract import extract_name_usta_pairs as P
+    assert P("", "21043871 Ethan Carter. Kate Hampton USTA# 2018840232") == [
+        {"name": "Ethan Carter", "usta": "21043871"},
+        {"name": "Kate Hampton", "usta": "2018840232"}]
+
+
+def test_doubles_pair_dedups_one_person_case_variants():
+    """Two case spellings of ONE name don't fill both slots."""
+    from app.email_extract import extract_doubles_pair as D
+    assert D("Doubles", "Pairing Mia LOPEZ and Mia Lopez for doubles") == []
+
+
+def test_fuzzy_match_nondecomposing_accents_and_compound_first():
+    """Norm folds letters NFKD leaves intact (ø/ł), and the first-initial
+    fallback uses the REAL first initial for a compound given name."""
+    from app.routers.emails import _fuzzy_name_match, _norm_name
+    assert _norm_name("Sørensen") == "sorensen"
+    assert _norm_name("Wałęsa") == "walesa"
+    assert _fuzzy_name_match(
+        [{"id": 1, "first_name": "Bjørn", "last_name": "Sørensen", "usta_number": "1"}],
+        "Bjorn Sorensen")["id"] == 1
+    # compound first name → first-initial fallback keys off "m", not "b"
+    assert _fuzzy_name_match(
+        [{"id": 2, "first_name": "Mary Beth", "last_name": "Quintero", "usta_number": "2"}],
+        "M. Quintero")["id"] == 2
+
+
 def test_extract_doubles_pair_corpus_phrasings():
     """Shapes pulled straight from the real email corpus (the fixture PDF)."""
     from app.email_extract import extract_doubles_pair as D

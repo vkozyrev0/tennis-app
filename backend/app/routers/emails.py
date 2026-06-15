@@ -449,6 +449,13 @@ _USTA_SUBJECT_RE = re.compile(
     r"withdrawal\s+request\s*[:\-]\s*([A-Za-z][\w'\-]+)\s*,\s*(boys|girls)\b[^\d]*?(\d+)", re.I)
 
 
+# Common letters that NFKD leaves intact (no base+combining decomposition).
+_TRANSLIT = str.maketrans({
+    "ø": "o", "œ": "oe", "æ": "ae", "ł": "l", "đ": "d", "ð": "d",
+    "þ": "th", "ß": "ss", "ı": "i", "ŋ": "n", "ħ": "h", "ĸ": "k",
+})
+
+
 def _norm_name(s: str) -> str:
     """Fold a name to a comparable form: strip accents/diacritics, drop
     apostrophes ("O'Brien" == "OBrien"), lowercase, and reduce any other
@@ -456,7 +463,10 @@ def _norm_name(s: str) -> str:
     'Renee OBrien' both fold to 'renee obrien'."""
     s = unicodedata.normalize("NFKD", s or "")
     s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.lower().replace("'", "").replace("’", "")
+    # Letters that DON'T NFKD-decompose to base+combining (Nordic/Polish/Turkish/
+    # …) would otherwise be dropped by the a-z filter below and shatter the token
+    # — fold them to their plain-ASCII base so "Sørensen" == "Sorensen".
+    s = s.lower().translate(_TRANSLIT).replace("'", "").replace("’", "")
     return re.sub(r"[^a-z0-9]+", " ", s).strip()
 
 
@@ -488,7 +498,9 @@ def _fuzzy_name_match(roster: list, name: str, exclude_ids: frozenset = frozense
             if ftoks <= toks:
                 out.append(r)
             elif initial_only:
-                fi = "".join(sorted(ftoks))[:1]  # a stable first char of the given name
+                # the ACTUAL first initial (first char of the given name) — not
+                # the alphabetically-first token, which mis-folds "Mary Beth".
+                fi = _norm_name(r["first_name"] or "")[:1]
                 if fi and any(t[:1] == fi for t in (toks - ltoks)):
                     out.append(r)
         return out

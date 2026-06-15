@@ -1714,7 +1714,7 @@ function rosterOpenModal() {
   rosterDetail.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = rosterCloseModal;
   scheduleComboSync();
 }
-function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; }
+function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; _rosterAddQueue = []; }
 rosterCloseBtn.addEventListener("click", rosterCloseModal);
 async function loadRoster() {
   if (!active) return;
@@ -2081,18 +2081,17 @@ onSubmit(rosterForm, async () => {
       } catch (_) { /* detection is a convenience; ignore failures */ }
     }
     await loadRoster();
+    // "Add both": grab the queued second player BEFORE the close handlers run
+    // (rosterCloseModal clears the queue, so capture it first).
+    const _nextAdd = _rosterAddQueue.shift();
     const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
     if (row) rosterSelect(row); else rosterShowNew();
     rosterCloseModal();
-    // "Add both": after the first player saves, open the form for the second.
-    if (_rosterAddQueue.length) {
-      const nxt = _rosterAddQueue.shift();
-      setTimeout(() => _inboxAddToRoster(nxt.m, nxt.plan), 60);
-    }
+    if (_nextAdd) setTimeout(() => _inboxAddToRoster(_nextAdd.m, _nextAdd.plan), 60);
   } catch (err) { setMsg("roster-msg", err.message, false); markInvalid(rosterForm, err.message); }
 });
 rosterForm.querySelector(".cancel").textContent = "Cancel";
-rosterForm.querySelector(".cancel").addEventListener("click", () => { _rosterAddQueue = []; rosterCloseModal(); });
+rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
 document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
 document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
 // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
@@ -3133,11 +3132,17 @@ const incidentsGrid = makeListGrid("incidents-table", [
 // wired once (guarded by _dayofWired) so re-renders don't stack listeners.
 const _DAYOF = { date: null, search: "" };
 let _dayofWired = false;
-function _todayIso() { return new Date().toISOString().slice(0, 10); }
+// LOCAL calendar date (not UTC) — a TD opening the venue view at 6pm Pacific
+// must see today, not tomorrow's UTC date. (toISOString would shift across the
+// UTC boundary in either direction depending on the offset's sign.)
+function _isoLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function _todayIso() { return _isoLocal(new Date()); }
 function _shiftIso(iso, days) {
-  const d = new Date(iso + "T00:00:00");
+  const d = new Date(iso + "T00:00:00");   // local midnight
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return _isoLocal(d);                       // format local — no UTC round-trip
 }
 
 async function loadDayOf() {
@@ -3146,13 +3151,15 @@ async function loadDayOf() {
   _wireDayOf();
   let d;
   try { d = await api(`/tournaments/${active.id}/day-of?on=${_DAYOF.date}`); }
-  catch (e) { toast("Couldn't load the day-of view: " + e.message, true); return; }
+  catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
   _dayofData = d;
-  _renderDayOfHead(d);
-  _renderDayOfSummary(d);
-  _renderDayOfCoverage(d);
-  _renderDayOfOfficials(d);
-  _renderDayOfIncidents(d);
+  try {
+    _renderDayOfHead(d);
+    _renderDayOfSummary(d);
+    _renderDayOfCoverage(d);
+    _renderDayOfOfficials(d);
+    _renderDayOfIncidents(d);
+  } catch (e) { toast("Couldn't render the day-of view: " + e.message, false); }
 }
 let _dayofData = null;
 
@@ -3291,7 +3298,7 @@ function _wireDayOf() {
       try {
         await api(`/assignment-days/${dayId}/status`, { method: "PUT", body: JSON.stringify({ actual_status: target }) });
         loadDayOf();
-      } catch (err) { toast("Couldn't update check-in: " + err.message, true); }
+      } catch (err) { toast("Couldn't update check-in: " + err.message, false); }
       return;
     }
 
@@ -3320,7 +3327,7 @@ function _wireDayOf() {
           body: JSON.stringify({ official_id: Number(cand.dataset.oid), work_date: _DAYOF.date, working_as: cand.dataset.role }) });
         toast("Assigned for " + _fmtMDY(_DAYOF.date), true);
         loadDayOf();
-      } catch (err) { toast("Couldn't assign: " + err.message, true); }
+      } catch (err) { toast("Couldn't assign: " + err.message, false); }
       return;
     }
   });

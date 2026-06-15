@@ -100,6 +100,11 @@ test("blank name → cannot add", () => {
   assert.equal(rosterPrefillFromName("", "", "G14").canAdd, false);
   assert.equal(rosterPrefillFromName(null).canAdd, false);
 });
+test("'Last, First' comma form is not swapped", () => {
+  const plan = rosterPrefillFromName("Langone, Mia", "", "G14");
+  assert.equal(plan.first_name, "Mia");
+  assert.equal(plan.last_name, "Langone");
+});
 
 // --- resolveFilePlayerId (player for the "File" forms) ----------------------
 const PLAYERS = [
