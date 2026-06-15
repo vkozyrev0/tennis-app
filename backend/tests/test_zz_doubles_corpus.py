@@ -71,6 +71,18 @@ def test_doubles_pairing_request_mentioning_withdraw_classifies_as_doubles():
         "from singles and doubles.") == "withdrawal"
 
 
+def test_corpus_body_does_not_bleed_into_next_email():
+    # USTA-portal exports stack several emails per page. A *singles* withdrawal's
+    # body used to absorb the following *doubles* email's "Subject:" header,
+    # poisoning event extraction (Singles → "Singles, Doubles"). The footer cut
+    # stops the body at the USTA portal footer.
+    from app.email_extract import extract_events
+    d = _find("Ashvath Chamarthi has requested")   # the singles withdrawal
+    assert "WITHDRAWAL REQUEST: Anvith" not in d["body"]      # next email's subject gone
+    assert "You are receiving this message" not in d["body"]  # footer cut
+    assert extract_events(d["subject"], d["body"]) == "Singles"
+
+
 def test_corpus_specific_pairs():
     # Name-only pair (connector).
     assert extract_doubles_pair(*_two("Confirmed partnership")) == \

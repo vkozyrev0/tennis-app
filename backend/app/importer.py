@@ -94,8 +94,12 @@ def _parse_pdf_emails(raw: bytes) -> list[dict]:
         addr_match = re.search(r"<([^>]+@[^>]+)>", from_text)
         from_addr = addr_match.group(1) if addr_match else from_text
         body = page_text[m.end():].strip()
-        # Strip the spam-filter footer USTA's mail gateway tacks on.
-        body = re.split(r"This email has been scanned for spam", body, maxsplit=1)[0].strip()
+        # Cut the body at the first footer marker. USTA portal exports stack
+        # several separate emails on one page, so without the portal footer cut
+        # one email's body runs into the NEXT email's "Subject:" header — e.g. a
+        # *singles* withdrawal absorbing the following *doubles* one's subject,
+        # which then poisons event/name extraction.
+        body = _cut_at_footer(body).strip()
         # Dedup by (subject, from_address) — the PDF often re-displays a
         # thread on multiple pages; the first page is the canonical top.
         key = (subj.lower(), from_addr.lower())
@@ -119,6 +123,23 @@ def _parse_pdf_emails(raw: bytes) -> list[dict]:
 # down to one. Module-level so the helper is import-safe across calls.
 def _deglyph_pdf(s: str) -> str:
     return re.sub(r"(.)\1{2,}", r"\1", s)
+
+
+# Footer/boundary markers that end an email body — everything from the earliest
+# one onward is gateway boilerplate or the next stacked email, not this email.
+_FOOTER_MARKERS = (
+    "This email has been scanned for spam",
+    "You are receiving this message as a registered tennis player",
+)
+
+
+def _cut_at_footer(body: str) -> str:
+    cut = len(body)
+    for mk in _FOOTER_MARKERS:
+        i = body.find(mk)
+        if i != -1:
+            cut = min(cut, i)
+    return body[:cut]
 
 
 def parse_file(filename: str, raw: bytes, cols) -> list[dict]:
