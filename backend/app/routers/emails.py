@@ -15,6 +15,7 @@ from ..email_extract import (
     extract_name_usta_pairs,
     extract_names,    # name-only spans (the doubles partner fallback signal)
     extract_doubles_pair,  # two names joined by a pairing connector (no USTA #)
+    extract_surname_pair,  # slashed surname shorthand in a subject (Pfifer / Mehendiratta)
     extract_withdraw_name,  # the withdrawing player's name (surface when unmatched)
     usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
@@ -152,6 +153,11 @@ def list_emails(response: Response, tournament_id: int | None = None,
                     names = (extract_doubles_pair(r.get("subject"), r.get("body"))
                              if r.get("classification") == "doubles"
                              else extract_names(r.get("subject"), r.get("body")))
+                    # Slashed surname shorthand in the subject ("… - Pfifer /
+                    # Mehendiratta") — the same pair the classifier counts, so a
+                    # doubles label never shows blank Player columns.
+                    if r.get("classification") == "doubles":
+                        names = [*names, *extract_surname_pair(r.get("subject"))]
                     for nm in names:
                         if _norm_name(nm) not in have:
                             pairs.append({"name": nm, "usta": None})

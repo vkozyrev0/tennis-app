@@ -13,6 +13,7 @@ import re
 from .email_extract import (
     extract_doubles_pair,
     extract_name_usta_pairs,
+    extract_surname_pair,
     extract_withdraw_name,
 )
 
@@ -57,16 +58,12 @@ _STRONG_RE = [(label, [re.compile(p) for p in pats]) for label, pats in _STRONG]
 # email's only evidence is a topic word ("…L3 Macon - Doubles" over an
 # acknowledgement body, "WITHDRAWAL REQUEST" with no name), and it should read as
 # UNKNOWN (other) for a human to review rather than a confident classification.
-# Two surnames slashed in the subject ("Pfifer / Mehendiratta") count as a pair.
-_SURNAME_PAIR_RE = re.compile(r"[A-Z][a-z][\w'’-]*\s*[/&]\s*[A-Z][a-z][\w'’-]*")
-
-
+# Two surnames slashed in the subject ("Pfifer / Mehendiratta") count as a pair
+# — same extractor the inbox grid uses to SHOW them, so label and names agree.
 def _doubles_name_count(subject: str | None, body: str | None) -> int:
-    n = max(len(extract_doubles_pair(subject, body)),
-            len(extract_name_usta_pairs(subject, body)))
-    if n < 2 and _SURNAME_PAIR_RE.search(subject or ""):
-        n = 2
-    return n
+    return max(len(extract_doubles_pair(subject, body)),
+               len(extract_name_usta_pairs(subject, body)),
+               len(extract_surname_pair(subject)))
 
 
 def _kw_match(text: str, kw) -> bool:

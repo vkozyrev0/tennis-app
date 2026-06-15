@@ -175,7 +175,12 @@ def _clean_name(raw: str) -> str | None:
     def _drop(tok: str) -> bool:
         return (tok in _NAME_STOPWORDS or tok.rstrip(".").lower() in _NONNAME_TOKENS)
 
-    while tokens and (tokens[0].endswith(".") or _drop(tokens[0])):
+    # A LEADING token with a digit is a division/level code ("G14s Dargan
+    # Alexander", "L3 Kate Hampton") — strip it so the span starts at the name.
+    # (Only leading: a trailing digit is virtually always real text, and never a
+    # division code, so this stays conservative.)
+    while tokens and (tokens[0].endswith(".") or _drop(tokens[0])
+                      or any(c.isdigit() for c in tokens[0])):
         tokens.pop(0)
     # Stop at a sentence-ending WORD ("…21043871 Ethan Carter. Kate Hampton…" →
     # keep just "Ethan Carter"). A multi-letter token ending in "." closes a
@@ -241,6 +246,34 @@ def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
                 out.append(nm)
         if len(out) == 2:
             return out
+    return []
+
+
+# Two single-token surnames slashed/ampersanded in a subject — the doubles
+# shorthand a TD writes when both players are known by surname ("L3 14s boys
+# doubles - Pfifer / Mehendiratta"). Each side is ONE person-name token (so glue
+# words, "Doubles", "Singles" are already excluded by _PERSON_TOKEN); the extra
+# guards drop division/level codes ("G14"), org/credential tokens, and require
+# the two to differ. This is the one source both the classifier (does a doubles
+# email name a pair?) and the inbox grid (which two names to show) read from.
+_SURNAME_PAIR_RE = re.compile("(" + _PERSON_TOKEN + r")\s*[/&]\s*(" + _PERSON_TOKEN + ")")
+_DIVISION_WORDS = {"boys", "girls", "men", "women", "mens", "womens", "adult",
+                   "junior", "juniors", "open", "level", "macon", "southern",
+                   "southerns", "singles", "doubles", "mixed"}
+
+
+def extract_surname_pair(subject: str | None) -> list[str]:
+    """The two surnames from a slashed doubles-shorthand subject
+    ('… - Pfifer / Mehendiratta') → ['Pfifer', 'Mehendiratta'], or []. Subject
+    only — slash pairs in a body are usually URLs / date ranges, not players."""
+    for m in _SURNAME_PAIR_RE.finditer(subject or ""):
+        a, b = m.group(1), m.group(2)
+        if any(any(c.isdigit() for c in t) or t.rstrip(".").lower() in _NONNAME_TOKENS
+               or t.lower() in _DIVISION_WORDS for t in (a, b)):
+            continue
+        if a.casefold() == b.casefold():
+            continue
+        return [a, b]
     return []
 
 
