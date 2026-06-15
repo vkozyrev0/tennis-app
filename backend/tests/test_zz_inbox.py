@@ -261,7 +261,7 @@ def test_put_manual_pick_tags_manual_then_clear():
 def test_suggest_classification():
     t = _tournament()
     e = _email(t["id"], subject="Withdrawal request for my daughter",
-               body="She must withdraw from the tournament due to injury.")
+               body="Please withdraw Anna Brown from the tournament due to injury.")
     out = _ok(client.post(f"/api/emails/{e['id']}/suggest", json={}), 200)
     assert out["classification"] == "withdrawal"
 

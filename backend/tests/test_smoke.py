@@ -1071,7 +1071,9 @@ def test_pay_snapshot_persisted():
 def test_triage_suggest():
     t = _tournament()
     cases = [
-        ("Need to withdraw", "my child has an injury", "withdrawal"),
+        # A label needs the right number of named players: a withdrawal must name
+        # the player; a doubles label needs a pair OR an explicit random pairing.
+        ("Need to withdraw", "Please withdraw Maya Lin, she has an injury.", "withdrawal"),
         ("Late entry?", "we missed the deadline, can we still enter", "late_entry"),
         ("Doubles partner", "please set up random pairing", "doubles"),
         ("Hotel info", "we are staying at the Marriott", "hotel"),

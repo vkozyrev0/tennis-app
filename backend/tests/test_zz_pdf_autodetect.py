@@ -103,8 +103,8 @@ def test_pdf_merge_no_roster_match_leaves_player_blank_but_keeps_usta_text():
 def test_pdf_merge_still_dedups_and_classifies():
     t = _tournament()
     subj = "WITHDRAWAL REQUEST: dup " + uuid.uuid4().hex[:6]
-    _merge(t["id"], subj, "withdraw due to injury")
-    _merge(t["id"], subj, "withdraw due to injury")   # same → deduped
+    _merge(t["id"], subj, "Please withdraw Sam Jones due to injury.")
+    _merge(t["id"], subj, "Please withdraw Sam Jones due to injury.")   # same → deduped
     rows = [m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
             if m["subject"] == subj]
     assert len(rows) == 1

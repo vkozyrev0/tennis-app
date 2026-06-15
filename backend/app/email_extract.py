@@ -204,7 +204,7 @@ _PERSON_NAME = _PERSON_TOKEN + r"(?:\s+" + _PERSON_TOKEN + r"){1,2}"
 # Y", "X would like to pair with Y", "X to play with Y". The filler is
 # lowercase-only so it can't swallow the second name.
 _PAIR_CONNECTOR = (r"\s*(?:&|\+|/|\band\b|\bplus\b|"
-                   r"(?:[a-z]+\s+){0,4}?\bwith\b)\s*")
+                   r"(?:[a-z]+\s+){0,6}?\bwith\b)\s*")  # "…would like to play doubles with Y"
 _DOUBLES_PAIR_RE = re.compile("(" + _PERSON_NAME + ")" + _PAIR_CONNECTOR
                               + "(" + _PERSON_NAME + ")")
 # A connected name pair only counts as PLAYERS when a doubles/pairing word sits
@@ -281,7 +281,16 @@ def extract_withdraw_name(subject: str | None, body: str | None) -> str | None:
               _WD_SUBJ_LEAD_RE.match(subj), _WD_BEFORE_RE.search(text)):
         if m and (nm := _clean_name(m.group(1))):
             return nm
+    # USTA-portal first-name-only form ("WITHDRAWAL REQUEST: Ashvath, Boys' 14
+    # & under singles") — accept the lone given name (the full name, when present,
+    # is caught above by the body template).
+    m = _WD_REQUEST_FIRST_RE.search(text)
+    if m:
+        return m.group(1)
     return None
+
+
+_WD_REQUEST_FIRST_RE = re.compile(r"(?i:withdrawal\s+request)\s*[:\-]\s*([A-Z][a-z][\w'’-]*)")
 
 
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:

@@ -50,7 +50,7 @@ def _classify(ids, **extra):
 
 def test_bulk_classify_sets_suggestion():
     t = _tournament()
-    wd = _email(t["id"], "Withdrawal", "I am withdrawing from the event")
+    wd = _email(t["id"], "Withdrawal", "Please withdraw Jordan Avery from the event.")
     le = _email(t["id"], "Question", "I missed the deadline, can I still enter?")
     out = _classify([wd["id"], le["id"]])
     assert out["classified"] == 2
@@ -71,7 +71,7 @@ def test_only_unclassified_by_default():
 
 def test_force_reclassify_overwrites():
     t = _tournament()
-    e = _email(t["id"], "Withdrawal", "withdrawing")
+    e = _email(t["id"], "Withdrawal", "Please withdraw Jordan Avery.")
     _ok(client.put(f"/api/emails/{e['id']}", json={"classification": "other"}), 200)
     out = _classify([e["id"]], only_unclassified=False)
     assert out["classified"] == 1

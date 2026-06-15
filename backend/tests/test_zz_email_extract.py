@@ -180,9 +180,10 @@ def test_extract_withdraw_name_corpus_shapes():
     assert W("WITHDRAWAL REQUEST: Ashvath, Boys' 14 & under singles",
              "Ashvath Chamarthi has requested to be withdrawn from Level 3.") == "Ashvath Chamarthi"
     assert W("Withdrawal Request: David Benedict", "Dear Julie,") == "David Benedict"
-    # the "WITHDRAWAL REQUEST:" prefix must NOT yield a garbage name
+    # the "WITHDRAWAL REQUEST: <First>" portal subject yields the player's first
+    # name when the body names no one — enough to classify (not a garbage token).
     assert W("WITHDRAWAL REQUEST: Siddhanth, Boys' 14 & under singles",
-             "Withdrawal Request\nDear Julie,") is None
+             "Withdrawal Request\nDear Julie,") == "Siddhanth"
     # a doubles email (no withdrawal cue) → nothing
     assert W("Macon L3 Doubles", "Everly Cogdell and Zaria Wadawu doubles partners") is None
 

@@ -10,7 +10,11 @@ needs an explicit cloud-vs-local decision first.
 """
 import re
 
-from .email_extract import extract_doubles_pair, extract_name_usta_pairs
+from .email_extract import (
+    extract_doubles_pair,
+    extract_name_usta_pairs,
+    extract_withdraw_name,
+)
 
 # Order matters: more specific intents first. Each rule entry is either a
 # bare keyword (substring match, lowercased) or a tuple ("re", pattern) for
@@ -48,28 +52,21 @@ _STRONG = [
 _STRONG_RE = [(label, [re.compile(p) for p in pats]) for label, pats in _STRONG]
 
 
-# "doubles" is a TOPIC word — a thread subject can say "L3 Macon - Doubles"
-# while the body is just an acknowledgement ("No worries thank you") with no
-# actual pairing request. Such emails should read as UNKNOWN (other), not a
-# confident doubles. So a doubles label needs a CONCRETE pairing signal: a named
-# pair, a "doubles partner(s)" phrase, a "pair/play doubles with <Name>" request,
-# two surnames slashed in the subject, or an "add … for doubles" ask.
-_DC_NAME = r"[A-Z][a-z][\w'’.-]*"
-_DOUBLES_CONCRETE = [
-    re.compile(r"\bdoubles?\s+partners?\b|\brandom\s+pair", re.I),
-    re.compile(r"(?i:\b(?:pair\w*|partner\w*|play\s+doubles))\b[^.?!\n]{0,25}"
-               r"\b(?i:with|and|&|up|for)\b\s*" + _DC_NAME),
-    re.compile(_DC_NAME + r"\s*[/&]\s*" + _DC_NAME),
-    re.compile(r"(?i:\b(?:add|enter|sign\s*up|register|put)\b)[^.?!\n]{0,25}"
-               r"\bfor\s+(?:the\s+)?doubles?\b"),
-]
+# A classification is only trustworthy when the right number of PLAYERS can
+# actually be named: doubles needs TWO, a withdrawal needs ONE. Otherwise the
+# email's only evidence is a topic word ("…L3 Macon - Doubles" over an
+# acknowledgement body, "WITHDRAWAL REQUEST" with no name), and it should read as
+# UNKNOWN (other) for a human to review rather than a confident classification.
+# Two surnames slashed in the subject ("Pfifer / Mehendiratta") count as a pair.
+_SURNAME_PAIR_RE = re.compile(r"[A-Z][a-z][\w'’-]*\s*[/&]\s*[A-Z][a-z][\w'’-]*")
 
 
-def _has_concrete_doubles(subject: str | None, body: str | None) -> bool:
-    text = f"{subject or ''} {body or ''}"
-    if any(p.search(text) for p in _DOUBLES_CONCRETE):
-        return True
-    return bool(extract_doubles_pair(subject, body)) or len(extract_name_usta_pairs(subject, body)) >= 2
+def _doubles_name_count(subject: str | None, body: str | None) -> int:
+    n = max(len(extract_doubles_pair(subject, body)),
+            len(extract_name_usta_pairs(subject, body)))
+    if n < 2 and _SURNAME_PAIR_RE.search(subject or ""):
+        n = 2
+    return n
 
 
 def _kw_match(text: str, kw) -> bool:
@@ -78,13 +75,18 @@ def _kw_match(text: str, kw) -> bool:
     return kw in text
 
 
+_RANDOM_PAIR_RE = re.compile(r"\brandom\s+pair", re.I)
+
+
 def classify(subject: str | None, body: str | None) -> str:
     label = _classify_raw(subject, body)
-    # A doubles label needs a CONCRETE pairing signal — otherwise a thread whose
-    # only doubles evidence is the topic word ("…L3 Macon - Doubles" with a body
-    # that's just "No worries thank you") reads as UNKNOWN (other), regardless of
-    # which pass suggested doubles.
-    if label == "doubles" and not _has_concrete_doubles(subject, body):
+    # Require the right number of identifiable PLAYERS, else fall back to UNKNOWN
+    # (other): a doubles label needs two named players, a withdrawal needs one.
+    # Exception: an explicit RANDOM-pairing request names no partner by design.
+    if label == "doubles":
+        if _doubles_name_count(subject, body) < 2 and not _RANDOM_PAIR_RE.search(f"{subject or ''} {body or ''}"):
+            return "other"
+    if label == "withdrawal" and not extract_withdraw_name(subject, body):
         return "other"
     return label
 
