@@ -54,6 +54,18 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 7 (classifier): a doubles *pairing* request that merely mentioned a
+player "withdrawing" was mislabeled **withdrawal** — the rule list checked the
+broad "withdraw" keyword first and any substring won. Reworked `classify()` into
+three passes (per the "patterns in sequence, not one mega-regex" steer):
+(1) strong, unambiguous phrases first, in priority order ("please withdraw" /
+"will be unable to participate" vs "doubles partner" / "pair … for doubles"), so
+competing signals resolve by specificity; (2) the **subject** keyword (the
+deliberate intent line) over an incidental body mention; (3) the original broad
+keyword fallback. On the real corpus this corrects two "…Doubles" threads from
+withdrawal → doubles (withdrawal 11→9) with no bad flips. +1 triage test, the
+corpus smoke-test counts updated; suite → 495 green.
+
 Follow-up 6 (withdrawals): withdrawal emails surfaced no player name when the
 player wasn't on the roster (unlike doubles), so most read as blank. New
 `extract_withdraw_name()` pulls the withdrawing player from the real corpus

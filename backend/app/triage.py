@@ -26,6 +26,26 @@ _RULES = [
 ]
 
 
+# High-confidence, UNAMBIGUOUS phrases — tried first, in priority order, so a
+# clear intent wins over an incidental mention elsewhere in the (often quoted)
+# thread. This is what stops "…please pair Zaria and Everly for doubles. Their
+# old partner Zeal is withdrawing" from reading as a withdrawal: it has a strong
+# doubles signal and no strong withdrawal one. Compiled patterns, matched
+# against subject+body.
+_STRONG = [
+    ("withdrawal", [r"\bplease\s+withdraw\b", r"\brequest(?:ed|ing)?\s+to\s+be\s+withdrawn\b",
+                    r"\bwill\s+be\s+unable\s+to\s+(?:participate|play|attend|compete)\b",
+                    r"\b(?:would\s+like|want|wish|need|hoping|going)\s+to\s+withdraw\b",
+                    r"\bwithdraw(?:ing|n|al)?\s+(?:him|her|them|my\s+\w+|\w+)?\s*from\s+the\s+(?:tournament|event|draw)\b"]),
+    ("doubles", [r"\bdoubles?\s+partners?\b", r"\bwould\s+like\s+to\s+(?:pair|partner|be\s+(?:doubles\s+)?partners?)\b",
+                 r"\bpair\s+(?:up|me|us|them)\b", r"\bpair\b[^.?!\n]{0,40}\bfor\s+(?:\w+\s+)?doubles?\b",
+                 r"\brandom\s+pair", r"\bpair\b[^.?!\n]{0,30}\b(?:and|with|&)\b[^.?!\n]{0,30}\bdoubles?\b"]),
+    ("late_entry", [r"\blate\s+(?:entry|entrant|add)\b", r"\bmissed\s+the\s+deadline\b",
+                    r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b"]),
+]
+_STRONG_RE = [(label, [re.compile(p) for p in pats]) for label, pats in _STRONG]
+
+
 def _kw_match(text: str, kw) -> bool:
     if isinstance(kw, tuple) and kw[0] == "re":
         return re.search(kw[1], text) is not None
@@ -33,7 +53,18 @@ def _kw_match(text: str, kw) -> bool:
 
 
 def classify(subject: str | None, body: str | None) -> str:
-    text = f"{subject or ''} {body or ''}".lower()
+    subj = (subject or "").lower()
+    text = f"{subj} {(body or '').lower()}"
+    # 1) Strongest, unambiguous phrases first — resolves competing signals.
+    for label, pats in _STRONG_RE:
+        if any(p.search(text) for p in pats):
+            return label
+    # 2) The SUBJECT is the deliberate intent line; trust a keyword there over an
+    #    incidental mention in the quoted body ("Macon L3 Doubles" → doubles).
+    for label, keywords in _RULES:
+        if any(_kw_match(subj, k) for k in keywords):
+            return label
+    # 3) Fall back to broad keywords over the whole text.
     for label, keywords in _RULES:
         if any(_kw_match(text, k) for k in keywords):
             return label

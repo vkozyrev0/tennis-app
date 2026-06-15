@@ -34,9 +34,10 @@ def test_corpus_parses_every_page():
 def test_corpus_classification_split():
     from collections import Counter
     counts = Counter(classify(r["data"]["subject"], r["data"]["body"]) for r in _ROWS)
-    # The export is all withdrawals + doubles requests.
-    assert counts["withdrawal"] == 11
-    assert counts["doubles"] == 19
+    # The export is all withdrawals + doubles requests. (Two "…Doubles" threads
+    # that merely *mention* a player withdrawing read as doubles, not withdrawal.)
+    assert counts["withdrawal"] == 9
+    assert counts["doubles"] == 21
 
 
 def test_corpus_doubles_pairs_extractable():
@@ -53,6 +54,21 @@ def test_corpus_doubles_pairs_extractable():
         if len(pair) == 2 or len(nu) >= 2:
             extractable += 1
     assert extractable >= 13
+
+
+def test_doubles_pairing_request_mentioning_withdraw_classifies_as_doubles():
+    # The reported bug: a pairing request that merely *mentions* a third player
+    # withdrawing must read as doubles, not withdrawal.
+    assert classify("Macon L3 Doubles",
+        "Can you please pair Zaria and Everly for doubles? Everly's initial "
+        "partner, Zeal, is withdrawing from doubles.") == "doubles"
+    assert classify("Re: Macon L3 Doubles",
+        "Good morning, Everly Cogdell and Zaria Wadawu. Doubles partners L3 "
+        "Macon. Thank you, Angelo Cogdell") == "doubles"
+    # …but a real withdrawal still wins even though it says "doubles".
+    assert classify("L3 Southern - Withdrawal Request",
+        "Zeal Reynolds will be unable to participate. Please withdraw her "
+        "from singles and doubles.") == "withdrawal"
 
 
 def test_corpus_specific_pairs():
