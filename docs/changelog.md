@@ -54,6 +54,15 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 8 (inbox): a **Confidence** column on the inbox grid — High / Medium /
+Low badge per email, derived from how the player was identified (`_inboxConfidence`):
+High = a USTA # or full name in the subject (or a manual pick); Medium = full
+name in the body, a fuzzy match, or an off-roster USTA; Low = a surname/first-
+name-only guess, or a name parsed from the text but not matched to the roster
+yet; — when nothing was identified. Frontend-only (reuses the existing
+`detected_match_kind` + the badge styles); `MATCH_KIND_META` gained the
+`fuzzy_name`/`firstname` kinds added earlier this session. Verified live.
+
 Follow-up 7 (classifier): a doubles *pairing* request that merely mentioned a
 player "withdrawing" was mislabeled **withdrawal** — the rule list checked the
 broad "withdraw" keyword first and any substring won. Reworked `classify()` into

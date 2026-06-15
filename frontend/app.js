@@ -4000,11 +4000,36 @@ const MATCH_KIND_META = {
   usta_subject:      { dot: "●", cls: "ok",   label: "Matched by USTA subject (first name + division) — high confidence" },
   fullname_subject:  { dot: "●", cls: "ok",   label: "Full name in the subject — high confidence" },
   fullname_body:     { dot: "◐", cls: "warn", label: "Full name in the body — medium confidence" },
+  fuzzy_name:        { dot: "◐", cls: "warn", label: "Name matched after normalizing (inversion / middle name / accent) — medium confidence" },
   lastname_subject:  { dot: "○", cls: "warn", label: "Surname only (subject) — please verify" },
   lastname:          { dot: "○", cls: "warn", label: "Surname only — please verify" },
+  firstname:         { dot: "○", cls: "warn", label: "First name only (unique on the roster) — please verify" },
   usta_offroster:    { dot: "◑", cls: "warn", label: "Matched by USTA # — but this player is NOT on this tournament's roster; add them" },
   manual:            { dot: "✎", cls: "info", label: "Set manually" },
 };
+// Per-email detection CONFIDENCE for the inbox grid, derived from how the
+// player was identified. High = a USTA # / full name in the subject (or a manual
+// pick); Medium = full name in the body / a fuzzy or off-roster match; Low = a
+// surname/first-name-only guess, or a name parsed from the text but not yet
+// matched to the roster. Returns null when nothing was identified.
+const _CONF_TIER = {
+  usta: 3, withdraw_template: 3, usta_subject: 3, fullname_subject: 3, manual: 3,
+  fullname_body: 2, fuzzy_name: 2, usta_offroster: 2,
+  lastname_subject: 1, lastname: 1, firstname: 1,
+};
+const _CONF_LABEL = { 3: ["High", "ok"], 2: ["Medium", "warn"], 1: ["Low", "bad"] };
+function _inboxConfidence(m) {
+  if (m.detected_player_id != null) {
+    const [label, cls] = _CONF_LABEL[_CONF_TIER[m.detected_match_kind] || 2];
+    return { label, cls, title: (MATCH_KIND_META[m.detected_match_kind] || {}).label || "Matched to a roster player" };
+  }
+  // not matched, but the email named someone / carried a USTA # → low (a lead to confirm)
+  if ((m.detected_name_pairs || []).length || m.detected_usta_text) {
+    return { label: "Low", cls: "bad",
+             title: "Parsed from the email but not matched to the roster — confirm or add the player" };
+  }
+  return null;
+}
 function matchHint(kind) {
   const m = MATCH_KIND_META[kind];
   if (!m) return "";
@@ -4331,6 +4356,13 @@ const inboxGrid = makeReadGrid("inbox-table", [
     formatter: (c) => classChip(c.getValue()),
     editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
     headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
+  // How confident the auto-detection of the player is (see _inboxConfidence).
+  { title: "Confidence", field: "_conf", width: 110, headerSort: false, hozAlign: "center",
+    formatter: (c) => {
+      const k = _inboxConfidence(c.getData());
+      return k ? hstr`<span class="badge badge-${k.cls}" title="${k.title}">${k.label}</span>`
+               : '<span class="muted" title="No player identified yet">—</span>';
+    } },
   { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
     headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
   { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 150, cssClass: "grid-actions-cell",
