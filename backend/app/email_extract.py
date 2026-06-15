@@ -244,6 +244,46 @@ def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
     return []
 
 
+# The player a withdrawal email is about — surfaced even when they're not on
+# the roster (so the inbox shows the name instead of a blank). The real corpus
+# names them three ways: a body template ("Ashvath Chamarthi has requested to be
+# withdrawn", "Zeal Reynolds will be unable to participate"), a subject lead
+# ("August Baklini withdrawal", "Stella Johansson Withdraw - …"), or "withdraw
+# <Name>". `_PERSON_NAME` stays case-sensitive; the verbs are scoped (?i:).
+# Whole-word withdraw/scratch forms (NOT `withdraw\w*` — that backtracks to a
+# prefix so the lookahead in _WD_BEFORE_RE could escape, capturing "L REQUEST"
+# out of "WITHDRAWAL REQUEST").
+_WD_KW = (r"\b(?i:withdraw|withdrawn|withdrawal|withdrawals|withdrawing|withdraws|"
+          r"scratch|scratched|scratching|scratches)\b")
+_WD_VERB = (r"(?i:has\s+requested\s+to\s+be\s+withdrawn|will\s+be\s+unable|"
+            r"is\s+unable|will\s+not\s+be\s+able|won['’]?t\s+be\s+able|"
+            r"is\s+withdrawing|will\s+not\s+be\s+participating|cannot\s+participate|"
+            r"needs?\s+to\s+withdraw)|" + _WD_KW)
+_WD_BODY_RE = re.compile("(" + _PERSON_NAME + r")(?:[’']s)?\s+(?:" + _WD_VERB + ")")
+# "Withdrawal Request: David Benedict" / "WITHDRAWAL REQUEST: Jane Doe" — the
+# forwarded-form / USTA-portal lead (the name needs 2+ tokens; a first-name-only
+# "…: Ashvath, Boys' 14" is left for the body template to catch).
+_WD_REQUEST_RE = re.compile(r"(?i:withdrawal\s+request)\s*[:\-]\s*(" + _PERSON_NAME + ")")
+# "Stella Johansson Withdraw …" / "August Baklini withdrawal" leading the subject.
+_WD_SUBJ_LEAD_RE = re.compile("(" + _PERSON_NAME + r")\s+(?:" + _WD_KW + r"|(?i:pulling))")
+# "withdraw Jane Doe" — but NOT "withdrawal request …" (handled above).
+_WD_BEFORE_RE = re.compile("(?:" + _WD_KW + r")(?!\s+(?i:request))\s*[:\-]?\s*(" + _PERSON_NAME + ")")
+_RE_PREFIX_RE = re.compile(r"^(?:(?:re|fw|fwd)\s*:\s*)+", re.I)
+
+
+def extract_withdraw_name(subject: str | None, body: str | None) -> str | None:
+    """The withdrawing player's name, or None. Prefers a full name from the body
+    template, then the 'Withdrawal Request: <Name>' lead, the subject lead, and
+    finally a 'withdraw <Name>' mention."""
+    subj = _RE_PREFIX_RE.sub("", (subject or "").strip())
+    text = f"{subj}\n{body or ''}"
+    for m in (_WD_BODY_RE.search(text), _WD_REQUEST_RE.search(text),
+              _WD_SUBJ_LEAD_RE.match(subj), _WD_BEFORE_RE.search(text)):
+        if m and (nm := _clean_name(m.group(1))):
+            return nm
+    return None
+
+
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
     """ALL plausible USTA #s for the multi-player classifications (doubles /
     pairing avoidance) — emails may carry a number for one player, both, or

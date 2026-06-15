@@ -54,6 +54,19 @@ so both players' numbers are found when the old narrow bridge (single separator
 + required space) missed the second. Letters never ride in the gap, so a number
 can't bind to a name across other words. +3 tests.
 
+Follow-up 6 (withdrawals): withdrawal emails surfaced no player name when the
+player wasn't on the roster (unlike doubles), so most read as blank. New
+`extract_withdraw_name()` pulls the withdrawing player from the real corpus
+shapes — a body template ("Zeal Reynolds will be unable to participate",
+"Ashvath Chamarthi has requested to be withdrawn"), a subject lead ("August
+Baklini withdrawal", "Stella Johansson Withdraw"), and "Withdrawal Request:
+&lt;Name&gt;" — without false-matching the "WITHDRAWAL REQUEST" prefix or the
+parent/club sender. The list endpoint surfaces it via `detected_name_pairs`
+(same grid path as doubles), so the Player-1 cell shows the name + ✉ + ＋ add
+even before a roster match. 7/11 corpus withdrawals now name the player (the
+rest are a misclassified-doubles, a pairing-change, and first-name-only portal
+variants whose siblings are named). +2 tests; suite → 494 green.
+
 Follow-up 5 (inbox doubles workflow): four more from the corpus pass.
 - **L7 surname guard** — a signature where a roster surname is actually someone
   else's first name + middle initial ("Alexander R. Jordan") no longer

@@ -15,6 +15,7 @@ from ..email_extract import (
     extract_name_usta_pairs,
     extract_names,    # name-only spans (the doubles partner fallback signal)
     extract_doubles_pair,  # two names joined by a pairing connector (no USTA #)
+    extract_withdraw_name,  # the withdrawing player's name (surface when unmatched)
     usta_candidates,  # the roster detector's L1 candidate list (ordered)
     extract_age_division,
     extract_avoid_day,
@@ -156,6 +157,12 @@ def list_emails(response: Response, tournament_id: int | None = None,
                             pairs.append({"name": nm, "usta": None})
                             have.add(_norm_name(nm))
                 r["detected_name_pairs"] = pairs[:4] or None
+            elif r.get("classification") == "withdrawal" and not r.get("detected_player_id"):
+                # Withdrawal naming a player who isn't matched to the roster:
+                # surface the parsed name (same grid path as doubles) so the TD
+                # sees who instead of a blank, with the ＋ add affordance.
+                nm = extract_withdraw_name(r.get("subject"), r.get("body"))
+                r["detected_name_pairs"] = [{"name": nm, "usta": None}] if nm else None
             else:
                 r["detected_name_pairs"] = None
             # Day/time only make sense for scheduling-avoidance emails (a weekday in

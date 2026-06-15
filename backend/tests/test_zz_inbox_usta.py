@@ -56,6 +56,21 @@ def test_labeled_usta_extracted_without_a_roster_match():
     assert row["detected_usta"] is None
 
 
+def test_unrostered_withdrawal_surfaces_the_player_name():
+    # A withdrawal naming a player NOT on the roster used to show a blank; now
+    # the parsed name surfaces (same grid path as doubles) so the TD sees who.
+    t = _tournament()
+    e = _email(t["id"], subject="L3 Southern 14 - Withdrawal Request",
+               body="Zeal Reynolds will be unable to participate. Please withdraw her.")
+    _ok(client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": None}), 200)
+    client.post(f"/api/emails/{e['id']}/detect-player")
+    row = _get(t["id"], e["id"])
+    assert row["detected_player_id"] is None        # not rostered
+    assert row["detected_name_pairs"] == [{"name": "Zeal Reynolds", "usta": None}]
+
+
 def test_membership_number_label_variant():
     t = _tournament()
     e = _email(t["id"], subject="Late entry",

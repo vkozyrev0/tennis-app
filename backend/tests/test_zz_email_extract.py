@@ -167,6 +167,26 @@ def test_extract_doubles_pair_name_only_real_shapes():
     assert D("", "Thanks, Leilei - Mia's mom") == []
 
 
+def test_extract_withdraw_name_corpus_shapes():
+    """The withdrawing player's name across the real corpus shapes — surfaced
+    even when the player isn't on the roster."""
+    from app.email_extract import extract_withdraw_name as W
+    assert W("L3 Southern 14 - Withdrawal Request",
+             "Zeal Reynolds will be unable to participate due to circumstances. "
+             "Please withdraw her.") == "Zeal Reynolds"
+    assert W("Re: August Baklini withdrawal", "Thanks.") == "August Baklini"
+    assert W("Re: Stella Johansson Withdraw - L3 Southern, G14",
+             "We will withdraw her.") == "Stella Johansson"
+    assert W("WITHDRAWAL REQUEST: Ashvath, Boys' 14 & under singles",
+             "Ashvath Chamarthi has requested to be withdrawn from Level 3.") == "Ashvath Chamarthi"
+    assert W("Withdrawal Request: David Benedict", "Dear Julie,") == "David Benedict"
+    # the "WITHDRAWAL REQUEST:" prefix must NOT yield a garbage name
+    assert W("WITHDRAWAL REQUEST: Siddhanth, Boys' 14 & under singles",
+             "Withdrawal Request\nDear Julie,") is None
+    # a doubles email (no withdrawal cue) → nothing
+    assert W("Macon L3 Doubles", "Everly Cogdell and Zaria Wadawu doubles partners") is None
+
+
 def test_name_usta_pairs_stop_at_sentence_boundary():
     """A name token must not swallow the next sentence's first word: '21043871
     Ethan Carter. Kate Hampton USTA# …' → two clean pairs, not 'Ethan Carter
