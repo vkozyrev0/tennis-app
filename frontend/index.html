@@ -954,6 +954,12 @@
           </span>
           <button type="button" id="inbox-bulk-populate" title="Create rows in the matching lists (withdrawals / late entries / scheduling / div-flex / hotel) using each email's classification + detected player">Populate lists →</button>
           <button type="button" id="inbox-bulk-triage" class="primary" title="One click: classify → detect players → populate lists for all selected emails">⚡ Triage all →</button>
+          <!-- Status group: for info-only emails (hotel notes, acks) that don't
+               populate a list but should still clear out of the unfiled queue. -->
+          <span class="bulk-group">
+            <button type="button" id="inbox-bulk-filed" title="Mark the selected emails handled — clears them out of the 'unfiled' count without creating a list row">✓ Mark filed</button>
+            <button type="button" id="inbox-bulk-followup" title="Flag the selected emails as needing follow-up">⏳ Need follow-up</button>
+          </span>
           <span class="msg" id="inbox-bulk-msg"></span>
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
@@ -1439,6 +1445,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=197"></script>
+  <script type="module" src="/app.js?v=198"></script>
 </body>
 </html>

@@ -101,6 +101,14 @@ class EmailBulkDetect(BaseModel):
     email_ids: list[int]
 
 
+class EmailBulkStatus(BaseModel):
+    """Mark every selected email filed / needs-follow-up / back to new — for the
+    info-only emails (hotel, division-flex acks) that don't populate a list but
+    should still clear out of the 'unfiled' count."""
+    email_ids: list[int]
+    status: EmailStatus
+
+
 class EmailBulkClassify(BaseModel):
     """Run the local rule-based triage classifier over selected emails and write
     each one's suggested classification."""

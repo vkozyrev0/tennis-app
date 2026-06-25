@@ -85,6 +85,7 @@ from ._models_inbox import (  # noqa: F401
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,
+    EmailBulkStatus,
     EmailCreate,
     EmailDetectResult,
     EmailOut,

@@ -4537,6 +4537,23 @@ const inboxGrid = makeReadGrid("inbox-table", [
           loadInbox();
         } catch (e) { toast(e.message, false); }
       };
+      // Per-row status parity with the bulk toolbar: lets the TD clear a single
+      // info-only email (hotel note, ack) — or flag one for follow-up — straight
+      // from its row, without bulk-selecting. Reuses /emails/bulk/status.
+      const doSetStatus = (status, verb) => async () => {
+        try {
+          await api("/emails/bulk/status", { method: "POST", body: JSON.stringify({ email_ids: [m.id], status }) });
+          toast(verb, true); loadInbox();
+        } catch (e) { toast(e.message, false); }
+      };
+      const statusItems = [
+        ...(m.status !== "filed" ? [{ label: "Mark filed (handled)",
+          title: "Clear this email out of the unfiled queue without creating a list row", onClick: doSetStatus("filed", "Marked filed") }] : []),
+        ...(m.status !== "needs_followup" ? [{ label: "Flag for follow-up",
+          title: "Mark this email as needing follow-up", onClick: doSetStatus("needs_followup", "Flagged for follow-up") }] : []),
+        ...(m.status !== "new" ? [{ label: "Reopen (back to unfiled)",
+          title: "Return this email to the unfiled queue", onClick: doSetStatus("new", "Reopened") }] : []),
+      ];
       const items = [
         { label: "Suggest classification + player", title: "Run the local classifier and player detector", onClick: doSuggest },
         ...(canFilePair ? [{ label: "File pair (both players)",
@@ -4547,6 +4564,8 @@ const inboxGrid = makeReadGrid("inbox-table", [
           title: offRoster ? "Add this existing player to the tournament roster" : "Open the roster form pre-filled with this email's USTA # + division", onClick: () => _inboxAddToRoster(m) }] : []),
         ...(m.amends_email_id ? [{ label: "Apply correction → update filed row",
           title: "Re-point the amended email's filed row to this one and re-apply the parsed fields", onClick: doApplyCorrection }] : []),
+        { separator: true },
+        ...statusItems,
         { separator: true },
         { label: "Delete email", danger: true, onClick: doDelete },
       ];
@@ -4968,6 +4987,30 @@ document.getElementById("inbox-bulk-reassign").addEventListener("click", async (
     _inboxBulkRefreshUi();
   } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
 });
+// Bulk status: clear the info-only emails (hotel notes, acks) that don't
+// populate a list but should still leave the 'unfiled' queue. Mirrors the other
+// bulk actions: POST /emails/bulk/status → toast + reload + refresh summary.
+const _inboxBulkStatus = (status, verb) => async (ev) => {
+  if (!_inboxSelected.size) return;
+  const btn = ev.currentTarget;
+  btn.disabled = true;
+  try {
+    const res = await api("/emails/bulk/status", {
+      method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected], status }),
+    });
+    const n = res.updated;
+    setMsg("inbox-bulk-msg", `${verb} ${n} email${n === 1 ? "" : "s"}`, true);
+    toast(`${verb} ${n} email${n === 1 ? "" : "s"}`, true);
+    _inboxSelected.clear();
+    await loadInbox();
+    _inboxBulkRefreshUi();
+  } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+  finally { btn.disabled = false; }
+};
+document.getElementById("inbox-bulk-filed")
+  .addEventListener("click", _inboxBulkStatus("filed", "Marked filed"));
+document.getElementById("inbox-bulk-followup")
+  .addEventListener("click", _inboxBulkStatus("needs_followup", "Flagged for follow-up"));
 document.getElementById("inbox-bulk-populate").addEventListener("click", async (ev) => {
   if (!_inboxSelected.size) return;
   const btn = ev.currentTarget;

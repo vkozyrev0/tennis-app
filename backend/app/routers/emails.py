@@ -37,6 +37,7 @@ from ..models import (
     EmailBulkDetect,
     EmailBulkPopulate,
     EmailBulkReassign,
+    EmailBulkStatus,
     EmailCreate,
     EmailDetectResult,
     EmailOut,
@@ -446,6 +447,21 @@ def bulk_reassign(body: EmailBulkReassign, conn=Depends(db_dep)):
         cur.execute(
             "UPDATE email_message SET tournament_id = %s WHERE id = ANY(%s)",
             (body.tournament_id, body.email_ids),
+        )
+        return {"updated": cur.rowcount}
+
+
+@router.post("/bulk/status")
+def bulk_status(body: EmailBulkStatus, conn=Depends(db_dep)):
+    """Mark every selected email filed / needs-follow-up / new. Lets the TD clear
+    the info-only emails (hotel notes, acknowledgements) that don't populate a
+    request list but should still leave the 'unfiled' queue."""
+    if not body.email_ids:
+        return {"updated": 0}
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE email_message SET status = %s WHERE id = ANY(%s)",
+            (body.status, body.email_ids),
         )
         return {"updated": cur.rowcount}
 

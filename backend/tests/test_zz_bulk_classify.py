@@ -81,3 +81,35 @@ def test_force_reclassify_overwrites():
 def test_empty_list_noop():
     out = _classify([])
     assert out["classified"] == 0
+
+
+def _status(ids, status):
+    return _ok(client.post("/api/emails/bulk/status",
+                           json={"email_ids": ids, "status": status}), 200)
+
+
+def test_bulk_status_marks_filed_and_followup():
+    t = _tournament()
+    a = _email(t["id"], "Hotel block", "We are staying at the Marriott, FYI.")
+    b = _email(t["id"], "Thanks", "Got it, thanks!")
+    # both start 'new' (unfiled)
+    assert _status([a["id"], b["id"]], "filed")["updated"] == 2
+    rows = {e["id"]: e for e in client.get(f"/api/emails?tournament_id={t['id']}").json()}
+    assert rows[a["id"]]["status"] == "filed"
+    assert rows[b["id"]]["status"] == "filed"
+    # flip one back to needs_followup
+    assert _status([a["id"]], "needs_followup")["updated"] == 1
+    rows = {e["id"]: e for e in client.get(f"/api/emails?tournament_id={t['id']}").json()}
+    assert rows[a["id"]]["status"] == "needs_followup"
+
+
+def test_bulk_status_empty_noop():
+    assert _status([], "filed")["updated"] == 0
+
+
+def test_bulk_status_rejects_unknown_status():
+    t = _tournament()
+    e = _email(t["id"], "x", "y")
+    r = client.post("/api/emails/bulk/status",
+                    json={"email_ids": [e["id"]], "status": "bogus"})
+    assert r.status_code == 422, r.text
