@@ -65,4 +65,11 @@ RUN set -eux; \
     pg_ctl -D "$PGDATA" -m fast -w stop
 
 EXPOSE 8000
+
+# Readiness signal for plain `docker run` / the Caddy-VM path (Fly & Render define
+# their own /api/health checks). Uses the venv Python's stdlib urllib — no curl,
+# no extra apt package. start-period covers the cold-start migrate/seed.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health').read()" || exit 1
+
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

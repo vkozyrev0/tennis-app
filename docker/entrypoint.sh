@@ -64,7 +64,18 @@ PY
 fi
 
 echo "[entrypoint] serving API + frontend on 0.0.0.0:$PORT  (sign in: admin / admin)"
-# uvicorn becomes PID 1 so it gets SIGTERM directly on `docker stop`. The bundled
-# Postgres is killed with the container; it crash-recovers on next start (fine for
-# a POC, and the data volume is ephemeral with `docker run --rm`).
-exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --app-dir /app/backend
+# Run uvicorn as a child (not exec) and trap SIGTERM so a `docker stop` / Fly
+# scale-to-zero shuts the bundled Postgres down CLEANLY before the container dies.
+# Without this, only uvicorn (PID 1) gets the signal and Postgres is SIGKILLed,
+# forcing slow WAL crash-recovery on the next start (and exit 255 noise).
+shutdown() {
+  echo "[entrypoint] SIGTERM — stopping uvicorn then Postgres ..."
+  kill -TERM "$uvicorn_pid" 2>/dev/null || true
+  wait "$uvicorn_pid" 2>/dev/null || true
+  pg_ctl -D "$PGDATA" -m fast -w stop || true
+}
+trap shutdown TERM INT
+
+uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --app-dir /app/backend &
+uvicorn_pid=$!
+wait "$uvicorn_pid"
