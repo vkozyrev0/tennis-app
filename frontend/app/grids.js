@@ -326,9 +326,32 @@ export function createGridFactories(ctx) {
       onRowClicked: (p) => (handlers.rowClick || []).forEach((fn) => fn(p.event, {
         getData: () => p.data, getElement: () => p.event && p.event.target && p.event.target.closest(".ag-row") })),
       onFilterChanged: () => (handlers.dataFiltered || []).forEach((fn) => fn()),
-      onSortChanged: () => (handlers.dataSorted || []).forEach((fn) => fn()),
-      onGridReady: (e) => { api = e.api; (handlers.tableBuilt || []).forEach((fn) => fn()); },
+      onSortChanged: () => {
+        // Sort persistence (Tabulator's persistence:{sort:true}): remember the
+        // active sort per grid across reloads.
+        if (tabOpts.persistKey && api) {
+          try {
+            const st = api.getColumnState().filter((c) => c.sort)
+              .map((c) => ({ colId: c.colId, sort: c.sort, sortIndex: c.sortIndex }));
+            localStorage.setItem(tabOpts.persistKey, JSON.stringify(st));
+          } catch (_) {}
+        }
+        (handlers.dataSorted || []).forEach((fn) => fn());
+      },
+      onGridReady: (e) => { api = e.api; _restoreSort(); (handlers.tableBuilt || []).forEach((fn) => fn()); },
+      // Also restore once rows first render — a grid created inside a hidden tab
+      // defers layout, so applyColumnState at onGridReady can be dropped; reapply
+      // when it actually renders. Idempotent, so running in both hooks is safe.
+      onFirstDataRendered: () => _restoreSort(),
     };
+    // Restore the persisted sort (Tabulator's persistence:{sort:true}).
+    function _restoreSort() {
+      if (!tabOpts.persistKey || !api) return;
+      try {
+        const saved = JSON.parse(localStorage.getItem(tabOpts.persistKey) || "null");
+        if (Array.isArray(saved) && saved.length) api.applyColumnState({ state: saved, defaultState: { sort: null } });
+      } catch (_) {}
+    }
     if (tabOpts.rowClassRules) opts.rowClassRules = tabOpts.rowClassRules;
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
@@ -413,6 +436,9 @@ export function createGridFactories(ctx) {
     const grid = _makeAgGrid(mount, {
       index: "id", placeholder, editTriggerEvent: "click",
       columnDefaults: { tooltip: true }, columns: cols,
+      // Sort persistence across reloads (Tabulator's persistence:{sort:true});
+      // opts.persist === false (the inbox) opts out.
+      ...(opts.persist === false ? {} : { persistKey: "courtops-ag-sort-" + tableId }),
     });
     const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
     grid.on("tableBuilt", _onBuilt);
