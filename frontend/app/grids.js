@@ -240,6 +240,9 @@ export function createGridFactories(ctx) {
       placeholder, columns,
       ...(opts.index ? { index: opts.index } : {}),
       ...(opts.editable ? { editTriggerEvent: opts.editable === true ? "click" : opts.editable } : {}),
+      // rowClassRules replaces Tabulator's rowFormatter for row-level styling
+      // (e.g. multi-select tint by set membership); re-applied via grid.redraw().
+      ...(opts.rowClassRules ? { rowClassRules: opts.rowClassRules } : {}),
     });
     if (exportName) {
       const csv = document.createElement("button");

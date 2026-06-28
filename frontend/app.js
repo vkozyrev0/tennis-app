@@ -1628,8 +1628,9 @@ const tSitesGrid = makeReadGrid("t-sites-table", [
 // whether it's currently part of the active tournament.
 ], "tournament-sites", "No sites match.", {
   index: "id",
-  engine: "tabulator",  // TODO: migrate to AG Grid (uses rowFormatter for row selection)
-  rowFormatter: (row) => row.getElement().classList.toggle("row-selected", tSitesSelected.has(row.getData().id)),
+  // Multi-select tint: rows already part of the active tournament get .row-selected.
+  // Re-evaluated on every setData()/setFilter() (which redraw) and after toggleSite.
+  rowClassRules: { "row-selected": (p) => p.data && tSitesSelected.has(p.data.id) },
 });
 function tSitesMatches(s) {
   const q = document.getElementById("t-sites-filter").value.trim().toLowerCase();
