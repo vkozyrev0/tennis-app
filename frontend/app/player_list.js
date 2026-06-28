@@ -7,11 +7,10 @@
 // of use, after `active` / expandPlayerRef / loadInbox exist), whereas
 // createGridFactories runs at module top. Dependency-injected like grids.js;
 // `active` is read through getActive() since it's a reassigned module global.
-/* global Tabulator */
 export function createPlayerList(ctx) {
   const {
     api, setMsg, confirmDialog, markInvalid, formObj, _csvDownload,
-    _autoHeaderFilters, GRIDS, expandPlayerRef, getActive, loadInbox,
+    _autoHeaderFilters, GRIDS, expandPlayerRef, getActive, loadInbox, makeGrid,
   } = ctx;
 
   return function wirePlayerList(cfg) {
@@ -56,14 +55,16 @@ export function createPlayerList(ctx) {
       },
     });
     let built = false, pending = null;
-    const table = new Tabulator(mount, {
-      index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder: cfg.empty,
-      renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _autoHeaderFilters(columns),
+    mount.style.height = "55vh";
+    const table = makeGrid(mount, {
+      index: "id", placeholder: cfg.empty, editTriggerEvent: "click",  // single click opens the cell editor (where set)
+      columnDefaults: { tooltip: true }, columns: _autoHeaderFilters(columns),
     });
     const _onBuilt = () => { built = true; if (pending) { table.setData(pending); pending = null; } };
     table.on("tableBuilt", _onBuilt);
-    if (table.initialized) _onBuilt();  // covers sync-fire race
+    // _onBuilt only touches locals declared above (no module-const TDZ risk), so
+    // the sync-init replay is safe to run inline.
+    if (table.initialized) _onBuilt();  // covers AG's synchronous init
     // In-grid edit: PUT only the editable fields (cfg.editFields maps field→true);
     // identity columns (player/usta) stay read-only.
     if (cfg.editFields) table.on("cellEdited", async (cell) => {

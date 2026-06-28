@@ -5646,7 +5646,7 @@ async function _suggestAlternates(wd) {
 // via a getter since it's a reassigned module global.
 const wirePlayerList = createPlayerList({
   api, setMsg, confirmDialog, markInvalid, formObj, _csvDownload,
-  _autoHeaderFilters, GRIDS, expandPlayerRef, loadInbox,
+  _autoHeaderFilters, GRIDS, expandPlayerRef, loadInbox, makeGrid,
   getActive: () => active,
 });
 const schedList = wirePlayerList({
