@@ -64,7 +64,7 @@ The backend already does the hard part: the upload endpoint stages every row int
 
 ## Redesign — preview grid with inline validation
 
-Replace the text summary with an **editable preview grid** (Tabulator) per
+Replace the text summary with an **editable preview grid** (AG Grid) per
 upload:
 
 - **Columns = the import type's columns** (from `/api/import/types` → `columns` +

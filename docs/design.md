@@ -41,7 +41,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 8 small helper modules (`util, shirts, roster_prefill, grids, auth, state, player_list, html`); **Tabulator 6.3.1** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 8 small helper modules (`util, shirts, roster_prefill, grids, auth, state, player_list, html`); **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -92,14 +92,15 @@ frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
   app.js               # ~8.0k lines: all behaviour (ES module)
   app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
-  app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a);
-                       #   responsive-collapse for mobile (overflow cols → ▸ tap-to-expand row)
+  app/grids.js         # AG Grid factories (createGridFactories(ctx) — P2 #11a); Tabulator-
+                       #   shaped colDefs translated to AG; custom dropdown/text header filters,
+                       #   sort persistence, mobile responsive-collapse (overflow cols → ▸ tap-popup)
   app/auth.js          # login + session view (sign-in/out, change-password, role-split header)
   app/state.js         # active-tournament state + change event
   app/player_list.js   # Part B list-page factory (wirePlayerList)
   app/html.js          # auto-escaping html`` / hstr tagged-template helper
   styles.css, tokens.css
-  vendor/tabulator.*   # vendored grid lib
+  vendor/ag-grid-community.min.js, ag-grid.css, ag-theme-quartz.css   # vendored grid lib
 scripts/
   e2e_td_scenario.py   # standalone black-box end-to-end driver (external HTTP client)
 docs/                  # this file + the others
@@ -331,7 +332,7 @@ loaded as `<script type="module">`) holds all behaviour; eight ESM helpers under
 normalisation, `roster_prefill.js`, `grids.js` — see below — plus `auth.js`
 login/session view, `state.js` active-tournament state, `player_list.js` the
 Part B list-page factory, and `html.js` the auto-escaping `html``/`hstr` helper).
-Tabulator is vendored.
+AG Grid Community is vendored.
 
 **Grid factories live in `app/grids.js`** (P2 #11a):
 `createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,

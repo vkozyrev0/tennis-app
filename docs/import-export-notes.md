@@ -32,7 +32,7 @@ Direct (non-staged) import: `POST /api/tournaments/{tid}/players/import` (roster
 | Payroll (bookkeeper) | `GET /api/tournaments/{tid}/payroll/export.csv` | CSV, **utf-8-sig BOM**, finalized records only |
 | Assignment audit | `GET /api/tournaments/{tid}/assignment-audit.csv` | CSV (incl. deleted-assignment rows) |
 | Official schedule | `GET /api/officials/{id}/schedule.ics` / `GET /api/me/schedule.ics` | iCalendar (RFC 5545, CRLF, all-day VEVENTs) |
-| Roster grid | Tabulator `grid.download("csv")` | CSV (browser) |
+| Roster grid | AG Grid `api.exportDataAsCsv()` | CSV (browser) |
 | Print windows (statements, staffing, hotel, rooming, day-of) | `printDoc()` in app.js | browser print/PDF + companion `_csvDownload` |
 
 ## Findings

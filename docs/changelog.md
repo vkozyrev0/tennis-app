@@ -9,6 +9,37 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-06-28 — AG Grid migration
+
+Replaced **Tabulator 6.x** with **AG Grid Community 32.3.5** across every grid
+(workspace lists, Setup master/detail CRUD, the read-only summaries, the roster,
+the staged-import preview, and the email inbox). The per-grid configs are
+unchanged: `grids.js` translates the existing Tabulator-shaped column defs into AG
+colDefs and emulates the small Tabulator cell/row surface the formatters and edit
+handlers call (`_agCell` / `_agRow`).
+
+- **Custom header filters** (AG Community has no Set filter): an exact-match
+  dropdown for `list` columns (status / division / gender / classification) and a
+  whole-row substring filter honouring each column's `headerFilterFunc` (so the
+  roster Player column matches name + USTA #, not just `last_name`). The inline
+  control is the filter UI — AG's funnel button is suppressed.
+- **Typeahead cell editor** for the inbox player/partner pickers (label/value
+  option pairs, which `agSelectCellEditor` can't do).
+- **Column groups** (inbox Player 1 / Player 2) and a **select-all header
+  checkbox** via a header component.
+- **Active-row highlight** (rowClassRules), **default id-asc sort**, **sort
+  persistence** across reloads (localStorage), and **mobile responsive-collapse**
+  — a ▸ expander opens a tap-popup listing the columns hidden below 760px.
+- Two app-breaking bugs caught + fixed during the migration (both local-only,
+  never pushed): a temporal-dead-zone ReferenceError in the roster's eager
+  tableBuilt replay, and an `opts is not defined` in `makeListGrid`'s sort-key —
+  each aborted module load after its grid.
+
+Tabulator and its ~470 KB vendor bundle are removed. Backend suite stays 528
+green; frontend node tests green.
+
+---
+
 ## 2026-06-14
 
 A UX round driven by a senior-UX usability pass: three builds, smallest-risk

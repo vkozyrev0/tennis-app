@@ -45,7 +45,7 @@ uvicorn app.main:app --reload --port 8000              # serves API at /api + fr
 ```
 
 Frontend has no build step — it's pure HTML/CSS/JS served straight from
-`frontend/`. Tabulator 6.3.1 is vendored.
+`frontend/`. AG Grid Community 32.3.5 is vendored.
 
 For a believable **live** demo to click around (staffed event, full roster,
 active inbox, problems to resolve), run `python demo_seed.py` from `backend/`.

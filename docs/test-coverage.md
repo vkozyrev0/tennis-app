@@ -39,7 +39,7 @@ risky to verify only through the live grid — seeding the roster add-form from 
 inbox email — is factored into `frontend/app/roster_prefill.js` and asserted by
 `frontend/app/roster_prefill.test.mjs` (run: `node frontend/app/roster_prefill.test.mjs`,
 12 checks). Covers the off-roster→pick-mode and unmatched→new-mode plans plus the
-"can't add" gates, independent of Tabulator rendering.
+"can't add" gates, independent of AG Grid rendering.
 
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the

@@ -155,7 +155,7 @@ adult_lists) one endpoint at a time.
 | **Connection pooling** (db.py opens one conn per request) | more than ~10 concurrent users, or any multi-worker deploy |
 | **Cluster-safe login throttle + sessions** (in-process dicts; per-instance brute-force window; the conftest reset fixture documents the smell) | `uvicorn --workers N` or a second replica |
 | **Transaction-isolation review** (default READ COMMITTED everywhere; fine for single-TD, unexamined for concurrent imports to the same tournament) | second concurrent writer on one tournament |
-| **Tabulator `renderVertical: "virtual"`** (all grids render every row; "basic" was chosen to dodge a resize-loop bug) | catalogs past ~300 rows; re-test the loop first |
+| ~~**Tabulator `renderVertical: "virtual"`**~~ — resolved: all grids migrated to AG Grid Community, which row-virtualizes natively (no resize-loop workaround needed). | — |
 | **Snapshot/audit abstraction** (proactive pay_audit vs lazy USTA backfill are two patterns) | the third audit target appears |
 | **CSS utility scale** (inline styles + magic values in JS-built DOM) | next visual-refresh round |
 

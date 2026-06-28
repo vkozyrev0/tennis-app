@@ -2,7 +2,7 @@
 
 Findings + fixes from the performance audit (2026-06-27), and the patterns to
 reuse when building similar subsystems. The app is a sync FastAPI + psycopg3
-backend (one connection per request) and a no-build vanilla-JS + Tabulator
+backend (one connection per request) and a no-build vanilla-JS + AG Grid
 frontend, so the wins are about **round-trips and per-row work**, not threads.
 
 ## Backend
