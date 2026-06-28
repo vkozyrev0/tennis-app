@@ -70,10 +70,11 @@ export function createGridFactories(ctx) {
   // string (e.g. "Last, First (USTA …)") or did exact-match enum filtering need
   // bespoke components. These pairs (filter + floating UI) cover both cases.
 
-  // values: ["a","b"] or { value: "Label" } (an "" key is treated as the
-  // all/clear option). Returns [[value,label], …].
+  // Accepts ["a","b"], [{label,value}, …], or { value: "Label" } (an "" key is
+  // the all/clear option). Returns [[value, label], …].
   function _valuePairs(values) {
-    if (Array.isArray(values)) return values.map((v) => [String(v), String(v)]);
+    if (Array.isArray(values)) return values.map((v) => (v && typeof v === "object")
+      ? [String(v.value), String(v.label)] : [String(v), String(v)]);
     return Object.keys(values || {}).map((k) => [k, String(values[k])]);
   }
 
