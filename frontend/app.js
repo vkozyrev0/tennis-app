@@ -466,7 +466,7 @@ function _rowGender(row) {
   if (!row || typeof playersById !== "object") return null;
   if (row.player_id && playersById[row.player_id]) return playersById[row.player_id].gender || null;
   if (row.usta_number) {
-    const p = Object.values(playersById).find((x) => x.usta_number === row.usta_number);
+    const p = playersByUsta[row.usta_number];  // O(1) index, was an O(n) scan
     return p ? (p.gender || null) : null;
   }
   return null;
@@ -912,6 +912,9 @@ document.addEventListener("reset", () => scheduleComboSync(), true);
 
 // ---- caches + labels ----
 const sitesById = {}, tournamentsById = {}, officialsById = {}, playersById = {}, hotelsById = {};
+// Secondary index: roster players keyed by USTA # for O(1) lookups (the
+// detection/grid paths match on USTA, not id). Rebuilt with playersById.
+const playersByUsta = {};
 const officialLabel = (o) => `${o.last_name}, ${o.first_name}`;
 const siteLabel = (s) => (s.code ? s.code + " — " : "") + s.name;
 const playerLabel = (p) => `${[p.last_name, p.first_name].filter(Boolean).join(", ") || "?"} (${p.usta_number})`;
@@ -1801,6 +1804,14 @@ const rosterGrid = new Tabulator(rosterMount, {
     { title: "Div", field: "age_division", editor: "list", cssClass: "editable-cell",
       editorParams: (cell) => _divisionListParams({ gender: _rowGender(cell.getData()) }),
       headerFilter: "input" },
+    // Gender is a primary axis when a TD splits work by Boys'/Girls' draws, but
+    // it was only used internally (division scoping) — surface + filter it.
+    { title: "Gender", field: "gender", width: 84,
+      formatter: (c) => { const g = _rowGender(c.getData());
+        return g === "male" ? "M" : g === "female" ? "F" : '<span class="muted">—</span>'; },
+      headerFilter: "list",
+      headerFilterParams: { values: { "": "all", male: "Boys / M", female: "Girls / F" }, clearable: true },
+      headerFilterFunc: (sel, _v, data) => !sel || _rowGender(data) === sel },
     { title: "Status", field: "selection_status", cssClass: "editable-cell",
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
       headerFilter: "list", headerFilterParams: { values: ["selected", "alternate", "withdrawn"], clearable: true },
@@ -3473,6 +3484,13 @@ const payrollGrid = makeReadGrid("payroll-table", [
         m.drift ? raw(' <span class="badge badge-bad" title="live total no longer matches the finalized amount — unfinalize + re-finalize, or investigate">drift</span>') : ""}`;
     } },
   { title: "Status", field: "_status", width: 120,
+    // open / finalized / paid is the field a TD settling pay scans most — let
+    // them filter to "everything still open" or "finalized but unpaid" in one
+    // click. The bucket is derived from finalized/paid, so a headerFilterFunc.
+    headerFilter: "list",
+    headerFilterParams: { values: { "": "all", open: "open", finalized: "finalized", paid: "paid" } },
+    headerFilterFunc: (sel, _v, data) => !sel
+      || (!data.finalized ? "open" : (data.finalized.paid ? "paid" : "finalized")) === sel,
     formatter: (c) => {
       const m = c.getData();
       if (!m.finalized) return '<span class="muted">open</span>';
@@ -3741,8 +3759,15 @@ const availGrid = makeReadGrid("avail-table", [
   { title: "Hotel", field: "hotel", width: 90, noFilter: true, formatter: (c) => (c.getData().hotel ? "yes" : "") },
   // Availability-vs-assigned gap: an official who offered dates but has no
   // assigned day yet is the TD's cue to staff them (audit §Availability).
-  { title: "Assigned", field: "assigned", width: 130, noFilter: true,
-    formatter: (c) => (c.getData().assigned ? "✓ yes" : '<span class="warn">⚠ not yet</span>') },
+  // "Show me who offered dates but isn't staffed yet" is the whole point of this
+  // tab — make Assigned filterable (and a chip, for parity with the app).
+  { title: "Assigned", field: "assigned", width: 130,
+    headerFilter: "list",
+    headerFilterParams: { values: { "": "all", yes: "assigned", no: "not yet" } },
+    headerFilterFunc: (sel, _v, data) => !sel || (sel === "yes" ? !!data.assigned : !data.assigned),
+    formatter: (c) => (c.getData().assigned
+      ? '<span class="badge badge-ok">✓ assigned</span>'
+      : '<span class="badge badge-warn">⚠ not yet</span>') },
 ], "availability", "No availability recorded yet.");
 // Official ids that have at least one assigned day in this tournament (set in
 // loadAvailability), so the table + gap callout can flag the unstaffed.
@@ -4131,9 +4156,14 @@ const _p360 = (pid, name) => pid
   ? hstr`<span class="p360-link" data-pid="${pid}" role="button" tabindex="0" title="View everything about this player (360)">${name}</span>`
   : hstr`${name}`;
 // Roster dropdown for the manual player/partner pickers (typeahead list).
-const _playerPickValues = () => Object.values(playersById)
+// Memoized: the sorted list is identical between roster reloads, but the editor
+// opens (and rebuilt it) on every cell-edit; invalidated by _invalidatePickCache
+// when playersById is rebuilt.
+let _pickCache = null;
+const _invalidatePickCache = () => { _pickCache = null; };
+const _playerPickValues = () => (_pickCache ||= Object.values(playersById)
   .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
-  .map((p) => ({ label: playerLabel(p), value: String(p.id) }));
+  .map((p) => ({ label: playerLabel(p), value: String(p.id) })));
 const _PLAYER_EDITOR = {
   editor: "list", cssClass: "editable-cell",
   editorParams: () => ({ values: _playerPickValues(), autocomplete: true,
@@ -4227,7 +4257,8 @@ async function _inboxDetectInto(m, row) {
 // list, or an empty cell (Detect + ✎ pick for slot 0; ✎ for slot 1).
 function _inboxNameCell(cell, slotIdx) {
   const m = cell.getData(); const row = cell.getRow();
-  const s = _inboxSlots(m)[slotIdx];
+  const all = _inboxSlots(m);  // computed once; reused for the "add both" peek below
+  const s = all[slotIdx];
   const wrap = document.createElement("span");
   wrap.className = "inbox-name-cell";
   const editBtn = (title) => _iconBtn("✎", title || "Change — pick a roster player", () => cell.edit(true));
@@ -4252,7 +4283,6 @@ function _inboxNameCell(cell, slotIdx) {
     // When BOTH players of a name-only pair are unrostered, collapse the two
     // per-cell ＋ into a single "Add both" on the primary cell (it opens each
     // player's form in turn); otherwise just this cell's ＋.
-    const all = _inboxSlots(m);
     const other = all[slotIdx === 0 ? 1 : 0];
     const otherPlan = other && other.name && !other.matched
       ? rosterPrefillFromName(other.name, other.usta, m.detected_division) : { canAdd: false };
@@ -7304,7 +7334,11 @@ const playersCrud = wireEntity({
     // (roster add, Part B player refs) need the full roster, and a stale-but-
     // complete cache beats a fresh-but-filtered one.
     if (info && info.q) return;
-    for (const k in playersById) delete playersById[k]; rows.forEach((p) => (playersById[p.id] = p)); refreshAllSelects();
+    for (const k in playersById) delete playersById[k];
+    for (const k in playersByUsta) delete playersByUsta[k];
+    rows.forEach((p) => { playersById[p.id] = p; if (p.usta_number) playersByUsta[p.usta_number] = p; });
+    _invalidatePickCache();
+    refreshAllSelects();
   },
   onSelect: (p) => loadPlayerHistory(p.id),
   onNew: () => { document.getElementById("player-history").hidden = true; },
