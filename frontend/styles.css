@@ -947,11 +947,17 @@ a.export-btn { text-decoration: none; }
    floating-filter row like AG's built-in text filter so they read as one strip. */
 .ag-theme-quartz .ag-list-floating,
 .ag-theme-quartz-dark .ag-list-floating {
-  width: 100%; height: var(--ag-list-item-height, 24px); min-height: 0;
+  width: 100%; box-sizing: border-box;
+  height: auto; min-height: 0; margin: 4px 0; line-height: 1.2;
   border: 1px solid var(--ag-border-color, var(--border)); border-radius: 4px;
   background: var(--ag-background-color, var(--card)); color: inherit;
   font: inherit; font-size: 0.78rem; padding: 0 0.2rem;
 }
+/* The floating-filter cell wraps our control in .ag-floating-filter-body; now
+   that the funnel button is gone, let our control fill the cell and stretch to
+   the same height AG gives its built-in floating text input. */
+.ag-theme-quartz .ag-floating-filter-body,
+.ag-theme-quartz-dark .ag-floating-filter-body { display: flex; align-items: stretch; }
 .ag-theme-quartz .ag-custom-filter,
 .ag-theme-quartz-dark .ag-custom-filter { padding: 6px; min-width: 180px; }
 .ag-theme-quartz .ag-custom-filter input { width: 100%; }

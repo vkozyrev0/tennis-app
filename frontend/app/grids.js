@@ -201,15 +201,17 @@ export function createGridFactories(ctx) {
         const vals = (col.headerFilterParams && col.headerFilterParams.values) || [];
         cd.filter = _agListFilter(col.headerFilterFunc, col.field);
         cd.floatingFilterComponent = _agListFloating(vals);
-        cd.floatingFilter = true;
       } else if (typeof col.headerFilterFunc === "function") {
         cd.filter = _agTextFuncFilter(col.headerFilterFunc, col.field);
         cd.floatingFilterComponent = _agTextFuncFloating();
-        cd.floatingFilter = true;
       } else {
         cd.filter = "agTextColumnFilter";
-        cd.floatingFilter = true;
       }
+      cd.floatingFilter = true;
+      // The inline floating control IS the filter UI (like Tabulator) — hide AG's
+      // funnel button that would otherwise sit beside every column's filter and
+      // eat the width the dropdown/input needs.
+      cd.suppressFloatingFilterButton = true;
     }
     // cellClick → onCellClicked (e.g. the roster's signed-in toggle column).
     if (typeof col.cellClick === "function") {
