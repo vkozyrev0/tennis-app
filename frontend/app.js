@@ -1815,7 +1815,7 @@ const rosterGrid = makeGrid(rosterMount, {
       formatter: (c) => { const g = _rowGender(c.getData());
         return g === "male" ? "M" : g === "female" ? "F" : '<span class="muted">—</span>'; },
       headerFilter: "list",
-      headerFilterParams: { values: { "": "all", male: "Boys / M", female: "Girls / F" }, clearable: true },
+      headerFilterParams: { values: { "": "All", male: "Boys / M", female: "Girls / F" }, clearable: true },
       headerFilterFunc: (sel, _v, data) => !sel || _rowGender(data) === sel },
     { title: "Status", field: "selection_status", cssClass: "editable-cell",
       editor: "list", editorParams: { values: ["selected", "alternate", "withdrawn"] },
@@ -1829,7 +1829,7 @@ const rosterGrid = makeGrid(rosterMount, {
         ? '<span class="ok" title="Checked in — click to undo">✓</span>'
         : '<span class="muted" title="Not checked in — click to check in">—</span>',
       headerFilter: "list",
-      headerFilterParams: { values: { "": "all", "true": "checked in", "false": "not in" }, clearable: true },
+      headerFilterParams: { values: { "": "All", "true": "checked in", "false": "not in" }, clearable: true },
       headerFilterFunc: (term, v) => String(!!v) === String(term),
       cellClick: async (ev, cell) => {
         ev.stopPropagation();
@@ -3736,7 +3736,7 @@ const payrollGrid = makeReadGrid("payroll-table", [
     // them filter to "everything still open" or "finalized but unpaid" in one
     // click. The bucket is derived from finalized/paid, so a headerFilterFunc.
     headerFilter: "list",
-    headerFilterParams: { values: { "": "all", open: "open", finalized: "finalized", paid: "paid" } },
+    headerFilterParams: { values: { "": "All", open: "open", finalized: "finalized", paid: "paid" } },
     headerFilterFunc: (sel, _v, data) => !sel
       || (!data.finalized ? "open" : (data.finalized.paid ? "paid" : "finalized")) === sel,
     formatter: (c) => {
@@ -4011,7 +4011,7 @@ const availGrid = makeReadGrid("avail-table", [
   // tab — make Assigned filterable (and a chip, for parity with the app).
   { title: "Assigned", field: "assigned", width: 130,
     headerFilter: "list",
-    headerFilterParams: { values: { "": "all", yes: "assigned", no: "not yet" } },
+    headerFilterParams: { values: { "": "All", yes: "assigned", no: "not yet" } },
     headerFilterFunc: (sel, _v, data) => !sel || (sel === "yes" ? !!data.assigned : !data.assigned),
     formatter: (c) => (c.getData().assigned
       ? '<span class="badge badge-ok">✓ assigned</span>'

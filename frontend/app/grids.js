@@ -109,7 +109,7 @@ export function createGridFactories(ctx) {
       init(params) {
         const sel = document.createElement("select");
         sel.className = "ag-floating-filter-input ag-list-floating";
-        if (!pairs.some(([v]) => v === "")) sel.appendChild(new Option("all", ""));
+        if (!pairs.some(([v]) => v === "")) sel.appendChild(new Option("All", ""));
         for (const [v, label] of pairs) sel.appendChild(new Option(label, v));
         sel.addEventListener("change", () => params.parentFilterInstance((inst) => inst.onFloating(sel.value)));
         this.eSelect = sel;
