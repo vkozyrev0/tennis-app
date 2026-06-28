@@ -904,31 +904,32 @@ a.export-btn { text-decoration: none; }
 }
 .import-preview-grid .tabulator-cell .bad { color: var(--bad); font-weight: 700; }
 .import-preview-grid .tabulator-cell .ok { color: #2e9e4f; font-weight: 700; }
-/* Per-import tabs: a sidebar of import types + the selected one's panel. */
-.import-tabs-wrap { display: flex; gap: 1rem; align-items: flex-start; margin-top: 0.4rem; }
-.import-tabs { display: flex; flex-direction: column; gap: 2px; flex: 0 0 220px;
-  border-right: 1px solid var(--border); padding-right: 0.55rem; }
-.import-tabgroup-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--muted-ink, #8a8a8a); margin: 0.55rem 0 0.1rem; }
-.import-tabgroup-label:first-child { margin-top: 0; }
-.import-tab { text-align: left; border: 0; background: transparent; color: inherit; font: inherit;
-  font-size: 0.82rem; padding: 0.32rem 0.5rem; border-radius: 5px; cursor: pointer;
-  box-shadow: inset 3px 0 0 transparent; }
+/* Per-import tabs: a horizontal strip of import types + the selected one's panel. */
+.import-tabs-wrap { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
+.import-tabs { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
+  border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; }
+.import-tabgroup-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted-ink, #8a8a8a); margin: 0 0.15rem; white-space: nowrap; }
+.import-tabgroup-label:not(:first-child) { margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid var(--border); }
+.import-tab { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid transparent;
+  background: transparent; color: inherit; font: inherit; font-size: 0.8rem;
+  padding: 0.28rem 0.55rem; border-radius: 6px; cursor: pointer; }
 .import-tab:hover { background: var(--sel, rgba(0,0,0,0.05)); }
-.import-tab.active { background: var(--sel, rgba(0,0,0,0.06)); font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--accent); }
-.import-tabpanel { flex: 1; min-width: 0; }
+.import-tab.active { background: var(--sel, rgba(0,0,0,0.06)); font-weight: 600; border-color: var(--accent); }
+.import-tab-ico { font-size: 0.95em; line-height: 1; }
+.import-tab-badge { display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.05rem; height: 1.05rem; padding: 0 0.25rem; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-size: 0.62rem; font-weight: 700; }
+.import-tabpanel { min-width: 0; }
 .import-tabpanel .import-section { border-bottom: 0; padding-top: 0; }
 .import-scope-chip { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
   padding: 0.05rem 0.3rem; border-radius: 999px; vertical-align: middle;
   background: rgba(120, 140, 200, 0.18); color: #4a5a90; }
 .import-scope-chip.setup { background: rgba(120, 180, 120, 0.2); color: #3a7a3a; }
-@media (max-width: 760px) {
-  .import-tabs-wrap { flex-direction: column; }
-  .import-tabs { flex: none; flex-direction: row; flex-wrap: wrap; width: 100%;
-    border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 0.4rem; }
-  .import-tabgroup-label { width: 100%; }
-}
+/* Bulk-set-a-column control in the preview toolbar. */
+.import-bulkset { display: inline-flex; align-items: center; gap: 0.25rem; }
+.import-bulkset-val { width: 8rem; max-width: 30vw; }
+.import-bulkset select { max-width: 9rem; }
 .export-section { padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
 .export-section:last-child { border-bottom: 0; }
 .export-section h4 { margin: 0 0 0.15rem; font-size: 0.95rem; }

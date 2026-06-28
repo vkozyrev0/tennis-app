@@ -19,6 +19,27 @@ sections. The per-panel "⬆ Import…" deep-links (`gotoImport`) select the rig
 tab. Each section is `_buildImportSection()`; a scope chip on the heading marks
 tournament-vs-Setup.
 
+## Preview-grid bulk actions + richer validation
+
+The preview grid's toolbar carries bulk fixes so a TD never has to round-trip to
+Excel:
+- **Merge ready rows** — merges only the rows that are server-valid AND
+  client-clean, passing their ids (`POST /merge {row_ids}`). Flagged rows are
+  **skipped, not blocking**, and stay staged; a partial merge does NOT seal the
+  batch (it's only marked `merged` once no unmerged rows remain), so the leftover
+  flagged rows stay editable/deletable.
+- **Delete flagged** — drops every flagged row in one click
+  (`POST /batches/{id}/rows-delete {ids}`).
+- **Set a column for all** — bulk-fill one column across every staged row, then
+  re-validate (`POST /batches/{id}/bulk-set {column, value}`), e.g.
+  `age_division = G16` for a whole sheet.
+
+The tab strip is horizontal with an **icon + short label** per type, a
+**staged-count badge** while a batch is in progress (switch tabs without losing
+it), and group separators (Tournament data | Setup catalogs). Validation adds a
+cross-row **duplicate-USTA-in-file** check plus per-field rules (numeric money
+columns, `year_of_birth`, `email` has `@`, division shape, the enums).
+
 ## Review of the current Import page
 
 `buildImportPage()` (frontend/app.js) renders one section per import type:

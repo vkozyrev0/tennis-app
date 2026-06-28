@@ -400,3 +400,61 @@ def test_edit_row_after_merge_is_409():
     r = client.patch(f"/api/import/batches/{up['batch_id']}/rows/{row['id']}",
                      json={"data": {**row["data"], "first_name": "X"}})
     assert r.status_code == 409, r.text
+
+
+# ============================================================ bulk actions
+
+
+def test_merge_only_selected_row_ids():
+    """The preview grid passes the 'ready' row ids so flagged rows are skipped
+    without deleting them — merge by id leaves the rest staged."""
+    t = _tournament()
+    a, b = _u(), _u()
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{a},female\n{b},female\n")
+    rows = _batch(up["batch_id"])["rows"]
+    first = rows[0]["id"]
+    m = _ok(client.post(f"/api/import/batches/{up['batch_id']}/merge",
+                        json={"row_ids": [first]}), 200)
+    assert m["merged"] == 1, m
+    # the other row is still staged + unmerged
+    after = _batch(up["batch_id"])["rows"]
+    leftover = [r for r in after if not r["merged"]]
+    assert len(leftover) == 1
+    # a PARTIAL merge must NOT seal the batch — the leftover stays editable
+    patched = client.patch(f"/api/import/batches/{up['batch_id']}/rows/{leftover[0]['id']}",
+                           json={"data": {**leftover[0]["data"], "first_name": "Edited"}})
+    assert patched.status_code == 200, patched.text
+    # a plain merge sweeps the rest; now the batch seals
+    assert _merge(up["batch_id"])["merged"] == 1
+    assert client.patch(f"/api/import/batches/{up['batch_id']}/rows/{leftover[0]['id']}",
+                        json={"data": leftover[0]["data"]}).status_code == 409
+
+
+def test_bulk_delete_rows():
+    t = _tournament()
+    csv = f"usta_number,gender\n{_u()},female\n{_u()},female\n{_u()},female\n"
+    up = _stage(t["id"], "roster", "x.csv", csv)
+    ids = [r["id"] for r in _batch(up["batch_id"])["rows"][:2]]
+    out = _ok(client.post(f"/api/import/batches/{up['batch_id']}/rows-delete",
+                          json={"ids": ids}), 200)
+    assert out["deleted"] == 2 and out["counts"]["total"] == 1
+
+
+def test_bulk_set_column_fills_and_revalidates():
+    t = _tournament()
+    # rows valid but with no age_division; bulk-set it across all
+    csv = f"usta_number,gender\n{_u()},female\n{_u()},female\n"
+    up = _stage(t["id"], "roster", "x.csv", csv)
+    out = _ok(client.post(f"/api/import/batches/{up['batch_id']}/bulk-set",
+                          json={"column": "age_division", "value": "G16"}), 200)
+    assert out["changed"] == 2 and out["counts"]["valid"] == 2
+    rows = _batch(up["batch_id"])["rows"]
+    assert all(r["data"]["age_division"] == "G16" for r in rows)
+
+
+def test_bulk_set_rejects_unknown_column():
+    t = _tournament()
+    up = _stage(t["id"], "roster", "x.csv", f"usta_number,gender\n{_u()},female\n")
+    r = client.post(f"/api/import/batches/{up['batch_id']}/bulk-set",
+                    json={"column": "not_a_column", "value": "x"})
+    assert r.status_code == 400, r.text

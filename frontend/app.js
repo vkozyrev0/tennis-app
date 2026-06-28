@@ -2153,6 +2153,19 @@ function _importRefresh() {
 // USTA #/id-shaped columns: digits only when present.
 const _IMPORT_ID_COLS = new Set(["usta_number", "partner_usta", "usta_1", "usta_2",
   "usta_3", "usta_4", "usta_5", "usta_6", "official_id", "site_id", "source_email_id"]);
+// Money/score columns: must be a number when present.
+const _IMPORT_NUM_COLS = new Set(["amount_paid", "amount_refunded", "amount_due",
+  "amount_outstanding", "wtn_singles", "wtn_doubles", "suspension_points"]);
+// Pattern/enum rules per column (case-insensitive), each with a hint.
+const _IMPORT_RULES = {
+  gender: { re: /^(m|f|male|female)$/i, msg: "male / female" },
+  wants_random: { re: /^(y|n|yes|no|true|false|1|0)$/i, msg: "yes / no" },
+  relationship: { re: /^(siblings|same_club)$/i, msg: "siblings / same_club" },
+  selection_status: { re: /^(selected|alternate|withdrawn)$/i, msg: "selected / alternate / withdrawn" },
+  request_date: { re: /^\d{4}-\d{2}-\d{2}$/, msg: "YYYY-MM-DD" },
+  year_of_birth: { re: /^(19|20)\d{2}$/, msg: "4-digit year" },
+  age_division: { re: /^[a-z]{0,3}\s?\d{1,2}\b/i, msg: "e.g. B14 / G16" },
+};
 // Client-side, per-cell validation for the import preview grid — the instant
 // first pass (the server's validate() still has the final say: USTA existence,
 // reason-required-on-merge, etc.). Returns an error string, or "" when fine.
@@ -2161,56 +2174,119 @@ function _importCellError(col, val, required) {
   if (required.has(col) && !v) return "required";
   if (!v) return "";
   if (_IMPORT_ID_COLS.has(col) && !/^\d+$/.test(v)) return "digits only";
-  if (col === "one_way_miles" && !(Number(v) >= 0)) return "number ≥ 0";
-  if (col === "gender" && !/^(m|f|male|female)$/i.test(v)) return "male / female";
-  if (col === "wants_random" && !/^(y|n|yes|no|true|false|1|0)$/i.test(v)) return "yes / no";
-  if (col === "request_date" && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return "YYYY-MM-DD";
-  if (col === "relationship" && !/^(siblings|same_club)$/i.test(v)) return "siblings / same_club";
-  if (col === "selection_status" && !/^(selected|alternate|withdrawn)$/i.test(v)) return "selected / alternate / withdrawn";
+  if (col === "one_way_miles") return Number(v) >= 0 ? "" : "number ≥ 0";
+  if (_IMPORT_NUM_COLS.has(col)) return isNaN(Number(v)) ? "must be a number" : "";
+  if (col === "emails") return /@/.test(v) ? "" : "missing @";
+  const rule = _IMPORT_RULES[col];
+  if (rule && !rule.re.test(v)) return rule.msg;
   return "";
 }
 
+// Per-import-type tab metadata: an icon + a short label (the backend labels are
+// verbose) so the per-import tabs scan fast. Plus the preferred display order
+// (roster variants grouped together).
+const _IMPORT_TAB_META = {
+  roster: { icon: "📋", short: "Roster (simple)" },
+  roster_initial: { icon: "📥", short: "Roster: Initial" },
+  roster_correction: { icon: "✏️", short: "Roster: Correction" },
+  late_entries: { icon: "⏰", short: "Late entries" },
+  withdrawals: { icon: "🚫", short: "Withdrawals" },
+  scheduling_avoidances: { icon: "📅", short: "Scheduling" },
+  division_flexibility: { icon: "🔀", short: "Division flex" },
+  pairing_avoidances: { icon: "⛔", short: "Pairing avoid" },
+  doubles_requests: { icon: "👥", short: "Doubles" },
+  player_hotels: { icon: "🏨", short: "Player hotels" },
+  tshirt_hotel_dietary: { icon: "👕", short: "Shirt + Hotel + Diet" },
+  emails_pdf: { icon: "✉️", short: "Emails (PDF)" },
+  distances: { icon: "📏", short: "Distances" },
+};
+const _IMPORT_TAB_ORDER = ["roster", "roster_initial", "roster_correction", "late_entries",
+  "withdrawals", "scheduling_avoidances", "division_flexibility", "pairing_avoidances",
+  "doubles_requests", "player_hotels", "tshirt_hotel_dietary", "emails_pdf", "distances"];
+
+// Show/clear a "staged rows waiting" badge on an import type's tab, so the TD can
+// switch tabs without losing track of an in-progress batch.
+function _importTabBadge(key, count) {
+  const btn = document.querySelector(`.import-tab[data-key="${key}"]`);
+  if (!btn) return;
+  let b = btn.querySelector(".import-tab-badge");
+  if (!count) { if (b) b.remove(); return; }
+  if (!b) { b = document.createElement("span"); b.className = "import-tab-badge"; btn.appendChild(b); }
+  b.textContent = String(count);
+}
+
 // Import preview: an editable grid of the staged rows. The TD sees exactly what
-// the file contained, fixes bad cells in place (each edit PATCHes the staged row
-// and re-validates server-side), drops junk rows, then merges only the valid
-// ones. Replaces the old counts-only summary.
+// the file contained, fixes bad cells in place (each edit PATCHes + re-validates
+// server-side), bulk-fixes (delete flagged / set a column for all), then merges
+// the ready rows (flagged rows are skipped, not blocked, and stay for fixing).
 async function _renderPreviewGrid(el, body, meta) {
   const required = new Set(meta.required || []);
   const cols = meta.columns || [];
-  let batch;
-  try { batch = await api(`/import/batches/${body.batch_id}`); }
-  catch (e) { el.textContent = e.message; return; }
+  const bid = body.batch_id;
   el.innerHTML = "";
 
   const head = document.createElement("div"); head.className = "import-preview-head";
   const counts = document.createElement("span"); counts.className = "import-counts";
+  // Bulk-set: pick a column, type a value, apply to every row.
+  const setWrap = document.createElement("span"); setWrap.className = "import-bulkset";
+  const setCol = document.createElement("select"); setCol.title = "Column to set for all rows";
+  setCol.innerHTML = '<option value="">Set column…</option>' + cols.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  const setVal = document.createElement("input"); setVal.type = "text"; setVal.placeholder = "value"; setVal.className = "import-bulkset-val";
+  const setBtn = document.createElement("button"); setBtn.type = "button"; setBtn.className = "export-btn"; setBtn.textContent = "Apply to all";
+  setWrap.append(setCol, setVal, setBtn);
+  const delFlagged = document.createElement("button");
+  delFlagged.type = "button"; delFlagged.className = "export-btn"; delFlagged.textContent = "🗑 Delete flagged";
   const merge = document.createElement("button");
   merge.type = "button"; merge.className = "export-btn primary";
   const disc = document.createElement("button");
   disc.type = "button"; disc.className = "export-btn"; disc.textContent = "Discard";
-  head.append(counts, merge, disc);
+  head.append(counts, setWrap, delFlagged, merge, disc);
   const mount = document.createElement("div"); mount.className = "import-preview-grid grid-mount";
   const after = document.createElement("div"); after.className = "import-result-after";
   el.append(head, mount, after);
 
-  // A cell fails the CLIENT rules → tinted + blocks merge (catches typos the
-  // server's existence-only check would wave through, e.g. a non-numeric USTA #).
-  const _rowClientBad = (d) => cols.some((c) => _importCellError(c, d[c], required));
-  // A row is merge-ready when the SERVER validated it AND no client rule trips.
+  let grid, dupUstas = new Set();
+  // cellErr = the standard rules PLUS the cross-row "duplicate USTA # in file"
+  // check (which needs the whole dataset, so it lives here as a closure).
+  const cellErr = (col, val) => {
+    const base = _importCellError(col, val, required);
+    if (base) return base;
+    if (col === "usta_number" && val && dupUstas.has(String(val).trim())) return "duplicate USTA # in file";
+    return "";
+  };
+  const _rowClientBad = (d) => cols.some((c) => cellErr(c, d[c]));
   const _rowReady = (d) => d._valid && !_rowClientBad(d);
 
-  let grid;  // set below; refresh() reads it
   const refresh = () => {
     const rows = grid.getData();
+    // recompute in-file duplicate USTA #s
+    const seen = {}; dupUstas = new Set();
+    rows.forEach((d) => { const u = (d.usta_number || "").trim(); if (!u) return; seen[u] = (seen[u] || 0) + 1; if (seen[u] > 1) dupUstas.add(u); });
+    grid.getRows().forEach((r) => r.reformat());   // re-tint cells for the new dup set
     const ready = rows.filter(_rowReady).length;
-    const flagged = rows.filter((d) => !_rowReady(d)).length;
+    const flagged = rows.length - ready;
     counts.innerHTML = hstr`Staged ${String(rows.length)}: ${raw(`<strong>${ready} ready</strong>`)}${flagged ? `, ${flagged} to fix` : ""}.`;
-    merge.disabled = ready === 0 || flagged > 0;
-    merge.textContent = ready && !flagged ? `Merge ${ready} row${ready === 1 ? "" : "s"}` : "Fix flagged rows to merge";
+    merge.disabled = ready === 0;
+    merge.textContent = `Merge ${ready} ready row${ready === 1 ? "" : "s"}`;
+    delFlagged.disabled = flagged === 0;
+    delFlagged.textContent = `🗑 Delete ${flagged} flagged`;
+    _importTabBadge(meta.key, rows.length);
   };
 
-  const data = batch.rows.map((r) => ({ _id: r.id, _num: r.row_num, _valid: r.valid,
-    _error: r.error, ...Object.fromEntries(cols.map((c) => [c, r.data[c] == null ? "" : r.data[c]])) }));
+  const mapRow = (r) => ({ _id: r.id, _num: r.row_num, _valid: r.valid, _error: r.error,
+    ...Object.fromEntries(cols.map((c) => [c, r.data[c] == null ? "" : r.data[c]])) });
+  // (re)load the unmerged staged rows from the server into the grid.
+  async function reloadGrid() {
+    const b = await api(`/import/batches/${bid}`);
+    const unmerged = b.rows.filter((r) => !r.merged).map(mapRow);
+    await grid.replaceData(unmerged);
+    refresh();
+    return unmerged.length;
+  }
+
+  let batch;
+  try { batch = await api(`/import/batches/${bid}`); }
+  catch (e) { el.textContent = e.message; return; }
 
   const colDefs = [
     { title: "", field: "_status", width: 42, headerSort: false, frozen: true,
@@ -2222,7 +2298,7 @@ async function _renderPreviewGrid(el, body, meta) {
     ...cols.map((col) => ({
       title: required.has(col) ? col + " *" : col, field: col,
       editor: "input", editableTitle: false, minWidth: 90, widthGrow: 1, cssClass: "editable-cell",
-      formatter: (c) => { const err = _importCellError(col, c.getValue(), required);
+      formatter: (c) => { const err = cellErr(col, c.getValue());
         const v = c.getValue() == null ? "" : String(c.getValue());
         return err ? `<span class="import-cell-bad" title="${esc(err)}">${esc(v) || "—"}</span>` : esc(v); },
     })),
@@ -2230,16 +2306,16 @@ async function _renderPreviewGrid(el, body, meta) {
       formatter: () => '<button type="button" class="btn-icon" title="Remove this row">✕</button>',
       cellClick: async (e, cell) => {
         const d = cell.getData();
-        try { await api(`/import/batches/${body.batch_id}/rows/${d._id}`, { method: "DELETE" });
+        try { await api(`/import/batches/${bid}/rows/${d._id}`, { method: "DELETE" });
           cell.getRow().delete(); refresh(); }
         catch (err) { toast(err.message, false); }
       } },
   ];
 
   grid = new Tabulator(mount, {
-    data, index: "_id", layout: "fitData", maxHeight: "52vh",
-    editTriggerEvent: "click", renderVertical: "basic",
-    placeholder: "No rows in this file.", columns: colDefs,
+    data: batch.rows.filter((r) => !r.merged).map(mapRow), index: "_id",
+    layout: "fitData", maxHeight: "52vh", editTriggerEvent: "click",
+    renderVertical: "basic", placeholder: "No rows in this file.", columns: colDefs,
   });
   grid.on("tableBuilt", refresh);
 
@@ -2247,32 +2323,67 @@ async function _renderPreviewGrid(el, body, meta) {
     const row = cell.getRow(); const d = row.getData();
     const payload = Object.fromEntries(cols.map((c) => [c, (d[c] ?? "") === "" ? null : d[c]]));
     try {
-      const res = await api(`/import/batches/${body.batch_id}/rows/${d._id}`,
+      const res = await api(`/import/batches/${bid}/rows/${d._id}`,
         { method: "PATCH", body: JSON.stringify({ data: payload }) });
       row.update({ _valid: res.valid, _error: res.error }); row.reformat();
       refresh();
     } catch (err) { toast(err.message, false); }
   });
 
+  setBtn.addEventListener("click", async () => {
+    if (!setCol.value) { toast("pick a column to set", false); return; }
+    setBtn.disabled = true;
+    try {
+      await api(`/import/batches/${bid}/bulk-set`, { method: "POST",
+        body: JSON.stringify({ column: setCol.value, value: setVal.value }) });
+      await reloadGrid();
+      toast(`Set ${setCol.value} for all rows`, true);
+    } catch (e) { toast(e.message, false); }
+    finally { setBtn.disabled = false; }
+  });
+
+  delFlagged.addEventListener("click", async () => {
+    const ids = grid.getData().filter((d) => !_rowReady(d)).map((d) => d._id);
+    if (!ids.length) return;
+    if (!(await confirmDialog(`Delete ${ids.length} flagged row(s)? This drops them from the staged batch (the file isn't changed).`, "Delete flagged", "danger"))) return;
+    try {
+      await api(`/import/batches/${bid}/rows-delete`, { method: "POST", body: JSON.stringify({ ids }) });
+      await reloadGrid();
+    } catch (e) { toast(e.message, false); }
+  });
+
+  const showMerged = (r) => {
+    const nConf = (r.conflicts || []).length;
+    toast(`Merged ${r.merged}${r.failed ? `, ${r.failed} failed` : ""}${nConf ? `, ${nConf} conflict(s)` : ""}`, !r.failed);
+    let html = `<div class="muted">✓ Merged ${r.merged} row(s)${r.failed ? `; ${r.failed} failed` : ""}.</div>`;
+    if (nConf) html += `<div class="warn" style="margin-top:.2rem">⚠ ${nConf} conflict(s) — merged anyway:</div>` +
+      '<ul class="import-errors" style="color:var(--warn-ink,#8a6d1b)">' +
+      r.conflicts.map((c) => hstr`<li>row ${c.row}: ${c.detail}</li>`).join("") + "</ul>";
+    if (r.errors && r.errors.length) html += '<ul class="import-errors">' +
+      r.errors.map((e) => hstr`<li>row ${e.row}: ${e.error}</li>`).join("") + "</ul>";
+    after.innerHTML = html;
+  };
+
   merge.addEventListener("click", async () => {
+    const readyIds = grid.getData().filter(_rowReady).map((d) => d._id);
+    if (!readyIds.length) return;
     merge.disabled = true;
     try {
-      const r = await api(`/import/batches/${body.batch_id}/merge`, { method: "POST" });
-      const nConf = (r.conflicts || []).length;
-      toast(`Merged ${r.merged}${r.failed ? `, ${r.failed} failed` : ""}${nConf ? `, ${nConf} conflict(s)` : ""}`, !r.failed);
-      head.style.display = "none"; mount.style.display = "none";
-      let html = `<div class="muted">✓ Merged ${r.merged} row(s)${r.failed ? `; ${r.failed} failed` : ""}.</div>`;
-      if (nConf) html += `<div class="warn" style="margin-top:.2rem">⚠ ${nConf} conflict(s) — merged anyway:</div>` +
-        '<ul class="import-errors" style="color:var(--warn-ink,#8a6d1b)">' +
-        r.conflicts.map((c) => hstr`<li>row ${c.row}: ${c.detail}</li>`).join("") + "</ul>";
-      if (r.errors && r.errors.length) html += '<ul class="import-errors">' +
-        r.errors.map((e) => hstr`<li>row ${e.row}: ${e.error}</li>`).join("") + "</ul>";
-      after.innerHTML = html;
+      const r = await api(`/import/batches/${bid}/merge`,
+        { method: "POST", body: JSON.stringify({ row_ids: readyIds }) });
+      // Merged the ready rows; flagged ones stay staged for fixing.
+      const remaining = await reloadGrid();
+      if (remaining === 0) {
+        head.style.display = "none"; mount.style.display = "none";
+        showMerged(r); _importTabBadge(meta.key, 0);
+      } else {
+        toast(`Merged ${r.merged} ready row(s); ${remaining} still need fixing.`, true);
+      }
       _importRefresh();
     } catch (e) { toast(e.message, false); merge.disabled = false; }
   });
   disc.addEventListener("click", async () => {
-    try { await api(`/import/batches/${body.batch_id}`, { method: "DELETE" }); el.innerHTML = ""; }
+    try { await api(`/import/batches/${bid}`, { method: "DELETE" }); el.innerHTML = ""; _importTabBadge(meta.key, 0); }
     catch (e) { toast(e.message, false); }
   });
 }
@@ -2355,19 +2466,23 @@ async function buildImportPage() {
   buildImportPage._activate = activate;   // gotoImport() drives this
 
   // Each import type gets its own tab. Tournament-data importers first, then the
-  // global Setup catalogs (which don't need an active tournament).
+  // global Setup catalogs (which don't need an active tournament). Within a
+  // group, order by _IMPORT_TAB_ORDER (roster variants grouped together).
+  const _ord = (t) => { const i = _IMPORT_TAB_ORDER.indexOf(t.key); return i < 0 ? 99 : i; };
   const groups = [
-    { label: "Tournament data", keys: types.filter((t) => !_IMPORT_SETUP_KEYS.has(t.key)) },
-    { label: "Setup catalogs", keys: types.filter((t) => _IMPORT_SETUP_KEYS.has(t.key)) },
+    { label: "Tournament data", keys: types.filter((t) => !_IMPORT_SETUP_KEYS.has(t.key)).sort((a, b) => _ord(a) - _ord(b)) },
+    { label: "Setup catalogs", keys: types.filter((t) => _IMPORT_SETUP_KEYS.has(t.key)).sort((a, b) => _ord(a) - _ord(b)) },
   ];
   for (const g of groups) {
     if (!g.keys.length) continue;
     const lbl = document.createElement("div"); lbl.className = "import-tabgroup-label"; lbl.textContent = g.label;
     tabsRoot.appendChild(lbl);
     for (const t of g.keys) {
+      const tm = _IMPORT_TAB_META[t.key] || {};
       const btn = document.createElement("button");
       btn.type = "button"; btn.className = "import-tab"; btn.dataset.key = t.key;
-      btn.setAttribute("role", "tab"); btn.tabIndex = -1; btn.textContent = t.label;
+      btn.setAttribute("role", "tab"); btn.tabIndex = -1; btn.title = t.label;   // full label on hover
+      btn.innerHTML = `<span class="import-tab-ico" aria-hidden="true">${tm.icon || "•"}</span><span class="import-tab-lbl">${esc(tm.short || t.label)}</span>`;
       btn.addEventListener("click", () => activate(t.key));
       tabsRoot.appendChild(btn); tabBtns[t.key] = btn;
       sections[t.key] = _buildImportSection(t, panelRoot);
