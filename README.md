@@ -1,6 +1,7 @@
 # CourtOps Tennis
 
 [![docker](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml/badge.svg)](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml)
+[![Docker Hub](https://img.shields.io/docker/image-size/vkozyrev0/tennis-app/latest?logo=docker&label=docker%20hub)](https://hub.docker.com/r/vkozyrev0/tennis-app)
 
 Back-office tooling for a USTA **Tournament Director (TD)**. Two loosely-coupled
 halves:
@@ -28,12 +29,19 @@ before any shared deployment.
 
 ## Run it in one container (Postgres + server + website)
 
-The whole POC — database, API, and frontend — runs from a single image:
+The whole POC — database, API, and frontend — runs from a single image. Pull the
+prebuilt image from Docker Hub (no clone/build needed):
+
+```bash
+docker run --rm -p 8000:8000 vkozyrev0/tennis-app:latest
+# open http://localhost:8000 — sign in as admin / admin
+```
+
+Or build it yourself from a checkout:
 
 ```bash
 docker build -t courtops:poc .
 docker run --rm -p 8000:8000 courtops:poc
-# open http://localhost:8000 — sign in as admin / admin
 ```
 
 The realistic demo (Macon Junior Open 2026) is **seeded at build time and baked
