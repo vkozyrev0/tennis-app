@@ -931,6 +931,17 @@ a.export-btn { text-decoration: none; }
 /* the app's grids sit flush in the card; trim AG's default outer chrome */
 .grid-mount.ag-theme-quartz { width: 100%; }
 .ag-theme-quartz .grid-actions { display: flex; gap: 2px; justify-content: flex-end; }
+/* Active/selected row (wireEntity master-detail nav): match the Tabulator look —
+   selection tint + a left-edge accent bar so it's visible during keyboard/prev-next
+   nav, not just hover. The class is set via rowClassRules and re-applied on
+   redrawRows(). Beat the per-cell background by tinting the cells, and the hover
+   rule by ordering this after it / using the row+cell combo. */
+.ag-theme-quartz .ag-row.row-selected .ag-cell,
+.ag-theme-quartz-dark .ag-row.row-selected .ag-cell { background: var(--sel); }
+.ag-theme-quartz .ag-row.row-selected,
+.ag-theme-quartz-dark .ag-row.row-selected {
+  box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar */
+}
 .ag-empty { color: var(--muted-ink, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
 
 /* Import preview grid (edit-before-merge). */
