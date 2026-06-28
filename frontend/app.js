@@ -7513,11 +7513,15 @@ const officialsCrud = wireEntity({
   path: "/officials", singular: "official", panelId: "panel-officials", formId: "official-form", msgId: "official-msg",
   columns: [
     { key: "id", responsive: 10 },
-    { key: "name", fmt: officialLabel, responsive: 0 },  // identity — never collapse
-    { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", "), responsive: 4 },
-    { key: "phone", responsive: 3 },
-    { key: "email", responsive: 2 },
-    { key: "dietary_restrictions", responsive: 6 },
+    // Inline-editable composite: shown "Last, First" → split back into last/first.
+    { key: "name", fmt: officialLabel, responsive: 0,  // identity — never collapse
+      edit: { editor: "input", composite: { get: officialLabel, set: (val) => _splitName(val) } } },
+    // Inline-editable composite: "City, ST" → city / state.
+    { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", "), responsive: 4,
+      edit: { editor: "input", composite: { get: (o) => [o.city, o.state].filter(Boolean).join(", "), set: (val) => _splitCityState(val) } } },
+    { key: "phone", responsive: 3, edit: { editor: "input" } },
+    { key: "email", responsive: 2, edit: { editor: "input" } },
+    { key: "dietary_restrictions", responsive: 6, edit: { editor: "input" } },
   ],
   exportCols: [
     { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
