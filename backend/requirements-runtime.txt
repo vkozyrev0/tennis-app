@@ -1,0 +1,13 @@
+# Runtime-only dependency set for the Docker image — the full requirements.txt
+# (used for local dev + CI) minus the test-only packages (pytest, httpx and
+# their transitive deps like pygments), which aren't imported by the running app.
+# Keep in sync with requirements.txt for the shared runtime packages.
+fastapi
+uvicorn[standard]
+psycopg[binary]
+pydantic
+python-dotenv
+openpyxl
+pdfplumber
+python-multipart
+cryptography

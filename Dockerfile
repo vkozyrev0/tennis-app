@@ -11,28 +11,39 @@
 # This bakes the DB engine + data into the app image on purpose — it's a
 # single-TD POC, not a production topology (see docs/design.md §11).
 #
-# Base: postgres:16-ALPINE (musl). ~20% smaller than the bookworm base; all of
-# our deps (psycopg[binary], cryptography, pillow, pydantic-core, uvloop) ship
-# musllinux wheels, so no compiler toolchain is needed in the image.
+# Size: ~690MB. Levers used to get there from ~980MB (debian + full deps):
+#   - postgres:16-ALPINE base (musl) — all deps ship musllinux wheels.
+#   - multi-stage: the venv is built in a throwaway stage, so pip / the build
+#     toolchain never land in the final image.
+#   - runtime-only deps (requirements-runtime.txt = no pytest/httpx) + stripped
+#     bytecode.
+# The remaining bulk is the Postgres engine itself (~290MB) + the baked cluster,
+# which are inherent to bundling the database in the image.
 
+# ---- builder: assemble + strip the venv (runtime deps only) ----
+FROM postgres:16-alpine AS builder
+RUN apk add --no-cache python3 py3-pip
+ENV VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
+RUN python3 -m venv "$VIRTUAL_ENV"
+COPY backend/requirements-runtime.txt /tmp/req.txt
+# --only-binary makes the build FAIL FAST if any dep lacks a musllinux wheel
+# rather than try to compile (no toolchain here, on purpose).
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --only-binary=:all: -r /tmp/req.txt \
+    && pip uninstall -y pip wheel 2>/dev/null || true \
+    && find "$VIRTUAL_ENV" -name '__pycache__' -type d -prune -exec rm -rf {} + \
+    && find "$VIRTUAL_ENV" -name '*.pyc' -delete
+
+# ---- final: postgres + bash + python runtime + the prebuilt venv ----
 FROM postgres:16-alpine
 
-# Python + bash. The entrypoint is a bash script (Alpine ships only busybox sh),
-# so bash is required. `--only-binary` on the pip step (below) makes the build
-# FAIL FAST if any dependency lacks a musllinux wheel rather than silently trying
-# to compile from source — there's no build toolchain here, on purpose.
-RUN apk add --no-cache python3 py3-pip bash
-
-ENV VIRTUAL_ENV=/opt/venv
-RUN python3 -m venv "$VIRTUAL_ENV"
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# bash: the entrypoint is a bash script (Alpine ships only busybox sh).
+# No py3-pip here — the venv is copied in ready-to-run from the builder.
+RUN apk add --no-cache python3 bash
+ENV VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
-COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir --only-binary=:all: -r backend/requirements.txt
-
-# App + frontend + entrypoint.
 COPY backend  backend
 COPY frontend frontend
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
