@@ -425,7 +425,24 @@ export function createGridFactories(ctx) {
         Promise.resolve(api.setColumnFilterModel(field, model)).then(() => api.onFilterChanged());
       },
       redraw: () => api && api.refreshCells({ force: true }),
-      redrawRows: () => api && api.redrawRows(),   // re-evaluate rowClassRules (selection)
+      // Re-apply the selection rowClassRules to the *rendered* rows by hand rather
+      // than calling api.redrawRows() — redrawRows destroys + recreates the row
+      // DOM, which rips out an in-progress single-click cell editor (the row-click
+      // selection handler fires on the same click that opens the editor, so the
+      // redraw would immediately revert the cell to read-only). Off-screen rows
+      // still get the class from rowClassRules when they virtualize in.
+      redrawRows: () => {
+        if (!api) return;
+        const rules = tabOpts.rowClassRules;
+        if (!rules) return;
+        api.forEachNode((node) => {
+          const id = String(node.id);
+          const sel = window.CSS && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '\\"');
+          mount.querySelectorAll('.ag-row[row-id="' + sel + '"]').forEach((el) => {
+            for (const cls in rules) { try { el.classList.toggle(cls, !!rules[cls]({ data: node.data, node })); } catch (_) {} }
+          });
+        });
+      },
       scrollToRow: (id) => { const n = api && api.getRowNode(String(id)); if (n) api.ensureNodeVisible(n); },
       download: (_fmt, name) => api && api.exportDataAsCsv({ fileName: name }),
     };
