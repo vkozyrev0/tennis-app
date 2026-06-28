@@ -948,14 +948,17 @@ a.export-btn { text-decoration: none; }
 .ag-theme-quartz .ag-list-floating,
 .ag-theme-quartz-dark .ag-list-floating {
   width: 100%; box-sizing: border-box;
-  height: auto; min-height: 0; margin: 4px 0; line-height: 1.2;
+  /* match AG's built-in floating text input: it fills the floating-filter body
+     (min-height = grid-size*4). No vertical margin — that was making the select
+     shorter than the neighboring text filters. */
+  height: auto; min-height: calc(var(--ag-grid-size, 8px) * 4); margin: 0; line-height: 1.2;
   border: 1px solid var(--ag-border-color, var(--border)); border-radius: 4px;
   background: var(--ag-background-color, var(--card)); color: inherit;
   font: inherit; font-size: 0.78rem; padding: 0 0.2rem;
 }
 /* The floating-filter cell wraps our control in .ag-floating-filter-body; now
-   that the funnel button is gone, let our control fill the cell and stretch to
-   the same height AG gives its built-in floating text input. */
+   that the funnel button is gone, stretch our control to the body height so it
+   is exactly as tall as AG's built-in floating text input in sibling columns. */
 .ag-theme-quartz .ag-floating-filter-body,
 .ag-theme-quartz-dark .ag-floating-filter-body { display: flex; align-items: stretch; }
 .ag-theme-quartz .ag-custom-filter,
