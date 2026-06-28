@@ -588,7 +588,7 @@ API endpoints (existing tournaments router):
 
 ---
 
-## Day-of operations + inbox detection (migrations 0040–0048)
+## Day-of operations + inbox detection (migrations 0040–0049)
 
 ### AssignmentDay.actual_status (migration 0040)  ✅ *day-of truth*
 Planned-vs-actual per assignment day (P4-1). The TD marks what really happened

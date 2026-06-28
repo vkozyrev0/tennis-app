@@ -28,7 +28,7 @@
 | `email_message` | `from_address`, `subject`, **`body`** | Minors + parents | Free-text inbound email — the **highest-risk** store: unstructured minors' info, addresses, reasons (injuries/illness = health-adjacent). |
 | `late_entry`, `withdrawal`, `scheduling_avoidance`, `division_flexibility`, `pairing_avoidance`, `doubles_request`, `player_hotel_stay`, `tournament_entry` | player linkage + free-text (`reason`, `notes`, `hotel_name`, t-shirt/dietary) | Minors | Part B lists; `dietary_preference` may reveal health/religious data. |
 | `official` | name, home street/city/state/zip, `phone`, `email`, `dietary_restrictions` | Adults | Not COPPA, but still PII subject to §312.8-style care + state law. |
-| `app_user`, `session` | login, `pbkdf2` hash, session token + expiry | Admin/officials | Auth (migration 0008/0017). Hash + expiry already in place. |
+| `user_account`, `session` | login, `pbkdf2` hash, session token + expiry | Admin/officials | Auth (migration 0008/0017). Hash + expiry already in place. |
 
 **Action A0 — confirm the population.** COPPA's strict obligations attach to
 **under-13** data. Determine the actual age distribution (USTA junior divisions

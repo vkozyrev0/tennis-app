@@ -81,7 +81,7 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0048_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0049_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
@@ -90,7 +90,7 @@ backend/
   tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (per-feature)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~7.6k lines: all behaviour (ES module)
+  app.js               # ~8.0k lines: all behaviour (ES module)
   app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
   app/grids.js         # Tabulator grid factories (createGridFactories(ctx) — P2 #11a);
                        #   responsive-collapse for mobile (overflow cols → ▸ tap-to-expand row)
@@ -174,7 +174,7 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0048`), each tracked in
+**Migrations are forward-only, filename-ordered** (`0001…0049`), each tracked in
 `schema_migrations`. `migrate.py` creates the DB if absent then applies pending
 files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
@@ -275,14 +275,15 @@ name-before-number — behind `extract_usta` / `extract_ustas` /
 USTA #) pairs**, every doubles shape in the real corpus), plus withdrawal
 reason, age division, events, and avoid-day/time extractors.
 
-**Player detection (`_detect_player_for`)** is an eight-layer ladder, most to
+**Player detection (`_detect_player_for`)** is a nine-layer ladder, most to
 least reliable; the first layer that yields **exactly one** roster player wins,
 and an ambiguous signal is skipped, not guessed: L1 explicit USTA # → L2 full
 name in the subject → L3 USTA withdrawal body template → L4 full name in the
 body → L5 USTA portal subject template (first name + gender + division) → L6
-unique surname in the subject → L7 unique surname anywhere → L8 **off-roster**
+unique surname in the subject → L7 unique surname anywhere → L8 **fuzzy**
+full-name match (normalized, order- and accent-independent) → L9 **off-roster**
 USTA match (the # belongs to a player in the system but not entered in this
-tournament). `_detect_pair_for` extends it to multi-player classifications:
+tournament). (Partner detection adds a first-name layer, `_unique_firstname_match`.) `_detect_pair_for` extends it to multi-player classifications:
 **doubles** re-runs the ladder with the primary excluded to find the partner;
 **pairing_avoidance** loops the ladder, excluding everyone found so far, until
 it comes up dry (capped at 6) to find the whole group
@@ -324,7 +325,7 @@ the erasure guarantee.
 ## 8. Frontend design
 
 **No build, one page, one big module.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~7.6k lines,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~8.0k lines,
 loaded as `<script type="module">`) holds all behaviour; eight ESM helpers under
 `app/` split out logic (`util.js` formatting/CSV, `shirts.js` size
 normalisation, `roster_prefill.js`, `grids.js` — see below — plus `auth.js`

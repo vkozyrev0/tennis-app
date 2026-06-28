@@ -30,8 +30,8 @@ HTML/CSS/JS** frontend (no build step; Tabulator vendored). POC auth defaults to
 The whole POC — database, API, and frontend — runs from a single image:
 
 ```bash
-docker build -t courtops .
-docker run --rm -p 8000:8000 courtops
+docker build -t courtops:poc .
+docker run --rm -p 8000:8000 courtops:poc
 # open http://localhost:8000 — sign in as admin / admin
 ```
 
