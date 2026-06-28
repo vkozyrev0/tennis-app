@@ -1,21 +1,24 @@
 # Fly.io deploy for the all-in-one CourtOps POC image (Postgres + API + frontend
 # in one container). Gives HTTPS on 443 automatically via *.fly.dev (valid cert).
 #
-#   fly launch --no-deploy --copy-config --name courtops-poc   # or edit `app` below
-#   fly volume create courtops_data --size 1 --region iad      # persistent DB
+#   fly apps create courtops-poc                               # or edit `app` below
 #   fly deploy                                                 # builds from Dockerfile
+#   # or, from a prebuilt image:
+#   fly deploy --image vkozyrev0/tennis-app:latest [--local-only]
 #
-# This builds the image from ./Dockerfile on Fly's remote builder (no ghcr/registry
-# push needed). The first build takes a few minutes (it bakes the demo DB).
+# This builds the image from ./Dockerfile on Fly's remote builder (no registry
+# push needed); the first build takes a few minutes (it bakes the demo DB). To
+# deploy a prebuilt image instead, pass --image (use --local-only to push your
+# local copy if the Docker Hub repo is private).
 #
-# To use a prebuilt ghcr image instead, swap the [build] block for:
-#   [build]
-#     image = "ghcr.io/vkozyrev0/tennis-app:latest"
-# and deploy with `fly deploy --image ghcr.io/vkozyrev0/tennis-app:latest`.
-#
-# The volume mounts over the image's baked /opt/courtops/pgdata. A FRESH volume is
-# empty, so the entrypoint re-seeds the demo into it on first boot, then your edits
-# persist across restarts/redeploys. (Fly volumes do not copy image contents.)
+# DATA IS EPHEMERAL (no volume): the image already bakes a seeded demo DB into
+# /opt/courtops/pgdata, so the app boots populated and resets to that pristine
+# demo on every restart/redeploy — which is what you want for a public demo.
+# A Fly volume can't be mounted here without extra work: a fresh volume mounts
+# root-owned with a lost+found over the baked path, and the image runs as the
+# unprivileged `postgres` user, so it can't initdb there. To add persistence,
+# the entrypoint would need to run as root, chown a *subdirectory* of the mount
+# to postgres, and gosu-drop for the DB ops.
 
 app = "courtops-poc"
 primary_region = "iad"
@@ -31,14 +34,13 @@ primary_region = "iad"
   #   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'
   # It's applied on first boot (fresh volume seeds) and re-applied every boot.
 
-[[mounts]]
-  source = "courtops_data"
-  destination = "/opt/courtops/pgdata"
+# No [[mounts]] — see the header note. The baked demo DB lives in the image layer
+# at /opt/courtops/pgdata (writable on Fly's machine rootfs for the machine's life).
 
 [http_service]
   internal_port = 8000
   force_https = true          # 443 -> redirects http; cert is auto-managed
-  auto_stop_machines = "stop" # scale to zero when idle (volume keeps the data)
+  auto_stop_machines = "stop" # scale to zero when idle (data is ephemeral anyway)
   auto_start_machines = true
   min_machines_running = 0
 
