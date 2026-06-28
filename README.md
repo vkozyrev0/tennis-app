@@ -21,9 +21,10 @@ surface for officials.
 
 ## Stack
 
-**Postgres** (Docker) · **FastAPI + psycopg 3** (Pydantic) · **vanilla
-HTML/CSS/JS** frontend (no build step; AG Grid Community vendored). POC auth defaults to
-`admin / admin` — harden before any shared deployment.
+**Postgres 16** (Docker) · **FastAPI + psycopg 3** (Pydantic) · **vanilla
+HTML/CSS/JS** frontend (no build step; **AG Grid Community 32.3.5** vendored — the
+only third-party frontend lib). POC auth defaults to `admin / admin` — harden
+before any shared deployment.
 
 ## Run it in one container (Postgres + server + website)
 

@@ -2,7 +2,7 @@
 
 Audit 2026-06-28. Every import and export surface was inventoried and verified
 end-to-end against the real HTTP APIs with real fake CSV/XLSX/PDF files. The
-regression net is `backend/tests/test_zz_import_export.py` (19 tests, all green).
+regression net is `backend/tests/test_zz_import_export.py` (28 tests, all green).
 Use this doc when adding a new import type or export so the same shapes/bugs
 don't recur.
 
@@ -13,11 +13,12 @@ don't recur.
 (multipart upload, parse+validate into `import_batch`/`import_row`) →
 `GET /batches/{bid}` → `POST /batches/{bid}/merge` → `DELETE /batches/{bid}`.
 The per-type registry (columns, aliases, required, merge fn) is
-`app/importer.py::TYPES`. Twelve types:
+`app/importer.py::TYPES`. Thirteen types:
 
 | Type | Parse path | Notes |
 |---|---|---|
 | roster, roster_initial (B2a), roster_correction (B2b) | CSV/XLSX | roster types carry `gender`, so a new player is created at merge |
+| tshirt_hotel_dietary (B3) | CSV/XLSX | combined t-shirt size + lodging-question answer + dietary in one row per player; blank cells leave existing roster values intact; USTAs not on the roster are late-added |
 | late_entries, withdrawals, scheduling_avoidances, division_flexibility, player_hotels | CSV/XLSX | `_PLAYER` cols incl. gender; withdrawals need a `reason` unless the player was an alternate (enforced at MERGE, not staging) |
 | pairing_avoidances | CSV/XLSX | wide format `usta_1..usta_6`; **no gender col → every USTA must already exist in Setup** |
 | doubles_requests | CSV/XLSX | per-player; `partner_usta` must already exist; mutual rows auto-pair |
@@ -37,7 +38,7 @@ Direct (non-staged) import: `POST /api/tournaments/{tid}/players/import` (roster
 
 ## Findings
 
-**Everything works.** All 12 import types stage + merge correctly across the CSV,
+**Everything works.** All 13 import types stage + merge correctly across the CSV,
 XLSX and PDF paths; templates download and round-trip; error handling is clean
 (corrupt file → friendly 400, missing-required → staged-invalid with a message,
 unknown USTA → staged-invalid naming the number, unknown type → 404); the CSV

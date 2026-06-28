@@ -1,7 +1,8 @@
 # Deploying the all-in-one POC image
 
 The whole POC — PostgreSQL **server**, FastAPI API, and the static frontend —
-ships as one image (`Dockerfile`, `FROM postgres:16-bookworm`). One container
+ships as one image (`Dockerfile`, a multi-stage build `FROM postgres:16-alpine`,
+~691 MB). One container
 runs the bundled Postgres *and* uvicorn; the demo DB is baked in at build time.
 This is a single-TD POC topology, not production (see `design.md` §11).
 

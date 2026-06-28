@@ -336,8 +336,9 @@ AG Grid Community is vendored.
 
 **Grid factories live in `app/grids.js`** (P2 #11a):
 `createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,
-_autoHeaderFilters }` — the Setup master/detail CRUD factory, the workspace
-list grid, the read-only summary grid, and the auto header-filter helper.
+makeGrid, _autoHeaderFilters }` — the Setup master/detail CRUD factory, the
+workspace list grid, the read-only summary grid, the low-level AG grid builder,
+and the auto header-filter helper.
 `app.js` calls it **once**, passing a `ctx` object of its own helpers (`api`,
 `esc`, `setMsg`, `confirmDialog`, the `GRIDS` registry, …) — the factories are
 deliberately coupled to the app's toast/message/modal conventions, so only the

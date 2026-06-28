@@ -13,8 +13,9 @@ human-reviewed — see [docs/audit.md](../docs/audit.md) §5.1).
 ## Prerequisites
 - A PostgreSQL 16 server on `localhost:5432` reachable as the `postgres`
   superuser (POC default). Override any of `PG{HOST,PORT,USER,PASSWORD,DATABASE}`
-  via `backend/.env`. (On a machine where 5432 is reserved — e.g. Docker/WinNAT —
-  set `PGPORT` in `backend/.env` to a free port.)
+  via `backend/.env`. (On a machine where 5432 is reserved — e.g. Docker/WinNAT
+  excludes the 5381–5480 range — set `PGPORT` in `backend/.env` to a free port.
+  This repo's local dev uses `PGPORT=5544`.)
 - Python 3.11+.
 
 ## Setup

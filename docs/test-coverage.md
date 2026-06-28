@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 460 tests, all passing (migrations through 0048) — deterministic
+**Status:** 528 tests, all passing (migrations through 0048) — deterministic
 (login-throttle state leak fixed). CI runs the suite against a Postgres 16
 service on every push/PR and gates the Docker image build on it
 (`.github/workflows/docker.yml`).
@@ -32,14 +32,25 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
 | `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
-| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`, `login_enum`, `extract_robustness`. |
+| `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`, `login_enum`, `extract_robustness`,
+`chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
+`import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-**Frontend unit check (JS):** the one piece of pure frontend logic that's
-risky to verify only through the live grid — seeding the roster add-form from an
-inbox email — is factored into `frontend/app/roster_prefill.js` and asserted by
-`frontend/app/roster_prefill.test.mjs` (run: `node frontend/app/roster_prefill.test.mjs`,
-12 checks). Covers the off-roster→pick-mode and unmatched→new-mode plans plus the
-"can't add" gates, independent of AG Grid rendering.
+**Frontend unit checks (JS):** two pieces of pure frontend logic that are
+risky to verify only through the live grid are factored out and asserted by
+DOM-free node test files:
+
+- `frontend/app/roster_prefill.test.mjs` (run: `node frontend/app/roster_prefill.test.mjs`,
+  16 checks) — seeding the roster add-form from an inbox email
+  (`roster_prefill.js`): the off-roster→pick-mode and unmatched→new-mode plans,
+  the name-only doubles-pair add path, `Last, First` handling, the
+  `resolveFilePlayerId` resolver, plus the "can't add" gates.
+- `frontend/app/html.test.mjs` (run: `node frontend/app/html.test.mjs`,
+  11 checks) — the `html`` ` template helper (`html.js`): default HTML-escaping,
+  `raw()` verbatim insertion, nested composition without double-escaping, array
+  concatenation, and `hstr` returning a plain string for formatters.
+
+Both run independently of AG Grid rendering.
 
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the
@@ -192,7 +203,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`) | **None at runtime** (except `roster_prefill.test.mjs`, above). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`) | **None at runtime** (except the `roster_prefill.test.mjs` + `html.test.mjs` node unit checks, above). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -204,7 +215,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (460)
+python -m pytest -q                                    # the whole suite (528)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -313,11 +324,15 @@ Two hardening layers over endpoints that return hand-built dicts (no
 | `test_official_response_is_attributed_to_their_login` | Contract | An official's accept via `/api/me/assignments/{id}/respond` (second TestClient so the login doesn't rotate the admin session) is attributed to their username. |
 | `test_trail_survives_assignment_deletion` | Contract | Deleting the assignment NULLs the FK (per-assignment endpoint returns []) but the rows survive with denormalized `official_name`, queryable by tournament. |
 
-### test_zz_doubles_partner.py — doubles partner + pairing groups (migrations 0041/0042) · 16 tests
+### test_zz_doubles_partner.py — doubles partner + pairing groups (migrations 0041/0042) · 26 tests
 
 E2E through the inbox API: a doubles email names TWO players — the detector
 fills both slots (primary + partner), the inbox list returns both names, and
-re-classifying away from doubles clears the partner.
+re-classifying away from doubles clears the partner. (The table below lists the
+core cases; the file has grown to 26 tests, adding partner-matching variants —
+middle initials, `Last, First` inversion, accented/apostrophe names, unique
+first-name and surname-signature guards, cross-line/number-first label shapes,
+and the one-click "file confirmed pair" path.)
 
 | Test | Type | What it locks in |
 |------|------|------------------|
@@ -338,10 +353,14 @@ re-classifying away from doubles clears the partner.
 | `test_clearing_primary_clears_manual_partner` | Contract | Clearing the primary player clears the manual partner too. |
 | `test_put_without_partner_field_clears_it` | Contract | A PUT body that omits `detected_partner_id` resets it to NULL, like the other `detected_*` fields. |
 
-### test_zz_email_extract.py — pure extractor units (P2 #9) · 15 tests
+### test_zz_email_extract.py — pure extractor units (P2 #9) · 25 tests
 
 UNIT tests for `app/email_extract.py` — no DB, no HTTP. Pins each extractor's
-contract directly, including the conservative give-up paths.
+contract directly, including the conservative give-up paths. (The table below
+lists the original core cases; the file has grown to 25 tests, adding
+doubles-pair / withdrawal name-corpus shapes, sentence-boundary stops,
+case-variant dedup, non-decomposing-accent fuzzy matching, business-signature
+rejection, permissive separators, and middle-initial handling.)
 
 | Test | Type | What it locks in |
 |------|------|------------------|
@@ -381,13 +400,15 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 | `test_zz_players_paging.py` / `test_zz_officials_paging.py` | 6 / 4 | Server-side q/limit/offset + `X-Total-Count`. |
 | `test_zz_ical.py` | 4 | RFC 5545 schedule export. |
 | `test_zz_db_errors.py` | 4 | Global constraint-violation → 409/400 mapping. |
+| `test_zz_import_export.py` | 36 | Staged CSV/XLSX/PDF import + export endpoints: per-type template round-trips, stage→edit→merge lifecycle, bulk row ops, the late-entry/withdrawal/distances/doubles/pairing/player-hotels importers, the emails-PDF stager, plus the payroll / assignment-audit CSV and official `schedule.ics` exports. |
 
 ---
 
-Total suite count: **460 tests, all passing** (see the status line at the top).
-`test_zz_chase_pending.py` (4) — assignment summary carries official contact;
+Total suite count: **528 tests, all passing** (see the status line at the top).
+`test_zz_chase_pending.py` (6) — assignment summary carries official contact;
 null when not on file; the **pending-nudge list** (`/pending`) names each
-unconfirmed official with email + first_name, null email when none on file; 404.
+unconfirmed official with email + first_name, null email when none on file; 404;
+plus the outreach-memory path (a nudge records `last_contacted`).
 `test_zz_payroll.py` (22) — payroll finalization (P4-4): freeze the computed
 summary, double-finalize 409, drift after a post-finalize no-show,
 unfinalize-unless-paid, mark-paid lifecycle/defaults, idempotent finalize-all,

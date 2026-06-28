@@ -46,6 +46,10 @@ scope** (D5/§5.1: email is human-reviewed, not parsed).
   credentials** for the POC. *(POC convenience only — see the security note below.)*
 - **Frontend:** **pure HTML/CSS** (no JS framework). Plain pages that call the API
   via `fetch`; keep it dependency-free for the POC.
+  > *Note (2026-06-28): the SPA is still framework-free vanilla JS, but it is no
+  > longer strictly dependency-free — the data grids now use **AG Grid Community
+  > 32.3.5** (the only third-party frontend lib; Tabulator was tried then removed).
+  > See `frontend/app/grids.js`.*
 - **Backend / API:** a **Python server** exposing JSON endpoints the HTML pages
   call (e.g., FastAPI or Flask — pick one at Phase 0), talking to Postgres.
 - **Part A (officials):** these pages + API — CRUD, calculations, reports.
@@ -84,7 +88,12 @@ HTML page and creates sites/tournaments end-to-end.
 
 ---
 
-## Phase 1 — Officials app, administrator side  *(highest, clearest value)*  🚧 IN PROGRESS
+## Phase 1 — Officials app, administrator side  *(highest, clearest value)*  ✅ DONE
+<!-- Status updated: every Phase-1 item below is [x]; the "remaining polish" called
+     out in the status line (distance backfill, room-count enforcement, pay
+     snapshots) is itself ✅ DONE in the "UI review & backlog" section (room-count
+     409 guard; pay snapshots migration 0005; distance backfill 47/38/6). -->
+
 - [x] TD CRUD: tournaments (name, type, the three dates above + match-play
       window, site), sites. *(full CRUD + filters, master-detail UI)*
 - [x] **Per-tournament roster import** (`TournamentEntry`): **CSV/XLSX upload**
@@ -300,7 +309,9 @@ Remaining: the optional auto-triage agent.
       per-day rates — alongside the outputs + rule version, so a reimbursement is
       reproducible even after a distance/rate changes. Surfaced as an ⓘ tooltip
       on the assignment card's total badge.
-- [ ] Multi-user TD access if needed (D8).
+- [x] Multi-user TD access if needed (D8). ✓ DONE — admin user management
+      (`backend/app/routers/users.py`, `/api/admin/users`: create/list/reset-password/delete
+      with self + last-admin guards) + a Setup → Users tab. (Also noted under "Open work".)
 - [x] **CSV export on every list** — a generic "⬇ CSV" button on the roster,
       t-shirts, inbox, and all Part B list tables (skips the actions column), plus
       the officials report's existing Print + CSV, and a **PDF export** (a clean,

@@ -172,6 +172,9 @@ optional **room block**. The **role and rate are per day** (see `AssignmentDay`)
 | `room_block_id` | FK → RoomBlock (nullable); capacity-checked on assign |
 | `snapshot_pay`, `snapshot_mileage`, `snapshot_total` | frozen money at the last change (§5.3) |
 | `rule_version`, `snapshot_at` | pricing-rule id + timestamp of the snapshot |
+| `pay_audit` | jsonb — frozen calc **inputs** (miles used + rule constants + per-day rates), so a reimbursement is reproducible even if a distance/rate changes (migration 0036) |
+| `response_status`, `responded_at` | official accept/decline: `pending` (default) \| `accepted` \| `declined` + timestamp (migration 0038) |
+| `last_nudged_at` | timestamptz, NULL = never nudged; stamped on a mailto nudge, cleared when the official responds (migration 0049) |
 
 > Pay, mileage, and `hotel_date_mismatch` are **computed** in the summary endpoint
 > and **snapshotted** onto the assignment (`snapshot_pay/mileage/total`,
@@ -229,9 +232,12 @@ even a USTA number may be corrected — so edits must be **historized** (see
 | `usta_number` | unique business key; correctable, change tracked |
 | `first_name`, `last_name` | mutable; change tracked |
 | `gender` | **required** `male`/`female`; drives the gender-aware division/event picker (migrations 0025 + 0026) |
-| `birthdate` | optional at the API boundary; required on the Setup-page form (inline-create from roster/inbox flows may upsert without it) |
+| `birthdate` | optional at the API boundary; required on the Setup-page form (inline-create from roster/inbox flows may upsert without it). **Encrypted at rest** — the column is `text` holding a Fernet token, not `date` (migration 0037, PII H2) |
+| `birthdate_precision` | `day` (default) \| `year` (Initial import carries only year-of-birth → stored `YYYY-01-01`) — migration 0028 |
 | `city`, `state` | optional address-of-record (migration 0019) |
+| `emails`, `phones`, `district`, `section`, `wtn_singles`, `wtn_singles_conf`, `wtn_doubles`, `wtn_doubles_conf` | USTA "Full Player Data" catalog extensions (migration 0028 — see Player catalog extensions below) |
 | `updated_at` | timestamp of the current version; sent back as `X-If-Updated-At` for optimistic concurrency on PUT |
+| `created_at` | timestamptz, default now() |
 
 > Per-tournament attributes — **age division, selection status, t-shirt size,
 > dietary preference** — live on `TournamentEntry`, not on `Player`, because they
@@ -252,15 +258,18 @@ The Player detail pane shows a **Name history** list.
 | `usta_number`, `first_name`, `last_name`, `birthdate` | the values **as they were** |
 | `valid_from`, `valid_to` | `[valid_from, valid_to)` window this version was current |
 | `change_type` | `update` \| `delete` |
-| `changed_by` | optional (TD/user) |
+| `changed_at` | timestamptz, default now() — when the snapshot was written |
 
 Trigger sketch (no app code, can't be bypassed):
 ```sql
 -- BEFORE UPDATE/DELETE on player: snapshot the OLD row, closing its window at now()
+-- Change detection compares (usta_number, first_name, last_name) only — birthdate
+-- is EXCLUDED since 0037 (Fernet ciphertext is non-deterministic, so equality
+-- can't detect a change), but it is still snapshotted whenever a name change fires.
 INSERT INTO player_history(player_id, usta_number, first_name, last_name,
                            birthdate, valid_from, valid_to, change_type)
 VALUES (OLD.id, OLD.usta_number, OLD.first_name, OLD.last_name,
-        OLD.birthdate, OLD.updated_at, now(), TG_OP);  -- 'UPDATE' | 'DELETE'
+        OLD.birthdate, OLD.updated_at, now(), 'update'/'delete');
 -- on UPDATE also set NEW.updated_at = now()
 ```
 
@@ -317,6 +326,7 @@ person sets `classification` and files each message into a list.
 | `tournament_id` | FK (set by the reviewer) |
 | `classification` | **human-assigned** text: `unclassified` \| `late_entry` \| `withdrawal` \| `doubles` \| `pairing_avoidance` \| `scheduling_avoidance` \| `division_flex` \| `hotel` \| `other` |
 | `status` | `new` \| `filed` \| `needs_followup` (filing a list sets `filed`) |
+| `amends_email_id` | FK → EmailMessage (nullable), ON DELETE SET NULL — a correction email points at the earlier email it supersedes (migration 0034) |
 
 > **Triage agent v0 (built):** `POST /api/emails/{id}/suggest` returns a
 > rule-based classification (`app/triage.py`) — local keyword matching, **no LLM /
@@ -456,8 +466,9 @@ ordered.
 |-------|-------|
 | `tournament_id` | PK · FK → Tournament |
 | `ordered_at` | date the order was placed (NULL = no order yet) |
-| `on_hand` | JSON map of `{size_code: count}`, sparse (TD-edited sizes only) |
-| `snapshot` | JSON map of `{size_code: requested_at_order_time}` |
+| `on_hand` | JSON map of `{size_code: count}`, sparse (TD-edited sizes only); NOT NULL default `{}` |
+| `snapshot` | JSON map of `{size_code: requested_at_order_time}` (NULL until an order is placed) |
+| `updated_at` | timestamptz, default now() |
 
 Canonical size codes: `YS YM YL AS AM AL AXL` (shared with the importer's
 `norm_shirt`). Surfaced at the **Tournament → T-shirts** tab.
@@ -482,7 +493,7 @@ land in `import_row` first. After the review summary, valid rows merge into
 the main tables; failed/conflict rows are surfaced with row-level errors.
 | Table | Fields |
 |-------|--------|
-| `import_batch` | `id`, `tournament_id`, `import_type`, `filename`, `status` (`staged`/`merged`/`discarded`), `created_at` |
+| `import_batch` | `id`, `tournament_id`, `import_type`, `filename`, `status` (`staged`/`merged`), `created_at` |
 | `import_row` | `id`, `batch_id` (FK), `row_num`, `data` (JSON), `valid`, `error`, `merged` |
 
 Registered import types (`importer.TYPES`, audit-resolved circular dep):
@@ -501,6 +512,58 @@ declarations and a parametrized round-trip smoke test.
 Migration 0018 added `lodging_plan` (Hotel / Commuter / At another's house /
 …); 0023 added `hotel_id` FK so the canonical hotel name is referenced, not
 free-text-duplicated.
+
+---
+
+## Auth — accounts + sessions  ✅ *built (migrations 0008 + 0017)*
+POC auth: pbkdf2 password hashes + a server-side session token in an HttpOnly
+cookie. Two roles — `admin` (the TD) and `official` (self-service); an
+`official` account links to an `official` record.
+
+### user_account
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `username` | unique, NOT NULL |
+| `password_hash` | pbkdf2, NOT NULL |
+| `role` | `admin` \| `official` (enum `user_role`, default `official`) |
+| `official_id` | FK → Official, ON DELETE CASCADE (nullable; set for `official` accounts) |
+| `created_at` | timestamptz |
+
+### session
+| Field | Notes |
+|-------|-------|
+| `token` | PK (the cookie value) |
+| `user_id` | FK → user_account, ON DELETE CASCADE |
+| `created_at` | timestamptz |
+| `expires_at` | timestamptz, default `now() + 30 days` (migration 0017); expired tokens are rejected + cleaned up on login |
+
+---
+
+## Support staff (non-officials)  ✅ *built (migrations 0032 / 0033 / 0035)*
+Non-certified tournament staff (Site Director, Player Amenities, Trainer,
+Operations, Stringer, …) — simpler than officials (no certs/mileage), a
+per-tournament roster of name + role + contact + flat daily rate, feeding the
+staffing-plan report.
+
+### tournament_staff
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `tournament_id` | FK → Tournament, ON DELETE CASCADE |
+| `name` | NOT NULL |
+| `role` | enum `staff_role`: `site_director` \| `player_amenities` \| `trainer` \| `operations` \| `stringer` \| `other` |
+| `phone`, `email`, `notes` | |
+| `daily_rate` | numeric(8,2), nullable (migration 0035); report pay = `daily_rate × scheduled days` |
+| `created_at` | timestamptz |
+
+### staff_day
+One row per scheduled day (parallels `assignment_day`, but no per-day role/rate).
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `staff_id` | FK → tournament_staff, ON DELETE CASCADE |
+| `work_date` | UNIQUE per `(staff_id, work_date)` |
 
 ---
 
