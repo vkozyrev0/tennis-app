@@ -43,6 +43,126 @@ export function createGridFactories(ctx) {
   // Grid options that turn overflow columns into a tap-to-expand ▸ row on phones.
   const RESPONSIVE_OPTS = { responsiveLayout: "collapse", responsiveLayoutCollapseStartOpen: false };
 
+  // ===================== AG Grid migration helpers =========================
+  // The grids are moving from Tabulator to AG Grid Community one factory at a
+  // time. These helpers translate the app's existing Tabulator-shaped column
+  // defs to AG Grid colDefs and emulate the small Tabulator cell/row surface the
+  // formatters + edit handlers call, so the per-grid configs don't have to change.
+  /* global agGrid */
+  const _AG_THEME = "ag-theme-quartz";
+
+  // A Tabulator-like `cell` facade over AG Grid renderer/editor/event params.
+  function _agCell(params) {
+    const field = params.colDef && params.colDef.field;
+    const rowEl = () => params.eGridCell ? params.eGridCell.closest(".ag-row") : null;
+    return {
+      getData: () => params.data || {},
+      getValue: () => params.value,
+      getOldValue: () => params.oldValue,
+      getField: () => field,
+      getElement: () => params.eGridCell || document.createElement("span"),
+      getRow: () => ({
+        getData: () => params.data || {},
+        getElement: () => rowEl() || document.createElement("div"),
+        getCell: (f) => ({ getElement: () => params.eGridCell, getValue: () => (params.data || {})[f] }),
+      }),
+      restoreOldValue: () => { if (params.node) params.node.setDataValue(field, params.oldValue); },
+      setValue: (v) => { if (params.node) params.node.setDataValue(field, v); },
+    };
+  }
+
+  // Translate ONE Tabulator column def → an AG Grid colDef (or null to drop it,
+  // e.g. the responsiveCollapse toggle, which AG Grid handles differently).
+  function _toAgCol(col) {
+    if (!col || col.formatter === "responsiveCollapse") return null;
+    const cd = { headerName: col.title != null ? col.title : "" };
+    if (col.field) cd.colId = col.field;
+    if (col.field && !col.field.startsWith("_")) cd.field = col.field;
+    if (col.width) cd.width = col.width;
+    if (col.minWidth) cd.minWidth = col.minWidth;
+    // widthGrow 0 / fixed width → no flex; else share leftover space (fitColumns).
+    if (col.width || col.widthGrow === 0) cd.flex = 0; else cd.flex = col.widthGrow || 1;
+    if (col.headerSort === false) cd.sortable = false;
+    if (col.resizable === false) cd.resizable = false;
+    if (col.hozAlign) cd.cellStyle = { textAlign: col.hozAlign };
+    if (col.cssClass) cd.cellClass = col.cssClass;
+    if (col.frozen) cd.pinned = "left";
+    if (col.field) cd.tooltipField = col.field;
+    // formatter → cellRenderer (may return a DOM node or an HTML string).
+    if (typeof col.formatter === "function") {
+      const fmt = col.formatter;
+      cd.cellRenderer = (params) => { try { return fmt(_agCell(params)); } catch (_) { return ""; } };
+    }
+    // editor → editable + cellEditor (single-click edit is a grid option below).
+    if (col.editor) {
+      cd.editable = true;
+      cd.cellClass = (cd.cellClass ? cd.cellClass + " " : "") + "editable-cell";
+      if (col.editor === "list") {
+        cd.cellEditor = "agSelectCellEditor";
+        cd.cellEditorParams = (params) => {
+          const ep = typeof col.editorParams === "function" ? col.editorParams(_agCell(params)) : (col.editorParams || {});
+          const vals = ep.values || [];
+          return { values: Array.isArray(vals) ? vals : Object.keys(vals) };
+        };
+      } else if (col.editor === "date") {
+        cd.cellEditor = "agDateStringCellEditor";
+      } else {
+        cd.cellEditor = "agTextCellEditor";
+      }
+    }
+    // header filter — TODO custom dropdown for `list`; text filter for now.
+    if (col.headerFilter) { cd.filter = "agTextColumnFilter"; cd.floatingFilter = true; }
+    return cd;
+  }
+
+  // Create an AG Grid and return a small Tabulator-compatible facade
+  // ({ setData, getData, getRows, on, download, redraw, api }). `tabOpts` is the
+  // existing Tabulator options object; only the bits the app uses are honored.
+  function _makeAgGrid(mount, tabOpts) {
+    mount.classList.add(_AG_THEME);
+    const colDefs = (tabOpts.columns || []).map(_toAgCol).filter(Boolean);
+    const handlers = {};   // event name -> [fns] (Tabulator-style .on)
+    let api = null;
+    const opts = {
+      columnDefs: colDefs,
+      rowData: [],
+      defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
+        ...(tabOpts.columnDefaults && tabOpts.columnDefaults.tooltip ? {} : {}) },
+      getRowId: tabOpts.index ? (p) => String(p.data[tabOpts.index]) : undefined,
+      singleClickEdit: tabOpts.editTriggerEvent === "click",
+      stopEditingWhenCellsLoseFocus: true,
+      suppressMovableColumns: true,
+      overlayNoRowsTemplate: `<span class="ag-empty">${esc(tabOpts.placeholder || "No data")}</span>`,
+      domLayout: "normal",
+      onCellValueChanged: (p) => {
+        if (p.oldValue === p.newValue) return;
+        (handlers.cellEdited || []).forEach((fn) => fn(_agCell(p)));
+      },
+      onRowClicked: (p) => (handlers.rowClick || []).forEach((fn) => fn(p.event, {
+        getData: () => p.data, getElement: () => p.event && p.event.target && p.event.target.closest(".ag-row") })),
+      onFilterChanged: () => (handlers.dataFiltered || []).forEach((fn) => fn()),
+      onSortChanged: () => (handlers.dataSorted || []).forEach((fn) => fn()),
+      onGridReady: (e) => { api = e.api; (handlers.tableBuilt || []).forEach((fn) => fn()); },
+    };
+    api = agGrid.createGrid(mount, opts);
+    mount.__agApi = api;   // debug/test hook (read model row count without DOM)
+    const activeRows = () => { const out = []; if (api) api.forEachNodeAfterFilterAndSort((n) => out.push(n)); return out; };
+    return {
+      api,
+      initialized: true,
+      on: (evt, fn) => { (handlers[evt] ||= []).push(fn); },
+      setData: (rows) => api && api.setGridOption("rowData", rows || []),
+      getData: (which) => which === "active" ? activeRows().map((n) => n.data) : (() => { const o = []; api.forEachNode((n) => o.push(n.data)); return o; })(),
+      getRows: (which) => (which === "active" ? activeRows() : (() => { const o = []; api.forEachNode((n) => o.push(n)); return o; })())
+        .map((n) => ({ getData: () => n.data, getElement: () => (api.getRowNode && null), getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }) })),
+      getRow: (id) => { const n = api.getRowNode(String(id)); return n ? { getData: () => n.data,
+        getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }), getElement: () => null } : null; },
+      setFilter: () => {},   // app-level external filter handled per grid (TODO)
+      redraw: () => api && api.refreshCells({ force: true }),
+      download: (_fmt, name) => api && api.exportDataAsCsv({ fileName: name }),
+    };
+  }
+
   function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited, exportCols) {
     // Import/export #3: exportCols (when given) drives a *re-importable* CSV
     // export with snake_case headers, not just the visible Tabulator columns.
@@ -83,15 +203,10 @@ export function createGridFactories(ctx) {
       },
     });
     let built = false, pending = null;
-    const grid = new Tabulator(mount, {
-      index: "id", layout: "fitColumns", maxHeight: "55vh", placeholder,
-      renderVertical: "basic", editTriggerEvent: "click",  // single click opens the cell editor (where set)
-      // Persist the TD's chosen SORT across visits (per-table localStorage key).
-      // Sort only — filter persistence would fight grids that set load-time
-      // filter defaults (e.g. the inbox). Bump the v1 key if columns change.
-      persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId,
-      ...RESPONSIVE_OPTS,
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 }, columns: _withResponsiveCollapse(cols),
+    mount.style.height = mount.style.height || "55vh";
+    const grid = _makeAgGrid(mount, {
+      index: "id", placeholder, editTriggerEvent: "click",
+      columnDefaults: { tooltip: true }, columns: cols,
     });
     const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
     grid.on("tableBuilt", _onBuilt);

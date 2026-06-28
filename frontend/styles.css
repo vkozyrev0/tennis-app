@@ -891,6 +891,30 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 a.export-btn { text-decoration: none; }
 .import-result { margin-top: 0.4rem; }
 .import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
+/* ===== AG Grid theme overrides — tune quartz to match the app's look ===== */
+.ag-theme-quartz, .ag-theme-quartz-dark {
+  --ag-font-family: inherit;
+  --ag-font-size: 0.8rem;
+  --ag-accent-color: var(--accent);
+  --ag-row-height: 32px;
+  --ag-header-height: 34px;
+  --ag-cell-horizontal-padding: 8px;
+  --ag-borders: solid 1px;
+  --ag-border-color: var(--border);
+  --ag-row-border-color: var(--border);
+  --ag-header-column-separator-display: none;
+  --ag-selected-row-background-color: var(--sel, rgba(0,0,0,0.05));
+  --ag-row-hover-color: var(--sel, rgba(0,0,0,0.04));
+  --ag-header-background-color: transparent;
+  --ag-odd-row-background-color: rgba(0,0,0,0.015);
+  --ag-wrapper-border-radius: 8px;
+}
+.ag-theme-quartz .ag-header-cell-text { font-weight: 600; }
+/* the app's grids sit flush in the card; trim AG's default outer chrome */
+.grid-mount.ag-theme-quartz { width: 100%; }
+.ag-theme-quartz .grid-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.ag-empty { color: var(--muted-ink, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
+
 /* Import preview grid (edit-before-merge). */
 .import-preview-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.35rem 0; }
 .import-counts { font-size: 0.82rem; }
