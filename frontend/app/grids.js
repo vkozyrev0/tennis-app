@@ -230,8 +230,25 @@ export function createGridFactories(ctx) {
       const fmt = col.formatter;
       cd.cellRenderer = (params) => { try { return fmt(_agCell(params)); } catch (_) { return ""; } };
     }
+    // Composite editor: a display column backed by several DB fields (e.g. Name =
+    // first+last, City/St = city+state). valueGetter feeds the editor the combined
+    // text; valueSetter parses the typed value back into the underlying fields on
+    // the row so the row-PUT persists them. Takes precedence over a plain editor.
+    if (col.composite) {
+      cd.editable = true;
+      cd.cellClass = (cd.cellClass ? cd.cellClass + " " : "") + "editable-cell";
+      cd.cellEditor = "agTextCellEditor";
+      cd.valueGetter = (p) => (p.data ? col.composite.get(p.data) : "");
+      cd.valueSetter = (p) => {
+        if (!p.data) return false;
+        const upd = col.composite.set(p.newValue, p.data);
+        if (!upd) return false;
+        Object.assign(p.data, upd);
+        return true;
+      };
+    }
     // editor → editable + cellEditor (single-click edit is a grid option below).
-    if (col.editor) {
+    else if (col.editor) {
       cd.editable = true;
       cd.cellClass = (cd.cellClass ? cd.cellClass + " " : "") + "editable-cell";
       if (col.editor === "list") {
@@ -638,6 +655,7 @@ export function createGridFactories(ctx) {
       if (c.edit) {
         col.editor = c.edit.editor;
         if (c.edit.params) col.editorParams = c.edit.params;
+        if (c.edit.composite) col.composite = c.edit.composite;  // multi-field inline edit
         col.cssClass = "editable-cell";
       }
       // Per-column header filter on the meaningful columns (skip the id column).

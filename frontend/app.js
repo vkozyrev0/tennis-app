@@ -7563,16 +7563,45 @@ async function loadPlayerHistory(id) {
   requestAnimationFrame(() => { try { phHistGrid.grid.redraw(true); } catch (_) {} });
 }
 
+// Parse the combined Name / City-St cells back into their DB fields for inline
+// edit. Name: "Last, First" honours the comma; otherwise the last token is the
+// surname and everything before it the given name(s). City/St: split on the last
+// comma so multi-word cities ("San Francisco, CA") survive.
+function _splitName(val) {
+  const s = String(val == null ? "" : val).trim();
+  if (!s) return { first_name: "", last_name: "" };
+  if (s.includes(",")) { const [last, ...rest] = s.split(","); return { last_name: last.trim(), first_name: rest.join(",").trim() }; }
+  const parts = s.split(/\s+/);
+  if (parts.length === 1) return { first_name: parts[0], last_name: "" };
+  return { first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1] };
+}
+function _splitCityState(val) {
+  const s = String(val == null ? "" : val).trim();
+  if (!s) return { city: "", state: "" };
+  const i = s.lastIndexOf(",");
+  if (i < 0) return { city: s, state: "" };
+  return { city: s.slice(0, i).trim(), state: s.slice(i + 1).trim() };
+}
+
 const playersCrud = wireEntity({
   path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
   optimisticConcurrency: true,  // audit M19/M8: send X-If-Updated-At on PUT
   columns: [
     { key: "id", responsive: 10 },
     { key: "usta_number", responsive: 5, edit: { editor: "input" } },
-    { key: "name", responsive: 0, fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" ") },
+    { key: "name", responsive: 0, fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" "),
+      // Inline-editable composite: type "First Last" (or "Last, First") → split back
+      // into first_name / last_name. Edit the modal for anything fancier.
+      edit: { editor: "input", composite: {
+        get: (r) => [r.first_name, r.last_name].filter(Boolean).join(" "),
+        set: (val) => _splitName(val) } } },
     { key: "gender", responsive: 3, fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "—",
       edit: { editor: "list", params: { values: [{ label: "Male", value: "male" }, { label: "Female", value: "female" }] } } },
-    { key: "loc", responsive: 4, fmt: (p) => [p.city, p.state].filter(Boolean).join(", ") },
+    { key: "loc", responsive: 4, fmt: (p) => [p.city, p.state].filter(Boolean).join(", "),
+      // Inline-editable composite: type "City, ST" → split into city / state.
+      edit: { editor: "input", composite: {
+        get: (r) => [r.city, r.state].filter(Boolean).join(", "),
+        set: (val) => _splitCityState(val) } } },
   ],
   exportCols: [
     { header: "usta_number", key: "usta_number" },
