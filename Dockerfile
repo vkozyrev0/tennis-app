@@ -4,20 +4,24 @@
 # The demo database is SEEDED AT BUILD TIME and baked into the image, so the
 # embedded DB already contains data the moment the container starts.
 #
-# Build:  docker build -t courtops .
-# Run:    docker run --rm -p 8000:8000 courtops
+# Build:  docker build -t courtops:poc .
+# Run:    docker run --rm -p 8000:8000 courtops:poc
 #         → open http://localhost:8000  (admin / admin)
 #
 # This bakes the DB engine + data into the app image on purpose — it's a
 # single-TD POC, not a production topology (see docs/design.md §11).
+#
+# Base: postgres:16-ALPINE (musl). ~20% smaller than the bookworm base; all of
+# our deps (psycopg[binary], cryptography, pillow, pydantic-core, uvloop) ship
+# musllinux wheels, so no compiler toolchain is needed in the image.
 
-FROM postgres:16-bookworm
+FROM postgres:16-alpine
 
-# Python + venv (psycopg[binary]/cryptography/pillow ship manylinux wheels, so no
-# compiler toolchain is needed).
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-venv \
-    && rm -rf /var/lib/apt/lists/*
+# Python + bash. The entrypoint is a bash script (Alpine ships only busybox sh),
+# so bash is required. `--only-binary` on the pip step (below) makes the build
+# FAIL FAST if any dependency lacks a musllinux wheel rather than silently trying
+# to compile from source — there's no build toolchain here, on purpose.
+RUN apk add --no-cache python3 py3-pip bash
 
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv "$VIRTUAL_ENV"
@@ -26,7 +30,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r backend/requirements.txt
+    && pip install --no-cache-dir --only-binary=:all: -r backend/requirements.txt
 
 # App + frontend + entrypoint.
 COPY backend  backend
