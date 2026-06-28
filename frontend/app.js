@@ -1628,6 +1628,7 @@ const tSitesGrid = makeReadGrid("t-sites-table", [
 // whether it's currently part of the active tournament.
 ], "tournament-sites", "No sites match.", {
   index: "id",
+  engine: "tabulator",  // TODO: migrate to AG Grid (uses rowFormatter for row selection)
   rowFormatter: (row) => row.getElement().classList.toggle("row-selected", tSitesSelected.has(row.getData().id)),
 });
 function tSitesMatches(s) {
@@ -4844,7 +4845,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false });
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false, engine: "tabulator" });
 // Persist inline edits (single click a cell): classification, manual player /
 // partner picks (the list editor's value is a player id), and typed USTA #s
 // (resolved against the roster cache; unknown numbers revert with a toast).

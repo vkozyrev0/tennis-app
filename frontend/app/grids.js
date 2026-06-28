@@ -123,9 +123,12 @@ export function createGridFactories(ctx) {
     const colDefs = (tabOpts.columns || []).map(_toAgCol).filter(Boolean);
     const handlers = {};   // event name -> [fns] (Tabulator-style .on)
     let api = null;
+    let extFilter = null;  // Tabulator-style setFilter(fn) → AG external filter
     const opts = {
       columnDefs: colDefs,
       rowData: [],
+      isExternalFilterPresent: () => !!extFilter,
+      doesExternalFilterPass: (node) => !extFilter || extFilter(node.data),
       defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
         ...(tabOpts.columnDefaults && tabOpts.columnDefaults.tooltip ? {} : {}) },
       getRowId: tabOpts.index ? (p) => String(p.data[tabOpts.index]) : undefined,
@@ -157,7 +160,7 @@ export function createGridFactories(ctx) {
         .map((n) => ({ getData: () => n.data, getElement: () => (api.getRowNode && null), getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }) })),
       getRow: (id) => { const n = api.getRowNode(String(id)); return n ? { getData: () => n.data,
         getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }), getElement: () => null } : null; },
-      setFilter: () => {},   // app-level external filter handled per grid (TODO)
+      setFilter: (fn) => { extFilter = fn || null; if (api) api.onFilterChanged(); },
       redraw: () => api && api.refreshCells({ force: true }),
       download: (_fmt, name) => api && api.exportDataAsCsv({ fileName: name }),
     };
@@ -216,10 +219,47 @@ export function createGridFactories(ctx) {
     return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
   }
 
-  // Read-only Tabulator list (summaries / reference tables): sortable + optional
-  // CSV, no row actions. Replaces the <table id> in place and registers for the
-  // redraw-on-tab-show pass. Returns { grid, setData, setFilter }.
+  // AG Grid version of makeReadGrid (summaries / reference tables). Same return
+  // shape { grid, setData, setFilter } so consumers don't change.
+  function _makeReadGridAg(tableId, columns, exportName, placeholder, opts) {
+    const tableEl = document.getElementById(tableId);
+    const panelId = tableEl.closest(".panel")?.id;
+    const mount = document.createElement("div"); mount.className = "grid-mount";
+    if (opts.compact) mount.classList.add("grid-mount--compact");
+    mount.style.height = mount.style.height || (opts.maxHeight || "55vh");
+    tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
+    const grid = _makeAgGrid(mount, {
+      placeholder, columns,
+      ...(opts.index ? { index: opts.index } : {}),
+      ...(opts.editable ? { editTriggerEvent: opts.editable === true ? "click" : opts.editable } : {}),
+    });
+    if (exportName) {
+      const csv = document.createElement("button");
+      csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
+      csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
+      mount.parentElement.insertBefore(csv, mount);
+    }
+    let built = false, pending = null, pendingFilter = null;
+    const _onBuilt = () => { built = true;
+      if (pending) { grid.setData(pending); pending = null; }
+      if (pendingFilter) { grid.setFilter(pendingFilter); pendingFilter = null; } };
+    grid.on("tableBuilt", _onBuilt);
+    if (grid.initialized) _onBuilt();
+    if (opts.onCellEdited) grid.on("cellEdited", (cell) => opts.onCellEdited(cell));
+    if (panelId) (GRIDS[panelId] ||= []).push(grid);
+    return {
+      grid,
+      setData: (rows) => { if (built) { grid.setData(rows); requestAnimationFrame(() => grid.redraw()); } else pending = rows; },
+      setFilter: (fn) => { if (built) grid.setFilter(fn); else pendingFilter = fn; },
+    };
+  }
+
+  // Read-only list (summaries / reference tables): sortable + optional CSV, no
+  // row actions. AG Grid by default; pass opts.engine === "tabulator" to keep the
+  // legacy Tabulator path (the inbox + event-sites grids, pending migration).
+  // Returns { grid, setData, setFilter }.
   function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
+    if (opts.engine !== "tabulator") return _makeReadGridAg(tableId, columns, exportName, placeholder, opts);
     const tableEl = document.getElementById(tableId);
     const panelId = tableEl.closest(".panel")?.id;
     const mount = document.createElement("div"); mount.className = "grid-mount";
