@@ -909,6 +909,24 @@ a.export-btn { text-decoration: none; }
   --ag-odd-row-background-color: rgba(0,0,0,0.015);
   --ag-wrapper-border-radius: 8px;
 }
+/* Dark mode: the app toggles :root[data-theme="dark"]; repaint AG with the
+   app's dark tokens so the grid isn't a white slab. */
+:root[data-theme="dark"] .ag-theme-quartz {
+  --ag-background-color: var(--bg, #16181c);
+  --ag-foreground-color: var(--ink, #e6e6e6);
+  --ag-header-foreground-color: var(--ink, #e6e6e6);
+  --ag-header-background-color: transparent;
+  --ag-odd-row-background-color: rgba(255, 255, 255, 0.025);
+  --ag-row-hover-color: rgba(255, 255, 255, 0.06);
+  --ag-selected-row-background-color: var(--sel, rgba(255, 255, 255, 0.1));
+  --ag-border-color: var(--border);
+  --ag-row-border-color: var(--border);
+  --ag-input-background-color: rgba(255, 255, 255, 0.06);
+  --ag-input-border-color: var(--border);
+  --ag-control-panel-background-color: var(--bg);
+  --ag-secondary-foreground-color: var(--muted-ink, #9aa0a6);
+  --ag-disabled-foreground-color: #6b6f76;
+}
 .ag-theme-quartz .ag-header-cell-text { font-weight: 600; }
 /* the app's grids sit flush in the card; trim AG's default outer chrome */
 .grid-mount.ag-theme-quartz { width: 100%; }
