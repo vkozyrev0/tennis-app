@@ -71,6 +71,84 @@ export function createGridFactories(ctx) {
     };
   }
 
+  // ---- custom AG floating filters (Tabulator headerFilter parity) -----------
+  // AG Community has no Set/dropdown filter, and its text filter only sees the
+  // cell value (not the row), so columns that filtered against a *computed*
+  // string (e.g. "Last, First (USTA …)") or did exact-match enum filtering need
+  // bespoke components. These pairs (filter + floating UI) cover both cases.
+
+  // values: ["a","b"] or { value: "Label" } (an "" key is treated as the
+  // all/clear option). Returns [[value,label], …].
+  function _valuePairs(values) {
+    if (Array.isArray(values)) return values.map((v) => [String(v), String(v)]);
+    return Object.keys(values || {}).map((k) => [k, String(values[k])]);
+  }
+
+  // Exact-match dropdown filter. `predicate(selected, _v, rowData)` overrides the
+  // default `String(rowData[field]) === selected` when supplied (Tabulator's
+  // headerFilterFunc), so gender/signed-in style virtual columns filter correctly.
+  function _agListFilter(predicate, field) {
+    return class {
+      init(params) { this.params = params; this.sel = ""; this.gui = document.createElement("div");
+        this.gui.className = "ag-filter-body-wrapper ag-custom-filter"; }
+      getGui() { return this.gui; }
+      isFilterActive() { return this.sel !== "" && this.sel != null; }
+      doesFilterPass(p) {
+        const data = p.node.data;
+        if (predicate) return predicate(this.sel, data[field], data);
+        return String(data[field] ?? "") === String(this.sel);
+      }
+      getModel() { return this.isFilterActive() ? { value: this.sel } : null; }
+      setModel(m) { this.sel = m ? m.value : ""; }
+      onFloating(v) { this.sel = v; this.params.filterChangedCallback(); }   // called by floating UI
+    };
+  }
+  function _agListFloating(values) {
+    const pairs = _valuePairs(values);
+    return class {
+      init(params) {
+        const sel = document.createElement("select");
+        sel.className = "ag-floating-filter-input ag-list-floating";
+        if (!pairs.some(([v]) => v === "")) sel.appendChild(new Option("all", ""));
+        for (const [v, label] of pairs) sel.appendChild(new Option(label, v));
+        sel.addEventListener("change", () => params.parentFilterInstance((inst) => inst.onFloating(sel.value)));
+        this.eSelect = sel;
+      }
+      onParentModelChanged(model) { this.eSelect.value = model ? model.value : ""; }
+      getGui() { return this.eSelect; }
+    };
+  }
+
+  // Substring text filter that runs the column's headerFilterFunc against the
+  // whole row (so the Player column can match name + USTA #, not just last_name).
+  function _agTextFuncFilter(fn, field) {
+    return class {
+      init(params) { this.params = params; this.term = ""; }
+      getGui() { const d = document.createElement("div"); d.className = "ag-filter-body-wrapper ag-custom-filter";
+        const i = document.createElement("input"); i.type = "text"; i.className = "ag-input-field-input ag-text-field-input";
+        i.value = this.term; i.addEventListener("input", () => { this.term = i.value; this.params.filterChangedCallback(); });
+        d.appendChild(i); this.eInput = i; return d; }
+      isFilterActive() { return !!this.term; }
+      doesFilterPass(p) { const data = p.node.data; return fn(this.term, data[field], data); }
+      getModel() { return this.term ? { term: this.term } : null; }
+      setModel(m) { this.term = m ? m.term : ""; }
+      onFloating(v) { this.term = v; this.params.filterChangedCallback(); }
+      afterGuiAttached() { if (this.eInput) this.eInput.focus(); }
+    };
+  }
+  function _agTextFuncFloating() {
+    return class {
+      init(params) {
+        const i = document.createElement("input"); i.type = "text";
+        i.className = "ag-input-field-input ag-text-field-input ag-floating-filter-input";
+        i.addEventListener("input", () => params.parentFilterInstance((inst) => inst.onFloating(i.value)));
+        this.eInput = i;
+      }
+      onParentModelChanged(model) { this.eInput.value = model ? model.term : ""; }
+      getGui() { return this.eInput; }
+    };
+  }
+
   // Translate ONE Tabulator column def → an AG Grid colDef (or null to drop it,
   // e.g. the responsiveCollapse toggle, which AG Grid handles differently).
   function _toAgCol(col) {
@@ -115,8 +193,28 @@ export function createGridFactories(ctx) {
         cd.cellEditor = "agTextCellEditor";
       }
     }
-    // header filter — TODO custom dropdown for `list`; text filter for now.
-    if (col.headerFilter) { cd.filter = "agTextColumnFilter"; cd.floatingFilter = true; }
+    // header filter — `list` → exact-match dropdown; `input` with a custom
+    // headerFilterFunc → whole-row substring filter; plain `input` → built-in
+    // text filter. Floating (always-visible in the header) in every case.
+    if (col.headerFilter) {
+      if (col.headerFilter === "list") {
+        const vals = (col.headerFilterParams && col.headerFilterParams.values) || [];
+        cd.filter = _agListFilter(col.headerFilterFunc, col.field);
+        cd.floatingFilterComponent = _agListFloating(vals);
+        cd.floatingFilter = true;
+      } else if (typeof col.headerFilterFunc === "function") {
+        cd.filter = _agTextFuncFilter(col.headerFilterFunc, col.field);
+        cd.floatingFilterComponent = _agTextFuncFloating();
+        cd.floatingFilter = true;
+      } else {
+        cd.filter = "agTextColumnFilter";
+        cd.floatingFilter = true;
+      }
+    }
+    // cellClick → onCellClicked (e.g. the roster's signed-in toggle column).
+    if (typeof col.cellClick === "function") {
+      cd.onCellClicked = (params) => { try { col.cellClick(params.event, _agCell(params)); } catch (_) {} };
+    }
     return cd;
   }
 
@@ -679,5 +777,7 @@ export function createGridFactories(ctx) {
     return { refresh };
   }
 
-  return { wireEntity, makeListGrid, makeReadGrid, _autoHeaderFilters };
+  // makeGrid exposes the AG facade for the few direct grids app.js still builds
+  // itself (roster, import preview, …) so they don't hand-roll `new Tabulator`.
+  return { wireEntity, makeListGrid, makeReadGrid, makeGrid: _makeAgGrid, _autoHeaderFilters };
 }

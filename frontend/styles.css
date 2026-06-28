@@ -943,6 +943,18 @@ a.export-btn { text-decoration: none; }
   box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar */
 }
 .ag-empty { color: var(--muted-ink, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
+/* Custom floating header filters (list dropdown + predicate text). Fill the
+   floating-filter row like AG's built-in text filter so they read as one strip. */
+.ag-theme-quartz .ag-list-floating,
+.ag-theme-quartz-dark .ag-list-floating {
+  width: 100%; height: var(--ag-list-item-height, 24px); min-height: 0;
+  border: 1px solid var(--ag-border-color, var(--border)); border-radius: 4px;
+  background: var(--ag-background-color, var(--card)); color: inherit;
+  font: inherit; font-size: 0.78rem; padding: 0 0.2rem;
+}
+.ag-theme-quartz .ag-custom-filter,
+.ag-theme-quartz-dark .ag-custom-filter { padding: 6px; min-width: 180px; }
+.ag-theme-quartz .ag-custom-filter input { width: 100%; }
 
 /* Import preview grid (edit-before-merge). */
 .import-preview-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.35rem 0; }

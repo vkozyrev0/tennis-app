@@ -1584,7 +1584,7 @@ document.addEventListener("keydown", (e) => {
 // wireEntity (the Setup master/detail CRUD factory) lives in ./app/grids.js
 // (P2 #11a) together with makeListGrid/makeReadGrid; instantiated here with
 // the app's helpers so the factory bodies stayed unchanged.
-const { wireEntity, makeListGrid, makeReadGrid, _autoHeaderFilters } = createGridFactories({
+const { wireEntity, makeListGrid, makeReadGrid, makeGrid, _autoHeaderFilters } = createGridFactories({
   api, esc, setMsg, confirmDialog, markInvalid, scheduleComboSync, formObj,
   _csvDownload, _reflectAriaSort, GRIDS, _detailBackdrop,
   setCloseOpenDetail: (fn) => { _closeOpenDetail = fn; },
@@ -1790,12 +1790,15 @@ const rosterTableEl = document.getElementById("roster-table");
 const rosterMount = rosterTableEl.closest(".list-scroll") || rosterTableEl.parentElement;
 rosterMount.classList.remove("list-scroll"); rosterMount.innerHTML = ""; rosterMount.classList.add("grid-mount");
 let rosterBuilt = false, rosterPending = null;
-const rosterGrid = new Tabulator(rosterMount, {
-  index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
+rosterMount.style.height = "calc(100vh - 16rem)";
+const rosterGrid = makeGrid(rosterMount, {
+  index: "id",
   placeholder: "No players on this roster yet.",
-  columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
+  columnDefaults: { tooltip: true },
   editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
-  renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
+  // Active-row highlight (replaces the old per-element rowFormatter); re-evaluated
+  // by redrawRows() in applyRosterSel().
+  rowClassRules: { "row-selected": (p) => p.data && p.data.id === rosterEditId },
   columns: [
     { title: "Player", field: "last_name",
       // design-crit R-1: show just the name (the USTA # was truncating the cell
@@ -1914,12 +1917,13 @@ const rosterGrid = new Tabulator(rosterMount, {
   ],
 });
 (GRIDS["panel-t-roster"] ||= []).push(rosterGrid);
-rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); _labelHeaderFilters(rosterGrid); });
+rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
+if (rosterGrid.initialized) { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); }
 // Single click only highlights (keeps double-click free for in-grid editing);
 // the Edit button opens the form overlay.
 rosterGrid.on("rowClick", (e, row) => { rosterEditId = row.getData().id; applyRosterSel(); });
 rosterGrid.on("dataFiltered", applyRosterSel);
-rosterGrid.on("dataSorted", () => { applyRosterSel(); _reflectAriaSort(rosterGrid); });
+rosterGrid.on("dataSorted", () => { applyRosterSel(); });   // AG sets aria-sort natively
 // In-grid edit: PUT the whole entry (RosterEntryOut has every field the model
 // needs; the backend re-normalizes t_shirt_size). Refresh to reflect that.
 rosterGrid.on("cellEdited", async (cell) => {
@@ -1955,7 +1959,7 @@ function rosterMatches(data) {
 function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("active").map((r) => r.getData()) : rosterRows; }
 function rosterMarkRows() {
   if (!rosterBuilt) return;
-  for (const r of rosterGrid.getRows()) r.getElement().classList.toggle("row-selected", r.getData().id === rosterEditId);
+  rosterGrid.redrawRows();   // re-evaluates rowClassRules { row-selected }
 }
 function applyRosterSel() { rosterMarkRows(); rosterUpdateNav(); }
 function rosterSelect(e) {
