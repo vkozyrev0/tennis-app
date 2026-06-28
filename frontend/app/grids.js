@@ -51,6 +51,21 @@ export function createGridFactories(ctx) {
   /* global agGrid */
   const _AG_THEME = "ag-theme-quartz";
 
+  // A Tabulator-like `row` facade over an AG row node. Covers the imperative row
+  // API the per-grid code calls: update() (merge a patch into the row data),
+  // reformat() (re-run cell renderers for this row), delete() (drop the row).
+  function _agRow(node, api, el) {
+    return {
+      getData: () => (node && node.data) || {},
+      getElement: () => el || document.createElement("div"),
+      getCell: (f) => ({ getElement: () => el || document.createElement("span"),
+        getValue: () => ((node && node.data) || {})[f] }),
+      update: (patch) => { if (node) node.setData({ ...node.data, ...patch }); },
+      reformat: () => { if (api && node) api.refreshCells({ rowNodes: [node], force: true }); },
+      delete: () => { if (api && node) api.applyTransaction({ remove: [node.data] }); },
+    };
+  }
+
   // A Tabulator-like `cell` facade over AG Grid renderer/editor/event params.
   function _agCell(params) {
     const field = params.colDef && params.colDef.field;
@@ -61,11 +76,7 @@ export function createGridFactories(ctx) {
       getOldValue: () => params.oldValue,
       getField: () => field,
       getElement: () => params.eGridCell || document.createElement("span"),
-      getRow: () => ({
-        getData: () => params.data || {},
-        getElement: () => rowEl() || document.createElement("div"),
-        getCell: (f) => ({ getElement: () => params.eGridCell, getValue: () => (params.data || {})[f] }),
-      }),
+      getRow: () => _agRow(params.node, params.api, rowEl()),
       restoreOldValue: () => { if (params.node) params.node.setDataValue(field, params.oldValue); },
       setValue: (v) => { if (params.node) params.node.setDataValue(field, v); },
     };
@@ -261,11 +272,11 @@ export function createGridFactories(ctx) {
       initialized: true,
       on: (evt, fn) => { (handlers[evt] ||= []).push(fn); },
       setData: (rows) => api && api.setGridOption("rowData", rows || []),
+      replaceData: (rows) => api && api.setGridOption("rowData", rows || []),
       getData: (which) => which === "active" ? activeRows().map((n) => n.data) : (() => { const o = []; api.forEachNode((n) => o.push(n.data)); return o; })(),
       getRows: (which) => (which === "active" ? activeRows() : (() => { const o = []; api.forEachNode((n) => o.push(n)); return o; })())
-        .map((n) => ({ getData: () => n.data, getElement: () => (api.getRowNode && null), getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }) })),
-      getRow: (id) => { const n = api.getRowNode(String(id)); return n ? { getData: () => n.data,
-        getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }), getElement: () => null } : null; },
+        .map((n) => _agRow(n, api)),
+      getRow: (id) => { const n = api.getRowNode(String(id)); return n ? _agRow(n, api) : null; },
       setFilter: (fn) => { extFilter = fn || null; if (api) api.onFilterChanged(); },
       redraw: () => api && api.refreshCells({ force: true }),
       redrawRows: () => api && api.redrawRows(),   // re-evaluate rowClassRules (selection)

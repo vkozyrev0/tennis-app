@@ -2318,11 +2318,13 @@ async function _renderPreviewGrid(el, body, meta) {
       } },
   ];
 
-  grid = new Tabulator(mount, {
-    data: batch.rows.filter((r) => !r.merged).map(mapRow), index: "_id",
-    layout: "fitData", maxHeight: "52vh", editTriggerEvent: "click",
-    renderVertical: "basic", placeholder: "No rows in this file.", columns: colDefs,
+  mount.style.height = "52vh";
+  grid = makeGrid(mount, {
+    index: "_id", editTriggerEvent: "click",
+    placeholder: "No rows in this file.", columns: colDefs,
   });
+  grid.setData(batch.rows.filter((r) => !r.merged).map(mapRow));
+  refresh();
   grid.on("tableBuilt", refresh);
 
   grid.on("cellEdited", async (cell) => {
