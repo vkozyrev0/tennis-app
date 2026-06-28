@@ -83,6 +83,11 @@ export function createGridFactories(ctx) {
     // widthGrow 0 / fixed width → no flex; else share leftover space (fitColumns).
     if (col.width || col.widthGrow === 0) cd.flex = 0; else cd.flex = col.widthGrow || 1;
     if (col.headerSort === false) cd.sortable = false;
+    // initial sort: AG with getRowId set does delta updates and doesn't preserve
+    // the rowData array order, so grids that want a deterministic default order
+    // (e.g. by id) must declare it on the column.
+    if (col.sort) cd.sort = col.sort;
+    if (col.sortIndex != null) cd.sortIndex = col.sortIndex;
     if (col.resizable === false) cd.resizable = false;
     if (col.hozAlign) cd.cellStyle = { textAlign: col.hozAlign };
     if (col.cssClass) cd.cellClass = col.cssClass;
@@ -393,7 +398,7 @@ export function createGridFactories(ctx) {
       if (c.responsive != null) col.responsive = c.responsive;
       // Narrow, non-growing ID column so fitColumns distributes the extra width
       // to the *meaningful* (name / city / …) columns.
-      if (c.key === "id") { col.width = 64; col.widthGrow = 0; }
+      if (c.key === "id") { col.width = 64; col.widthGrow = 0; col.sort = "asc"; }
       if (c.edit) {
         col.editor = c.edit.editor;
         if (c.edit.params) col.editorParams = c.edit.params;
