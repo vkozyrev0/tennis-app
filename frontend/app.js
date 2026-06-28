@@ -1917,8 +1917,13 @@ const rosterGrid = makeGrid(rosterMount, {
   ],
 });
 (GRIDS["panel-t-roster"] ||= []).push(rosterGrid);
-rosterGrid.on("tableBuilt", () => { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); });
-if (rosterGrid.initialized) { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); }
+function _rosterOnBuilt() { rosterBuilt = true; if (rosterPending) { rosterGrid.setData(rosterPending); rosterPending = null; } applyRosterSel(); }
+rosterGrid.on("tableBuilt", _rosterOnBuilt);
+// AG's facade reports initialized:true synchronously, but applyRosterSel() reads
+// module consts (rosterPos/Prev/Next) declared further down — running it inline
+// here would hit the temporal dead zone and abort the whole module. Defer to a
+// microtask so the rest of the module finishes evaluating first.
+if (rosterGrid.initialized) queueMicrotask(_rosterOnBuilt);
 // Single click only highlights (keeps double-click free for in-grid editing);
 // the Edit button opens the form overlay.
 rosterGrid.on("rowClick", (e, row) => { rosterEditId = row.getData().id; applyRosterSel(); });
@@ -4415,7 +4420,7 @@ const _playerPickValues = () => (_pickCache ||= Object.values(playersById)
   .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
   .map((p) => ({ label: playerLabel(p), value: String(p.id) })));
 const _PLAYER_EDITOR = {
-  editor: "list", cssClass: "editable-cell",
+  editor: "list", editorAutocomplete: true, cssClass: "editable-cell",
   editorParams: () => ({ values: _playerPickValues(), autocomplete: true,
     clearable: true, listOnEmpty: true, placeholderEmpty: "no roster match" }),
 };
@@ -4852,7 +4857,7 @@ const inboxGrid = makeReadGrid("inbox-table", [
       const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
       wrap.append(rvBtn, menu); return wrap;
     } },
-], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false, engine: "tabulator" });
+], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false });
 // Persist inline edits (single click a cell): classification, manual player /
 // partner picks (the list editor's value is a player id), and typed USTA #s
 // (resolved against the roster cache; unknown numbers revert with a toast).

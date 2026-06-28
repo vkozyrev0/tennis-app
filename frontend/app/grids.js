@@ -99,7 +99,7 @@ export function createGridFactories(ctx) {
   // default `String(rowData[field]) === selected` when supplied (Tabulator's
   // headerFilterFunc), so gender/signed-in style virtual columns filter correctly.
   function _agListFilter(predicate, field) {
-    return class {
+    const C = class {
       init(params) { this.params = params; this.sel = ""; this.gui = document.createElement("div");
         this.gui.className = "ag-filter-body-wrapper ag-custom-filter"; }
       getGui() { return this.gui; }
@@ -113,6 +113,8 @@ export function createGridFactories(ctx) {
       setModel(m) { this.sel = m ? m.value : ""; }
       onFloating(v) { this.sel = v; this.params.filterChangedCallback(); }   // called by floating UI
     };
+    C.__kind = "list";   // setHeaderFilterValue → model { value }
+    return C;
   }
   function _agListFloating(values) {
     const pairs = _valuePairs(values);
@@ -133,7 +135,7 @@ export function createGridFactories(ctx) {
   // Substring text filter that runs the column's headerFilterFunc against the
   // whole row (so the Player column can match name + USTA #, not just last_name).
   function _agTextFuncFilter(fn, field) {
-    return class {
+    const C = class {
       init(params) { this.params = params; this.term = ""; }
       getGui() { const d = document.createElement("div"); d.className = "ag-filter-body-wrapper ag-custom-filter";
         const i = document.createElement("input"); i.type = "text"; i.className = "ag-input-field-input ag-text-field-input";
@@ -146,6 +148,8 @@ export function createGridFactories(ctx) {
       onFloating(v) { this.term = v; this.params.filterChangedCallback(); }
       afterGuiAttached() { if (this.eInput) this.eInput.focus(); }
     };
+    C.__kind = "textfunc";   // setHeaderFilterValue → model { term }
+    return C;
   }
   function _agTextFuncFloating() {
     return class {
@@ -160,10 +164,65 @@ export function createGridFactories(ctx) {
     };
   }
 
+  // Header cell rendered from a Tabulator titleFormatter (e.g. the inbox's
+  // select-all checkbox). AG calls getGui() once; we render the formatter's node.
+  function _agHeaderFromFormatter(fn) {
+    return class {
+      init() { this.e = document.createElement("div"); this.e.className = "ag-header-cell-custom";
+        const out = fn(); if (out instanceof HTMLElement) this.e.appendChild(out); else this.e.innerHTML = out || ""; }
+      getGui() { return this.e; }
+      refresh() { return false; }
+    };
+  }
+
+  // Typeahead cell editor for the rich `list` editors whose options are
+  // { label, value } pairs (the inbox player/partner pickers — agSelectCellEditor
+  // only handles plain string values). A filter input narrows a scrollable list;
+  // picking commits the option's value (a player id). Options come from
+  // cellEditorParams.values, resolved per-open like agSelect.
+  function _agAutocompleteEditor() {
+    return class {
+      init(params) {
+        this.params = params;
+        const vals = params.values || [];
+        this.opts = vals.map((v) => (v && typeof v === "object")
+          ? { label: String(v.label), value: String(v.value) } : { label: String(v), value: String(v) });
+        this.value = params.value == null ? "" : String(params.value);
+        const wrap = document.createElement("div"); wrap.className = "ag-autocomplete-editor";
+        const input = document.createElement("input"); input.type = "text";
+        input.className = "ag-input-field-input"; input.placeholder = params.placeholderEmpty || "type to filter…";
+        const list = document.createElement("div"); list.className = "ag-autocomplete-list";
+        wrap.append(input, list);
+        const cur = this.opts.find((o) => o.value === this.value); if (cur) input.value = cur.label;
+        const render = () => {
+          const q = input.value.trim().toLowerCase();
+          list.innerHTML = "";
+          if (params.clearable) { const c = document.createElement("div"); c.className = "ag-autocomplete-opt muted";
+            c.textContent = "— clear —"; c.onmousedown = (e) => { e.preventDefault(); this.value = ""; params.stopEditing(); }; list.appendChild(c); }
+          for (const o of (q ? this.opts.filter((o) => o.label.toLowerCase().includes(q)) : this.opts).slice(0, 50)) {
+            const d = document.createElement("div"); d.className = "ag-autocomplete-opt"; d.textContent = o.label;
+            d.onmousedown = (e) => { e.preventDefault(); this.value = o.value; params.stopEditing(); }; list.appendChild(d);
+          }
+        };
+        input.addEventListener("input", render); render();
+        this.wrap = wrap; this.input = input;
+      }
+      getGui() { return this.wrap; }
+      afterGuiAttached() { this.input.focus(); this.input.select(); }
+      getValue() { return this.value; }
+      isPopup() { return true; }
+    };
+  }
+
   // Translate ONE Tabulator column def → an AG Grid colDef (or null to drop it,
   // e.g. the responsiveCollapse toggle, which AG Grid handles differently).
   function _toAgCol(col) {
     if (!col || col.formatter === "responsiveCollapse") return null;
+    // Column GROUP (Tabulator nests via `columns`) → AG group colDef with children.
+    if (Array.isArray(col.columns)) {
+      const children = col.columns.map(_toAgCol).filter(Boolean);
+      return { headerName: col.title != null ? col.title : "", marryChildren: true, children };
+    }
     const cd = { headerName: col.title != null ? col.title : "" };
     if (col.field) cd.colId = col.field;
     if (col.field && !col.field.startsWith("_")) cd.field = col.field;
@@ -182,6 +241,8 @@ export function createGridFactories(ctx) {
     if (col.cssClass) cd.cellClass = col.cssClass;
     if (col.frozen) cd.pinned = "left";
     if (col.field) cd.tooltipField = col.field;
+    // titleFormatter → a custom header component (e.g. the inbox select-all box).
+    if (typeof col.titleFormatter === "function") cd.headerComponent = _agHeaderFromFormatter(col.titleFormatter);
     // formatter → cellRenderer (may return a DOM node or an HTML string).
     if (typeof col.formatter === "function") {
       const fmt = col.formatter;
@@ -192,11 +253,16 @@ export function createGridFactories(ctx) {
       cd.editable = true;
       cd.cellClass = (cd.cellClass ? cd.cellClass + " " : "") + "editable-cell";
       if (col.editor === "list") {
-        cd.cellEditor = "agSelectCellEditor";
+        // Rich label/value pickers (editorAutocomplete) use the typeahead editor;
+        // plain enum lists use AG's built-in select.
+        cd.cellEditor = col.editorAutocomplete ? _agAutocompleteEditor() : "agSelectCellEditor";
+        cd.cellEditorPopup = !!col.editorAutocomplete;
         cd.cellEditorParams = (params) => {
           const ep = typeof col.editorParams === "function" ? col.editorParams(_agCell(params)) : (col.editorParams || {});
           const vals = ep.values || [];
-          return { values: Array.isArray(vals) ? vals : Object.keys(vals) };
+          return col.editorAutocomplete
+            ? { values: vals, clearable: ep.clearable, placeholderEmpty: ep.placeholderEmpty }
+            : { values: Array.isArray(vals) ? vals : Object.keys(vals) };
         };
       } else if (col.editor === "date") {
         cd.cellEditor = "agDateStringCellEditor";
@@ -278,6 +344,24 @@ export function createGridFactories(ctx) {
         .map((n) => _agRow(n, api)),
       getRow: (id) => { const n = api.getRowNode(String(id)); return n ? _agRow(n, api) : null; },
       setFilter: (fn) => { extFilter = fn || null; if (api) api.onFilterChanged(); },
+      // Programmatically set a column header filter (inbox default-scoping to the
+      // active tournament + status=new). The model shape depends on the filter:
+      // our custom list/text-func use { value }/{ term }; AG's text filter uses
+      // its own contains model.
+      setHeaderFilterValue: (field, value) => {
+        if (!api) return;
+        const col = api.getColumn(field); if (!col) return;
+        const f = col.getColDef().filter;
+        const v = value == null ? "" : String(value);
+        let model = null;
+        if (v !== "") {
+          if (f && f.__kind === "list") model = { value: v };
+          else if (f && f.__kind === "textfunc") model = { term: v };
+          else if (f === "agTextColumnFilter") model = { filterType: "text", type: "contains", filter: v };
+          else model = { value: v };
+        }
+        Promise.resolve(api.setColumnFilterModel(field, model)).then(() => api.onFilterChanged());
+      },
       redraw: () => api && api.refreshCells({ force: true }),
       redrawRows: () => api && api.redrawRows(),   // re-evaluate rowClassRules (selection)
       scrollToRow: (id) => { const n = api && api.getRowNode(String(id)); if (n) api.ensureNodeVisible(n); },

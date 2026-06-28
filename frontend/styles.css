@@ -943,6 +943,19 @@ a.export-btn { text-decoration: none; }
   box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar */
 }
 .ag-empty { color: var(--muted-ink, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
+/* Typeahead cell editor (inbox player/partner pickers): a filter input over a
+   scrollable option list, themed to match the grid. */
+.ag-theme-quartz .ag-autocomplete-editor,
+.ag-theme-quartz-dark .ag-autocomplete-editor {
+  background: var(--ag-background-color, var(--card)); border: 1px solid var(--accent);
+  border-radius: 4px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); width: 240px; padding: 4px;
+}
+.ag-theme-quartz .ag-autocomplete-editor > input { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
+.ag-theme-quartz .ag-autocomplete-list { max-height: 220px; overflow-y: auto; }
+.ag-theme-quartz .ag-autocomplete-opt { padding: 4px 6px; cursor: pointer; border-radius: 3px; font-size: 0.8rem; }
+.ag-theme-quartz .ag-autocomplete-opt:hover { background: var(--sel); }
+/* Custom header cells (e.g. inbox select-all checkbox) center their content. */
+.ag-theme-quartz .ag-header-cell-custom { display: flex; align-items: center; justify-content: center; height: 100%; }
 /* Custom floating header filters (list dropdown + predicate text). Fill the
    floating-filter row like AG's built-in text filter so they read as one strip. */
 .ag-theme-quartz .ag-list-floating,
