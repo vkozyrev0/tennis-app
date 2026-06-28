@@ -241,11 +241,22 @@ export function createGridFactories(ctx) {
         cd.cellEditorPopup = !!col.editorAutocomplete;
         cd.cellEditorParams = (params) => {
           const ep = typeof col.editorParams === "function" ? col.editorParams(_agCell(params)) : (col.editorParams || {});
-          const vals = ep.values || [];
-          return col.editorAutocomplete
-            ? { values: vals, clearable: ep.clearable, placeholderEmpty: ep.placeholderEmpty }
-            : { values: Array.isArray(vals) ? vals : Object.keys(vals) };
+          let vals = ep.values || [];
+          if (!Array.isArray(vals)) vals = Object.keys(vals);
+          if (col.editorAutocomplete) return { values: vals, clearable: ep.clearable, placeholderEmpty: ep.placeholderEmpty };
+          // agSelectCellEditor only renders plain string options; for { label, value }
+          // option objects pass just the values (labels are shown via valueFormatter).
+          const objOpts = vals.length && typeof vals[0] === "object";
+          return { values: objOpts ? vals.map((v) => String(v.value)) : vals.map((v) => String(v)) };
         };
+        // Static { label, value } option set → show the labels in the select's
+        // dropdown via a valueFormatter (the cell itself keeps its own cellRenderer).
+        const _ep = typeof col.editorParams !== "function" ? col.editorParams : null;
+        if (!col.editorAutocomplete && _ep && Array.isArray(_ep.values)
+            && _ep.values.length && typeof _ep.values[0] === "object") {
+          const _lab = Object.fromEntries(_ep.values.map((v) => [String(v.value), String(v.label)]));
+          cd.valueFormatter = (p) => (p.value == null || p.value === "" ? "" : (_lab[String(p.value)] ?? String(p.value)));
+        }
       } else if (col.editor === "date") {
         cd.cellEditor = "agDateStringCellEditor";
       } else {
