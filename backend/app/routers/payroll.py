@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from ..db import db_dep
 from ..models import PayrollMarkPaid, PaymentBatchCreate
 from ..security import require_admin
-from .assignments import _ASG_SELECT, _audit, _summary
+from .assignments import _ASG_SELECT, _audit, _summaries, _summary
 
 router = APIRouter(tags=["payroll"])
 
@@ -97,8 +97,7 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
             else:
                 by_assignment[r["assignment_id"]] = r
         out = []
-        for a in assignments:
-            s = _summary(cur, a)
+        for a, s in zip(assignments, _summaries(cur, assignments)):
             rec = by_assignment.pop(a["id"], None)
             fin = _record_out(rec) if rec else None
             out.append({

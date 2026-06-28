@@ -14,6 +14,7 @@ import csv
 import io
 import json
 import re
+from collections import defaultdict
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -127,6 +128,85 @@ def _summary(cur, a: dict) -> dict:
                            other_bookings, avail_rows)
 
 
+def _summaries(cur, assignments) -> list[dict]:
+    """Batch equivalent of ``[_summary(cur, a) for a in assignments]`` — loads
+    every per-assignment input in **5 set-based queries** instead of 5 PER
+    assignment (the N+1 fan-out that dominated the payroll / officials-report /
+    pay-statement / conflict endpoints — perf audit 2026-06-24). The pure
+    ``compute_summary()`` is unchanged; only the data-loading layer is batched."""
+    assignments = list(assignments)
+    if not assignments:
+        return []
+    aids = [a["id"] for a in assignments]
+    oids = list({a["official_id"] for a in assignments})
+
+    # 1) assignment_day rows, grouped by assignment. Pop the grouping key so each
+    #    per-day dict matches the single-query shape compute_summary copies out.
+    cur.execute(
+        "SELECT assignment_id, id, work_date, working_as, rate_applied, actual_status "
+        "FROM assignment_day WHERE assignment_id = ANY(%s) ORDER BY assignment_id, work_date",
+        (aids,),
+    )
+    days_by: dict = defaultdict(list)
+    for r in cur.fetchall():
+        days_by[r.pop("assignment_id")].append(r)
+
+    # 2) certifications, grouped by official.
+    cur.execute("SELECT official_id, cert_type FROM certification WHERE official_id = ANY(%s)", (oids,))
+    certs_by: dict = defaultdict(set)
+    for r in cur.fetchall():
+        certs_by[r["official_id"]].add(r["cert_type"])
+
+    # 3) site distances for the (official, site) pairs in play.
+    dist_by: dict = {}
+    if any(a["site_id"] is not None for a in assignments):
+        cur.execute("SELECT official_id, site_id, one_way_miles FROM official_site_distance "
+                    "WHERE official_id = ANY(%s)", (oids,))
+        for r in cur.fetchall():
+            dist_by[(r["official_id"], r["site_id"])] = float(r["one_way_miles"])
+
+    # 4) every day these officials work in ANY assignment; per-assignment we drop
+    #    the current one to get "other bookings" (matches WHERE a2.id <> %s).
+    cur.execute(
+        "SELECT a2.official_id, a2.id AS assignment_id, ad.work_date, "
+        "       a2.tournament_id AS other_tournament_id, t2.name AS other_tournament, "
+        "       COALESCE(s2.code, s2.name) AS other_site, a2.site_id AS other_site_id "
+        "FROM assignment_day ad "
+        "JOIN assignment a2 ON a2.id = ad.assignment_id "
+        "JOIN tournament t2 ON t2.id = a2.tournament_id "
+        "LEFT JOIN site s2 ON s2.id = a2.site_id "
+        "WHERE a2.official_id = ANY(%s) ORDER BY a2.official_id, ad.work_date",
+        (oids,),
+    )
+    bookings_by: dict = defaultdict(list)
+    for r in cur.fetchall():
+        bookings_by[r["official_id"]].append(r)
+
+    # 5) availability, keyed by (official, tournament).
+    cur.execute("SELECT official_id, tournament_id, available_date FROM availability "
+                "WHERE official_id = ANY(%s)", (oids,))
+    avail_by: dict = defaultdict(list)
+    for r in cur.fetchall():
+        avail_by[(r["official_id"], r["tournament_id"])].append(r)
+
+    out = []
+    for a in assignments:
+        oid, sid = a["official_id"], a["site_id"]
+        one_way, missing = None, False
+        if sid is not None:
+            d = dist_by.get((oid, sid))
+            if d is None:
+                missing = True
+            else:
+                one_way = d
+        other = [b for b in bookings_by.get(oid, []) if b["assignment_id"] != a["id"]]
+        out.append(compute_summary(
+            a, days_by.get(a["id"], []), certs_by.get(oid, set()),
+            one_way, missing, other, avail_by.get((oid, a["tournament_id"]), []),
+        ))
+    return out
+
+
 _ASG_SELECT = """
 SELECT a.id, a.tournament_id, a.official_id, a.site_id, a.room_block_id,
        a.snapshot_at, a.rule_version, a.pay_audit,
@@ -207,7 +287,7 @@ def pay_summary(cur, official_id: int) -> dict:
         raise HTTPException(status_code=404, detail="official not found")
     cur.execute(_ASG_SELECT + " WHERE a.official_id = %s ORDER BY t.play_start_date DESC",
                 (official_id,))
-    rows = [_summary(cur, a) for a in cur.fetchall()]
+    rows = _summaries(cur, cur.fetchall())
     tournaments = [{
         "tournament_id": r["tournament_id"], "tournament_name": r["tournament_name"],
         "pay": r["pay"], "mileage": r["mileage"] or 0.0, "total": r["total"],
@@ -248,7 +328,7 @@ def official_pay_statement(official_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="official not found")
         cur.execute(_ASG_SELECT + " WHERE a.official_id = %s ORDER BY t.play_start_date",
                     (official_id,))
-        summaries = [_summary(cur, a) for a in cur.fetchall()]
+        summaries = _summaries(cur, cur.fetchall())
 
     assignments = [{
         "tournament_id": s["tournament_id"], "tournament_name": s["tournament_name"],
@@ -306,7 +386,7 @@ def list_assignments(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name", (tournament_id,))
         rows = cur.fetchall()
-        return [_summary(cur, a) for a in rows]
+        return _summaries(cur, rows)
 
 
 def hard_conflict_counts(cur, tournament_ids: list[int]) -> dict:
@@ -364,7 +444,7 @@ def tournament_pay_statements(tournament_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name, o.first_name",
                     (tournament_id,))
-        summaries = [_summary(cur, a) for a in cur.fetchall()]
+        summaries = _summaries(cur, cur.fetchall())
 
     officials = [{
         "assignment_id": s["id"], "official_name": s["official_name"],
@@ -511,7 +591,7 @@ def assignment_conflicts(tournament_id: int, conn=Depends(db_dep)):
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name", (tournament_id,))
-        summaries = [_summary(cur, a) for a in cur.fetchall()]
+        summaries = _summaries(cur, cur.fetchall())
 
     double_bookings, uncertified, outside_avail, out_of_window, hotel_mismatch = [], [], [], [], []
     for s in summaries:

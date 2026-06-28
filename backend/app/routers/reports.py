@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..db import db_dep
-from .assignments import _ASG_SELECT, _summary
+from .assignments import _ASG_SELECT, _summaries
 
 router = APIRouter(prefix="/api/tournaments", tags=["reports"])
 
@@ -260,7 +260,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
 
         # _summary already carries dietary_restrictions (joined in _ASG_SELECT),
         # so no per-official follow-up query is needed.
-        officials = [_summary(cur, a) for a in rows]
+        officials = _summaries(cur, rows)
 
         # Non-official support staff round out the TD's staffing plan — listed
         # separately (no pay/mileage/days), grouped by role in the report.

@@ -6,7 +6,7 @@ from ..db import db_dep
 from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
 from ..security import get_current_user
-from .assignments import _ASG_SELECT, _audit, _summary, pay_summary
+from .assignments import _ASG_SELECT, _audit, _summaries, _summary, pay_summary
 
 # Belt-and-suspenders: every endpoint also takes `Depends(get_current_user)` to
 # get `user`, but mounting the dep on the router means nothing here can ever be
@@ -90,7 +90,7 @@ def my_assignments(user=Depends(get_current_user), conn=Depends(db_dep)):
             (oid,),
         )
         rows = cur.fetchall()
-        return [_summary(cur, a) for a in rows]
+        return _summaries(cur, rows)
 
 
 @router.get("/schedule.ics")
