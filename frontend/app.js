@@ -2281,60 +2281,100 @@ async function _renderPreviewGrid(el, body, meta) {
 // gate the active-tournament needs-note.
 const _IMPORT_SETUP_KEYS = new Set(["distances", "divisions", "events", "players", "officials"]);
 
+// Build one import type's section (template downloads + upload + preview grid),
+// appended (hidden) to the shared panel. Returns the section element.
+function _buildImportSection(t, panelRoot) {
+  const sec = document.createElement("section");
+  sec.className = "export-section import-section";
+  sec.id = "import-" + t.key;     // deep-link target for per-panel ⬆ Import buttons
+  sec.hidden = true;
+  const needsT = !_IMPORT_SETUP_KEYS.has(t.key)
+    ? '<span class="import-scope-chip" title="Imports into the active tournament">tournament</span>'
+    : '<span class="import-scope-chip setup" title="Global Setup catalog — no active tournament needed">Setup catalog</span>';
+  // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable so
+  // gotoImport() can land focus here after switching tabs.
+  sec.innerHTML = hstr`<h4 tabindex="-1">${t.label} ${raw(needsT)}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
+  const row = document.createElement("div"); row.className = "export-grid";
+  for (const fmt of ["csv", "xlsx"]) {
+    const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
+    a.href = `/api/import/template/${t.key}?fmt=${fmt}`;
+    a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
+    row.appendChild(a);
+  }
+  // CSV/XLSX for the row-shaped importers; PDF for the emails_pdf type.
+  const file = document.createElement("input"); file.type = "file";
+  file.accept = t.key === "emails_pdf" ? ".pdf" : ".csv,.xlsx,.xlsm";
+  const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";
+  const msg = document.createElement("span"); msg.className = "msg";
+  row.append(file, up, msg);
+  const result = document.createElement("div"); result.className = "import-result";
+  sec.append(row, result);
+  up.addEventListener("click", async () => {
+    if (!active) { msg.textContent = "select a tournament first"; msg.className = "msg bad"; return; }
+    if (!file.files[0]) { msg.textContent = "choose a file"; msg.className = "msg bad"; return; }
+    up.disabled = true; msg.textContent = "";
+    try {
+      // Audit M25: route through api() so the progress bar runs and 422
+      // detail arrays get the same humanizer as the rest of the app.
+      const fd = new FormData(); fd.append("file", file.files[0]);
+      const body = await api(`/import/tournaments/${active.id}/${t.key}`, { method: "POST", body: fd });
+      file.value = "";
+      _renderPreviewGrid(result, body, t);
+    } catch (e) { msg.textContent = e.message; msg.className = "msg bad"; }
+    finally { up.disabled = false; }
+  });
+  panelRoot.appendChild(sec);
+  return sec;
+}
+
 async function buildImportPage() {
-  const tRoot = document.getElementById("import-sections-tournament");
-  const sRoot = document.getElementById("import-sections-setup");
+  const tabsRoot = document.getElementById("import-tabs");
+  const panelRoot = document.getElementById("import-panel");
   const note = document.getElementById("import-needs-active");
-  if (!tRoot || !sRoot) return;
+  if (!tabsRoot || !panelRoot) return;
   // Toggle the needs-active hint based on current selection.
   if (note) note.hidden = !!active;
-  if (tRoot.dataset.built) return;
+  if (tabsRoot.dataset.built) return;
   // Set the guard BEFORE the await so a second concurrent call (e.g. the tab
-  // click handler + gotoImport both firing) doesn't race past this check and
-  // append a duplicate set of sections.
-  tRoot.dataset.built = "1";
+  // click handler + gotoImport both firing) doesn't race past this check.
+  tabsRoot.dataset.built = "1";
   let types;
   try { types = await api("/import/types"); }
-  catch (e) { tRoot.textContent = e.message; tRoot.dataset.built = ""; return; }
-  for (const t of types) {
-    const sec = document.createElement("section");
-    sec.className = "export-section";
-    sec.id = "import-" + t.key;     // deep-link target for per-panel ⬆ Import buttons
-    // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable
-    // so gotoImport() can land focus here. Sighted users see no change; SR /
-    // keyboard users get correct focus order after the deep-link.
-    sec.innerHTML = hstr`<h4 tabindex="-1">${t.label}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
-    const row = document.createElement("div"); row.className = "export-grid";
-    for (const fmt of ["csv", "xlsx"]) {
-      const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
-      a.href = `/api/import/template/${t.key}?fmt=${fmt}`;
-      a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
-      row.appendChild(a);
-    }
-    // CSV/XLSX for the row-shaped importers; PDF for the emails_pdf type.
-    const file = document.createElement("input"); file.type = "file";
-    file.accept = t.key === "emails_pdf" ? ".pdf" : ".csv,.xlsx,.xlsm";
-    const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";
-    const msg = document.createElement("span"); msg.className = "msg";
-    row.append(file, up, msg);
-    const result = document.createElement("div"); result.className = "import-result";
-    sec.append(row, result);
-    up.addEventListener("click", async () => {
-      if (!active) { msg.textContent = "select a tournament first"; msg.className = "msg bad"; return; }
-      if (!file.files[0]) { msg.textContent = "choose a file"; msg.className = "msg bad"; return; }
-      up.disabled = true; msg.textContent = "";
-      try {
-        // Audit M25: route through api() so the progress bar runs and 422
-        // detail arrays get the same humanizer as the rest of the app.
-        const fd = new FormData(); fd.append("file", file.files[0]);
-        const body = await api(`/import/tournaments/${active.id}/${t.key}`, { method: "POST", body: fd });
-        file.value = "";
-        _renderPreviewGrid(result, body, t);
-      } catch (e) { msg.textContent = e.message; msg.className = "msg bad"; }
-      finally { up.disabled = false; }
+  catch (e) { panelRoot.textContent = e.message; tabsRoot.dataset.built = ""; return; }
+
+  const sections = {};   // key -> section element
+  const tabBtns = {};    // key -> tab button
+  const activate = (key) => {
+    if (!sections[key]) return;
+    Object.entries(sections).forEach(([k, sec]) => { sec.hidden = k !== key; });
+    Object.entries(tabBtns).forEach(([k, btn]) => {
+      const on = k === key; btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false"); btn.tabIndex = on ? 0 : -1;
     });
-    (_IMPORT_SETUP_KEYS.has(t.key) ? sRoot : tRoot).appendChild(sec);
+  };
+  buildImportPage._activate = activate;   // gotoImport() drives this
+
+  // Each import type gets its own tab. Tournament-data importers first, then the
+  // global Setup catalogs (which don't need an active tournament).
+  const groups = [
+    { label: "Tournament data", keys: types.filter((t) => !_IMPORT_SETUP_KEYS.has(t.key)) },
+    { label: "Setup catalogs", keys: types.filter((t) => _IMPORT_SETUP_KEYS.has(t.key)) },
+  ];
+  for (const g of groups) {
+    if (!g.keys.length) continue;
+    const lbl = document.createElement("div"); lbl.className = "import-tabgroup-label"; lbl.textContent = g.label;
+    tabsRoot.appendChild(lbl);
+    for (const t of g.keys) {
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.className = "import-tab"; btn.dataset.key = t.key;
+      btn.setAttribute("role", "tab"); btn.tabIndex = -1; btn.textContent = t.label;
+      btn.addEventListener("click", () => activate(t.key));
+      tabsRoot.appendChild(btn); tabBtns[t.key] = btn;
+      sections[t.key] = _buildImportSection(t, panelRoot);
+    }
   }
+  const first = (groups.find((g) => g.keys.length) || { keys: [] }).keys[0];
+  if (first) activate(first.key);
 }
 
 // Deep-link helper: activates the Setup → Import tab, builds the page if
@@ -2347,18 +2387,17 @@ async function gotoImport(typeKey) {
   if (setupGroupBtn) setupGroupBtn.click();
   const importTab = document.querySelector('.tab[data-target="panel-import"]');
   if (importTab) importTab.click();
-  // 2. Build the page if it hasn't been built yet, then scroll.
+  // 2. Build the page if it hasn't been built yet, then SELECT that type's tab.
   await buildImportPage();
+  if (typeof buildImportPage._activate === "function") buildImportPage._activate(typeKey);
   const target = document.getElementById("import-" + typeKey);
   if (target) {
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
     target.classList.add("import-section-flash");
     setTimeout(() => target.classList.remove("import-section-flash"), 1400);
-    // a11y 9th-pass: programmatically focus the section's heading so keyboard
-    // users land at the right place in tab order. The activation cascade
-    // (group click → first-tab click → import-tab click → buildImportPage
-    // → redraws) keeps resetting focus during the ~200 ms it takes to settle,
-    // so we re-apply focus a few times. Cheap, and idempotent.
+    // a11y 9th-pass: focus the now-visible section's heading so keyboard users
+    // land at the right place. The activation cascade (group → tab → import-tab
+    // clicks → buildImportPage → redraws) keeps resetting focus during the
+    // ~200 ms it takes to settle, so re-apply a few times. Cheap + idempotent.
     const h = target.querySelector("h4");
     const reapply = () => { if (h && document.activeElement !== h) h.focus({ preventScroll: true }); };
     reapply();

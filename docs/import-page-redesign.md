@@ -8,6 +8,17 @@ a roster upload with a missing-USTA row + a non-numeric-USTA row stages as
 "1 ready, 2 to fix", merge is blocked, fixing the two cells in-grid revalidates
 to "3 ready", and merge writes all three.
 
+## Layout: one tab per import type
+
+The page is a **tabbed layout** (`buildImportPage`): a left sidebar lists every
+import type as a tab — grouped **Tournament data** then **Setup catalogs** (the
+global ones that don't need an active tournament) — and the selected type's
+panel (template downloads + upload + preview grid) shows on the right. Only one
+import is visible at a time, so the page isn't a long scroll of 13 stacked
+sections. The per-panel "⬆ Import…" deep-links (`gotoImport`) select the right
+tab. Each section is `_buildImportSection()`; a scope chip on the heading marks
+tournament-vs-Setup.
+
 ## Review of the current Import page
 
 `buildImportPage()` (frontend/app.js) renders one section per import type:

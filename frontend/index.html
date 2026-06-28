@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
   <link rel="stylesheet" href="/vendor/tabulator.min.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=80" />
+  <link rel="stylesheet" href="/styles.css?v=81" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -540,11 +540,11 @@
           staged and validated), then <strong>Merge</strong> the valid rows into the tables.
           (Each list's own page has its <strong><span aria-hidden="true">⬇</span> CSV export</strong> and an
           <strong><span aria-hidden="true">⬆</span> Import…</strong> button that jumps straight to its section here.)</p>
-        <div id="import-needs-active" class="needs-active-note" hidden>Select a tournament in the bar above to import its data. Setup-catalog imports (e.g. Distances) below don't need a tournament.</div>
-        <h4 class="import-group-heading">Tournament data</h4>
-        <div id="import-sections-tournament"></div>
-        <h4 class="import-group-heading">Setup catalogs <span class="muted">(no active tournament needed)</span></h4>
-        <div id="import-sections-setup"></div>
+        <div id="import-needs-active" class="needs-active-note" hidden>Select a tournament in the bar above to import its data. Setup-catalog imports (e.g. Distances) don't need a tournament.</div>
+        <div class="import-tabs-wrap">
+          <div id="import-tabs" class="import-tabs" role="tablist" aria-label="Import types"></div>
+          <div id="import-panel" class="import-tabpanel"></div>
+        </div>
       </div>
     </section>
 
@@ -1445,6 +1445,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=200"></script>
+  <script type="module" src="/app.js?v=201"></script>
 </body>
 </html>
