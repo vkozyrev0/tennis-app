@@ -147,6 +147,7 @@ export function createGridFactories(ctx) {
       onSortChanged: () => (handlers.dataSorted || []).forEach((fn) => fn()),
       onGridReady: (e) => { api = e.api; (handlers.tableBuilt || []).forEach((fn) => fn()); },
     };
+    if (tabOpts.rowClassRules) opts.rowClassRules = tabOpts.rowClassRules;
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
     const activeRows = () => { const out = []; if (api) api.forEachNodeAfterFilterAndSort((n) => out.push(n)); return out; };
@@ -162,6 +163,8 @@ export function createGridFactories(ctx) {
         getCell: (f) => ({ getElement: () => null, getValue: () => n.data[f] }), getElement: () => null } : null; },
       setFilter: (fn) => { extFilter = fn || null; if (api) api.onFilterChanged(); },
       redraw: () => api && api.refreshCells({ force: true }),
+      redrawRows: () => api && api.redrawRows(),   // re-evaluate rowClassRules (selection)
+      scrollToRow: (id) => { const n = api && api.getRowNode(String(id)); if (n) api.ensureNodeVisible(n); },
       download: (_fmt, name) => api && api.exportDataAsCsv({ fileName: name }),
     };
   }
@@ -443,17 +446,14 @@ export function createGridFactories(ctx) {
       },
     });
 
-    const table = new Tabulator(mount, {
-      index: "id", layout: "fitColumns", maxHeight: "calc(100vh - 16rem)",
+    mount.style.height = mount.style.height || "calc(100vh - 16rem)";
+    const table = _makeAgGrid(mount, {
+      index: "id", editTriggerEvent: "click",
       placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
-      // On a narrow viewport, columns that don't fit fold into a tap-to-expand ▸
-      // row instead of forcing horizontal scroll (mobile support). Desktop shows
-      // them all. Priorities come from each column's `responsive` (above).
-      responsiveLayout: "collapse", responsiveLayoutCollapseStartOpen: false,
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
-      editTriggerEvent: "click",  // single click opens the cell editor (discoverable in-place edit)
-      renderVertical: "basic",  // small lists; avoids the virtual-render resize loop
       columns,
+      // selected-row highlight via a class rule (re-evaluated on redrawRows()),
+      // since AG has no per-row imperative element access like Tabulator.
+      rowClassRules: { "row-selected": (p) => p.data && p.data.id === selectedId },
     });
     (GRIDS[cfg.panelId] ||= []).push(table);
     // Setup CSV exports include every importable column (not just what's visible
@@ -480,7 +480,7 @@ export function createGridFactories(ctx) {
     // editing); use the Edit button to open the form overlay.
     table.on("rowClick", (e, row) => { selectedId = row.getData().id; applySelection(); });
     table.on("dataFiltered", () => { markRows(); updateNav(); });
-    table.on("dataSorted", () => { markRows(); updateNav(); _reflectAriaSort(table); });
+    table.on("dataSorted", () => { markRows(); updateNav(); });   // AG sets aria-sort natively
     // In-grid edit: PUT the whole row (the *Out record has every field the model
     // needs; Pydantic ignores extras). Refresh to pick up server normalization.
     table.on("cellEdited", async (cell) => {
@@ -540,9 +540,9 @@ export function createGridFactories(ctx) {
     prevBtn.addEventListener("click", () => navTo(-1));
     nextBtn.addEventListener("click", () => navTo(1));
 
-    function markRows() {  // highlight the selected row
+    function markRows() {  // highlight the selected row (rowClassRules + redraw)
       if (!built) return;
-      for (const r of table.getRows()) r.getElement().classList.toggle("row-selected", r.getData().id === selectedId);
+      try { table.redrawRows(); } catch (_) {}
     }
     function applySelection() { markRows(); updateNav(); }
 
