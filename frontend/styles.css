@@ -891,6 +891,19 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 a.export-btn { text-decoration: none; }
 .import-result { margin-top: 0.4rem; }
 .import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
+/* Import preview grid (edit-before-merge). */
+.import-preview-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.35rem 0; }
+.import-counts { font-size: 0.82rem; }
+.import-preview-grid { margin-top: 0.3rem; }
+.import-result-after { margin-top: 0.4rem; }
+/* a cell whose value fails the client-side rule — tinted, with the rule in the
+   title tooltip. The row's ⚠ status carries the authoritative server error. */
+.import-cell-bad {
+  display: block; margin: -3px -6px; padding: 3px 6px;
+  background: rgba(255, 107, 107, 0.16); box-shadow: inset 2px 0 0 var(--bad);
+}
+.import-preview-grid .tabulator-cell .bad { color: var(--bad); font-weight: 700; }
+.import-preview-grid .tabulator-cell .ok { color: #2e9e4f; font-weight: 700; }
 .export-section { padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
 .export-section:last-child { border-bottom: 0; }
 .export-section h4 { margin: 0 0 0.15rem; font-size: 0.95rem; }

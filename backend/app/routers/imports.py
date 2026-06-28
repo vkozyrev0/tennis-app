@@ -5,6 +5,7 @@ Flow: download a template (CSV/XLSX) -> upload a filled file -> rows land in
 rows into the real tables. See app/importer.py for the per-type registry.
 """
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
 from psycopg.types.json import Json
 
 from .. import importer
@@ -13,6 +14,24 @@ from ..db import db_dep
 router = APIRouter(prefix="/api/import", tags=["import"])
 
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+class ImportRowUpdate(BaseModel):
+    data: dict
+
+
+def _batch_counts(cur, batch_id: int) -> dict:
+    """Aggregate valid/invalid/total for a staging batch's not-yet-merged rows —
+    the live feed the preview grid's Merge button reads."""
+    cur.execute(
+        "SELECT count(*) AS total, "
+        "       count(*) FILTER (WHERE valid AND NOT merged) AS valid, "
+        "       count(*) FILTER (WHERE NOT valid AND NOT merged) AS invalid "
+        "FROM import_row WHERE batch_id = %s",
+        (batch_id,),
+    )
+    r = cur.fetchone()
+    return {"total": r["total"], "valid": r["valid"], "invalid": r["invalid"]}
 
 
 @router.get("/types")
@@ -84,10 +103,60 @@ def get_batch(batch_id: int, conn=Depends(db_dep)):
         batch = cur.fetchone()
         if batch is None:
             raise HTTPException(status_code=404, detail="batch not found")
-        cur.execute("SELECT row_num, data, valid, error, merged FROM import_row "
+        cur.execute("SELECT id, row_num, data, valid, error, merged FROM import_row "
                     "WHERE batch_id = %s ORDER BY row_num", (batch_id,))
         batch["rows"] = cur.fetchall()
     return batch
+
+
+@router.patch("/batches/{batch_id}/rows/{row_id}")
+def edit_row(batch_id: int, row_id: int, body: ImportRowUpdate, conn=Depends(db_dep)):
+    """Overwrite a staged row's data and re-validate it (same validate() the
+    upload ran), so the preview grid's inline fixes persist and the valid/error
+    badge always matches what merge will accept. Refuses on an already-merged
+    batch."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT import_type, status FROM import_batch WHERE id = %s", (batch_id,))
+        batch = cur.fetchone()
+        if batch is None:
+            raise HTTPException(status_code=404, detail="batch not found")
+        if batch["status"] == "merged":
+            raise HTTPException(status_code=409, detail="this batch was already merged — re-upload to make changes")
+        cfg = importer.TYPES.get(batch["import_type"])
+        if cfg is None:
+            raise HTTPException(status_code=400, detail="unknown import type")
+        cur.execute("SELECT merged FROM import_row WHERE id = %s AND batch_id = %s", (row_id, batch_id))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="row not found")
+        if row["merged"]:
+            raise HTTPException(status_code=409, detail="this row was already merged")
+        # Only keep recognized columns; ignore anything the grid sends extra.
+        canon = {c.canon for c in cfg["cols"]}
+        data = {k: (v if v not in ("",) else None) for k, v in body.data.items() if k in canon}
+        err = importer.validate(data, cfg["cols"], cur)
+        cur.execute(
+            "UPDATE import_row SET data = %s, valid = %s, error = %s WHERE id = %s",
+            (Json(data), err is None, err, row_id),
+        )
+        return {"id": row_id, "data": data, "valid": err is None, "error": err,
+                "counts": _batch_counts(cur, batch_id)}
+
+
+@router.delete("/batches/{batch_id}/rows/{row_id}")
+def delete_row(batch_id: int, row_id: int, conn=Depends(db_dep)):
+    """Drop one staged row (e.g. a stray totals line) without re-uploading."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT status FROM import_batch WHERE id = %s", (batch_id,))
+        batch = cur.fetchone()
+        if batch is None:
+            raise HTTPException(status_code=404, detail="batch not found")
+        if batch["status"] == "merged":
+            raise HTTPException(status_code=409, detail="this batch was already merged")
+        cur.execute("DELETE FROM import_row WHERE id = %s AND batch_id = %s AND NOT merged", (row_id, batch_id))
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="row not found (or already merged)")
+        return {"deleted": row_id, "counts": _batch_counts(cur, batch_id)}
 
 
 @router.post("/batches/{batch_id}/merge")

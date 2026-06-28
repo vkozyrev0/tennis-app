@@ -332,3 +332,71 @@ def test_official_schedule_ics_exports():
     assert r.headers["content-type"].startswith("text/calendar")
     assert r.text.startswith("BEGIN:VCALENDAR")
     assert "END:VCALENDAR" in r.text
+
+
+# ============================================================ preview-grid edit/delete
+
+
+def _batch(bid):
+    return _ok(client.get(f"/api/import/batches/{bid}"), 200)
+
+
+def test_batch_rows_carry_id_for_editing():
+    t = _tournament()
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{_u()},female\n")
+    rows = _batch(up["batch_id"])["rows"]
+    assert rows and "id" in rows[0]
+
+
+def test_edit_staged_row_fixes_invalid_then_merges():
+    """The redesign's core: an invalid staged row is corrected in the preview grid
+    (PATCH) → revalidates to valid → merges."""
+    t = _tournament()
+    # one valid + one invalid (no usta_number)
+    csv = "usta_number,first_name,gender,age_division\n" + f"{_u()},Good,female,G16\n" + ",Bad,female,G16\n"
+    up = _stage(t["id"], "roster", "r.csv", csv)
+    assert up["valid"] == 1 and up["invalid"] == 1, up
+    rows = _batch(up["batch_id"])["rows"]
+    bad = next(r for r in rows if not r["valid"])
+    fixed_usta = _u()
+    patched = _ok(client.patch(
+        f"/api/import/batches/{up['batch_id']}/rows/{bad['id']}",
+        json={"data": {**bad["data"], "usta_number": fixed_usta}}), 200)
+    assert patched["valid"] is True and patched["error"] is None, patched
+    assert patched["counts"]["valid"] == 2 and patched["counts"]["invalid"] == 0
+    m = _merge(up["batch_id"])
+    assert m["merged"] == 2 and m["failed"] == 0, m
+    roster = {e["usta_number"] for e in client.get(f"/api/tournaments/{t['id']}/players").json()}
+    assert fixed_usta in roster
+
+
+def test_edit_can_invalidate_a_row_too():
+    t = _tournament()
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{_u()},female\n")
+    row = _batch(up["batch_id"])["rows"][0]
+    # blank out the required usta_number -> becomes invalid
+    patched = _ok(client.patch(
+        f"/api/import/batches/{up['batch_id']}/rows/{row['id']}",
+        json={"data": {**row["data"], "usta_number": ""}}), 200)
+    assert patched["valid"] is False and "usta_number" in patched["error"]
+    assert patched["counts"]["valid"] == 0
+
+
+def test_delete_staged_row_updates_counts():
+    t = _tournament()
+    csv = f"usta_number,gender\n{_u()},female\n{_u()},female\n"
+    up = _stage(t["id"], "roster", "r.csv", csv)
+    rows = _batch(up["batch_id"])["rows"]
+    out = _ok(client.delete(f"/api/import/batches/{up['batch_id']}/rows/{rows[0]['id']}"), 200)
+    assert out["counts"]["total"] == 1
+    assert len(_batch(up["batch_id"])["rows"]) == 1
+
+
+def test_edit_row_after_merge_is_409():
+    t = _tournament()
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{_u()},female\n")
+    row = _batch(up["batch_id"])["rows"][0]
+    _merge(up["batch_id"])
+    r = client.patch(f"/api/import/batches/{up['batch_id']}/rows/{row['id']}",
+                     json={"data": {**row["data"], "first_name": "X"}})
+    assert r.status_code == 409, r.text
