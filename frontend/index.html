@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CourtOps Tennis</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='12' r='10' fill='%23d6ec4a' stroke='%23a9c020' stroke-width='0.8'/><path d='M3.2 8.5 A 12 12 0 0 1 14.5 21.4' fill='none' stroke='white' stroke-width='1.5'/><path d='M9.5 2.6 A 12 12 0 0 1 20.8 15.5' fill='none' stroke='white' stroke-width='1.5'/></svg>" />
-  <link rel="stylesheet" href="/vendor/tabulator.min.css" />
-  <!-- AG Grid Community (migration in progress: loaded alongside Tabulator until
-       every grid is switched over). -->
+  <!-- AG Grid Community — every grid in the app. -->
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
@@ -1437,7 +1435,6 @@
        pick a suggestion or type a free-form value for edge cases. -->
   <datalist id="divisions-list"></datalist>
   <datalist id="events-list"></datalist>
-  <script src="/vendor/tabulator.min.js"></script>
   <script src="/vendor/ag-grid-community.min.js"></script>
   <!-- Audit A47: app.js is now an ES module so it can import from /app/*.js.
        util.js holds the dependency-free helpers (esc, date formatters, csv
@@ -1450,6 +1447,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=218"></script>
+  <script type="module" src="/app.js?v=219"></script>
 </body>
 </html>

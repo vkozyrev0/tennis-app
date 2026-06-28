@@ -6,8 +6,7 @@
 // object of its helpers (same names as before the extraction, so the moved
 // bodies are unchanged), because they are deliberately coupled to the app's
 // toast/message/modal conventions — only the construction seam is new.
-// `Tabulator` itself is the vendored script-tag global.
-/* global Tabulator */
+// All grids now build on AG Grid Community (the `agGrid` script-tag global).
 
 export function createGridFactories(ctx) {
   const {
@@ -25,23 +24,6 @@ export function createGridFactories(ctx) {
     }
     return cols;
   }
-  // Enable mobile responsive-collapse on a column set: pin the interactive
-  // columns (actions, selection checkbox) always-visible, then prepend the ▸
-  // toggle (Tabulator doesn't auto-add it under fitColumns + renderVertical:basic,
-  // so collapsed columns would otherwise be unreachable). Returns the same array.
-  function _withResponsiveCollapse(cols) {
-    cols.forEach((c) => {
-      const cls = typeof c.cssClass === "string" ? c.cssClass : "";
-      if (c.field === "_act" || c.field === "_sel" || cls.includes("grid-actions")) c.responsive = 0;
-    });
-    cols.unshift({
-      formatter: "responsiveCollapse", width: 32, minWidth: 32, widthGrow: 0, hozAlign: "center",
-      resizable: false, headerSort: false, responsive: 0, cssClass: "rcollapse-col",
-    });
-    return cols;
-  }
-  // Grid options that turn overflow columns into a tap-to-expand ▸ row on phones.
-  const RESPONSIVE_OPTS = { responsiveLayout: "collapse", responsiveLayoutCollapseStartOpen: false };
 
   // ===================== AG Grid migration helpers =========================
   // The grids are moving from Tabulator to AG Grid Community one factory at a
@@ -548,62 +530,7 @@ export function createGridFactories(ctx) {
   // legacy Tabulator path (the inbox + event-sites grids, pending migration).
   // Returns { grid, setData, setFilter }.
   function makeReadGrid(tableId, columns, exportName, placeholder, opts = {}) {
-    if (opts.engine !== "tabulator") return _makeReadGridAg(tableId, columns, exportName, placeholder, opts);
-    const tableEl = document.getElementById(tableId);
-    const panelId = tableEl.closest(".panel")?.id;
-    const mount = document.createElement("div"); mount.className = "grid-mount";
-    if (opts.compact) mount.classList.add("grid-mount--compact");
-    tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
-    if (exportName) {
-      const csv = document.createElement("button");
-      csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
-      csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
-      mount.parentElement.insertBefore(csv, mount);
-    }
-    let built = false, pending = null, pendingFilter = null;
-    const grid = new Tabulator(mount, {
-      layout: "fitColumns", maxHeight: opts.maxHeight || "55vh", placeholder,
-      renderVertical: "basic",
-      // Persist the chosen SORT (sort only — see makeListGrid). Opt out with
-      // opts.persist === false (the inbox does, to keep its load-time filter
-      // behaviour predictable).
-      ...(opts.persist === false ? {} : { persistence: { sort: true }, persistenceID: "courtops-v1-" + tableId }),
-      // Mobile responsive-collapse by default; opt out (opts.responsive === false)
-      // for grids with column GROUPS or heavy in-cell editing (the inbox).
-      ...(opts.responsive === false ? {} : RESPONSIVE_OPTS),
-      columnDefaults: { headerSortTristate: true, resizable: true, tooltip: true, widthGrow: 1 },
-      columns: opts.responsive === false ? _autoHeaderFilters(columns) : _withResponsiveCollapse(_autoHeaderFilters(columns)),
-      ...(opts.index ? { index: opts.index } : {}),
-      ...(opts.rowFormatter ? { rowFormatter: opts.rowFormatter } : {}),
-      // opt-in editing (e.g. the inbox's manual player/USTA assignment) —
-      // opts.editable is the trigger event; "dblclick" keeps single-click
-      // links (p360, Detect) working in editable cells.
-      ...(opts.editable ? { editTriggerEvent: opts.editable === true ? "click" : opts.editable } : {}),
-    });
-    if (opts.onCellEdited) grid.on("cellEdited", (cell) => opts.onCellEdited(cell));
-    const _onBuilt = () => {
-      built = true;
-      if (pending) { grid.setData(pending); pending = null; }
-      if (pendingFilter) { grid.setFilter(pendingFilter); pendingFilter = null; }
-    };
-    grid.on("tableBuilt", _onBuilt);
-    if (grid.initialized) _onBuilt();  // covers sync-fire race
-    if (panelId) (GRIDS[panelId] ||= []).push(grid);
-    return {
-      grid,
-      // Read-only summary grids are often loaded async AFTER their panel becomes
-      // visible (loadCvb / loadHotelSummary / …). If the grid was built while
-      // hidden, fitColumns has nothing to size against — schedule a redraw once
-      // data lands so columns expand to fill the now-visible container.
-      setData: (rows) => {
-        if (built) {
-          const p = grid.setData(rows);
-          if (p && typeof p.then === "function") p.then(() => { try { grid.redraw(true); } catch (_) {} });
-          else requestAnimationFrame(() => { try { grid.redraw(true); } catch (_) {} });
-        } else pending = rows;
-      },
-      setFilter: (fn) => { if (built) grid.setFilter(fn); else pendingFilter = fn; },
-    };
+    return _makeReadGridAg(tableId, columns, exportName, placeholder, opts);
   }
 
   function wireEntity(cfg) {
