@@ -297,12 +297,56 @@ export function createGridFactories(ctx) {
     return cd;
   }
 
+  // Mobile responsive-collapse popup: AG Community has no row-expander, so the ▸
+  // button opens a small panel listing the columns hidden at the current width.
+  function _showCollapsePopup(anchorEl, rowData, meta) {
+    document.querySelectorAll(".ag-collapse-popup").forEach((p) => p.remove());
+    const pop = document.createElement("div"); pop.className = "ag-collapse-popup";
+    for (const m of meta) {
+      let v; try { v = m.value(rowData); } catch (_) { v = ""; }
+      if (v == null || v === "") continue;
+      const row = document.createElement("div"); row.className = "ag-collapse-row";
+      const k = document.createElement("span"); k.className = "ag-collapse-key"; k.textContent = m.headerName;
+      const val = document.createElement("span"); val.className = "ag-collapse-val";
+      if (v instanceof HTMLElement) val.appendChild(v); else val.innerHTML = String(v);
+      row.append(k, val); pop.appendChild(row);
+    }
+    if (!pop.childElementCount) { const e = document.createElement("div"); e.className = "ag-collapse-row muted"; e.textContent = "No additional fields"; pop.appendChild(e); }
+    document.body.appendChild(pop);
+    const r = anchorEl.getBoundingClientRect();
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)) + "px";
+    pop.style.top = (r.bottom + 4) + "px";
+    const close = (ev) => { if (!pop.contains(ev.target) && ev.target !== anchorEl) { pop.remove(); document.removeEventListener("click", close, true); } };
+    setTimeout(() => document.addEventListener("click", close, true), 0);
+  }
+
   // Create an AG Grid and return a small Tabulator-compatible facade
   // ({ setData, getData, getRows, on, download, redraw, api }). `tabOpts` is the
   // existing Tabulator options object; only the bits the app uses are honored.
   function _makeAgGrid(mount, tabOpts) {
     mount.classList.add(_AG_THEME);
     const colDefs = (tabOpts.columns || []).map(_toAgCol).filter(Boolean);
+    // Responsive-collapse: columns that opted into a Tabulator responsive priority
+    // (>=1) hide below a breakpoint; a ▸ expander reveals their values in a popup.
+    // Highest priority collapses first (listed first in the popup). responsive:0
+    // and unmarked columns stay visible. Grids opt out with responsive:false.
+    const _collapseMeta = tabOpts.responsive === false ? [] : (tabOpts.columns || [])
+      .filter((c) => typeof c.responsive === "number" && c.responsive >= 1 && c.field && !c.columns)
+      .sort((a, b) => b.responsive - a.responsive)
+      .map((c) => ({ colId: c.field, headerName: c.title || c.field,
+        value: (data) => { try { return c.formatter ? c.formatter(_agCell({ data, value: data[c.field], colDef: { field: c.field } })) : (data[c.field] ?? ""); } catch (_) { return data[c.field] ?? ""; } } }));
+    if (_collapseMeta.length) {
+      colDefs.unshift({
+        colId: "_expand", pinned: "left", width: 36, minWidth: 36, sortable: false, filter: false,
+        resizable: false, hide: true, headerName: "", cellClass: "rcollapse-col",
+        cellRenderer: (params) => {
+          const b = document.createElement("button"); b.type = "button"; b.className = "btn-icon rcollapse-toggle";
+          b.textContent = "▸"; b.title = "Show more"; b.setAttribute("aria-label", "Show hidden fields");
+          b.addEventListener("click", (ev) => { ev.stopPropagation(); _showCollapsePopup(b, params.data, _collapseMeta); });
+          return b;
+        },
+      });
+    }
     const handlers = {};   // event name -> [fns] (Tabulator-style .on)
     let api = null;
     let extFilter = null;  // Tabulator-style setFilter(fn) → AG external filter
@@ -355,6 +399,19 @@ export function createGridFactories(ctx) {
     if (tabOpts.rowClassRules) opts.rowClassRules = tabOpts.rowClassRules;
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
+    // Toggle the collapse on/off at the mobile breakpoint: hide the collapsible
+    // columns + show the ▸ expander on narrow screens, reverse on wide.
+    if (_collapseMeta.length) {
+      const ids = _collapseMeta.map((m) => m.colId);
+      const mq = window.matchMedia("(max-width: 760px)");
+      const applyCollapse = () => {
+        if (!api) return;
+        api.setColumnsVisible(ids, !mq.matches);
+        api.setColumnsVisible(["_expand"], mq.matches);
+      };
+      applyCollapse();
+      mq.addEventListener("change", applyCollapse);
+    }
     const activeRows = () => { const out = []; if (api) api.forEachNodeAfterFilterAndSort((n) => out.push(n)); return out; };
     return {
       api,
@@ -436,9 +493,9 @@ export function createGridFactories(ctx) {
     const grid = _makeAgGrid(mount, {
       index: "id", placeholder, editTriggerEvent: "click",
       columnDefaults: { tooltip: true }, columns: cols,
-      // Sort persistence across reloads (Tabulator's persistence:{sort:true});
-      // opts.persist === false (the inbox) opts out.
-      ...(opts.persist === false ? {} : { persistKey: "courtops-ag-sort-" + tableId }),
+      // Sort persistence across reloads (Tabulator's persistence:{sort:true}).
+      // makeListGrid has no persist opt-out (unlike makeReadGrid), so always set it.
+      persistKey: "courtops-ag-sort-" + tableId,
     });
     const _onBuilt = () => { built = true; if (pending) { grid.setData(pending); pending = null; } };
     grid.on("tableBuilt", _onBuilt);

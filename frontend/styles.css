@@ -956,6 +956,18 @@ a.export-btn { text-decoration: none; }
 .ag-theme-quartz .ag-autocomplete-opt:hover { background: var(--sel); }
 /* Custom header cells (e.g. inbox select-all checkbox) center their content. */
 .ag-theme-quartz .ag-header-cell-custom { display: flex; align-items: center; justify-content: center; height: 100%; }
+/* Mobile responsive-collapse: the ▸ expander + the tap popup listing hidden cols. */
+.ag-theme-quartz .rcollapse-toggle { font-size: 0.85rem; line-height: 1; }
+.ag-collapse-popup {
+  position: fixed; z-index: 1000; max-width: min(320px, 90vw);
+  background: var(--card, #fff); color: var(--ink, inherit);
+  border: 1px solid var(--border, #ccc); border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.22); padding: 0.5rem 0.6rem; font-size: 0.85rem;
+}
+.ag-collapse-row { display: flex; gap: 0.4rem; padding: 0.15rem 0; }
+.ag-collapse-row + .ag-collapse-row { border-top: 1px solid var(--border, #eee); }
+.ag-collapse-key { color: var(--muted-ink, #777); min-width: 6.5rem; font-weight: 600; }
+.ag-collapse-val { flex: 1; }
 /* Custom floating header filters (list dropdown + predicate text). Fill the
    floating-filter row like AG's built-in text filter so they read as one strip. */
 .ag-theme-quartz .ag-list-floating,
