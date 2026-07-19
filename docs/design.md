@@ -210,6 +210,13 @@ workspace vs Part B vs reporting:
   routers `late_entries`, `withdrawals`, `doubles`, `pairing_avoidances`,
   `player_hotels`, `adult_lists` (scheduling avoidance + division flex),
   `imports` (staged spreadsheet import for every type).
+- **Email auto-ingest (D4):** `ingest` — token-authenticated open endpoints
+  (`POST /api/ingest/email` JSON + `/email/form` multipart) that land in
+  `email_message` with body encryption, `message_id` dedup, optional keyword
+  pre-classification, and tournament routing via `tournament.ingest_address`
+  (migration 0050). Shared helpers in `email_ingest.py`. See
+  [email-ingest.md](email-ingest.md). Not admin-cookie gated (providers cannot
+  hold a session); `INGEST_TOKEN` is required or the endpoint returns 503.
 - **Other:** `health`, `retention` (PII purge sweep), `trash` (Trash list +
   restore for soft-deleted tournaments + incidents; migration 0046).
 

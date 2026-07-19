@@ -14,6 +14,7 @@ class EmailCreate(BaseModel):
     tournament_id: Optional[int] = None
     message_id: Optional[str] = None
     from_address: Optional[str] = None
+    to_address: Optional[str] = None
     subject: Optional[str] = None
     body: Optional[str] = None
 
@@ -36,10 +37,13 @@ class EmailOut(BaseModel):
     message_id: Optional[str] = None
     received_at: datetime
     from_address: Optional[str] = None
+    to_address: Optional[str] = None
     subject: Optional[str] = None
     body: Optional[str] = None
     classification: str
     status: EmailStatus
+    # How the row entered the inbox (manual | webhook | form | pdf_import | …).
+    ingest_source: Optional[str] = "manual"
     detected_player_id: Optional[int] = None
     # Joined fields for the inbox grid — populated by the LEFT JOIN in
     # routers/emails.py so the TD sees the player name inline.

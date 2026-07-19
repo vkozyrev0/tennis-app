@@ -54,6 +54,7 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 # inline in the inbox grid alongside the classification.
 _COLS = (
     "e.id, e.tournament_id, e.message_id, e.received_at, e.from_address, "
+    "e.to_address, e.ingest_source, "
     "e.subject, e.body, e.classification, e.status, e.detected_player_id, "
     "e.detected_match_kind, e.detected_usta_text, "
     "p.usta_number AS detected_usta, "
@@ -251,12 +252,17 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
         with conn.cursor() as cur:
             # PII H2: encrypt the body at rest (decrypt-on-read everywhere else).
             # Persist the USTA # parsed from the plaintext so it stays searchable.
+            # Manual paste path: ingest_source defaults to 'manual' in the schema.
             params = {**body.model_dump(), "body": _enc_body(body.body),
                       "detected_usta_text": extract_usta(body.subject, body.body)}
             cur.execute(
                 """
-                INSERT INTO email_message (tournament_id, message_id, from_address, subject, body, detected_usta_text)
-                VALUES (%(tournament_id)s, %(message_id)s, %(from_address)s, %(subject)s, %(body)s, %(detected_usta_text)s)
+                INSERT INTO email_message
+                    (tournament_id, message_id, from_address, to_address,
+                     subject, body, detected_usta_text, ingest_source)
+                VALUES
+                    (%(tournament_id)s, %(message_id)s, %(from_address)s, %(to_address)s,
+                     %(subject)s, %(body)s, %(detected_usta_text)s, 'manual')
                 RETURNING id
                 """,
                 params,

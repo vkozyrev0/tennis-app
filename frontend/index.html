@@ -269,6 +269,16 @@
               <label>Registration deadline <input type="date" name="registration_deadline" /></label>
               <label>Late-entry deadline <input type="date" name="late_entry_deadline" /></label>
             </div>
+            <div class="row">
+              <label title="Local-part or full address used to route auto-ingested email (e.g. macon2026 or macon2026@inbox.example.com). Requires INGEST_TOKEN on the server.">
+                Ingest address
+                <input name="ingest_address" placeholder="macon2026@inbox.example.com" autocomplete="off" />
+              </label>
+            </div>
+            <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem">
+              Optional. When email auto-ingest is enabled, messages To: this address land in this tournament’s inbox.
+              See <code>docs/email-ingest.md</code>.
+            </p>
             <div class="actions-row">
               <button type="submit">Save</button>
               <button type="button" class="delete" hidden>Delete</button>
@@ -983,7 +993,9 @@
           <h4 id="inbox-detail-subject" class="inbox-detail-subject">Email detail</h4>
           <div class="inbox-detail-meta">
             <span class="muted">From:</span> <strong id="inbox-detail-from"></strong>
+            <span class="muted" style="margin-left:1rem">To:</span> <strong id="inbox-detail-to"></strong>
             <span class="muted" style="margin-left:1rem">Received:</span> <strong id="inbox-detail-received"></strong>
+            <span class="muted" style="margin-left:1rem">Source:</span> <strong id="inbox-detail-source"></strong>
           </div>
           <div class="inbox-detail-body-label">
             <span class="muted">Body</span>
@@ -1447,6 +1459,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=224"></script>
+  <script type="module" src="/app.js?v=225"></script>
 </body>
 </html>

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/tournaments", tags=["tournaments"])
 
 _COLS = (
     "id, name, type, play_start_date, play_end_date, "
-    "registration_deadline, late_entry_deadline"
+    "registration_deadline, late_entry_deadline, ingest_address"
 )
 _SITE_COLS = "id, code, name, street, city, state, zip, lat, lng"
 
@@ -32,6 +32,24 @@ def get_tournament(tournament_id: int, conn=Depends(db_dep)):
     return row
 
 
+def _tournament_params(body: TournamentCreate) -> dict:
+    """Normalize optional ingest_address (blank → NULL; lowercased for stable match)."""
+    data = body.model_dump()
+    addr = data.get("ingest_address")
+    if addr is not None:
+        addr = str(addr).strip().lower() or None
+    data["ingest_address"] = addr
+    return data
+
+
+def _unique_detail(exc: psycopg.errors.UniqueViolation) -> str:
+    diag = getattr(exc, "diag", None)
+    cname = (getattr(diag, "constraint_name", None) or "") if diag else ""
+    if "ingest_address" in cname:
+        return "another active tournament already uses this ingest address"
+    return "tournament name already exists"
+
+
 @router.post("", response_model=TournamentOut, status_code=201)
 def create_tournament(body: TournamentCreate, conn=Depends(db_dep)):
     try:
@@ -40,17 +58,18 @@ def create_tournament(body: TournamentCreate, conn=Depends(db_dep)):
                 f"""
                 INSERT INTO tournament
                     (name, type, play_start_date, play_end_date,
-                     registration_deadline, late_entry_deadline)
+                     registration_deadline, late_entry_deadline, ingest_address)
                 VALUES
                     (%(name)s, %(type)s, %(play_start_date)s, %(play_end_date)s,
-                     %(registration_deadline)s, %(late_entry_deadline)s)
+                     %(registration_deadline)s, %(late_entry_deadline)s,
+                     %(ingest_address)s)
                 RETURNING {_COLS}
                 """,
-                body.model_dump(),
+                _tournament_params(body),
             )
             return cur.fetchone()
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail="tournament name already exists")
+    except psycopg.errors.UniqueViolation as e:
+        raise HTTPException(status_code=409, detail=_unique_detail(e))
 
 
 @router.put("/{tournament_id}", response_model=TournamentOut)
@@ -64,15 +83,16 @@ def update_tournament(tournament_id: int, body: TournamentCreate, conn=Depends(d
                     play_start_date = %(play_start_date)s,
                     play_end_date = %(play_end_date)s,
                     registration_deadline = %(registration_deadline)s,
-                    late_entry_deadline = %(late_entry_deadline)s
+                    late_entry_deadline = %(late_entry_deadline)s,
+                    ingest_address = %(ingest_address)s
                 WHERE id = %(id)s
                 RETURNING {_COLS}
                 """,
-                {**body.model_dump(), "id": tournament_id},
+                {**_tournament_params(body), "id": tournament_id},
             )
             row = cur.fetchone()
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail="tournament name already exists")
+    except psycopg.errors.UniqueViolation as e:
+        raise HTTPException(status_code=409, detail=_unique_detail(e))
     if row is None:
         raise HTTPException(status_code=404, detail="tournament not found")
     return row

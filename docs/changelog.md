@@ -9,6 +9,25 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-19 — Email auto-ingest (D4)
+
+Token-authenticated inbound email webhook so a dedicated tournament address can
+land messages in the review inbox without manual paste.
+
+- **Migration 0050:** `email_message.to_address` + `ingest_source`; 
+  `tournament.ingest_address` (unique per active tournament) for To: routing.
+- **`POST /api/ingest/email`** (JSON) and **`/email/form`** (Mailgun/SendGrid-style
+  multipart); auth via `Authorization: Bearer`, `X-Ingest-Token`, or `?token=`.
+  Disabled (503) when `INGEST_TOKEN` is unset. Dedup by `message_id` returns 200
+  with `duplicate: true` so providers stop retrying.
+- **Helpers** in `app/email_ingest.py`: provider field aliases, HTML→text, body
+  encryption, optional keyword pre-classify (still human-filed). Logs never
+  include subject/body.
+- **UI:** tournament form “Ingest address”; inbox detail shows To + source.
+- **Docs:** [email-ingest.md](email-ingest.md). Tests: `test_zz_email_ingest.py`.
+
+---
+
 ## 2026-06-28 — AG Grid migration
 
 Replaced **Tabulator 6.x** with **AG Grid Community 32.3.5** across every grid

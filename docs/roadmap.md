@@ -252,8 +252,10 @@ pay snapshots).
 The player side starts as a **human-review workflow — no automated parsing**
 (D5/§5.1). The TD forwards player/parent email to a dedicated address; it lands in
 a review inbox; a person files each message into the right list.
-- [~] Ingestion: **POC manual add** to the inbox (migration 0011). Dedicated
-      forwarding-address auto-ingest still 🔭 (D4).
+- [x] Ingestion: **POC manual add** to the inbox (migration 0011) **plus**
+      token-authenticated auto-ingest webhook (migration 0050, `POST
+      /api/ingest/email` + form adapter). Dedicated provider wiring still needs
+      a public HTTPS host + mail domain — see [email-ingest.md](email-ingest.md).
 - [x] `EmailMessage` provenance + dedup by `message_id`.
 - [x] **Review inbox UI** (Inbox tab): add a message, set `classification`, **file**
       it into a list (no auto-extract); filing sets the email `status='filed'`.
@@ -338,7 +340,7 @@ buildable without them is done; revisit when the prerequisite is available.
 | Item | Why it's blocked | To unblock |
 |------|------------------|------------|
 | **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), and the **driving-distance Distance Matrix call is now scaffolded** (migration 0047, `road_one_way_miles()` behind `GOOGLE_MAPS_API_KEY`, source=`maps`) — still **key-blocked**. | Provide an API key + confirm cost + egress; the driving-distance path is wired (the estimate stays the fallback). |
-| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | Needs a mail domain + inbound webhook/IMAP infra. POC uses manual paste into the review inbox. | Stand up a forwarding address + ingestion endpoint; dedup by `message_id` already exists. |
+| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side shipped** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md)). Still needs a public HTTPS host + mail domain / provider route. | Set `INGEST_TOKEN`, assign per-tournament ingest addresses, point Mailgun/SendGrid/CF Worker at the webhook. |
 | **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
 | **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS for the *encryption* piece. **Partly shipped** (see `docs/pii-hardening-plan.md`): **H1** ENV-gated boot guard refusing default creds / non-TLS in prod + `sslmode`; **H3** PII erased from `player_history` on delete + an email-body retention-purge endpoint. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption (H2), retention schedule + purge job (H3.1/H3.3). |
 | ~~**Non-official staff in the Staffing Plan**~~ — ✅ **SHIPPED** (migration 0032): a per-tournament `tournament_staff` roster (name + `staff_role` ∈ Site Director / Player Amenities / Trainer / Operations / Stringer / Other + contact), a **Staffing → Staff** tab (CRUD), and an **"Other staff"** section in the officials report (+ `staff_count`). Per-day staff scheduling now ships (staff_day, day-column report grid); flat daily-rate pay now ships (report totals staff pay); per-day-varying rates remain a possible refinement. |

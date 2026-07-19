@@ -31,6 +31,17 @@ class Settings:
     # require / verify-ca / verify-full — enforced in validate().
     sslmode: str = os.getenv("PGSSLMODE", "prefer")
 
+    # Email auto-ingest (D4). Read live from the environment so tests can
+    # monkeypatch INGEST_TOKEN without reconstructing Settings. Empty = disabled
+    # (POST /api/ingest/email returns 503).
+    @property
+    def ingest_token(self) -> str:
+        return os.getenv("INGEST_TOKEN", "").strip()
+
+    @property
+    def ingest_enabled(self) -> bool:
+        return bool(self.ingest_token)
+
     _DEV_ENVS = {"dev", "development", "local", "test", "ci"}
     _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}
 

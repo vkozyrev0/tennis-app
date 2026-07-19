@@ -28,6 +28,7 @@ master data) and a per-tournament workspace (scoped operations).
 | 10 | [pii-h2-key-management.md](pii-h2-key-management.md) | H2 PII key-management & rotation design (Fernet MultiFernet, re-encrypt backfill, deploy runbook). |
 | 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
 | 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
+| 13 | [email-ingest.md](email-ingest.md) | Auto-ingest webhook (D4): token auth, routing, provider sketches. |
 
 ## Quickstart
 

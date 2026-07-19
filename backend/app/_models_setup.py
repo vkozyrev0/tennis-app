@@ -36,6 +36,9 @@ class TournamentCreate(BaseModel):
     play_end_date: date
     registration_deadline: Optional[date] = None
     late_entry_deadline: Optional[date] = None
+    # Email auto-ingest routing key (D4): local-part or full address matched
+    # against the inbound To: header. Null = not auto-routed by address.
+    ingest_address: Optional[str] = None
 
     @model_validator(mode="after")
     def _dates_ok(self):

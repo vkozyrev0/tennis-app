@@ -23,6 +23,7 @@ from .routers import (
     hotels,
     imports,
     incidents,
+    ingest,
     late_entries,
     me,
     officials,
@@ -59,10 +60,11 @@ app = FastAPI(title="CourtOps Tennis API", version="0.4.0")
 install_db_error_handlers(app)
 
 # Open endpoints: health + auth (login) + the official self-service surface
-# (which checks the session itself).
+# (which checks the session itself) + email auto-ingest (token-gated, not cookie).
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(me.router)
+app.include_router(ingest.router)
 
 # Admin-only: every TD/back-office router requires an admin session.
 _admin = [Depends(require_admin)]

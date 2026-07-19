@@ -1042,9 +1042,23 @@ function _markGroup(key) {
 function activateGroup(key) {
   _markGroup(key);
   const grp = _groups.find((g) => g.dataset.group === key);
-  if (grp && !grp.querySelector(".tab.active")) {
-    const first = [...grp.querySelectorAll(".tab")].find((t) => !t.classList.contains("disabled"));
-    if (first) first.click();
+  if (grp) {
+    // Always activate a tab in the group so the main panel matches the L1
+    // choice. Prefer an already-active, enabled tab; else the first enabled
+    // tab; else the first tab even if it is `.disabled` (needs-active).
+    //
+    // Previously we only clicked when the group had *no* `.tab.active` and we
+    // skipped disabled tabs. For single-tab groups like Day-of that meant:
+    // click L1 "Day-of" with no tournament selected → Venue view is disabled →
+    // no click → previous group's panel stayed on screen. Same for any
+    // needs-active-only group when the context bar has no tournament.
+    const tabs = [...grp.querySelectorAll(".tab")];
+    const tab =
+      tabs.find((t) => t.classList.contains("active") && !t.classList.contains("disabled")) ||
+      tabs.find((t) => !t.classList.contains("disabled")) ||
+      tabs.find((t) => t.classList.contains("active")) ||
+      tabs[0];
+    if (tab) tab.click();
   }
   // Entering Inbox or the merged Player-lists group is a natural moment to
   // re-pull the badge counts so they reflect any changes made elsewhere.
@@ -4969,7 +4983,9 @@ function _openInboxDetail(m) {
   box.hidden = false;
   document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
   document.getElementById("inbox-detail-from").textContent = m.from_address || "(no sender)";
+  document.getElementById("inbox-detail-to").textContent = m.to_address || "—";
   document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
+  document.getElementById("inbox-detail-source").textContent = m.ingest_source || "manual";
   document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
   document.getElementById("inbox-detail-classification").value = m.classification || "";
   document.getElementById("inbox-detail-status").value = m.status || "new";
@@ -7441,6 +7457,7 @@ const tournamentsCrud = wireEntity({
     { header: "play_end_date", key: "play_end_date" },
     { header: "registration_deadline", key: "registration_deadline" },
     { header: "late_entry_deadline", key: "late_entry_deadline" },
+    { header: "ingest_address", key: "ingest_address" },
   ],
   onLoad: (rows) => {
     for (const k in tournamentsById) delete tournamentsById[k];
