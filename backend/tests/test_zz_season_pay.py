@@ -32,6 +32,8 @@ def _tournament():
 
 def _assign_day(oid, site_id):
     t = _tournament()
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site_id]}), 200)
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                         json={"official_id": oid, "site_id": site_id}))
     _ok(client.post(f"/api/assignments/{a['id']}/days",

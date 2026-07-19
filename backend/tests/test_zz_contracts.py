@@ -47,6 +47,8 @@ def staffed():
     t = _ok(client.post("/api/tournaments", json={
         "name": "CT " + uuid.uuid4().hex[:6], "type": "junior",
         "play_start_date": "2026-08-01", "play_end_date": "2026-08-03"}))
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site["id"]]}), 200)
     asg_ids = []
     for i in range(3):
         o = _ok(client.post("/api/officials", json={

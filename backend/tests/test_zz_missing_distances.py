@@ -45,6 +45,10 @@ def _official():
 
 
 def _assign(tid, oid, site_id):
+    linked = [s["id"] for s in client.get(f"/api/tournaments/{tid}/sites").json()]
+    if site_id not in linked:
+        _ok(client.put(f"/api/tournaments/{tid}/sites",
+                       json={"site_ids": linked + [site_id]}), 200)
     return _ok(client.post(f"/api/tournaments/{tid}/assignments",
                            json={"official_id": oid, "site_id": site_id}))
 

@@ -249,6 +249,46 @@ def _check_room_capacity(cur, room_block_id, exclude_id=None) -> None:
         )
 
 
+def _check_assignment_refs(cur, tournament_id: int, site_id, room_block_id) -> None:
+    """Tournament-scope site + hotel (audit D5/D6).
+
+    The UI already filters both pickers to the active tournament; the API used
+    to accept any valid site/room_block FK, so a scripted or mistyped client
+    could attach mileage to a venue from another event or book a room block
+    reserved for a different tournament. NULL is always allowed (TBD site /
+    no hotel).
+    """
+    if site_id is not None:
+        cur.execute(
+            "SELECT 1 FROM tournament_site "
+            "WHERE tournament_id = %s AND site_id = %s",
+            (tournament_id, site_id),
+        )
+        if cur.fetchone() is None:
+            # Distinguish "site doesn't exist" (FK would fail later) from
+            # "exists but isn't linked to this event" so the TD gets a clear cue.
+            cur.execute("SELECT 1 FROM site WHERE id = %s", (site_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=400, detail="site_id does not exist")
+            raise HTTPException(
+                status_code=400,
+                detail="site_id is not linked to this tournament",
+            )
+    if room_block_id is not None:
+        cur.execute(
+            "SELECT tournament_id FROM room_block WHERE id = %s",
+            (room_block_id,),
+        )
+        rb = cur.fetchone()
+        if rb is None:
+            raise HTTPException(status_code=400, detail="room_block_id does not exist")
+        if rb["tournament_id"] != tournament_id:
+            raise HTTPException(
+                status_code=400,
+                detail="room_block_id does not belong to this tournament",
+            )
+
+
 def _persist_snapshot(cur, assignment_id: int) -> dict:
     """Recompute and freeze pay/mileage/total + the full calc AUDIT (inputs +
     rule constants) on the assignment, so the reimbursement is reproducible even
@@ -696,6 +736,7 @@ def create_assignment(tournament_id: int, body: AssignmentCreate,
                       user=Depends(require_admin), conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
+            _check_assignment_refs(cur, tournament_id, body.site_id, body.room_block_id)
             _check_room_capacity(cur, body.room_block_id)
             cur.execute(
                 """
@@ -731,6 +772,9 @@ def bulk_create_assignments(tournament_id: int, body: AssignmentBulkCreate,
         cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        # Fail the whole bulk call on a bad site/hotel (not a per-official
+        # skip) — every row would share the same bad refs.
+        _check_assignment_refs(cur, tournament_id, body.site_id, body.room_block_id)
         _check_room_capacity(cur, body.room_block_id)
         # Which of these officials exist, and which are already assigned here?
         cur.execute("SELECT id FROM official WHERE id = ANY(%s)", (ids,))
@@ -870,6 +914,16 @@ def update_assignment(assignment_id: int, body: AssignmentCreate,
                       user=Depends(require_admin), conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
+            cur.execute(
+                "SELECT tournament_id FROM assignment WHERE id = %s",
+                (assignment_id,),
+            )
+            existing = cur.fetchone()
+            if existing is None:
+                raise HTTPException(status_code=404, detail="assignment not found")
+            _check_assignment_refs(
+                cur, existing["tournament_id"], body.site_id, body.room_block_id,
+            )
             _check_room_capacity(cur, body.room_block_id, exclude_id=assignment_id)
             cur.execute(
                 "UPDATE assignment SET official_id=%s, site_id=%s, room_block_id=%s "

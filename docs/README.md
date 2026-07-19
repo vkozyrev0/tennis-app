@@ -29,6 +29,7 @@ master data) and a per-tournament workspace (scoped operations).
 | 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
 | 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 | 13 | [email-ingest.md](email-ingest.md) | Auto-ingest webhook (D4): token auth, routing, provider sketches. |
+| 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
 
 ## Quickstart
 
@@ -68,12 +69,13 @@ against a live server, see [e2e-findings.md](e2e-findings.md).
 ## Status
 
 The original TD audit (D1–D8) is closed. Subsequent code/UX
-critique passes are closed; the running findings register is
-folded into `changelog.md`. The 2026-06-10 improvement plan's P1 round
-and most P2/P4 items are shipped (P2 #8 + #10–14 and #9 phase 1; all P4
-day-of + payroll work — only the deferred at-scale P4-7/P4-8 remain) —
-see `improvement-plan.md` for the per-item marks. Active open items live
-in `roadmap.md` under "Open work".
+critique passes are tracked in [audit-register.md](audit-register.md)
+(open/deferred/resolved) and summarized in `changelog.md`. The
+2026-06-10 improvement plan's P1 round and most P2/P4 items are shipped
+(P2 #8 + #10–14 and #9 phase 1; all P4 day-of + payroll work — only the
+deferred at-scale P4-7/P4-8 remain) — see `improvement-plan.md` for the
+per-item marks. Product open work also lives in `roadmap.md` under
+"Open work".
 
 POC stack: **Postgres** (localhost) · **FastAPI + psycopg3** · **vanilla
 HTML/CSS/JS**. The POC defaults to `admin/admin`; harden before any

@@ -40,6 +40,8 @@ def test_pay_audit_freezes_inputs_and_survives_distance_change():
     t = _ok(client.post("/api/tournaments", json={
         "name": "T " + uuid.uuid4().hex[:6], "type": "junior",
         "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site["id"]]}), 200)
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={
         "official_id": o["id"], "site_id": site["id"]}))
     _ok(client.post(f"/api/assignments/{a['id']}/days", json={

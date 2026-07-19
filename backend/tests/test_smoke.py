@@ -238,6 +238,7 @@ def test_roster():
 
 def test_assignment_pay_and_mileage():
     t, o, s = _tournament(), _official(), _site()
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites", json={"site_ids": [s["id"]]}), 200)
     # distance: one-way 100 -> round trip 200 -> reimbursable 150 -> 150*0.65=97.5 (< cap)
     _ok(client.post("/api/distances", json={"official_id": o["id"], "site_id": s["id"], "one_way_miles": 100}))
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
@@ -1440,6 +1441,7 @@ def test_roster_point_in_time_name():
 
 def test_assignment_missing_distance_and_hotel_mismatch():
     t, o, s, h = _tournament(), _official(), _site(), _hotel()
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites", json={"site_ids": [s["id"]]}), 200)
     # no distance on file -> mileage None, missing_distance True
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                         json={"official_id": o["id"], "site_id": s["id"]}))
