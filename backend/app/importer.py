@@ -802,17 +802,27 @@ def _merge_email_pdf(cur, tid, d):
         return "already in inbox — skipped"
     cls = classify(subj, body)  # classify on plaintext, before encrypting at rest
     from .crypto import encrypt as _enc_body  # PII H2
-    # Parse the USTA #(s) from the plaintext: multi-player classes (doubles /
-    # pairing) keep every plausible number — an email may carry one per player.
-    from .routers.emails import extract_usta, extract_ustas
-    if cls in ("doubles", "pairing_avoidance"):
-        usta_text = ", ".join(extract_ustas(subj, body)) or None
-    else:
-        usta_text = extract_usta(subj, body)
+    # Stamp extracted text fields (D9) so inbox list never re-parses the body.
+    from .email_extract import compute_extracted_fields
+    import json as _json
+    fields = compute_extracted_fields(subj, body, cls, has_detected_player=False)
+    pairs_json = (
+        _json.dumps(fields["detected_name_pairs"])
+        if fields["detected_name_pairs"] is not None else None
+    )
     cur.execute(
-        "INSERT INTO email_message (tournament_id, from_address, subject, body, classification, detected_usta_text) "
-        "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-        (tid, from_addr, subj, _enc_body(body), cls, usta_text),
+        "INSERT INTO email_message ("
+        "  tournament_id, from_address, subject, body, classification,"
+        "  detected_usta_text, detected_reason, detected_division, detected_events,"
+        "  detected_name_pairs, detected_avoid_day, detected_avoid_time,"
+        "  detected_text_ready"
+        ") VALUES ("
+        "  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE"
+        ") RETURNING id",
+        (tid, from_addr, subj, _enc_body(body), cls,
+         fields["detected_usta_text"], fields["detected_reason"],
+         fields["detected_division"], fields["detected_events"],
+         pairs_json, fields["detected_avoid_day"], fields["detected_avoid_time"]),
     )
     new_id = cur.fetchone()["id"]
     # Auto-detect the player this email is about (USTA # / name against the
@@ -820,7 +830,7 @@ def _merge_email_pdf(cur, tid, d):
     # per-row "Detect" click. Best-effort: a no-match just leaves the row blank,
     # exactly as before. Lazy import avoids a module-load cycle (emails router
     # doesn't import importer).
-    from .routers.emails import _detect_pair_for
+    from .routers.emails import _detect_pair_for, _stamp_extracted_fields
     det, partner, member_ids = _detect_pair_for(cur, tid, subj, body, from_addr, cls)
     if det.get("detected_player_id"):
         cur.execute(
@@ -828,6 +838,10 @@ def _merge_email_pdf(cur, tid, d):
             "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s",
             (det["detected_player_id"], det["match_kind"],
              partner["detected_partner_id"], member_ids, new_id),
+        )
+        # Player match can change withdrawal name-pair fallback — re-stamp.
+        _stamp_extracted_fields(
+            cur, new_id, subj, body, cls, det.get("detected_player_id"),
         )
     return None
 

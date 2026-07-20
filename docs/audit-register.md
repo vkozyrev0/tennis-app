@@ -22,7 +22,6 @@ Severity: **H** high · **M** medium · **L** low
 | D3 | 30-day sessions + default `admin/admin` on POC | M | Fine laptop-only; tighten before shared host |
 | D4 | Ingest allows `?token=` | M | Prefer header-only in prod runbooks (app side shipped) |
 | D8 | Officials can list all tournaments | L–M | `GET /api/me/tournaments` — needed for availability UX |
-| D9 | Inbox list decrypts + re-runs extractors per row | M | Persist `detected_*` at detect/write; page by default |
 | D10 | `finalize_all` / some invite paths still N×`_summary` | L–M | Batch with `_summaries` |
 | D11 | `frontend/app.js` ~8.4k LOC; mixed `innerHTML` | M | Continue module slices + `html`` adoption |
 | D12 | Unpinned `requirements.txt` | M | Lockfile when deploys matter |
@@ -36,6 +35,7 @@ Severity: **H** high · **M** medium · **L** low
 |----|---------|----------|
 | D5 | Assignment `site_id` not tournament-scoped (API) | ✅ 2026-07-19 — `_check_assignment_refs` on create/update/bulk |
 | D6 | Assignment `room_block_id` not tournament-scoped (API) | ✅ 2026-07-19 — same helper |
+| D9 | Inbox list re-ran extractors per row | ✅ 2026-07-19 — migration 0051 stamp + column reads; search/paging UX |
 | — | Day-of L1 left previous panel on screen | ✅ 2026-07-19 — `activateGroup` always activates a tab |
 | — | Email auto-ingest app side (D4) | ✅ 2026-07-19 — migration 0050 + webhook; provider wiring still external |
 
@@ -60,7 +60,7 @@ Severity: **H** high · **M** medium · **L** low
 
 1. ~~Commit ingest + Day-of~~ ✅  
 2. ~~API site/hotel tournament guards (D5/D6)~~ ✅  
-3. **Inbox performance (D9)** — highest product leverage given triage pain  
+3. ~~Inbox performance (D9)~~ ✅  
 4. Thin COPPA when real junior data is imminent (D1/D2/A2)  
 5. Mail provider wiring when public HTTPS + domain exist  
 

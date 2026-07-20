@@ -1,4 +1,5 @@
 """Part B review inbox: inbound parent/player email, filed by a human (D5/§5.1)."""
+import json
 import re
 import unicodedata
 
@@ -12,6 +13,7 @@ from ..db import db_dep
 # here both for use and for back-compat re-export (importer.py + tests
 # import them from this module).
 from ..email_extract import (
+    compute_extracted_fields,
     extract_name_usta_pairs,
     extract_names,    # name-only spans (the doubles partner fallback signal)
     extract_doubles_pair,  # two names joined by a pairing connector (no USTA #)
@@ -57,6 +59,9 @@ _COLS = (
     "e.to_address, e.ingest_source, "
     "e.subject, e.body, e.classification, e.status, e.detected_player_id, "
     "e.detected_match_kind, e.detected_usta_text, "
+    "e.detected_reason, e.detected_division, e.detected_events, "
+    "e.detected_name_pairs, e.detected_avoid_day, e.detected_avoid_time, "
+    "e.detected_text_ready, "
     "p.usta_number AS detected_usta, "
     "TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) "
     "  AS detected_player_name, "
@@ -80,16 +85,77 @@ _FROM = ("FROM email_message e "
          "LEFT JOIN email_message am ON am.id = e.amends_email_id")
 
 
+def _stamp_extracted_fields(cur, email_id: int, subject, body, classification,
+                            detected_player_id=None) -> dict:
+    """Compute + persist derived text fields (D9). Returns the field dict."""
+    fields = compute_extracted_fields(
+        subject, body, classification,
+        has_detected_player=bool(detected_player_id),
+    )
+    cur.execute(
+        """
+        UPDATE email_message SET
+            detected_usta_text = %(detected_usta_text)s,
+            detected_reason = %(detected_reason)s,
+            detected_division = %(detected_division)s,
+            detected_events = %(detected_events)s,
+            detected_name_pairs = %(detected_name_pairs)s::jsonb,
+            detected_avoid_day = %(detected_avoid_day)s,
+            detected_avoid_time = %(detected_avoid_time)s,
+            detected_text_ready = TRUE
+        WHERE id = %(id)s
+        """,
+        {
+            **fields,
+            "detected_name_pairs": json.dumps(fields["detected_name_pairs"])
+            if fields["detected_name_pairs"] is not None else None,
+            "id": email_id,
+        },
+    )
+    return fields
+
+
+def _apply_extracted_to_row(r: dict, fields: dict) -> None:
+    """Copy stamped fields onto a SELECT row (and drop the ready flag)."""
+    for k, v in fields.items():
+        r[k] = v
+    r.pop("detected_text_ready", None)
+
+
+def _finalize_email_row(cur, r: dict) -> dict:
+    """Decrypt body; ensure extracted fields are present (lazy-stamp legacy)."""
+    r["body"] = _dec_body(r.get("body"))
+    ready = r.pop("detected_text_ready", True)
+    # JSONB may arrive as list already (psycopg) or need a pass-through.
+    pairs = r.get("detected_name_pairs")
+    if isinstance(pairs, str):
+        try:
+            r["detected_name_pairs"] = json.loads(pairs)
+        except (TypeError, ValueError):
+            r["detected_name_pairs"] = None
+    if not ready:
+        fields = _stamp_extracted_fields(
+            cur, r["id"], r.get("subject"), r.get("body"),
+            r.get("classification"), r.get("detected_player_id"),
+        )
+        _apply_extracted_to_row(r, fields)
+    return r
+
+
 @router.get("", response_model=list[EmailOut])
 def list_emails(response: Response, tournament_id: int | None = None,
                 status: str | None = None, q: str | None = None,
                 unmatched: bool | None = None,
                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
     """Server-side filtered/paged inbox. `q` searches subject + from_address +
-    the player's USTA # (matched player's number AND the USTA # parsed from the
-    email text) — but NOT the body itself, which is encrypted at rest (H2).
+    classification + division + matched player name/USTA + parsed USTA text —
+    but NOT the body itself, which is encrypted at rest (H2).
     `limit`/`offset` page the result; the full match count is in the
-    `X-Total-Count` header. With no limit the whole (filtered) set is returned."""
+    `X-Total-Count` header. With no limit the whole (filtered) set is returned.
+
+    Derived detect fields are **read from columns** (stamped on write/detect).
+    Pre-0051 rows get a one-time lazy stamp when `detected_text_ready` is false.
+    """
     clauses, params = [], []
     if tournament_id is not None:
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
@@ -99,87 +165,23 @@ def list_emails(response: Response, tournament_id: int | None = None,
         # Detection gap: no roster player matched. Feeds the unmatched drilldown.
         clauses.append("e.detected_player_id IS NULL")
     if q:
-        # USTA # search hits the matched player's number (p.usta_number) and the
-        # number parsed from the email (e.detected_usta_text, persisted so it's
-        # SQL-searchable even though the body is encrypted).
-        clauses.append("(e.subject ILIKE %s OR e.from_address ILIKE %s "
-                       "OR p.usta_number ILIKE %s OR e.detected_usta_text ILIKE %s)")
+        # Metadata + stamped fields only (body is encrypted — not ILIKE'd).
+        clauses.append(
+            "(e.subject ILIKE %s OR e.from_address ILIKE %s "
+            "OR e.classification ILIKE %s OR e.detected_division ILIKE %s "
+            "OR e.detected_usta_text ILIKE %s OR p.usta_number ILIKE %s "
+            "OR TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')) ILIKE %s)"
+        )
         eq = like_escape(q)
-        params += [f"%{eq}%", f"%{eq}%", f"%{eq}%", f"%{eq}%"]
+        params += [f"%{eq}%"] * 7
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
-        # Count uses the same FROM (joins to player) so a USTA-# `q` resolves.
         rows = paged_select(cur, response, cols=_COLS, from_sql=_FROM,
                             where=where, params=params,
                             order_by=" ORDER BY e.received_at DESC",
                             limit=limit, offset=offset)
-        # Post-process inside the cursor so we can lazily backfill the persisted
-        # USTA # for pre-0039 rows (their column is NULL): compute from the
-        # decrypted body once, store it, and it becomes searchable next time.
         for r in rows:
-            r["body"] = _dec_body(r.get("body"))  # PII H2: encrypted at rest
-            r["detected_reason"] = (
-                extract_withdrawal_reason(r.get("subject"), r.get("body"))
-                if r.get("classification") == "withdrawal" else None
-            )
-            # Structured fields the late-entry / withdrawal forms ask for — parsed
-            # locally (no LLM) so single-file filing pre-fills them. Cheap regex;
-            # null when nothing recognizable is present.
-            r["detected_division"] = extract_age_division(r.get("subject"), r.get("body"))
-            r["detected_events"] = extract_events(r.get("subject"), r.get("body"))
-            # USTA #(s) parsed from the email text — shown even when no roster
-            # player is matched. Prefer the persisted column; backfill if
-            # missing. Multi-player classes may carry a number for one player,
-            # both, or neither — keep every plausible one (comma-joined).
-            if not r.get("detected_usta_text"):
-                if r.get("classification") in ("doubles", "pairing_avoidance"):
-                    computed = ", ".join(extract_ustas(r.get("subject"), r.get("body"))) or None
-                else:
-                    computed = extract_usta(r.get("subject"), r.get("body"))
-                if computed:
-                    cur.execute(
-                        "UPDATE email_message SET detected_usta_text = %s WHERE id = %s",
-                        (computed, r["id"]),
-                    )
-                r["detected_usta_text"] = computed
-            # (name, USTA#) pairs parsed from the text — for doubles/pairing
-            # emails whose players aren't (yet) rostered, the email itself says
-            # who the players are; the grid falls back to these. When the email
-            # carries NO USTA # (the common doubles shape — "Mia Langone and
-            # Chelsea Ie would like to pair up"), surface the two NAMES anyway so
-            # both players still show for the TD to confirm / add to the roster.
-            if r.get("classification") in ("doubles", "pairing_avoidance"):
-                pairs = extract_name_usta_pairs(r.get("subject"), r.get("body"))
-                if len(pairs) < 2:
-                    have = {_norm_name(p["name"]) for p in pairs}
-                    names = (extract_doubles_pair(r.get("subject"), r.get("body"))
-                             if r.get("classification") == "doubles"
-                             else extract_names(r.get("subject"), r.get("body")))
-                    # Slashed surname shorthand in the subject ("… - Pfifer /
-                    # Mehendiratta") — the same pair the classifier counts, so a
-                    # doubles label never shows blank Player columns.
-                    if r.get("classification") == "doubles":
-                        names = [*names, *extract_surname_pair(r.get("subject"))]
-                    for nm in names:
-                        if _norm_name(nm) not in have:
-                            pairs.append({"name": nm, "usta": None})
-                            have.add(_norm_name(nm))
-                r["detected_name_pairs"] = pairs[:4] or None
-            elif r.get("classification") == "withdrawal" and not r.get("detected_player_id"):
-                # Withdrawal naming a player who isn't matched to the roster:
-                # surface the parsed name (same grid path as doubles) so the TD
-                # sees who instead of a blank, with the ＋ add affordance.
-                nm = extract_withdraw_name(r.get("subject"), r.get("body"))
-                r["detected_name_pairs"] = [{"name": nm, "usta": None}] if nm else None
-            else:
-                r["detected_name_pairs"] = None
-            # Day/time only make sense for scheduling-avoidance emails (a weekday in
-            # a withdrawal email isn't an "avoid day"), so scope them to that class.
-            is_sched = r.get("classification") == "scheduling_avoidance"
-            r["detected_avoid_day"] = (
-                extract_avoid_day(r.get("subject"), r.get("body")) if is_sched else None)
-            r["detected_avoid_time"] = (
-                extract_avoid_time(r.get("subject"), r.get("body")) if is_sched else None)
+            _finalize_email_row(cur, r)
     return rows
 
 
@@ -251,27 +253,40 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
     try:
         with conn.cursor() as cur:
             # PII H2: encrypt the body at rest (decrypt-on-read everywhere else).
-            # Persist the USTA # parsed from the plaintext so it stays searchable.
+            # Stamp extracted text fields so the list never re-parses (D9).
             # Manual paste path: ingest_source defaults to 'manual' in the schema.
-            params = {**body.model_dump(), "body": _enc_body(body.body),
-                      "detected_usta_text": extract_usta(body.subject, body.body)}
+            fields = compute_extracted_fields(
+                body.subject, body.body, "unclassified", has_detected_player=False,
+            )
+            params = {
+                **body.model_dump(),
+                "body": _enc_body(body.body),
+                **fields,
+                "detected_name_pairs": json.dumps(fields["detected_name_pairs"])
+                if fields["detected_name_pairs"] is not None else None,
+            }
             cur.execute(
                 """
                 INSERT INTO email_message
                     (tournament_id, message_id, from_address, to_address,
-                     subject, body, detected_usta_text, ingest_source)
+                     subject, body, detected_usta_text, detected_reason,
+                     detected_division, detected_events, detected_name_pairs,
+                     detected_avoid_day, detected_avoid_time, detected_text_ready,
+                     ingest_source)
                 VALUES
                     (%(tournament_id)s, %(message_id)s, %(from_address)s, %(to_address)s,
-                     %(subject)s, %(body)s, %(detected_usta_text)s, 'manual')
+                     %(subject)s, %(body)s, %(detected_usta_text)s, %(detected_reason)s,
+                     %(detected_division)s, %(detected_events)s,
+                     %(detected_name_pairs)s::jsonb,
+                     %(detected_avoid_day)s, %(detected_avoid_time)s, TRUE,
+                     'manual')
                 RETURNING id
                 """,
                 params,
             )
             new_id = cur.fetchone()["id"]
             cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (new_id,))
-            row = cur.fetchone()
-            row["body"] = _dec_body(row.get("body"))
-            return row
+            return _finalize_email_row(cur, cur.fetchone())
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="an email with this message_id already exists")
 
@@ -305,17 +320,21 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
                     WHEN %(classification)s <> 'pairing_avoidance' THEN NULL
                     WHEN %(detected_player_id)s::int IS NULL THEN NULL
                     ELSE detected_member_ids END
-            WHERE id = %(id)s RETURNING id
+            WHERE id = %(id)s RETURNING id, subject, body
             """,
             {**body.model_dump(), "id": email_id},
         )
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="email not found")
+        # Classification / player change can flip which extractors apply
+        # (reason only on withdrawal, name-pairs on doubles, …).
+        _stamp_extracted_fields(
+            cur, email_id, row["subject"], _dec_body(row.get("body")),
+            body.classification, body.detected_player_id,
+        )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        out = cur.fetchone()
-        out["body"] = _dec_body(out.get("body"))
-        return out
+        return _finalize_email_row(cur, cur.fetchone())
 
 
 @router.post("/{email_id}/amends", response_model=EmailOut)
@@ -346,9 +365,7 @@ def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
             (target, email_id),
         )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        out = cur.fetchone()
-        out["body"] = _dec_body(out.get("body"))
-        return out
+        return _finalize_email_row(cur, cur.fetchone())
 
 
 @router.post("/{email_id}/apply-correction")
@@ -807,16 +824,6 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
         d, partner, member_ids = _detect_pair_for(cur, em["tournament_id"], em["subject"],
                                                    body_txt, em["from_address"],
                                                    em["classification"])
-        # Re-evaluate the parsed USTA #(s) too — the classification may have
-        # changed since import (e.g. now doubles -> keep BOTH numbers).
-        if em["classification"] in ("doubles", "pairing_avoidance"):
-            usta_text = ", ".join(extract_ustas(em["subject"], body_txt)) or None
-        else:
-            usta_text = extract_usta(em["subject"], body_txt)
-        cur.execute(
-            "UPDATE email_message SET detected_usta_text = %s WHERE id = %s",
-            (usta_text, email_id),
-        )
         cur.execute(
             "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
             "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s "
@@ -827,6 +834,12 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
              partner["detected_partner_id"], member_ids, email_id),
         )
         names = cur.fetchone()["member_names"]
+        # Re-stamp extracted text (USTA(s), name pairs, division, …) after
+        # detection — player presence affects withdrawal name-pair fallback.
+        _stamp_extracted_fields(
+            cur, email_id, em["subject"], body_txt, em["classification"],
+            d.get("detected_player_id"),
+        )
         return {"email_id": email_id, **d, **partner,
                 "detected_member_ids": member_ids, "detected_member_names": names}
 
@@ -848,14 +861,19 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
                             "detected_usta": None, "detected_player_name": None,
                             "match_kind": None})
                 continue
+            body_txt = _dec_body(em["body"])
             d, partner, member_ids = _detect_pair_for(cur, em["tournament_id"], em["subject"],
-                                                       _dec_body(em["body"]), em["from_address"],
+                                                       body_txt, em["from_address"],
                                                        em["classification"])
             cur.execute(
                 "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
                 "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s",
                 (d["detected_player_id"], d["match_kind"],
                  partner["detected_partner_id"], member_ids, em["id"]),
+            )
+            _stamp_extracted_fields(
+                cur, em["id"], em["subject"], body_txt, em["classification"],
+                d.get("detected_player_id"),
             )
             out.append({"email_id": em["id"], **d, **partner,
                         "detected_member_ids": member_ids})
@@ -899,13 +917,22 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
         for em in rows:
             if body.only_unclassified and em["classification"] != "unclassified":
                 continue
-            cls = classify(em["subject"], _dec_body(em.get("body")))
+            body_txt = _dec_body(em.get("body"))
+            cls = classify(em["subject"], body_txt)
             if cls == em["classification"]:
                 continue
             cur.execute(
                 "UPDATE email_message SET classification = %s WHERE id = %s",
                 (cls, em["id"]),
             )
+            # Classification drives which extractors apply — re-stamp now so the
+            # next list GET does not recompute (and withdrawal reason appears).
+            cur.execute(
+                "SELECT detected_player_id FROM email_message WHERE id = %s",
+                (em["id"],),
+            )
+            pid = cur.fetchone()["detected_player_id"]
+            _stamp_extracted_fields(cur, em["id"], em["subject"], body_txt, cls, pid)
             changed.append({"id": em["id"], "classification": cls})
             counts[cls] = counts.get(cls, 0) + 1
     return {"classified": len(changed), "changed": changed, "counts": counts}

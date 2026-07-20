@@ -5394,30 +5394,59 @@ let _inboxFilterInit = false;
 const _INBOX_PAGE = 200;  // server-side cap; search to reach older mail
 async function loadInbox() {
   if (!active) return;
-  // Fetch emails across tournaments (a true triage surface) but capped + with a
-  // SERVER-SIDE search (q matches subject/sender in SQL — body is encrypted, so
-  // it's metadata search). The Tournament column header-filter still narrows the
-  // loaded page client-side. Scales past the old "load every row" approach.
+  // Scope to the active tournament so search, paging, and unmatched counts
+  // agree with the status summary (and q hits the right rows). Server-side
+  // `q` matches subject/sender/classification/division/player/USTA text —
+  // body is encrypted, so it's metadata search only (D9).
   const q = (document.getElementById("inbox-search")?.value || "").trim();
-  const params = new URLSearchParams({ limit: String(_INBOX_PAGE) });
+  const params = new URLSearchParams({
+    limit: String(_INBOX_PAGE),
+    tournament_id: String(active.id),
+  });
   if (q) params.set("q", q);
   if (_inboxUnmatchedOnly) params.set("unmatched", "true");
-  const rows = await api(`/emails?${params}`);
+  // Need X-Total-Count for the "showing N of M" note — fetch directly.
+  _progress(1);
+  let rows = [], total = null;
+  try {
+    const res = await fetch("/api/emails?" + params.toString());
+    if (res.status === 401) {
+      document.dispatchEvent(new CustomEvent("auth-expired"));
+      throw new Error("not authenticated");
+    }
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { const b = await res.json(); if (b && b.detail) detail = b.detail; } catch (_) {}
+      throw new Error(_humanizeDetail(detail, `${res.status}`));
+    }
+    total = res.headers.get("X-Total-Count");
+    if (total != null) total = parseInt(total, 10);
+    rows = await res.json();
+  } finally {
+    _progress(-1);
+  }
   inboxGrid.setData(rows);
   const note = document.getElementById("inbox-search-note");
   if (note) {
-    note.textContent = rows.length >= _INBOX_PAGE
-      ? `showing the first ${_INBOX_PAGE} — refine the search to narrow`
-      : (q ? `${rows.length} match(es)` : "");
+    const n = rows.length;
+    const tot = Number.isFinite(total) ? total : null;
+    if (tot != null && tot > n) {
+      note.textContent = q
+        ? `showing ${n} of ${tot} match(es) — refine search to narrow`
+        : `showing ${n} of ${tot} — refine search to reach older mail`;
+    } else if (q) {
+      note.textContent = `${n} match(es)`;
+    } else if (tot != null) {
+      note.textContent = tot ? `${tot} in this tournament` : "";
+    } else {
+      note.textContent = "";
+    }
   }
-  // Default filters: status "new" + the active tournament. One-time for status
-  // (respect manual choice); the tournament filter re-applies each load so it
-  // tracks the active tournament as the TD switches between them.
+  // Default status filter "new" once; tournament is already server-scoped.
   if (!_inboxFilterInit) {
     _inboxFilterInit = true;
     try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
   }
-  try { inboxGrid.grid.setHeaderFilterValue("tournament_name", active.name || ""); } catch (_) {}
   _loadInboxStatusSummary();
 }
 // Inbox progress summary: counts of unfiled (new) / filed / need-follow-up for

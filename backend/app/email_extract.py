@@ -445,3 +445,70 @@ def extract_avoid_time(subject: str, body: str):
     if m:
         return m.group(1).lower()
     return None
+
+
+def _pair_name_key(s: str) -> str:
+    """Cheap de-dupe key for name-pair lists (not the roster matcher)."""
+    return re.sub(r"\s+", " ", (s or "").strip().lower())
+
+
+def compute_extracted_fields(
+    subject: str | None,
+    body: str | None,
+    classification: str | None,
+    *,
+    has_detected_player: bool = False,
+) -> dict:
+    """All list-time derived fields for one email (pure — no DB).
+
+    Stamped into email_message at write/detect/classify so GET /emails can
+    read columns instead of re-running extractors (performance D9).
+    """
+    cls = classification or "unclassified"
+    reason = (
+        extract_withdrawal_reason(subject or "", body or "")
+        if cls == "withdrawal" else None
+    )
+    division = extract_age_division(subject or "", body or "")
+    events = extract_events(subject or "", body or "")
+
+    if cls in ("doubles", "pairing_avoidance"):
+        usta_text = ", ".join(extract_ustas(subject, body)) or None
+        pairs = list(extract_name_usta_pairs(subject, body))
+        if len(pairs) < 2:
+            have = {_pair_name_key(p["name"]) for p in pairs}
+            names = (
+                extract_doubles_pair(subject, body)
+                if cls == "doubles"
+                else extract_names(subject, body)
+            )
+            if cls == "doubles":
+                names = [*names, *extract_surname_pair(subject)]
+            for nm in names:
+                key = _pair_name_key(nm)
+                if key and key not in have:
+                    pairs.append({"name": nm, "usta": None})
+                    have.add(key)
+        name_pairs = pairs[:4] or None
+    elif cls == "withdrawal" and not has_detected_player:
+        usta_text = extract_usta(subject, body)
+        nm = extract_withdraw_name(subject, body)
+        name_pairs = [{"name": nm, "usta": None}] if nm else None
+    else:
+        usta_text = extract_usta(subject, body)
+        name_pairs = None
+
+    is_sched = cls == "scheduling_avoidance"
+    return {
+        "detected_usta_text": usta_text,
+        "detected_reason": reason,
+        "detected_division": division,
+        "detected_events": events,
+        "detected_name_pairs": name_pairs,
+        "detected_avoid_day": (
+            extract_avoid_day(subject or "", body or "") if is_sched else None
+        ),
+        "detected_avoid_time": (
+            extract_avoid_time(subject or "", body or "") if is_sched else None
+        ),
+    }

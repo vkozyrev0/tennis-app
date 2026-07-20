@@ -21,8 +21,9 @@ from typing import Any
 import psycopg
 
 from .crypto import encrypt as _enc_body
-from .email_extract import extract_usta
+from .email_extract import compute_extracted_fields
 from .triage import classify
+import json
 
 _MSG_ID_RE = re.compile(r"<([^>]+)>")
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -309,7 +310,13 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
         classification = classify(payload.subject, payload.body) or "unclassified"
 
     enc_body = _enc_body(payload.body)
-    usta_text = extract_usta(payload.subject, payload.body)
+    fields = compute_extracted_fields(
+        payload.subject, payload.body, classification, has_detected_player=False,
+    )
+    pairs_json = (
+        json.dumps(fields["detected_name_pairs"])
+        if fields["detected_name_pairs"] is not None else None
+    )
     received_at = payload.received_at  # None → DB default now()
 
     if payload.message_id:
@@ -334,17 +341,27 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
                 """
                 INSERT INTO email_message (
                     tournament_id, message_id, from_address, to_address,
-                    subject, body, classification, status, detected_usta_text,
+                    subject, body, classification, status,
+                    detected_usta_text, detected_reason, detected_division,
+                    detected_events, detected_name_pairs, detected_avoid_day,
+                    detected_avoid_time, detected_text_ready,
                     ingest_source, received_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, 'new', %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, 'new',
+                    %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
+                    %s, %s
                 )
                 RETURNING id, tournament_id, classification, status, message_id
                 """,
                 (
                     tournament_id, payload.message_id, payload.from_address,
                     payload.to_address, payload.subject, enc_body,
-                    classification, usta_text, payload.ingest_source, received_at,
+                    classification,
+                    fields["detected_usta_text"], fields["detected_reason"],
+                    fields["detected_division"], fields["detected_events"],
+                    pairs_json, fields["detected_avoid_day"],
+                    fields["detected_avoid_time"],
+                    payload.ingest_source, received_at,
                 ),
             )
         else:
@@ -352,17 +369,27 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
                 """
                 INSERT INTO email_message (
                     tournament_id, message_id, from_address, to_address,
-                    subject, body, classification, status, detected_usta_text,
+                    subject, body, classification, status,
+                    detected_usta_text, detected_reason, detected_division,
+                    detected_events, detected_name_pairs, detected_avoid_day,
+                    detected_avoid_time, detected_text_ready,
                     ingest_source
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, 'new', %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, 'new',
+                    %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
+                    %s
                 )
                 RETURNING id, tournament_id, classification, status, message_id
                 """,
                 (
                     tournament_id, payload.message_id, payload.from_address,
                     payload.to_address, payload.subject, enc_body,
-                    classification, usta_text, payload.ingest_source,
+                    classification,
+                    fields["detected_usta_text"], fields["detected_reason"],
+                    fields["detected_division"], fields["detected_events"],
+                    pairs_json, fields["detected_avoid_day"],
+                    fields["detected_avoid_time"],
+                    payload.ingest_source,
                 ),
             )
     except psycopg.errors.UniqueViolation:

@@ -30,14 +30,18 @@ assemble in Python. Never put `cur.execute` inside a row loop. The dashboard
 digest (`routers/dashboard.py`) is already a good model — 5 `GROUP BY` queries +
 Python assembly, no per-row SQL.
 
+### Fixed — inbox detected-text stamp (D9, 2026-07-19)
+Migration **0051** adds `detected_reason` / `detected_division` /
+`detected_events` / `detected_name_pairs` / `detected_avoid_day` /
+`detected_avoid_time` + `detected_text_ready`. Pure
+`email_extract.compute_extracted_fields` runs on create / update / detect /
+bulk-classify / ingest / PDF import; list GETs **read columns** and only
+lazy-stamp when `detected_text_ready` is false (legacy rows). Body is still
+decrypted for the detail pane. Search also matches classification, division,
+and player name. Frontend inbox scopes to the active tournament and shows
+`X-Total-Count` ("N of M").
+
 ### Known follow-ups (not yet done)
-- **Emails list** (`routers/emails.py::list_emails`) decrypts the body and runs
-  6–10 regex extractor passes **per row** on every inbox load, and the list is
-  unpaged by default. Persist the derived fields (`detected_division`,
-  `detected_events`, `detected_reason`, `detected_name_pairs`, avoid day/time) at
-  write/detect time — the way `detected_usta_text` already is — and read the
-  columns instead of recomputing. Also page the list (the grid already supports
-  `X-Total-Count`). And move the lazy `UPDATE` backfill out of the GET handler.
 - **`payroll.finalize_all` / `assignment_invite_texts`** still loop the single
   `_summary`; batch them with `_summaries` (and `executemany` the inserts).
 
