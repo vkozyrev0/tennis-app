@@ -36,6 +36,8 @@ Severity: **H** high · **M** medium · **L** low
 | D5 | Assignment `site_id` not tournament-scoped (API) | ✅ 2026-07-19 — `_check_assignment_refs` on create/update/bulk |
 | D6 | Assignment `room_block_id` not tournament-scoped (API) | ✅ 2026-07-19 — same helper |
 | D9 | Inbox list re-ran extractors per row | ✅ 2026-07-19 — migration 0051 stamp + column reads; search/paging UX |
+| E1 | Day-of defaults to today outside play window (empty venue) | ✅ 2026-07-19 — default/snap to play_start; "Jump to play start" |
+| E2 | Official profile Save wiped lat/lng (no form fields) | ✅ 2026-07-19 — cache geo from /me and re-send on PUT |
 | — | Day-of L1 left previous panel on screen | ✅ 2026-07-19 — `activateGroup` always activates a tab |
 | — | Email auto-ingest app side (D4) | ✅ 2026-07-19 — migration 0050 + webhook; provider wiring still external |
 

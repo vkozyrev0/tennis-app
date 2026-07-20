@@ -1410,6 +1410,9 @@ _tstate.onChange(({ active: next, prev }) => {
   // data — close any open detail + reset workspace forms. Toast the transition.
   closeOpenDetail();
   document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
+  // Day-of keeps a sticky calendar date; reset so the next load picks a
+  // default inside the new tournament's play window (not yesterday's event).
+  if (typeof _DAYOF !== "undefined") _DAYOF.date = null;
   if (next) toast(`Switched to ${next.name}`, true);
   else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
   refreshNavCounts();  // repaint the per-tab + Inbox badges for the new tournament
@@ -3425,13 +3428,33 @@ function _shiftIso(iso, days) {
   return _isoLocal(d);                       // format local — no UTC round-trip
 }
 
+function _dayOfDefaultDate(tournament) {
+  // Prefer today when the event is live; otherwise open on play_start so the
+  // TD doesn't land on an empty "outside play window" day with every site red
+  // (walkthrough 2026-07-19: Macon 7/9–7/12 opened as empty on 7/19).
+  const today = _todayIso();
+  if (!tournament) return today;
+  const start = tournament.play_start_date;
+  const end = tournament.play_end_date;
+  if (start && end && today >= start && today <= end) return today;
+  return start || today;
+}
+
 async function loadDayOf() {
   if (!active) return;
-  if (!_DAYOF.date) _DAYOF.date = _todayIso();
+  if (!_DAYOF.date) _DAYOF.date = _dayOfDefaultDate(active);
   _wireDayOf();
   let d;
   try { d = await api(`/tournaments/${active.id}/day-of?on=${_DAYOF.date}`); }
   catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
+  // If we still landed outside the window (e.g. sticky date from another
+  // tournament) and the API reports play dates, snap once to play_start.
+  if (!d.in_window && d.play_start_date && _DAYOF.date !== d.play_start_date
+      && !(_DAYOF.date >= d.play_start_date && _DAYOF.date <= d.play_end_date)) {
+    _DAYOF.date = d.play_start_date;
+    try { d = await api(`/tournaments/${active.id}/day-of?on=${_DAYOF.date}`); }
+    catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
+  }
   _dayofData = d;
   try {
     _renderDayOfHead(d);
@@ -3457,6 +3480,7 @@ function _renderDayOfHead(d) {
       </div>
       <button type="button" class="dayof-step touch-btn" data-step="1" aria-label="Next day">▶</button>
       ${isToday ? "" : raw('<button type="button" class="dayof-today btn-small">Jump to today</button>')}
+      ${(!d.in_window && d.play_start_date) ? raw(`<button type="button" class="dayof-playstart btn-small" data-date="${d.play_start_date}">Jump to play start</button>`) : ""}
     </div>`;
 }
 
@@ -3568,6 +3592,12 @@ function _wireDayOf() {
   panel.addEventListener("click", async (e) => {
     const step = e.target.closest(".dayof-step");
     if (step) { _DAYOF.date = _shiftIso(_DAYOF.date, Number(step.dataset.step)); loadDayOf(); return; }
+    const playStart = e.target.closest(".dayof-playstart");
+    if (playStart && playStart.dataset.date) {
+      _DAYOF.date = playStart.dataset.date;
+      loadDayOf();
+      return;
+    }
     if (e.target.closest(".dayof-today")) { _DAYOF.date = _todayIso(); loadDayOf(); return; }
 
     const chk = e.target.closest(".dayof-present, .dayof-noshow");
@@ -8037,16 +8067,23 @@ let meTournaments = [];
 async function officialInit() {
   const me = await api("/me");
   const o = me.official || {};
+  _meOfficialGeo = { lat: o.lat ?? null, lng: o.lng ?? null };
   for (const el of document.getElementById("me-form").elements) {
     if (el.name) el.value = o[el.name] == null ? "" : o[el.name];
   }
   meTournaments = await api("/me/tournaments");
   const sel = document.getElementById("me-tournament");
   sel.innerHTML = "";
-  for (const t of meTournaments) {
+  if (!meTournaments.length) {
     const op = document.createElement("option");
-    op.value = t.id; op.textContent = `${t.name} (${t.play_start_date} → ${t.play_end_date})`;
+    op.value = ""; op.textContent = "— no tournaments yet —";
     sel.appendChild(op);
+  } else {
+    for (const t of meTournaments) {
+      const op = document.createElement("option");
+      op.value = t.id; op.textContent = `${t.name} (${t.play_start_date} → ${t.play_end_date})`;
+      sel.appendChild(op);
+    }
   }
   await loadMyAvailability();
   await loadMyAssignments();
@@ -8228,6 +8265,9 @@ const _ME_PROFILE_FIELDS = [
   "first_name", "last_name", "street", "city", "state", "zip",
   "phone", "email", "dietary_restrictions", "lat", "lng",
 ];
+// Cached from last /me load so a profile Save that only posts form fields
+// cannot null out geocoded lat/lng (walkthrough: form has no lat/lng inputs).
+let _meOfficialGeo = { lat: null, lng: null };
 onSubmit(document.getElementById("me-form"), async (e) => {
   const b = {};
   for (const el of e.target.elements) {
@@ -8235,8 +8275,13 @@ onSubmit(document.getElementById("me-form"), async (e) => {
     if (!_ME_PROFILE_FIELDS.includes(el.name)) continue;  // ignore stray inputs
     b[el.name] = el.value === "" ? null : el.value;
   }
-  try { await api("/me/profile", { method: "PUT", body: JSON.stringify(b) }); setMsg("me-msg", "saved", true); }
-  catch (err) { setMsg("me-msg", err.message, false); }
+  // Preserve coordinates the form doesn't expose.
+  if (b.lat == null) b.lat = _meOfficialGeo.lat;
+  if (b.lng == null) b.lng = _meOfficialGeo.lng;
+  try {
+    await api("/me/profile", { method: "PUT", body: JSON.stringify(b) });
+    setMsg("me-msg", "saved", true);
+  } catch (err) { setMsg("me-msg", err.message, false); }
 });
 document.getElementById("me-tournament").addEventListener("change", loadMyAvailability);
 document.getElementById("me-avail-save").addEventListener("click", async () => {
