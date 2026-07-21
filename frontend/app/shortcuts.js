@@ -14,6 +14,11 @@ export function showShortcuts() {
           <tr><th><kbd>1</kbd>-<kbd>9</kbd></th><td>Jump to the Nth tab in the current menu</td></tr>
           <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
           <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
+          <tr><th colspan="2" style="padding-top:0.6rem;color:var(--muted);font-weight:600">Inbox</th></tr>
+          <tr><th><kbd>t</kbd></th><td>Triage selected emails (classify → detect → file)</td></tr>
+          <tr><th><kbd>d</kbd></th><td>Detect players (selection, or all unmatched if none)</td></tr>
+          <tr><th><kbd>f</kbd></th><td>Mark selected emails filed</td></tr>
+          <tr><th><kbd>u</kbd></th><td>Toggle “Unmatched only”</td></tr>
         </tbody></table>
         <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
       </div>`;

@@ -790,14 +790,15 @@ export function createInboxPanel(ctx) {
     _inboxDetailId = null;
     document.getElementById("inbox-detail").hidden = true;
   }
-  // Esc closes the modal when it's open and the user isn't typing in a field
-  // inside it (where Esc means "cancel edit", handled by the input itself).
+  // Esc closes the detail modal — but not while focus is in a form control
+  // (so Esc can cancel a combobox/list edit first). A second Esc then closes.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     const box = document.getElementById("inbox-detail");
     if (!box || box.hidden) return;
-    // Don't fight with the input — only swallow Esc if focus isn't inside the
-    // body pre (which is tabindex=0 + focusable but has no edit mode).
+    const a = document.activeElement;
+    if (a && box.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    e.preventDefault();
     _closeInboxDetail();
   });
   // Click on the backdrop (outside the modal-box) also closes.
@@ -951,16 +952,24 @@ export function createInboxPanel(ctx) {
     } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
     finally { btn.disabled = false; }
   });
-  document.getElementById("inbox-bulk-detect").addEventListener("click", async () => {
+  document.getElementById("inbox-bulk-detect").addEventListener("click", async (ev) => {
     if (!_inboxSelected.size) return;
+    const btn = ev.currentTarget;
+    btn.disabled = true;
     try {
       const res = await api("/emails/bulk/detect-players", {
         method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
       });
       const hits = res.filter((r) => r.detected_player_id).length;
-      setMsg("inbox-bulk-msg", `detected ${hits} of ${res.length}`, true);
+      const miss = res.length - hits;
+      setMsg("inbox-bulk-msg", `detected ${hits} of ${res.length}` + (miss ? ` · ${miss} still unmatched` : ""), true);
+      toast(miss
+        ? `Matched ${hits}/${res.length} — ${miss} still unmatched (toggle “Unmatched only” to focus them)`
+        : `Matched all ${hits} selected email(s)`, !miss);
       await loadInbox();
+      _inboxBulkRefreshUi();
     } catch (e) { setMsg("inbox-bulk-msg", e.message, false); }
+    finally { btn.disabled = false; }
   });
   // "Unmatched only" drilldown: a SERVER-SIDE filter (unmatched=true) so it's
   // accurate across the whole inbox, not just the loaded page — the TD works
@@ -973,20 +982,30 @@ export function createInboxPanel(ctx) {
   // One-click "Detect players" over the whole inbox: runs the detector on every
   // loaded email that has no matched player yet (and an assigned tournament — the
   // detector needs a roster). No row selection required.
-  document.getElementById("inbox-detect-all").addEventListener("click", async () => {
+  document.getElementById("inbox-detect-all").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const ids = inboxGrid.grid.getData()
       .filter((m) => !m.detected_player_id && m.tournament_id)
       .map((m) => m.id);
     if (!ids.length) { setMsg("inbox-import-pdf-msg", "every inbox email already has a matched player", true); return; }
+    btn.disabled = true;
     setMsg("inbox-import-pdf-msg", `detecting players for ${ids.length} email(s)…`, true);
     try {
       const res = await api("/emails/bulk/detect-players", {
         method: "POST", body: JSON.stringify({ email_ids: ids }),
       });
       const hits = res.filter((r) => r.detected_player_id).length;
-      setMsg("inbox-import-pdf-msg", `matched ${hits} of ${ids.length} unmatched email(s)`, true);
+      const miss = ids.length - hits;
+      setMsg("inbox-import-pdf-msg",
+        `matched ${hits} of ${ids.length} unmatched email(s)` + (miss ? ` · ${miss} still open` : ""), true);
+      if (miss) {
+        toast(`Still ${miss} unmatched — click the “N unmatched” summary chip or enable Unmatched only`, true);
+      } else {
+        toast(`Matched all ${hits} previously unmatched email(s)`, true);
+      }
       await loadInbox();
     } catch (e) { setMsg("inbox-import-pdf-msg", e.message, false); }
+    finally { btn.disabled = false; }
   });
   // Retention sweep (PII hardening H3 / COPPA §312.10): redact body/subject/sender
   // of FILED emails past the threshold via POST /api/emails/purge. The provenance
@@ -1096,9 +1115,11 @@ export function createInboxPanel(ctx) {
     }
   });
   // One-click triage: classify → detect players → populate, in a single request.
-  document.getElementById("inbox-bulk-triage").addEventListener("click", async (ev) => {
+  async function _inboxRunTriage(ev) {
     if (!_inboxSelected.size) return;
-    const btn = ev.currentTarget;
+    const btn = ev && ev.currentTarget
+      ? ev.currentTarget
+      : document.getElementById("inbox-bulk-triage");
     if (!(await confirmDialog(
       `Triage ${_inboxSelected.size} selected email(s)?\n\nThis will, in one pass:\n` +
       `  1. auto-classify the unclassified ones (local rules)\n` +
@@ -1106,7 +1127,7 @@ export function createInboxPanel(ctx) {
       `  3. file the fileable ones into their lists\n\n` +
       `Doubles / pairing emails and any without a detected player are left for manual filing.`,
       "Triage all", "primary"))) return;
-    btn.disabled = true;
+    if (btn) btn.disabled = true;
     try {
       const res = await api("/emails/bulk/triage", {
         method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
@@ -1117,16 +1138,65 @@ export function createInboxPanel(ctx) {
       const summary = `Triaged: classified ${res.classified}, matched ${res.detected}, filed ${res.filed}${skippedMsg}`;
       setMsg("inbox-bulk-msg", summary, res.skipped.length === 0);
       toast(summary, res.skipped.length === 0);
-      _inboxSelected.clear();
+      // Keep selection of rows that still need work (skipped) so the TD can
+      // continue with Detect / Add to roster without re-selecting.
+      if (res.skipped && res.skipped.length) {
+        const keep = new Set(res.skipped.map((s) => s.id));
+        for (const id of [..._inboxSelected]) {
+          if (!keep.has(id)) _inboxSelected.delete(id);
+        }
+      } else {
+        _inboxSelected.clear();
+      }
       await loadInbox();
       _inboxBulkRefreshUi();
     } catch (e) {
       setMsg("inbox-bulk-msg", e.message, false);
       toast(e.message, false);
     } finally {
-      btn.disabled = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+  document.getElementById("inbox-bulk-triage").addEventListener("click", _inboxRunTriage);
+
+  // Inbox-panel shortcuts (when not typing in a field):
+  //   t = triage selection · d = detect selection (or detect-all if none)
+  //   f = mark filed · u = toggle unmatched-only · / = search (global)
+  document.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    const panel = document.getElementById("panel-t-inbox");
+    if (!panel || !panel.classList.contains("active")) return;
+    const a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "button" && a.type !== "checkbox") return;
+    // Detail modal owns its own keys.
+    const detail = document.getElementById("inbox-detail");
+    if (detail && !detail.hidden) return;
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (k === "t") {
+      if (!_inboxSelected.size) {
+        toast("Select one or more emails first (checkboxes), then press T to triage", false);
+        return;
+      }
+      e.preventDefault();
+      _inboxRunTriage(null);
+    } else if (k === "d") {
+      e.preventDefault();
+      if (_inboxSelected.size) {
+        document.getElementById("inbox-bulk-detect")?.click();
+      } else {
+        document.getElementById("inbox-detect-all")?.click();
+      }
+    } else if (k === "f") {
+      if (!_inboxSelected.size) return;
+      e.preventDefault();
+      document.getElementById("inbox-bulk-filed")?.click();
+    } else if (k === "u") {
+      e.preventDefault();
+      const cb = document.getElementById("inbox-unmatched-only");
+      if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); }
     }
   });
+
   // Populate the tournament dropdown lazily — once when the panel opens.
   _inboxPopulateTournamentDropdown();
   let _inboxFilterInit = false;

@@ -137,8 +137,8 @@ export function createAvailabilityPanel(ctx) {
     let g;
     try { g = await api(`/tournaments/${getActive().id}/availability/grid`); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
-    if (!g.days.length) { box.innerHTML = '<p class="muted">This tournament has no play-date window set.</p>'; return; }
-    if (!g.officials.length) { box.innerHTML = '<p class="muted">No availability declared and nobody assigned yet.</p>'; return; }
+    if (!g.days.length) { box.innerHTML = hstr`<p class="muted">This tournament has no play-date window set.</p>`; return; }
+    if (!g.officials.length) { box.innerHTML = hstr`<p class="muted">No availability declared and nobody assigned yet.</p>`; return; }
     const head = `<th class="hm-name">Official</th>` +
       g.days.map((d) => hstr`<th class="hm-day">${fmtDOW(d)}</th>`).join("");
     const body = g.officials.map((o) => {

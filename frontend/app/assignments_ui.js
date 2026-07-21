@@ -128,9 +128,7 @@ export function createAssignmentsPanel(ctx) {
         .map((oid) => (getOfficialsById()[oid] ? officialLabel(getOfficialsById()[oid]) : `#${oid}`))
         .sort();
       nudge.hidden = false;
-      nudge.innerHTML = `⚠ ${availableUnassigned.length} available official(s) not yet assigned: ` +
-        `<strong>${names.map(esc).join("; ")}</strong>. ` +
-        `<a href="#" id="asg-nudge-link">Open Availability →</a>`;
+      nudge.innerHTML = html`⚠ ${String(availableUnassigned.length)} available official(s) not yet assigned: <strong>${names.join("; ")}</strong>. <a href="#" id="asg-nudge-link">Open Availability →</a>`;
       const link = document.getElementById("asg-nudge-link");
       if (link) link.addEventListener("click", (e) => {
         e.preventDefault();
@@ -197,7 +195,7 @@ export function createAssignmentsPanel(ctx) {
     const summary = document.querySelector("#asg-bulk > summary");
     if (summary) summary.textContent = `＋ Invite several officials at once (${candidates.length} available)`;
     if (!candidates.length) {
-      box.innerHTML = '<p class="muted">Every official is already assigned to this tournament.</p>';
+      box.innerHTML = hstr`<p class="muted">Every official is already assigned to this tournament.</p>`;
     } else {
       box.innerHTML = candidates.map((o) => {
         const n = (availByOfficial[o.id] || []).length;
@@ -319,9 +317,7 @@ export function createAssignmentsPanel(ctx) {
       chase = ` · <a href="${href}" class="chase-link">✉ Email ${pendingEmails.length} pending</a>`;
     }
     const sum = document.getElementById("asg-resp-summary");
-    sum.innerHTML = `${counts.all} assigned · <span class="resp-ok">${counts.accepted} accepted</span> · ` +
-      `${counts.pending} pending · <span class="${counts.declined ? "resp-bad" : ""}">${counts.declined} declined</span>` +
-      (counts.declined ? " — needs re-staffing" : "") + chase;
+    sum.innerHTML = html`${String(counts.all)} assigned · <span class="resp-ok">${String(counts.accepted)} accepted</span> · ${String(counts.pending)} pending · <span class="${counts.declined ? "resp-bad" : ""}">${String(counts.declined)} declined</span>${counts.declined ? " — needs re-staffing" : ""}${raw(chase)}`;
     document.getElementById("asg-respbar").hidden = false;
     // Reflect counts on the filter chips + active state.
     document.querySelectorAll("#asg-respbar .chip-toggle").forEach((btn) => {
@@ -492,7 +488,7 @@ export function createAssignmentsPanel(ctx) {
     // here instead of switching to the Distances tab.
     if (a.missing_distance && a.site_id) {
       const fix = document.createElement("div"); fix.className = "add-day";
-      fix.innerHTML = '<span class="muted">No mileage on file — </span>';
+      fix.innerHTML = hstr`<span class="muted">No mileage on file — </span>`;
       const mi = document.createElement("input");
       mi.type = "number"; mi.min = "0"; mi.step = "0.1"; mi.placeholder = "one-way miles";
       mi.style.maxWidth = "9rem";
@@ -546,7 +542,7 @@ export function createAssignmentsPanel(ctx) {
       x.addEventListener("click", async () => { try { await api(`/assignment-days/${d.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); } });
       chip.appendChild(x); days.appendChild(chip);
     }
-    if (!a.days.length) days.innerHTML = '<span class="muted">No days assigned yet.</span>';
+    if (!a.days.length) days.innerHTML = hstr`<span class="muted">No days assigned yet.</span>`;
     card.appendChild(days);
 
     // Add days: a labelled certification dropdown + the official's available days
@@ -579,10 +575,10 @@ export function createAssignmentsPanel(ctx) {
           pickWrap.appendChild(lbl);
         }
       } else {
-        pickWrap.innerHTML = '<span class="muted">all available days added</span>';
+        pickWrap.innerHTML = hstr`<span class="muted">all available days added</span>`;
       }
     } else {
-      pickWrap.innerHTML = '<span class="muted">no availability set — </span>';
+      pickWrap.innerHTML = hstr`<span class="muted">no availability set — </span>`;
       manualIn = document.createElement("input"); manualIn.type = "date";
       manualIn.setAttribute("aria-label", "Work date to add");
       pickWrap.appendChild(manualIn);
