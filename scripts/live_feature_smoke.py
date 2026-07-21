@@ -15,6 +15,7 @@ parallel login storms can trip the process-local throttle.
 """
 from __future__ import annotations
 
+import os
 import sys
 import uuid
 from datetime import date, timedelta
@@ -26,6 +27,9 @@ except ImportError:
     sys.exit(2)
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+# Prefer ADMIN_PASSWORD when the live DB was hardened; fall back to POC default.
+ADMIN_USER = os.environ.get("COURTOPS_ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or os.environ.get("COURTOPS_ADMIN_PASSWORD") or "admin"
 c = httpx.Client(base_url=BASE, timeout=30.0, follow_redirects=True)
 ok = fail = 0
 
@@ -77,6 +81,10 @@ def main() -> int:
     check("official loadMyPay after respond", "loadMyPay" in offjs and "respond" in offjs)
     asgjs = c.get("/app/assignments_ui.js").text
     check("assignments nologin nav", "activateGroup" in asgjs and "panel-officials" in asgjs)
+    inboxjs = c.get("/app/inbox.js").text
+    check("inbox triage shortcut", 'k === "t"' in inboxjs or "k === 't'" in inboxjs)
+    check("inbox unmatched shortcut", 'k === "u"' in inboxjs or "k === 'u'" in inboxjs)
+    check("inbox add-to-roster wiring", "rosterAddFromEmail" in inboxjs)
     appjs = c.get("/app.js").text
     for name in (
         "installGlobalSearch",
@@ -90,8 +98,17 @@ def main() -> int:
     # 3) Admin session
     h = c.get("/api/health").json()
     check("health", h.get("status") == "ok" and h.get("db") == "ok", str(h))
-    r = c.post("/api/auth/login", json={"username": "admin", "password": "admin"})
-    check("admin login", r.status_code == 200, r.text[:120])
+    r = c.post("/api/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASSWORD})
+    check("admin login", r.status_code == 200, r.text[:120] if r.status_code != 200 else ADMIN_USER)
+    if r.status_code != 200:
+        print(
+            "HINT: set ADMIN_PASSWORD (or COURTOPS_ADMIN_PASSWORD) to the live "
+            "admin password if this DB is not the POC default admin/admin",
+            file=sys.stderr,
+        )
+        print("---")
+        print(f"SUMMARY: {ok} passed, {fail} failed (stopped at login)")
+        return 1
     me = c.get("/api/auth/me").json()
     check("admin me", me.get("role") == "admin")
 

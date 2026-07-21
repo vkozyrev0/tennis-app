@@ -77,6 +77,21 @@ crew, a full roster, lodging, an active inbox, and a few problems to resolve —
 every screen opens to lifelike activity. Official demo logins use password
 `official` (e.g. `jwhitfield`). `reset_demo.py` restores just the lean baseline.
 
+## Live scripts (server must be running)
+
+Prefer **one at a time** (parallel logins trip the process-local throttle):
+
+```bash
+# Optional if the live DB is not admin/admin:
+#   set ADMIN_PASSWORD=…   (PowerShell: $env:ADMIN_PASSWORD="...")
+backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py
+backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py
+backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py
+```
+
+See [docs/deploy.md](docs/deploy.md) §6 (readiness checklist) and
+[docs/email-ingest.md](docs/email-ingest.md) (provider wiring checklist).
+
 ## Tests
 
 ```bash

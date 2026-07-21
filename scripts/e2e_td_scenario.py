@@ -27,11 +27,19 @@ import argparse
 import http.cookiejar
 import io
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 import uuid
 from datetime import date, timedelta
+
+ADMIN_USER = os.environ.get("COURTOPS_ADMIN_USER", "admin")
+ADMIN_PASSWORD = (
+    os.environ.get("ADMIN_PASSWORD")
+    or os.environ.get("COURTOPS_ADMIN_PASSWORD")
+    or "admin"
+)
 
 # Windows consoles default to cp1252, which can't encode the ✓/✗/⚑ glyphs;
 # force UTF-8 (replace as a last resort) so the report renders anywhere.
@@ -239,8 +247,13 @@ def run(base_url: str):
     phase("P0 — Connect & authenticate")
     s, _ = c.get("/api/health")
     check("server health reachable", s == 200, f"HTTP {s}")
-    s, body = c.post("/api/auth/login", {"username": "admin", "password": "admin"})
+    s, body = c.post("/api/auth/login", {"username": ADMIN_USER, "password": ADMIN_PASSWORD})
     if not check("admin login", s == 200, f"HTTP {s}: {body}"):
+        print(
+            "HINT: set ADMIN_PASSWORD (or COURTOPS_ADMIN_PASSWORD) if the live "
+            "DB is not the POC default admin/admin",
+            file=sys.stderr,
+        )
         raise SystemExit("Cannot continue without an admin session.")
 
     # ---- P1: setup catalog (sites, hotel, room block) -----------------------

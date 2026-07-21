@@ -112,3 +112,36 @@ It ships with `admin / admin` and a bundled single-container DB — POC only.
 - Keep deployments short-lived/unlisted while it's a demo.
 - For anything real, split out a managed Postgres (point the `PG*` env vars at it)
   per `design.md` §11 rather than relying on the bundled DB.
+
+## 6. Deploy readiness checklist (real junior event)
+
+Gate each box before under-13 / shared-host use. Code already enforces several
+of these when `ENV=prod` (boot guard, session Secure cookie, 7d sessions,
+`must_change_password` on default admin, ingest query-token ban).
+
+| # | Check | How |
+|---|--------|-----|
+| 1 | `ENV=prod` | Refuse default superuser DB role / missing TLS expectations via `settings.validate()` |
+| 2 | Non-default admin password | `ADMIN_PASSWORD` secret (container) or change password on first login |
+| 3 | Real Fernet key(s) | `PII_ENCRYPTION_KEY` and optional `PII_ENCRYPTION_KEYS` (rotation) — not the dev default |
+| 4 | TLS at the edge | Fly/Render HTTPS or Caddy + Let’s Encrypt (see §2) |
+| 5 | Dedicated Postgres | Prefer managed PG + `PG*` env vars over the baked single-container DB for anything persistent |
+| 6 | Disk / secret manager | Keys and DB password in platform secrets; volume encryption where available |
+| 7 | Ingest hardened | `INGEST_TOKEN` set; do not set `INGEST_ALLOW_QUERY_TOKEN` in prod ([email-ingest.md](email-ingest.md)) |
+| 8 | COPPA policy | Read [coppa-policy.md](coppa-policy.md); only set `ALLOW_UNDER13_PII=1` if intentional |
+| 9 | Export gate | TD accounts that export minors’ PII need `can_export_pii` + confirm |
+| 10 | Smoke after deploy | `scripts/live_feature_smoke.py` with `ADMIN_PASSWORD=…` against the public URL |
+
+### Live scripts (dev or staged host)
+
+```bash
+# Prefer sequential runs — parallel logins trip the process-local throttle (D14).
+set ADMIN_PASSWORD=your-password   # PowerShell: $env:ADMIN_PASSWORD="..."
+backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py https://your.host
+backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py https://your.host
+backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url https://your.host
+```
+
+Still **deferred** until multi-user/multi-instance: DB connection pool (D13),
+cluster-safe login throttle (D14), explicit CSRF tokens (D18 — SameSite=Strict
+SPA is enough for same-origin).

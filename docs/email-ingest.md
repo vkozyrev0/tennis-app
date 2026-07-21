@@ -148,3 +148,22 @@ curl -sS -X POST http://localhost:8000/api/ingest/email \
 
 Then open the Inbox tab — the message should appear with classification
 `late_entry` (keyword suggest) and status `new`.
+
+## Wiring checklist (next real event)
+
+App-side ingest is **done** (webhook, tournament routing, Fernet body, prod
+query-token ban). What is still **outside** the repo:
+
+| Step | Owner | Notes |
+|------|--------|--------|
+| 1. Public HTTPS origin | Hosting | Fly / Render / Caddy + domain (see [deploy.md](deploy.md)) |
+| 2. `INGEST_TOKEN` secret | Hosting | `secrets.token_urlsafe(32)`; never commit |
+| 3. Tournament **Ingest address** | TD | Setup → Tournaments, e.g. `macon2026@inbox.example.com` |
+| 4. Provider receive route | Mail | Mailgun route / SendGrid Inbound Parse / CF Worker → `POST …/api/ingest/email` or `/form` |
+| 5. Prefer header auth | Mail | `Authorization: Bearer` or `X-Ingest-Token`; avoid `?token=` in prod |
+| 6. Do **not** set `INGEST_ALLOW_QUERY_TOKEN` in prod | Hosting | Unless a provider cannot send headers |
+| 7. Smoke one message | TD | Confirm Inbox row + classification chip |
+| 8. Human triage | TD | Classify → detect → file (shortcuts `t`/`d`/`f`/`u` on Inbox) |
+
+**Out of scope until approved:** LLM auto-triage, full mailbox IMAP poll, sending
+outbound invite email from CourtOps (mailto / copy-text remain the path).

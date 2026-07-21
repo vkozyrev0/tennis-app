@@ -5,6 +5,7 @@ Usage (server must be running):
 """
 from __future__ import annotations
 
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -16,6 +17,8 @@ except ImportError:
     sys.exit(2)
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+ADMIN_USER = os.environ.get("COURTOPS_ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or os.environ.get("COURTOPS_ADMIN_PASSWORD") or "admin"
 findings: list[tuple[bool, str, str]] = []
 
 
@@ -32,8 +35,13 @@ def main() -> int:
     h = c.get("/api/health").json()
     check("health db ok", h.get("db") == "ok", str(h))
 
-    r = c.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    r = c.post("/api/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASSWORD})
     check("admin login", r.status_code == 200, r.text[:200])
+    if r.status_code != 200:
+        print(
+            "HINT: set ADMIN_PASSWORD if the live DB is not admin/admin",
+            file=sys.stderr,
+        )
 
     for path in (
         "/api/tournaments",

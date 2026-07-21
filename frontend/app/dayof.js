@@ -107,7 +107,7 @@ export function createDayOfPanel(ctx) {
     const gaps = d.uncovered_sites.length
       ? hstr`<div class="dayof-gaps"><span class="dayof-gaps-l">No official today at:</span> ${
           d.uncovered_sites.map((s) => html`<span class="badge badge-warn">${s.site_label}</span>`)}</div>`
-      : (d.sites.length ? '<div class="dayof-gaps ok">✓ every site has an official today</div>' : "");
+      : (d.sites.length ? hstr`<div class="dayof-gaps ok">✓ every site has an official today</div>` : "");
     // Quick-assign: pick a role, find certified officials free that day, one tap
     // to fill. Reuses /coverage-candidates + /coverage-fill.
     const roleOpts = getCertPairs().map(([v, l]) => hstr`<option value="${v}">${l}</option>`).join("");
@@ -150,8 +150,9 @@ export function createDayOfPanel(ctx) {
     };
     const list = shown.length
       ? shown.map(card).join("")
-      : (d.officials.length ? '<p class="muted">No official matches the search.</p>'
-                            : '<p class="muted">No officials are scheduled to work this day.</p>');
+      : (d.officials.length
+          ? hstr`<p class="muted">No official matches the search.</p>`
+          : hstr`<p class="muted">No officials are scheduled to work this day. Use Quick-assign above or open Assignments.</p>`);
     box.innerHTML = hstr`<h3>Officials working <span class="muted">(${d.officials_count})</span></h3>
       <input type="search" class="dayof-search" placeholder="🔍 filter by name…" value="${_DAYOF.search}" aria-label="Filter officials by name" />
       <div class="dayof-off-list">${raw(list)}</div>`;
@@ -170,8 +171,9 @@ export function createDayOfPanel(ctx) {
             i.resolved ? raw(' · <span class="badge badge-ok">resolved</span>') : ""}</div>
         </div>
       </div>`;
-    const list = d.incidents.length ? d.incidents.map(row).join("")
-      : '<p class="muted">No incidents logged this day.</p>';
+    const list = d.incidents.length
+      ? d.incidents.map(row).join("")
+      : hstr`<p class="muted">No incidents logged this day — use the form below for weather, injury, facility, or conduct notes.</p>`;
     box.innerHTML = hstr`<h3>Incidents <span class="muted">(${d.incidents.length})</span></h3>
       <form class="dayof-inc-form" autocomplete="off">
         <div class="row">
