@@ -46,6 +46,22 @@ DOM-free node test files (independent of AG Grid):
 
 Run: `node frontend/app/<name>.test.mjs`.
 
+**Live server scripts** (server must already be up, e.g. uvicorn on `:8000`):
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/e2e_td_scenario.py` | Full TD workflow + manufactured challenges → readiness/dashboard/exports. |
+| `scripts/ux_walkthrough.py` | Admin + official portal API walk + static asset 200s. |
+| `scripts/live_feature_smoke.py` | SPA modules for changed D11 pages + day-of early_departure + official accept/pay. |
+
+```bash
+backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py
+backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py
+backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url http://127.0.0.1:8000
+```
+
+Run them **sequentially** (not in parallel) so login throttle does not 401 mid-suite.
+
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the
 E2E module — the auth router rotates sessions on every login per audit C3,

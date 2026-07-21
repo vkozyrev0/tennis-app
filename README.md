@@ -86,14 +86,19 @@ cd backend && python -m pytest -q                   # full suite (deterministic)
 `tests/test_td_e2e.py` walks the whole TD workflow at the API boundary.
 `tests/test_zz_*.py` are per-feature suites (sorted last to avoid login races).
 
-### End-to-end scenario (against a running server)
+### Live server scripts (uvicorn must already be running)
 
 ```bash
+backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py
+backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py
 backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py [--write-findings]
 ```
 
-An external driver that simulates a TD's workflow + the challenges they hit and
-checks each surfaces correctly. See [docs/e2e-findings.md](docs/e2e-findings.md).
+- **`e2e_td_scenario.py`** — full TD workflow + manufactured challenges (see [docs/e2e-findings.md](docs/e2e-findings.md)).
+- **`ux_walkthrough.py`** — admin + official portal API walk + static assets.
+- **`live_feature_smoke.py`** — SPA module checks + day-of / official / import fix surface.
+
+Run them **one at a time** (parallel logins can trip the process-local throttle).
 
 ## Docs
 

@@ -289,10 +289,16 @@ def run(base_url: str):
     ok(s, "create official room block", 201)
     block_id = block["id"]
 
-    # second tournament (same dates) — to manufacture a cross-tournament clash
+    # second tournament (same dates) — to manufacture a cross-tournament clash.
+    # Sites must be linked on T2 too: assignment site_id is tournament-scoped
+    # (_check_assignment_refs). Without this, the chair's T2 site PUT fails and
+    # hard_double_bookings stays 0 (other_site_id NULL → soft only).
     t2 = new_tournament("adult", ["Adult Open", "Adult Championships",
                                   "Adult Masters", "Senior Open"])
     t2id = t2["id"] if t2 else None
+    if t2id:
+        s, _ = c.put(f"/api/tournaments/{t2id}/sites", {"site_ids": list(site_ids.values())})
+        ok(s, "link sites to 2nd tournament (for hard double-book)", 200)
 
     # ---- P2: officials, certs, logins, availability -------------------------
     phase("P2 — Officials: certifications, logins, availability")
@@ -464,7 +470,9 @@ def run(base_url: str):
     ok(s, f"invite {nm('chair')} to the 2nd tournament", 201)
     s, lst2 = c.get(f"/api/tournaments/{t2id}/assignments")
     a_chair2 = next((a["id"] for a in lst2 if a["official_id"] == officials["chair"]["id"]), None)
-    c.put(f"/api/assignments/{a_chair2}", {"official_id": officials["chair"]["id"], "site_id": site_ids["B"]})
+    s, _ = c.put(f"/api/assignments/{a_chair2}",
+                 {"official_id": officials["chair"]["id"], "site_id": site_ids["B"]})
+    ok(s, f"set {nm('chair')} T2 site to B (different venue → hard clash)", 200)
     add_day(a_chair2, DAYS[0], "chair_umpire")
     step(f"{nm('chair')} double-booked: both tournaments, same day, different venues")
 
