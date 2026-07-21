@@ -21,6 +21,7 @@ from .routers import (
     divisions,
     doubles,
     emails,
+    emails_bulk,
     export_audit,
     health,
     hotels,
@@ -74,7 +75,7 @@ app.include_router(ingest.router)
 _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, divisions, roster, assignments, reports, dashboard, certifications, availability,
-          emails, late_entries, withdrawals, adult_lists, player_hotels,
+          emails, emails_bulk, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users,
           export_audit, access_audit, coppa):
     app.include_router(r.router, dependencies=_admin)

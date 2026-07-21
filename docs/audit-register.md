@@ -65,7 +65,7 @@ Severity: **H** high · **M** medium · **L** low
 | B4 | Partial `html`` adoption | L | Ongoing where raw markup remains; preferred path is `html`/`hstr` |
 | B5 | Unpinned deps | M | = **D12** ✅ |
 | C1 | Huge `app.js` | H velocity | = **D11** ✅ |
-| C2 | Large routers (`assignments`, `emails`, `importer`) | M | Optional splits |
+| C2 | Large routers (`assignments`, `emails`, `importer`) | M | 🔄 **emails** 2026-07-21 — bulk → `emails_bulk.py`, detect → `email_detect.py`, stamp → `email_stamp.py`; `assignments` / `importer` still optional |
 | C4 | Docs slightly stale | L | = **D15** ✅ 2026-07-21 |
 
 ## Deep dive — 2026-07-20 (COPPA / export / crypto / ingest)

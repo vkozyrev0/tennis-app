@@ -837,7 +837,9 @@ def _merge_email_pdf(cur, tid, d):
     # per-row "Detect" click. Best-effort: a no-match just leaves the row blank,
     # exactly as before. Lazy import avoids a module-load cycle (emails router
     # doesn't import importer).
-    from .routers.emails import _detect_pair_for, _stamp_extracted_fields
+    # C2: helpers live outside the router modules (no load-order cycle).
+    from .email_detect import _detect_pair_for
+    from .email_stamp import _stamp_extracted_fields
     det, partner, member_ids = _detect_pair_for(cur, tid, subj, body, from_addr, cls)
     if det.get("detected_player_id"):
         cur.execute(
