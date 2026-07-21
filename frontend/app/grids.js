@@ -488,14 +488,19 @@ export function createGridFactories(ctx) {
     tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
     const csv = document.createElement("button");
     csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
-    csv.addEventListener("click", () => {
+    csv.addEventListener("click", async () => {
+      // Always go through _csvDownload so H4.1 audit + H4.2 PII gate apply
+      // (AG Grid's native CSV export would bypass both).
       if (exportCols && exportCols.length) {
         const headers = exportCols.map((c) => c.header);
         const rows = grid.getData("active").map((r) =>
           exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
-        _csvDownload([headers, ...rows], exportName);
+        await _csvDownload([headers, ...rows], exportName, { resource: exportName });
       } else {
-        grid.download("csv", exportName + ".csv");
+        const colDefs = (columns || []).filter((c) => c.field && c.field !== "_act" && !String(c.field).startsWith("_"));
+        const headers = colDefs.map((c) => c.title || c.field);
+        const rows = grid.getData("active").map((r) => colDefs.map((c) => r[c.field]));
+        await _csvDownload([headers, ...rows], exportName, { resource: exportName });
       }
     });
     mount.parentElement.insertBefore(csv, mount);
@@ -553,7 +558,12 @@ export function createGridFactories(ctx) {
     if (exportName) {
       const csv = document.createElement("button");
       csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
-      csv.addEventListener("click", () => grid.download("csv", exportName + ".csv"));
+      csv.addEventListener("click", async () => {
+        const colDefs = (columns || []).filter((c) => c.field && !String(c.field).startsWith("_"));
+        const headers = colDefs.map((c) => c.title || c.field);
+        const rows = grid.getData("active").map((r) => colDefs.map((c) => r[c.field]));
+        await _csvDownload([headers, ...rows], exportName, { resource: exportName });
+      });
       mount.parentElement.insertBefore(csv, mount);
     }
     let built = false, pending = null, pendingFilter = null;
@@ -718,15 +728,20 @@ export function createGridFactories(ctx) {
     (GRIDS[cfg.panelId] ||= []).push(table);
     // Setup CSV exports include every importable column (not just what's visible
     // in the grid), so a round-trip via spreadsheet / re-import keeps all fields.
-    csvBtn.addEventListener("click", () => {
-      const filename = cfg.path.replace(/^\//, "") + ".csv";
+    csvBtn.addEventListener("click", async () => {
+      // H4.1/H4.2: never use native AG CSV (bypasses audit + PII gate).
+      const resource = cfg.path.replace(/^\//, "");
       if (cfg.exportCols && cfg.exportCols.length) {
         const headers = cfg.exportCols.map((c) => c.header);
         const rows = table.getData("active").map((r) =>
           cfg.exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
-        _csvDownload([headers, ...rows], cfg.path.replace(/^\//, ""));
+        await _csvDownload([headers, ...rows], resource, { resource });
       } else {
-        table.download("csv", filename);
+        const colDefs = (cfg.columns || columns || []).filter(
+          (c) => c.field && c.field !== "_act" && !String(c.field).startsWith("_"));
+        const headers = colDefs.map((c) => c.title || c.field);
+        const rows = table.getData("active").map((r) => colDefs.map((c) => r[c.field]));
+        await _csvDownload([headers, ...rows], resource, { resource });
       }
     });
     // Tabulator can fire tableBuilt synchronously (small grids, hidden mount,

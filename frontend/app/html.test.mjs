@@ -22,6 +22,17 @@ test("ampersands and angle brackets in text", () => {
   assert.equal(String(html`${"Tom & Jerry < 5 > 3"}`), "Tom &amp; Jerry &lt; 5 &gt; 3");
 });
 
+test("quotes are escaped for attribute safety", () => {
+  const evil = `O'Brien "x" onmouseover=alert(1)`;
+  const out = String(html`<div title="${evil}">${evil}</div>`);
+  assert.ok(out.includes("&#39;") || out.includes("&quot;"));
+  assert.ok(!out.includes(`title="${evil}"`));
+  assert.equal(
+    String(html`${`a"b'c`}`),
+    "a&quot;b&#39;c",
+  );
+});
+
 test("null/undefined/false render as empty, true too", () => {
   assert.equal(String(html`a${null}b${undefined}c${false}d${true}e`), "abcde");
 });

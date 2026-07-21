@@ -25,14 +25,19 @@ export function createPlayerList(ctx) {
     csv.type = "button"; csv.className = "export-btn no-print"; csv.textContent = "⬇ CSV";
     // Import/export #3: same exportCols pattern as wireEntity — CSV includes
     // every field the matching importer can read back, not just visible cols.
-    csv.addEventListener("click", () => {
+    csv.addEventListener("click", async () => {
+      // H4.1/H4.2: route through _csvDownload (audit + PII gate).
       if (cfg.exportCols && cfg.exportCols.length) {
         const headers = cfg.exportCols.map((c) => c.header);
         const rows = table.getData("active").map((r) =>
           cfg.exportCols.map((c) => (c.fmt ? c.fmt(r) : r[c.key])));
-        _csvDownload([headers, ...rows], cfg.exportName);
+        await _csvDownload([headers, ...rows], cfg.exportName, { resource: cfg.exportName });
       } else {
-        table.download("csv", cfg.exportName + ".csv");
+        const colDefs = (cfg.columns || []).filter(
+          (c) => c.field && c.field !== "_act" && !String(c.field).startsWith("_"));
+        const headers = colDefs.map((c) => c.title || c.field);
+        const rows = table.getData("active").map((r) => colDefs.map((c) => r[c.field]));
+        await _csvDownload([headers, ...rows], cfg.exportName, { resource: cfg.exportName });
       }
     });
     mount.parentElement.insertBefore(csv, mount);

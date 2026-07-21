@@ -5,26 +5,66 @@
 // What to LOAD when the role resolves (admin vs official init, nav-history,
 // breadcrumbs) is app-specific, so it stays in app.js and is injected as the
 // onRoleResolved / onLogout callbacks — the same dependency-injection seam
-// grids.js uses. The bodies are otherwise unchanged from the in-app version.
+// grids.js uses.
 export function createAuth(ctx) {
   const { api, setMsg, toast, onSubmit, onRoleResolved, onLogout } = ctx;
+
+  const _cpwModal = document.getElementById("change-pw-modal");
+
+  function _openChangePw() {
+    document.getElementById("change-pw-form").reset();
+    setMsg("cpw-msg", "", true);
+    _cpwModal.hidden = false;
+    document.getElementById("cpw-current").focus();
+  }
+
+  function _closeChangePw() {
+    // D3: refuse dismiss while a forced change is pending.
+    if (_cpwModal.dataset.forced === "1") return;
+    _cpwModal.hidden = true;
+  }
 
   // Role-based view switch. The pure DOM show/hide lives here; the app-specific
   // reactions (nav history, breadcrumbs, adminInit/officialInit) run via the
   // injected onRoleResolved so this module stays free of those dependencies.
   function applyAuth(who) {
     const logged = !!who;
-    const isAdmin = logged && who.role === "admin";
-    const isOfficial = logged && who.role === "official";
+    const mustChange = !!(who && who.must_change_password);
+    // D3: until password is rotated, keep chrome minimal and force the modal.
+    // Full admin/official init still runs only when not forced; prod API 403s.
+    const isAdmin = logged && who && who.role === "admin" && !mustChange;
+    const isOfficial = logged && who && who.role === "official" && !mustChange;
     document.getElementById("login-view").hidden = logged;
     document.getElementById("user-box").hidden = !logged;
-    document.getElementById("username-label").textContent = who ? `${who.username} (${who.role})` : "";
+    document.getElementById("username-label").textContent = who
+      ? `${who.username} (${who.role})${mustChange ? " — change password" : ""}`
+      : "";
     document.getElementById("menu").hidden = !isAdmin;
     document.getElementById("menu-groups").hidden = !isAdmin;
     document.querySelector("main:not(#official-app)").hidden = !isAdmin;
     document.getElementById("context-bar").hidden = !isAdmin;
     document.getElementById("official-app").hidden = !isOfficial;
-    onRoleResolved({ who, logged, isAdmin, isOfficial });
+
+    const cancel = document.getElementById("cpw-cancel");
+    if (_cpwModal) {
+      if (mustChange) {
+        _cpwModal.dataset.forced = "1";
+        if (cancel) cancel.hidden = true;
+        queueMicrotask(() => {
+          _openChangePw();
+          setMsg(
+            "cpw-msg",
+            "You must set a new password before using CourtOps (the POC default is not allowed on shared hosts).",
+            false,
+          );
+        });
+      } else {
+        _cpwModal.dataset.forced = "";
+        if (cancel) cancel.hidden = false;
+      }
+    }
+
+    onRoleResolved({ who, logged, isAdmin, isOfficial, mustChange });
   }
 
   // Audit F3: one-shot listener so a stray flood of expired-session 401s
@@ -41,7 +81,10 @@ export function createAuth(ctx) {
   onSubmit(document.getElementById("login-form"), async (e) => {
     const f = e.target;
     try {
-      const who = await api("/auth/login", { method: "POST", body: JSON.stringify({ username: f.username.value, password: f.password.value }) });
+      const who = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: f.username.value, password: f.password.value }),
+      });
       f.reset();
       applyAuth(who);
     } catch (err) { setMsg("login-msg", err.message, false); }
@@ -52,19 +95,14 @@ export function createAuth(ctx) {
     applyAuth(null);
   });
 
-  // --- Change own password (admin or official; available from the header) ---
-  const _cpwModal = document.getElementById("change-pw-modal");
-  function _openChangePw() {
-    document.getElementById("change-pw-form").reset();
-    setMsg("cpw-msg", "", true);
-    _cpwModal.hidden = false;
-    document.getElementById("cpw-current").focus();
-  }
-  function _closeChangePw() { _cpwModal.hidden = true; }
   document.getElementById("change-pw-btn").addEventListener("click", _openChangePw);
   document.getElementById("cpw-cancel").addEventListener("click", _closeChangePw);
-  _cpwModal.addEventListener("click", (e) => { if (e.target.id === "change-pw-modal") _closeChangePw(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !_cpwModal.hidden) _closeChangePw(); });
+  _cpwModal.addEventListener("click", (e) => {
+    if (e.target.id === "change-pw-modal") _closeChangePw();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !_cpwModal.hidden) _closeChangePw();
+  });
   onSubmit(document.getElementById("change-pw-form"), async () => {
     const cur = document.getElementById("cpw-current").value;
     const nw = document.getElementById("cpw-new").value;
@@ -73,9 +111,17 @@ export function createAuth(ctx) {
     if (nw.length < 8) { setMsg("cpw-msg", "new password must be at least 8 characters", false); return; }
     if (nw === cur) { setMsg("cpw-msg", "new password must differ from the current one", false); return; }
     try {
-      await api("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password: cur, new_password: nw }) });
-      _closeChangePw();
+      await api("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: cur, new_password: nw }),
+      });
+      _cpwModal.dataset.forced = "";
+      _cpwModal.hidden = true;
       toast("Password updated — other devices were signed out", true);
+      try {
+        const who = await api("/auth/me");
+        applyAuth(who);
+      } catch (_) { /* ignore */ }
     } catch (e) { setMsg("cpw-msg", e.message, false); }
   });
 

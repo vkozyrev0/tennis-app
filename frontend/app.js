@@ -2,7 +2,7 @@
 // as <script type="module">.
 import {
   esc, fmtDOW, fmtMDY as _fmtMDY, dowLong as _dowLong,
-  humanizeDetail as _humanizeDetail, csvDownload as _csvDownload,
+  humanizeDetail as _humanizeDetail,
 } from "./app/util.js";
 import {
   SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
@@ -14,6 +14,34 @@ import { createAuth } from "./app/auth.js";
 import { createTournamentState } from "./app/state.js";
 import { html, raw, hstr } from "./app/html.js";
 import { createPlayerList } from "./app/player_list.js";
+import {
+  chip, money, makeMenuButton, formObj, onSubmit, fillSelect,
+} from "./app/ui.js";
+import {
+  enhanceSelect, enhanceAllSelects, syncCombos, scheduleComboSync,
+} from "./app/combobox.js";
+import { createPrintDoc } from "./app/print.js";
+import "./app/theme.js";          // installTheme on load
+import "./app/shortcuts.js";      // installShortcuts on load
+import { createBreadcrumbs } from "./app/breadcrumbs.js";
+import { createDivisionCatalog } from "./app/catalog.js";
+import { createShell } from "./app/shell.js";
+import { createCsvExport } from "./app/export_csv.js";
+import { createLayout } from "./app/layout.js";
+import {
+  officialLabel, siteLabel, playerLabel, createCertCatalog, DEFAULT_CERTS,
+} from "./app/labels.js";
+import { createSelectRefresh } from "./app/selects.js";
+import { labelHeaderFilters as _labelHeaderFilters, reflectAriaSort as _reflectAriaSort } from "./app/grid_a11y.js";
+import { createPrereqCallout } from "./app/prereq.js";
+import { createNavCounts, NAV_COUNT_TABS } from "./app/nav_counts.js";
+import {
+  createDetailChrome, installFormModals, enhanceDetailDialogs,
+} from "./app/detail_modals.js";
+import { createPayrollPanel } from "./app/payroll.js";
+import { createAvailabilityPanel } from "./app/availability.js";
+import { createDayOfPanel } from "./app/dayof.js";
+import { datesInRange as _datesInRange } from "./app/util.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend (single file, vanilla JS, no framework).
@@ -25,567 +53,40 @@ import { createPlayerList } from "./app/player_list.js";
 //    persisted) scopes Sites / Roster / Assignments / Room blocks / Part B.
 //
 // Sections (rough line ranges — search the headers if these drift):
-//   Theme + small helpers (esc, api, toast, setMsg, confirmDialog, chip)
-//   Keyboard shortcuts + help modal
-//   Type-in searchable comboboxes (enhanceSelect / syncCombos)
+//   ESM shell: shell (api/toast/confirm), export_csv, theme, shortcuts
+//   ESM slices: util, html, ui, combobox, print, catalog, breadcrumbs,
+//     grids, auth, state, player_list, shirts, roster_prefill
 //   Caches + labels + tabs + two-level menu + sizeLists
 //   Active tournament state (setActive / updateActiveUI)
 //   GRIDS registry + grid helpers (wireEntity, makeListGrid, makeReadGrid,
-//     wirePlayerList) — these factories own Tabulator wiring
-//   Tournament workspace pages (Sites toggle, Roster, Import, Assignments,
-//     Room blocks, Availability, Inbox + Part B lists, T-shirts, Pairing,
-//     Doubles, Reports)
+//     wirePlayerList)
+//   Tournament workspace pages (Sites, Roster, Import, Assignments, …)
 //   Setup entity configs (tournamentsCrud … distancesCrud)
-//   CSV export helpers
-//   FORM_MODALS — wraps workspace add-forms as modal overlays
-//   ARIA enhancement for every .detail-pane (role=dialog + focus management)
+//   FORM_MODALS + ARIA detail-pane
 //   Auth + role-based views (admin vs official)
 // ============================================================================
 
-// ---- theme (light/dark) — applied ASAP to avoid a flash, persisted locally ----
-function applyTheme(t) {
-  const dark = t === "dark";
-  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) { /* ignore */ }
-  const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = dark ? "☀ Light" : "🌙 Dark";
-}
-applyTheme((() => { try { return localStorage.getItem("theme"); } catch (e) { return null; } })() || "light");
-document.addEventListener("DOMContentLoaded", () => {
-  const btn = document.getElementById("theme-toggle");
-  if (btn) {
-    applyTheme(document.documentElement.getAttribute("data-theme"));  // sync label
-    btn.addEventListener("click", () =>
-      applyTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"));
-  }
-  // a11y re-review #1: every static <th> in a list-table gets scope="col" so
-  // SR users get explicit header→cell mapping. JS-built Tabulator grids set
-  // scope themselves.
-  document.querySelectorAll(".list-table thead th").forEach((th) => {
-    if (!th.hasAttribute("scope")) th.setAttribute("scope", "col");
-  });
-  // a11y re-review #5: register every inline form-status span as a polite
-  // live region at page load so screen readers pre-track them. setMsg() also
-  // re-asserts the role per-message; this is the safety net.
-  document.querySelectorAll("span.msg").forEach((el) => {
-    if (!el.hasAttribute("role")) el.setAttribute("role", "status");
-    if (!el.hasAttribute("aria-live")) el.setAttribute("aria-live", "polite");
-  });
-  // a11y re-review #7: main panel-switching tabs get role="tab" semantics +
-  // aria-selected reflecting the .active class, aria-controls pointing at the
-  // panel they reveal. Each .menu-group becomes a tablist. The existing click
-  // handlers flip .active; we mirror that into aria-selected via observer.
-  document.querySelectorAll(".menu-group").forEach((g) => g.setAttribute("role", "tablist"));
-  document.querySelectorAll(".menu .tab").forEach((b) => {
-    b.setAttribute("role", "tab");
-    const target = b.dataset.target;
-    if (target) b.setAttribute("aria-controls", target);
-    b.setAttribute("aria-selected", b.classList.contains("active") ? "true" : "false");
-  });
-  // Sync aria-selected when .active changes (handled by existing click code).
-  const tabObserver = new MutationObserver((muts) => {
-    for (const m of muts) {
-      if (m.attributeName === "class" && m.target.classList.contains("tab")) {
-        m.target.setAttribute("aria-selected", m.target.classList.contains("active") ? "true" : "false");
-      }
-    }
-  });
-  document.querySelectorAll(".menu .tab").forEach((b) => tabObserver.observe(b, { attributes: true, attributeFilter: ["class"] }));
-  // a11y re-review #2: blank detail-title <h3>s are noisy for SR linear reads;
-  // hide them until populated. Setup populates textContent on selection.
-  document.querySelectorAll("h3.detail-title").forEach((h) => {
-    if (!h.textContent.trim()) h.hidden = true;
-  });
-  const titleObserver = new MutationObserver((muts) => {
-    for (const m of muts) {
-      const h = m.target;
-      h.hidden = !h.textContent.trim();
-    }
-  });
-  document.querySelectorAll("h3.detail-title").forEach((h) =>
-    titleObserver.observe(h, { childList: true, characterData: true, subtree: true }));
-  // a11y 5th-pass #3: label the per-panel "×" close buttons.
-  document.querySelectorAll("button.detail-close").forEach((b) => {
-    if (!b.hasAttribute("aria-label")) b.setAttribute("aria-label", "Close details");
-  });
-  // a11y 5th-pass #1: sr-only <caption> per static table to give SR users a
-  // purpose label when jumping by tables.
-  document.querySelectorAll("table.list-table").forEach((t) => {
-    if (t.querySelector("caption")) return;
-    const panel = t.closest(".panel, section, .card");
-    const h = panel?.querySelector("h3, h2, h4");
-    const label = h?.textContent.trim().replace(/\s+/g, " ") || "Data table";
-    const cap = document.createElement("caption");
-    cap.className = "sr-only";
-    cap.textContent = label;
-    t.insertBefore(cap, t.firstChild);
-  });
-  // a11y 5th-pass #2: WAI-ARIA roving tabindex on main panel tabs. Only the
-  // active tab in each group is reachable by Tab; arrow keys move focus
-  // within the group (and activate the new tab so the panel switches).
-  document.querySelectorAll(".menu-group").forEach((group) => {
-    const tabs = [...group.querySelectorAll(".tab")];
-    const sync = () => {
-      tabs.forEach((t) => { t.tabIndex = t.classList.contains("active") ? 0 : -1; });
-    };
-    sync();
-    // Re-sync on class changes (MutationObserver in DOMContentLoaded already
-    // covers aria-selected; piggyback by observing here too).
-    new MutationObserver(sync).observe(group, { attributes: true, attributeFilter: ["class"], subtree: true });
-    group.addEventListener("keydown", (e) => {
-      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-      const cur = tabs.indexOf(document.activeElement);
-      if (cur < 0) return;
-      e.preventDefault();
-      let next;
-      if (e.key === "Home") next = 0;
-      else if (e.key === "End") next = tabs.length - 1;
-      else if (e.key === "ArrowLeft") next = (cur - 1 + tabs.length) % tabs.length;
-      else next = (cur + 1) % tabs.length;
-      tabs[next].focus();
-      tabs[next].click();  // activate panel to match WAI-ARIA "automatic activation" tabs pattern
-    });
-  });
+// D11: API + toast + confirm live in ./app/shell.js
+const { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress } = createShell();
+let _resetDayOfDate = () => {};  // filled by createDayOfPanel (D11)
+
+// Session user (login /me) — H4.2 reads can_export_pii for bulk CSV gate.
+let authUser = null;
+
+// D11: CSV export gate + audit (H4.1/H4.2)
+const { csvDownload: _csvDownload } = createCsvExport({
+  api, toast, confirmDialog,
+  getAuthUser: () => authUser,
+  getActive: () => (typeof active !== "undefined" ? active : null),
 });
 
-let _inflight = 0;
-function _progress(delta) {
-  _inflight = Math.max(0, _inflight + delta);
-  const p = document.getElementById("progress");
-  if (p) {
-    const busy = _inflight > 0;
-    p.classList.toggle("active", busy);
-    // a11y re-review #6: surface busy state to SR users via the progressbar
-    // role declared in markup; hide it when idle so SR doesn't keep a stale
-    // "loading" landmark on the page.
-    p.setAttribute("aria-hidden", busy ? "false" : "true");
-  }
-}
-// _humanizeDetail now imported from ./app/util.js (audit A47).
-async function api(path, options) {
-  _progress(1);
-  try {
-    const hasBody = options && options.body;
-    // Only set Content-Type when there's a body, and never on FormData (which
-    // needs the browser to set the multipart boundary itself).
-    const headers = hasBody && !(options.body instanceof FormData)
-      ? { "Content-Type": "application/json" } : {};
-    const res = await fetch("/api" + path, { ...options, headers: { ...headers, ...(options && options.headers) } });
-    let body = null;
-    if (res.status !== 204) {
-      try { body = await res.json(); }
-      catch (_) { /* non-JSON error page (HTML 5xx, gateway, etc.) */ }
-    }
-    if (!res.ok) {
-      const detail = body && body.detail !== undefined ? body.detail : res.statusText;
-      // Audit F3: a 401 anywhere outside the login path means the session
-      // expired — surface it once and prompt re-login so panels don't just
-      // silently blank out (the old Promise.allSettled fix in N14 still kept
-      // every individual rejection's message but never re-prompted).
-      if (res.status === 401 && !path.startsWith("/auth/")) {
-        document.dispatchEvent(new CustomEvent("auth-expired"));
-      }
-      throw new Error(_humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));
-    }
-    return body;
-  } finally {
-    _progress(-1);
-  }
-}
-function toast(text, ok = true, action = null) {
-  const box = document.getElementById("toasts");
-  if (!box || !text) return;
-  const t = document.createElement("div");
-  t.className = "toast " + (ok ? "ok" : "bad");
-  t.setAttribute("role", ok ? "status" : "alert");
-  // text in its own span so the optional action button/close sit beside it
-  const span = document.createElement("span"); span.textContent = text; t.appendChild(span);
-  // Optional inline action (e.g. "View") — dismisses the toast then runs.
-  if (action && action.label && typeof action.onClick === "function") {
-    const a = document.createElement("button");
-    a.type = "button"; a.className = "toast-action"; a.textContent = action.label;
-    a.addEventListener("click", () => { t.remove(); action.onClick(); });
-    t.appendChild(a);
-  }
-  // a11y #10: error toasts get a close button + stay until dismissed (WCAG
-  // 2.2.1 Timing Adjustable). Success toasts still auto-fade. A success toast
-  // WITH an action lingers longer so there's time to click it.
-  if (!ok) {
-    const x = document.createElement("button");
-    x.type = "button"; x.className = "toast-close"; x.textContent = "×";
-    x.setAttribute("aria-label", "Dismiss notification");
-    x.addEventListener("click", () => t.remove());
-    t.appendChild(x);
-  }
-  box.appendChild(t);
-  if (ok) {
-    const ttl = action ? 7000 : 2500;
-    setTimeout(() => { t.style.transition = "opacity .3s"; t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, ttl);
-  }
-}
-function setMsg(id, text, ok) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.textContent = text;
-    el.className = "msg " + (ok ? "ok" : "bad");
-    el.setAttribute("role", ok ? "status" : "alert");
-    // Keep error messages visible until the next form interaction; ok messages auto-clear.
-    if (text && ok !== false) setTimeout(() => { if (el.textContent === text) el.textContent = ""; }, 4000);
-  }
-  toast(text, ok);
-}
+// D11: print scaffold lives in ./app/print.js
+const printDoc = createPrintDoc({ toast });
 
-// Find the form input most likely responsible for a server error message and
-// flag it (aria-invalid + .field-error + focus). Errors that don't match any
-// field name fall back to the form-level message only.
-function markInvalid(form, errorText) {
-  if (!form || !errorText) return;
-  // Strip prior invalid marks before re-evaluating.
-  for (const el of form.querySelectorAll("[aria-invalid='true']")) {
-    el.removeAttribute("aria-invalid"); el.classList.remove("field-error");
-  }
-  const t = String(errorText).toLowerCase();
-  // candidates: input/select/textarea with a name
-  const fields = [...form.elements].filter((e) => e.name);
-  // word-boundary search: the field name (or its dash/space variants) appears in
-  // the error. When several fields match (cross-field errors name both, e.g.
-  // "play_end_date must be on or after play_start_date"), flag the one mentioned
-  // FIRST in the message — the server leads with the offender — not the first in
-  // DOM order.
-  let hit = null, hitPos = Infinity;
-  for (const e of fields) {
-    const n = e.name.toLowerCase();
-    for (const w of [n, n.replace(/_/g, " "), n.replace(/_/g, "-")]) {
-      const m = new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").exec(t);
-      if (m && m.index < hitPos) { hit = e; hitPos = m.index; }
-    }
-  }
-  if (hit) {
-    hit.setAttribute("aria-invalid", "true"); hit.classList.add("field-error");
-    try { hit.focus(); } catch (_) {}
-  }
-}
-// Clear the invalid mark as soon as the user starts editing the flagged field.
-document.addEventListener("input", (e) => {
-  const t = e.target;
-  if (t && t.getAttribute && t.getAttribute("aria-invalid") === "true") {
-    t.removeAttribute("aria-invalid"); t.classList.remove("field-error");
-  }
-}, true);
 
-// Styled confirm dialog (replaces native confirm); returns a Promise<bool>.
-function confirmDialog(message, okLabel = "Delete", okKind = "danger") {
-  return new Promise((resolve) => {
-    const m = document.getElementById("confirm-modal");
-    const ok = document.getElementById("confirm-ok");
-    const cancel = document.getElementById("confirm-cancel");
-    document.getElementById("confirm-text").textContent = message;
-    ok.textContent = okLabel;
-    // Audit P41: reset class state every open so a previous "danger" label
-    // doesn't leak into a benign confirm (e.g. order cancellation).
-    ok.className = "confirm-ok " + (okKind === "danger" ? "danger" : "primary");
-    // a11y re-review #3: remember invoker so focus returns on close, default
-    // focus to Cancel (safer than focusing the destructive button), and trap
-    // Tab within the modal's two buttons.
-    const invoker = document.activeElement;
-    // a11y 5th-pass #4: mark non-modal landmarks `inert` so assistive-tech
-    // virtual cursors can't reach background controls while the dialog is up.
-    const inertTargets = ["header", "nav.menu-l1", "nav.menu", "main#main-app", "main#official-app"]
-      .map((sel) => document.querySelector(sel)).filter(Boolean);
-    inertTargets.forEach((el) => el.setAttribute("inert", ""));
-    m.hidden = false;
-    cancel.focus();
-    const done = (v) => {
-      m.hidden = true;
-      inertTargets.forEach((el) => el.removeAttribute("inert"));
-      ok.removeEventListener("click", onOk);
-      cancel.removeEventListener("click", onCancel);
-      document.removeEventListener("keydown", onKey);
-      if (invoker && typeof invoker.focus === "function") invoker.focus();
-      resolve(v);
-    };
-    const onOk = () => done(true);
-    const onCancel = () => done(false);
-    const onKey = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); done(false); return; }
-      if (e.key === "Enter" && document.activeElement !== cancel) { e.preventDefault(); done(true); return; }
-      if (e.key === "Tab") {
-        // Trap focus between cancel and ok.
-        const focusables = [cancel, ok];
-        const idx = focusables.indexOf(document.activeElement);
-        e.preventDefault();
-        const next = e.shiftKey
-          ? focusables[(idx <= 0 ? focusables.length - 1 : idx - 1)]
-          : focusables[(idx + 1) % focusables.length];
-        next.focus();
-      }
-    };
-    ok.addEventListener("click", onOk);
-    cancel.addEventListener("click", onCancel);
-    document.addEventListener("keydown", onKey);
-  });
-}
-
-// Keyboard shortcuts: `/` focuses the active panel's filter, `n`/`N` triggers
-// its + New / + Add button, `?` opens the shortcuts help. Skipped while the
-// user is typing in a field. Esc-to-close-modal is handled by the detail-pane
-// MutationObserver block elsewhere.
-function showShortcuts() {
-  let m = document.getElementById("shortcuts-modal");
-  if (!m) {
-    m = document.createElement("div"); m.id = "shortcuts-modal"; m.className = "modal";
-    m.innerHTML = `
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
-        <h3 id="shortcuts-title" style="margin-top:0">Keyboard shortcuts</h3>
-        <table class="shortcuts"><tbody>
-          <tr><th><kbd>/</kbd></th><td>Focus the page filter</td></tr>
-          <tr><th><kbd>n</kbd></th><td>Add a new record on the active panel</td></tr>
-          <tr><th><kbd>1</kbd>-<kbd>9</kbd></th><td>Jump to the Nth tab in the current menu</td></tr>
-          <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
-          <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
-        </tbody></table>
-        <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
-      </div>`;
-    document.body.appendChild(m);
-    const close = () => {
-      m.hidden = true;
-      if (m._invoker && typeof m._invoker.focus === "function") m._invoker.focus();
-    };
-    m.querySelector("#shortcuts-close").addEventListener("click", close);
-    m.addEventListener("click", (e) => { if (e.target === m) close(); });
-    // a11y 4th-pass #3: trap Tab inside the shortcuts dialog the same way
-    // the confirm dialog does. Only one focusable inside (Close), but Tab
-    // and Shift+Tab still need to stay there.
-    m.addEventListener("keydown", (e) => {
-      if (m.hidden) return;
-      if (e.key === "Tab") {
-        e.preventDefault();
-        m.querySelector("#shortcuts-close").focus();
-      }
-    });
-  }
-  m._invoker = document.activeElement;
-  m.hidden = false;
-  requestAnimationFrame(() => m.querySelector("#shortcuts-close").focus());
-}
-const _shortcutsBtn = document.getElementById("shortcuts-btn");
-if (_shortcutsBtn) _shortcutsBtn.addEventListener("click", showShortcuts);
-document.addEventListener("keydown", (e) => {
-  if (e.defaultPrevented) return;
-  const a = document.activeElement;
-  const inField = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "button";
-  if (inField) return;
-  // Skip while a confirm dialog or shortcuts modal is open.
-  const sm = document.getElementById("shortcuts-modal");
-  if (sm && !sm.hidden) {
-    if (e.key === "Escape") { sm.hidden = true; e.preventDefault(); }
-    return;
-  }
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  if (e.key === "/") {
-    const p = document.querySelector(".panel.active");
-    const f = p && p.querySelector("input.filter, input[type=search]");
-    if (f) { e.preventDefault(); f.focus(); f.select(); }
-  } else if (e.key === "n" || e.key === "N") {
-    const p = document.querySelector(".panel.active");
-    const t = p && (p.querySelector(".new-btn:not(.add-trigger)") || p.querySelector(".add-trigger"));
-    if (t) { e.preventDefault(); t.click(); }
-  } else if (e.key === "?") {
-    e.preventDefault(); showShortcuts();
-  } else if (/^[1-9]$/.test(e.key)) {
-    // Audit P46: numeric keys jump to the Nth tab in the currently visible
-    // menu group, giving keyboard parity with mouse tab clicks.
-    const tabs = [...document.querySelectorAll(".menu .tab")].filter((t) =>
-      t.offsetParent !== null);  // visible only
-    const idx = Number(e.key) - 1;
-    if (tabs[idx]) { e.preventDefault(); tabs[idx].click(); tabs[idx].focus(); }
-  }
-});
-
-// =================== Division + Event lookup lists ===================
-// Loaded from the Setup catalog (/api/divisions, /api/events) on init and
-// refreshed when those CRUDs change. The TD can add/edit/remove rows from the
-// Setup tabs without a code change — see migration 0027 for the seed data.
-let divisionsAll = [];
-let eventsAll = [];
-
-function _populateDatalist(id, items) {
-  const dl = document.getElementById(id);
-  if (!dl) return;
-  dl.innerHTML = items.map((it) => {
-    const value = typeof it === "string" ? it : it.code;
-    const label = typeof it === "string" ? "" : (it.label === it.code ? "" : it.label);
-    // Conditional attribute via hstr fragment + raw() so it composes without
-    // re-escaping (the documented attribute-fragment technique).
-    const labelAttr = label ? hstr` label="${label}"` : "";
-    return hstr`<option value="${value}"${raw(labelAttr)}>${label || value}</option>`;
-  }).join("");
-}
-// Filter divisions / events by tournament type + (optional) player gender.
-// The catalog rows carry `tournament_type` and `gender` (null = any), so the
-// rule reduces to: row matches its tournament_type AND (row.gender is null OR
-// row.gender equals the player's gender OR no gender supplied).
-function _divisionsFor(type, gender) {
-  return divisionsAll.filter((d) => d.tournament_type === type
-    && (d.gender == null || !gender || d.gender === gender));
-}
-function _eventsFor(type, gender) {
-  return eventsAll
-    .filter((e) => e.tournament_type === type
-      && (e.gender == null || !gender || e.gender === gender))
-    .map((e) => e.name);
-}
-function refreshDivisionLists(gender) {
-  // Default to junior when no tournament is active so the form still has
-  // useful suggestions on first open.
-  const type = (active && active.type) || "junior";
-  _populateDatalist("divisions-list", _divisionsFor(type, gender || null));
-  _populateDatalist("events-list", _eventsFor(type, gender || null));
-  // Also (re)populate any `<select data-catalog="division|event">` controls
-  // that have replaced the legacy free-text inputs.
-  _populateCatalogSelects(type, gender || null);
-}
-
-// Tabulator `editor: "list"` parameter factories — same data source as the
-// <select data-catalog> form controls. Returned object plugs into the
-// column's `editorParams` (function form, so the active tournament + gender
-// are evaluated lazily when the editor opens).
-function _divisionListParams(opts) {
-  const o = opts || {};
-  const type = (active && active.type) || "junior";
-  const items = _divisionsFor(type, o.gender || null);
-  return {
-    values: items.map((d) => ({ label: d.code, value: d.code })),
-    autocomplete: true, listOnEmpty: true, clearable: true,
-    multiselect: !!o.multiple,
-  };
-}
-// Helper for in-grid editors on rows that include a player reference but
-// not the player's gender column — looks it up via playersById.
-function _rowGender(row) {
-  if (!row || typeof playersById !== "object") return null;
-  if (row.player_id && playersById[row.player_id]) return playersById[row.player_id].gender || null;
-  if (row.usta_number) {
-    const p = playersByUsta[row.usta_number];  // O(1) index, was an O(n) scan
-    return p ? (p.gender || null) : null;
-  }
-  return null;
-}
-function _eventListParams(opts) {
-  const o = opts || {};
-  const type = (active && active.type) || "junior";
-  const items = _eventsFor(type, o.gender || null);
-  return {
-    values: items.map((n) => ({ label: n, value: n })),
-    autocomplete: true, listOnEmpty: true, clearable: true,
-    multiselect: !!o.multiple,
-  };
-}
-
-// Fill every <select data-catalog="division|event"> in the page from the
-// catalog arrays, filtered by tournament type + (optional) player gender.
-// Preserves the current selection where the value still exists.
-function _populateCatalogSelects(type, gender) {
-  const divs = _divisionsFor(type, gender);
-  const evs = _eventsFor(type, gender);
-  for (const sel of document.querySelectorAll('select[data-catalog]')) {
-    const kind = sel.getAttribute("data-catalog");
-    const items = kind === "event" ? evs.map((n) => ({ code: n, label: n }))
-                                   : divs;  // [{code, label}, ...]
-    // Snapshot current selection so we can re-apply it after rebuilding.
-    const isMulti = sel.multiple;
-    const prevSelected = isMulti
-      ? new Set([...sel.selectedOptions].map((o) => o.value))
-      : sel.value;
-    // Rebuild options. Single-select keeps the existing "— pick … —"
-    // placeholder (it's the first <option value="">); multi-select doesn't
-    // need a placeholder.
-    const placeholder = !isMulti && sel.querySelector('option[value=""]');
-    sel.innerHTML = "";
-    if (placeholder) sel.appendChild(placeholder);
-    for (const it of items) {
-      const o = document.createElement("option");
-      o.value = it.code;
-      o.textContent = it.label === it.code ? it.code : `${it.code} — ${it.label}`;
-      sel.appendChild(o);
-    }
-    // Re-apply selection.
-    if (isMulti) {
-      [...sel.options].forEach((o) => { if (prevSelected.has(o.value)) o.selected = true; });
-    } else if (prevSelected) {
-      // If the prior value is no longer in the filtered set, append it as a
-      // legacy option so the form doesn't silently drop it (e.g. an inbox
-      // filed entry with a value the TD has since removed from the catalog).
-      if (![...sel.options].some((o) => o.value === prevSelected)) {
-        const o = document.createElement("option");
-        o.value = prevSelected; o.textContent = prevSelected + " (legacy)";
-        sel.appendChild(o);
-      }
-      sel.value = prevSelected;
-    }
-    // The type-in combo wrapper (enhanceSelect) keeps its own display state
-    // that needs to be re-synced from the native <select>'s options + value.
-    if (sel.dataset.combo === "1") scheduleComboSync();
-  }
-}
-// When a division/events input gains focus, infer the player gender from the
-// containing form (player_ref combobox, roster's player_id picker, or the
-// inline-create gender select) and refresh the shared datalists accordingly.
-function _inferFormGender(form) {
-  if (!form || typeof playersById !== "object") return null;
-  const pref = form.querySelector("[name='player_ref']");
-  if (pref && pref.value) return (playersById[pref.value] || {}).gender || null;
-  const picker = form.querySelector("[name='player_id']");
-  if (picker && picker.value && !picker.disabled) {
-    return (playersById[picker.value] || {}).gender || null;
-  }
-  const newRow = form.querySelector(".roster-new-row [name='gender']");
-  if (newRow && !newRow.disabled && newRow.value) return newRow.value;
-  return null;
-}
-document.addEventListener("focusin", (e) => {
-  const t = e.target;
-  if (!t) return;
-  // Legacy input+datalist control (still used by a couple of free-text fields)
-  if (t.tagName === "INPUT") {
-    const list = t.getAttribute("list");
-    if (list === "divisions-list" || list === "events-list") {
-      refreshDivisionLists(_inferFormGender(t.closest("form")));
-    }
-    return;
-  }
-  // Modern dropdown control — `<select data-catalog="division|event">`.
-  if (t.tagName === "SELECT" && t.hasAttribute("data-catalog")) {
-    refreshDivisionLists(_inferFormGender(t.closest("form")));
-  }
-});
-
-// When the player changes (or the inline-create gender select changes), the
-// inferred gender changes — refresh the division/event lists in that form so
-// boys see only boys' divisions + mixed, girls see only girls' divisions + mixed.
-document.addEventListener("change", (e) => {
-  const t = e.target;
-  if (!t || !t.form) return;
-  const name = t.getAttribute("name");
-  if (name === "player_ref" || name === "player_id" || name === "gender") {
-    refreshDivisionLists(_inferFormGender(t.form));
-  }
-});
-
-// Colored status chip for known tokens (selection status, email status, etc.).
-const BADGE = {
-  selected: "ok", alternate: "warn", withdrawn: "bad",
-  new: "warn", filed: "ok", needs_followup: "warn",
-  pending: "warn", paired: "ok",
-  mutual: "info", random: "muted",
-  same_club: "info", siblings: "info",
-};
-function chip(v) {
-  if (v == null || v === "") return "";
-  return hstr`<span class="badge badge-${BADGE[v] || "muted"}">${v}</span>`;
-}
 
 // Open the modal overlay wrapping a workspace add-form (used when filing/editing).
+// Stays in app.js because it touches form._openModal / source_email_id filing state.
 function openForm(form) {
   if (form && typeof form._openModal === "function") {
     // file-from-email sets source_email_id before openForm() — remember the
@@ -596,431 +97,41 @@ function openForm(form) {
   }
   scheduleComboSync();
 }
-// Lightweight dropdown-menu button — collapses a cluster of related toolbar
-// actions into one trigger (design-crit R-1/I-8). `items` is an array of
-// { label, onClick, title } objects (or { separator: true }). Returns the
-// wrapper element ready to drop into a toolbar.
-function makeMenuButton(triggerHtml, items, opts = {}) {
-  const wrap = document.createElement("div");
-  wrap.className = "menu-btn-wrap";
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = (opts.className || "export-btn no-print") + " menu-btn-trigger";
-  btn.setAttribute("aria-haspopup", "menu");
-  btn.setAttribute("aria-expanded", "false");
-  if (opts.title) btn.title = opts.title;
-  btn.innerHTML = opts.noCaret
-    ? triggerHtml
-    : `${triggerHtml} <span class="menu-caret" aria-hidden="true">▾</span>`;
-  const pop = document.createElement("div");
-  pop.className = "menu-btn-pop";
-  pop.setAttribute("role", "menu");
-  pop.hidden = true;
-  for (const it of items) {
-    if (it.separator) {
-      const hr = document.createElement("div"); hr.className = "menu-btn-sep"; pop.appendChild(hr); continue;
-    }
-    const mi = document.createElement("button");
-    mi.type = "button";
-    mi.className = "menu-btn-item" + (it.danger ? " danger" : "");
-    mi.setAttribute("role", "menuitem");
-    mi.textContent = it.label;
-    if (it.title) mi.title = it.title;
-    mi.addEventListener("click", () => { close(); it.onClick(); });
-    pop.appendChild(mi);
-  }
-  // opts.anchor: render the popup fixed-positioned on <body> instead of
-  // absolutely inside the wrapper. Needed inside Tabulator cells, which clip
-  // overflow and would otherwise hide the menu. Right-aligned under the button.
-  const anchored = !!opts.anchor;
-  function position() {
-    const r = btn.getBoundingClientRect();
-    pop.style.position = "fixed";
-    pop.style.top = `${Math.round(r.bottom + 4)}px`;
-    // right-align the popup to the trigger so it never runs off-screen on the
-    // right edge where action cells live.
-    pop.style.left = "auto";
-    pop.style.right = `${Math.round(window.innerWidth - r.right)}px`;
-  }
-  const menuItems = () => [...pop.querySelectorAll(".menu-btn-item:not([disabled])")];
-  function focusItem(i) { const it = menuItems(); if (it.length) it[(i + it.length) % it.length].focus(); }
-  // focusIdx: 0 = first item, -1 = last, null = leave focus on the trigger (mouse open).
-  function open(focusIdx = null) {
-    if (anchored) { document.body.appendChild(pop); position(); }
-    pop.hidden = false; btn.setAttribute("aria-expanded", "true");
-    document.addEventListener("click", onDoc, true);
-    document.addEventListener("keydown", onKey);
-    if (anchored) {
-      window.addEventListener("scroll", close, true);
-      window.addEventListener("resize", close);
-    }
-    if (focusIdx != null) requestAnimationFrame(() => focusItem(focusIdx));
-  }
-  function close() {
-    pop.hidden = true; btn.setAttribute("aria-expanded", "false");
-    document.removeEventListener("click", onDoc, true);
-    document.removeEventListener("keydown", onKey);
-    if (anchored) {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-      if (pop.parentNode === document.body) wrap.appendChild(pop);
-    }
-  }
-  function onDoc(e) { if (!wrap.contains(e.target) && !pop.contains(e.target)) close(); }
-  function onKey(e) {
-    if (e.key === "Escape") { close(); btn.focus(); return; }
-    if (e.key === "Tab") { close(); return; }          // let focus leave the menu naturally
-    const it = menuItems(); if (!it.length) return;
-    const cur = it.indexOf(document.activeElement);
-    if (e.key === "ArrowDown") { e.preventDefault(); focusItem(cur < 0 ? 0 : cur + 1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); focusItem(cur < 0 ? -1 : cur - 1); }
-    else if (e.key === "Home") { e.preventDefault(); focusItem(0); }
-    else if (e.key === "End") { e.preventDefault(); focusItem(-1); }
-  }
-  // Keyboard-activated click (Enter/Space) reports detail 0 → move focus into the
-  // menu; a mouse click (detail>0) opens without stealing focus.
-  btn.addEventListener("click", (e) => { e.stopPropagation(); pop.hidden ? open(e.detail === 0 ? 0 : null) : close(); });
-  // ArrowDown/Up on the closed trigger opens the menu and moves focus into it.
-  btn.addEventListener("keydown", (e) => {
-    if (pop.hidden && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); open(e.key === "ArrowDown" ? 0 : -1); }
-  });
-  wrap.append(btn, pop);
-  return wrap;
-}
-
-// Audit M27: many sites called scheduleComboSync() ad-hoc; this
-// coalesces concurrent requests into a single rAF so combo-display refresh
-// runs at most once per frame regardless of how many fillSelect calls fired.
-let _comboScheduled = false;
-function scheduleComboSync() {
-  if (_comboScheduled || typeof syncCombos !== "function") return;
-  _comboScheduled = true;
-  requestAnimationFrame(() => { _comboScheduled = false; syncCombos(); });
-}
-// esc() now imported from ./app/util.js (audit A47).
-function formObj(form) {
-  const o = {};
-  for (const el of form.elements) {
-    if (!el.name) continue;
-    // Multi-select serializes as a comma-joined string (matches the existing
-    // backend contract for `events` + `willing_divisions` — both stored as
-    // free-text comma-separated strings in TournamentEntry / DivisionFlex).
-    if (el.tagName === "SELECT" && el.multiple) {
-      const vals = [...el.selectedOptions].map((o) => o.value).filter(Boolean);
-      o[el.name] = vals.length ? vals.join(", ") : null;
-    } else {
-      o[el.name] = el.value === "" ? null : el.value;
-    }
-  }
-  return o;
-}
-// Register a submit handler that preventDefaults and disables the submit button
-// while the async handler runs (guards against double-submit), re-enabling after.
-function onSubmit(form, handler) {
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const btn = form.querySelector('button[type="submit"]');
-    // Audit M31 + N8/N9: disable just the named inputs (so the handler can't
-    // see a half-edited form mid-flight) while leaving Cancel + close buttons
-    // active so a stuck request can still be escaped. Snapshot which inputs
-    // were *enabled* before we toggled, so we don't re-enable a field the
-    // handler legitimately disabled (e.g. mode toggles in roster).
-    const inputs = [...form.elements].filter((el) => el.name);
-    const wasEnabled = inputs.filter((el) => !el.disabled);
-    inputs.forEach((el) => (el.disabled = true));
-    if (btn) btn.disabled = true;
-    form.classList.add("is-submitting");
-    try { await handler(e); }
-    finally {
-      // Re-enable only those inputs the handler didn't itself disable.
-      wasEnabled.forEach((el) => { if (el.isConnected) el.disabled = false; });
-      form.classList.remove("is-submitting");
-      if (btn) btn.disabled = false;
-    }
-  });
-}
-function fillSelect(el, items, labelFn, none = true) {
-  if (!el) return;
-  const cur = el.value;
-  // Audit M26: build options inside a DocumentFragment so the enhanceSelect
-  // MutationObserver fires once per fill instead of once per option.
-  const frag = document.createDocumentFragment();
-  if (none) {
-    const o = document.createElement("option"); o.value = ""; o.textContent = "— none —";
-    frag.appendChild(o);
-  }
-  for (const it of items) {
-    const o = document.createElement("option");
-    o.value = it.id; o.textContent = labelFn(it);
-    frag.appendChild(o);
-  }
-  el.replaceChildren(frag);
-  el.value = cur;
-}
-
-// =================== Type-in dropdowns (searchable comboboxes) ===================
-// Progressively enhance every native <select> into a filterable, type-to-search
-// dropdown. The native <select> stays in the DOM as the form's source of truth
-// (value/required/submit/listeners all unchanged) — we just overlay a text input.
-function enhanceSelect(sel) {
-  if (!sel || sel.dataset.combo) return;
-  // One shared outside-click closer for ALL combos (plan P1 #7).
-  if (!enhanceSelect._open) {
-    enhanceSelect._open = new Set();
-    document.addEventListener("click", (e) => {
-      for (const c of [...enhanceSelect._open]) {
-        if (!c.wrap.contains(e.target) && !c.list.contains(e.target)) c.close(true);
-      }
-    });
-  }
-  // Multi-selects (events, willing_divisions) stay as the native
-  // `<select multiple size="N">` control — the type-in combo wrapper is a
-  // single-value picker that wouldn't handle multi-selection.
-  if (sel.multiple) return;
-  sel.dataset.combo = "1";
-  sel.tabIndex = -1;
-  sel.classList.add("combo-native");
-  const wrap = document.createElement("span");
-  wrap.className = "combo";
-  sel.parentNode.insertBefore(wrap, sel);
-  wrap.appendChild(sel);
-  const listId = "combo-list-" + (enhanceSelect._n = (enhanceSelect._n || 0) + 1);
-  const input = document.createElement("input");
-  input.type = "text"; input.className = "combo-input"; input.autocomplete = "off";
-  input.setAttribute("role", "combobox");
-  input.setAttribute("aria-autocomplete", "list");
-  input.setAttribute("aria-expanded", "false");
-  input.setAttribute("aria-haspopup", "listbox");
-  input.setAttribute("aria-controls", listId);
-  // Label the overlay input from the wrapping <label>'s leading text (the native
-  // select is tabindex=-1, so AT reads the input).
-  const lbl = sel.closest("label");
-  const lblText = lbl && [...lbl.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-  input.setAttribute("aria-label",
-    (sel.getAttribute("aria-label") || (lblText ? lblText.textContent : sel.name) || "select").trim());
-  const list = document.createElement("div");
-  list.className = "combo-list"; list.hidden = true; list.id = listId;
-  list.setAttribute("role", "listbox");
-  // The list is portaled to <body> (not kept inside `wrap`) so it can never be
-  // clipped by a scrolling/transformed ancestor — e.g. the .detail-pane modal,
-  // which is position:fixed + transform + overflow:auto and would otherwise trap
-  // an absolutely-positioned dropdown inside its own scroll area.
-  wrap.append(input);
-  document.body.appendChild(list);
-  let shown = [], hi = -1;
-
-  function syncDisplay() {
-    const o = sel.selectedOptions[0];
-    const blank = [...sel.options].find((x) => x.value === "");
-    // A blank/placeholder option becomes the input's grey placeholder (not its
-    // value), so the field starts empty and you can type a search immediately.
-    input.placeholder = blank ? blank.textContent : "";
-    input.value = (o && o.value !== "") ? o.textContent : "";
-    input.disabled = sel.disabled;
-  }
-  function render(q) {
-    const t = (q || "").trim().toLowerCase();
-    // The blank/placeholder option (value "") is shown as the input placeholder,
-    // not as a selectable row. Optional fields are cleared by emptying the text.
-    shown = [...sel.options].filter((o) => o.value !== "" && (!t || o.textContent.toLowerCase().includes(t)));
-    list.innerHTML = "";
-    if (!shown.length) { list.innerHTML = '<div class="combo-empty">No matches</div>'; return; }
-    shown.forEach((o, i) => {
-      const it = document.createElement("div");
-      it.className = "combo-item" + (o.value === sel.value ? " sel" : "") + (i === hi ? " hi" : "");
-      it.id = listId + "-opt-" + i;
-      it.setAttribute("role", "option");
-      it.setAttribute("aria-selected", o.value === sel.value ? "true" : "false");
-      it.textContent = o.textContent;
-      it.addEventListener("mousedown", (e) => { e.preventDefault(); choose(o); });
-      list.appendChild(it);
-    });
-  }
-  function paintHi() {
-    [...list.children].forEach((c, i) => c.classList.toggle("hi", i === hi));
-    const cur = list.children[hi];
-    if (cur) { cur.scrollIntoView({ block: "nearest" }); input.setAttribute("aria-activedescendant", cur.id); }
-    else input.removeAttribute("aria-activedescendant");
-  }
-  // Position the portaled list (position:fixed) under—or above—the input, using
-  // the input's viewport rect. Flips up when there isn't room below, and caps the
-  // height to the available space so it always scrolls internally rather than
-  // pushing the page. Recomputed on open and on any scroll/resize while open.
-  function positionList() {
-    const r = input.getBoundingClientRect();
-    const margin = 8, maxH = 240;
-    const below = window.innerHeight - r.bottom - margin;
-    const above = r.top - margin;
-    const up = below < Math.min(maxH, list.scrollHeight) && above > below;
-    list.style.position = "fixed";
-    list.style.left = r.left + "px";
-    list.style.width = r.width + "px";
-    list.style.right = "auto";
-    if (up) {
-      list.style.top = "auto";
-      list.style.bottom = (window.innerHeight - r.top + 2) + "px";
-      list.style.maxHeight = Math.max(80, Math.min(maxH, above)) + "px";
-    } else {
-      list.style.bottom = "auto";
-      list.style.top = (r.bottom + 2) + "px";
-      list.style.maxHeight = Math.max(80, Math.min(maxH, below)) + "px";
-    }
-  }
-  const reposition = () => { if (!list.hidden) positionList(); };
-  // Outside-click close goes through ONE shared document listener (plan P1 #7)
-  // instead of one standing listener per combo (~46 on a loaded page). Open
-  // combos register in a set; the shared handler iterates 0-or-1 entries.
-  const _openEntry = { wrap, list, close: (c) => close(c) };
-  function open() { if (sel.disabled) return; render(""); hi = shown.findIndex((o) => o.value === sel.value); paintHi(); list.hidden = false; positionList(); window.addEventListener("scroll", reposition, true); window.addEventListener("resize", reposition); enhanceSelect._open.add(_openEntry); input.setAttribute("aria-expanded", "true"); }
-  // commit=true: if the text was cleared, clear the selection (for optional fields
-  // that have a blank "" option). Otherwise just restore the displayed value.
-  function close(commit) {
-    list.hidden = true; hi = -1;
-    window.removeEventListener("scroll", reposition, true);
-    window.removeEventListener("resize", reposition);
-    enhanceSelect._open.delete(_openEntry);
-    input.setAttribute("aria-expanded", "false");
-    input.removeAttribute("aria-activedescendant");
-    if (commit && input.value.trim() === "" && sel.value !== "" && [...sel.options].some((o) => o.value === "")) {
-      sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    syncDisplay();
-  }
-  function choose(o) { sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true })); syncDisplay(); close(false); }
-
-  // Select existing text on focus so the first keystroke overtypes a prior choice.
-  input.addEventListener("focus", () => { open(); input.select(); });
-  input.addEventListener("click", open);
-  input.addEventListener("input", () => { hi = -1; render(input.value); list.hidden = false; positionList(); enhanceSelect._open.add(_openEntry); input.setAttribute("aria-expanded", "true"); input.removeAttribute("aria-activedescendant"); });
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); if (list.hidden) return open(); hi = Math.min(shown.length - 1, hi + 1); paintHi(); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); hi = Math.max(0, hi - 1); paintHi(); }
-    else if (e.key === "Enter") { if (!list.hidden && shown[hi]) { e.preventDefault(); choose(shown[hi]); } else { e.preventDefault(); close(true); } }
-    else if (e.key === "Escape") { if (!list.hidden) { e.preventDefault(); close(false); } }
-  });
-  // Keep the visible text in sync when options/value/disabled change in code.
-  new MutationObserver(() => requestAnimationFrame(syncDisplay))
-    .observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
-  sel.addEventListener("change", syncDisplay);
-  sel._comboSync = syncDisplay;
-  syncDisplay();
-}
-function enhanceAllSelects() { document.querySelectorAll("select").forEach(enhanceSelect); }
-function syncCombos() { document.querySelectorAll("select[data-combo]").forEach((s) => s._comboSync && s._comboSync()); }
-// form.reset() doesn't fire change — resync combos after any reset.
-document.addEventListener("reset", () => scheduleComboSync(), true);
 
 // ---- caches + labels ----
 const sitesById = {}, tournamentsById = {}, officialsById = {}, playersById = {}, hotelsById = {};
 // Secondary index: roster players keyed by USTA # for O(1) lookups (the
 // detection/grid paths match on USTA, not id). Rebuilt with playersById.
 const playersByUsta = {};
-const officialLabel = (o) => `${o.last_name}, ${o.first_name}`;
-const siteLabel = (s) => (s.code ? s.code + " — " : "") + s.name;
-const playerLabel = (p) => `${[p.last_name, p.first_name].filter(Boolean).join(", ") || "?"} (${p.usta_number})`;
 
-// Certifications (value -> label). Audit F23: seeded as a fallback but
-// overwritten from `/api/enums` at adminInit() time so the backend stays
-// the single source of truth even for display strings.
-let CERTS = [
-  ["roving_official", "Roving official"],
-  ["chair_umpire", "Chair umpire"],
-  ["tournament_referee", "Tournament referee"],
-  ["deputy_referee", "Deputy referee"],
-  ["referee_in_training", "Referee in training"],
-];
-let CERT_LABEL = Object.fromEntries(CERTS);
-const certLabel = (v) => CERT_LABEL[v] || v;
+// D11: division/event catalog (Setup lists + grid editors). Reads active/players via getters.
+const _divCatalog = createDivisionCatalog({
+  getActive: () => active,
+  getPlayersById: () => playersById,
+  getPlayersByUsta: () => playersByUsta,
+  scheduleComboSync,
+});
+const refreshDivisionLists = (...a) => _divCatalog.refreshDivisionLists(...a);
+const _divisionListParams = (...a) => _divCatalog.divisionListParams(...a);
+const _eventListParams = (...a) => _divCatalog.eventListParams(...a);
+const _rowGender = (...a) => _divCatalog.rowGender(...a);
+const _inferFormGender = (...a) => _divCatalog.inferFormGender(...a);
+
+// D11: display labels + cert catalog (./app/labels.js)
+const _certs = createCertCatalog(DEFAULT_CERTS);
+const certLabel = (v) => _certs.certLabel(v);
 // fmtDOW now imported from ./app/util.js (A47).
 
-// Setup CRUDs each call refreshAllSelects from their onLoad — on first paint
-// that fires 5+ times in the same animation frame. Coalesce via rAF.
-let _refreshAllSelectsScheduled = false;
-function refreshAllSelects() {
-  if (_refreshAllSelectsScheduled) return;
-  _refreshAllSelectsScheduled = true;
-  requestAnimationFrame(() => { _refreshAllSelectsScheduled = false; _refreshAllSelectsImpl(); });
-}
-function _refreshAllSelectsImpl() {
-  fillSelect(document.getElementById("dist-official"), Object.values(officialsById), officialLabel, false);
-  fillSelect(document.getElementById("dist-site"), Object.values(sitesById), siteLabel, false);
-  fillSelect(document.getElementById("roster-player"), Object.values(playersById), playerLabel, false);
-  fillSelect(document.getElementById("asg-official"), Object.values(officialsById), officialLabel, false);
-  // asg-site is filled per-tournament in loadAssignments() (mileage site must be
-  // one of THIS tournament's sites), so it is intentionally not filled here.
-  fillSelect(document.getElementById("trb-hotel"), Object.values(hotelsById), (h) => h.name, false);
-  fillPlayerRefs();
-  // Suggest known hotel names on the player-hotel input (free text still allowed).
-  const dl = document.getElementById("known-hotels");
-  if (dl) dl.innerHTML = Object.values(hotelsById)
-    .map((h) => hstr`<option value="${h.name}"></option>`).join("");
-}
-
-// Part B forms reference the existing Players list instead of free-typing a
-// player. Fill any `select.player-ref` and resolve the choice back to the
-// player's identity fields on submit (backend upserts by USTA #, unchanged).
-function fillPlayerRef(sel) {
-  if (!sel) return;
-  const cur = sel.value;
-  const blank = sel.name === "partner_ref" ? "— none —" : "— select player —";
-  sel.innerHTML = `<option value="">${blank}</option>`;
-  for (const p of Object.values(playersById)) {
-    const o = document.createElement("option");
-    o.value = p.id; o.textContent = playerLabel(p);
-    sel.appendChild(o);
-  }
-  sel.value = cur;
-}
-function fillPlayerRefs() { document.querySelectorAll("select.player-ref").forEach(fillPlayerRef); }
-// Expand a chosen player id (field) into usta_number/first_name/last_name on `b`.
-function expandPlayerRef(b, field = "player_ref") {
-  const id = b[field];
-  delete b[field];
-  if (!id) return b;
-  const p = playersById[id];
-  if (!p) {
-    // Audit M21 + N10: stale cache. Kick off a refresh so the next attempt
-    // succeeds; surface the error to the user immediately rather than
-    // submitting a half-formed body.
-    if (typeof playersCrud !== "undefined" && playersCrud.refresh) {
-      playersCrud.refresh().catch(() => {});
-    }
-    throw new Error("selected player isn't loaded — refreshing the player list, try again in a moment");
-  }
-  b.usta_number = p.usta_number;
-  b.first_name = p.first_name || null;
-  b.last_name = p.last_name || null;
-  return b;
-}
-
-// a11y #9: walk Tabulator header-filter inputs and tag them with a
-// per-column aria-label so screen readers say "Filter Name" instead of
-// the bare "search edit text". Runs on every tableBuilt + dataFiltered.
-function _labelHeaderFilters(table) {
-  if (!table || !table.element) return;
-  table.element.querySelectorAll(".tabulator-col").forEach((col) => {
-    const title = col.querySelector(".tabulator-col-title")?.textContent?.trim();
-    const filter = col.querySelector(".tabulator-header-filter input, .tabulator-header-filter select");
-    if (title && filter && !filter.hasAttribute("aria-label")) {
-      filter.setAttribute("aria-label", `Filter ${title}`);
-    }
-  });
-}
-// a11y 4th-pass #4: reflect Tabulator's current sort direction into aria-sort
-// so SR users hear "ascending" / "descending" on the column they're inspecting.
-// Tabulator already sets `aria-sort` on sortable columns to "none" by default;
-// we update it post-sort.
-function _reflectAriaSort(table) {
-  if (!table || !table.element) return;
-  const sorters = (typeof table.getSorters === "function") ? table.getSorters() : [];
-  const active = new Map(sorters.map((s) => [s.field, s.dir]));
-  table.element.querySelectorAll(".tabulator-col[tabulator-field]").forEach((col) => {
-    const field = col.getAttribute("tabulator-field");
-    if (!field) return;
-    const dir = active.get(field);
-    col.setAttribute("aria-sort", dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none");
-  });
-}
+// D11: shared select refresh + player-ref helpers
+const {
+  refreshAllSelects, fillPlayerRef, fillPlayerRefs, expandPlayerRef,
+} = createSelectRefresh({
+  getOfficialsById: () => officialsById,
+  getSitesById: () => sitesById,
+  getPlayersById: () => playersById,
+  getHotelsById: () => hotelsById,
+  getPlayersCrud: () => (typeof playersCrud !== "undefined" ? playersCrud : undefined),
+});
 
 // ---- tabs ----
 // ARIA: expose the menu as a tablist and make tabs keyboard-navigable.
@@ -1066,75 +177,17 @@ function activateGroup(key) {
   sizeLists();
 }
 
-// IA cleanup (P0 #2): per-tab count badges. One cheap /nav-counts call maps to
-// the seven Player-list tabs plus the Inbox (tab + L1 group button). Hidden at
-// zero so a clean list carries no chip — only waiting work draws the eye.
-const NAV_COUNT_TABS = {
-  "panel-t-inbox": "inbox_unfiled",
-  "panel-t-late": "late_entries",
-  "panel-t-withdrawals": "withdrawals",
-  "panel-t-sched": "scheduling",
-  "panel-t-divflex": "div_flex",
-  "panel-t-pairing": "pairing",
-  "panel-t-doubles": "doubles",
-  "panel-t-photels": "player_hotels",
-};
-function _setNavBadge(el, n) {
-  if (!el) return;
-  let b = el.querySelector(":scope > .tab-badge");
-  if (!n) { if (b) b.remove(); return; }
-  if (!b) {
-    b = document.createElement("span");
-    b.className = "tab-badge";
-    el.appendChild(b);
-  }
-  b.textContent = n > 99 ? "99+" : String(n);
-}
-async function refreshNavCounts() {
-  const inboxBtn = _groupsEl.querySelector('.gbtn[data-group="inbox"]');
-  if (!active) {
-    Object.keys(NAV_COUNT_TABS).forEach((pid) =>
-      _setNavBadge(document.querySelector(`.tab[data-target="${pid}"]`), 0));
-    _setNavBadge(inboxBtn, 0);
-    return;
-  }
-  let counts;
-  try { counts = await api(`/tournaments/${active.id}/nav-counts`); }
-  catch (_) { return; }  // non-fatal: leave the last-known badges in place
-  for (const [pid, key] of Object.entries(NAV_COUNT_TABS)) {
-    _setNavBadge(document.querySelector(`.tab[data-target="${pid}"]`), counts[key] || 0);
-  }
-  // The L1 Inbox group button mirrors the unfiled count — the global "mail is
-  // waiting" signal visible from any tab.
-  _setNavBadge(inboxBtn, counts.inbox_unfiled || 0);
-}
+// D11: breadcrumb history (needs activateGroup)
+const { pushCrumb: _pushCrumb } = createBreadcrumbs({ activateGroup });
 
-// Prerequisite callout (plan P1 #1): when a workspace page depends on an EMPTY
-// Setup catalog (no officials / players / hotels yet), say so up top with a
-// jump link — instead of presenting a silently empty picker the TD has to
-// puzzle over. The note removes itself once the catalog has rows.
-function prereqCallout(panelId, show, msg, setupTabId) {
-  const panel = document.getElementById(panelId);
-  if (!panel) return;
-  let note = panel.querySelector(":scope > .prereq-note");
-  if (!show) { if (note) note.remove(); return; }
-  if (!note) {
-    note = document.createElement("div");
-    note.className = "prereq-note";
-    note.setAttribute("role", "note");
-    panel.prepend(note);
-  }
-  note.innerHTML = "";
-  const span = document.createElement("span"); span.textContent = msg + " ";
-  const a = document.createElement("a"); a.href = "#"; a.className = "btn-link";
-  a.textContent = "Open Setup →";
-  a.addEventListener("click", (e) => {
-    e.preventDefault();
-    activateGroup("setup");
-    const t = document.getElementById(setupTabId); if (t) t.click();
-  });
-  note.append(span, a);
-}
+// D11: nav badges + prereq callout
+const { refreshNavCounts } = createNavCounts({
+  api,
+  getActive: () => active,
+  getGroupsEl: () => _groupsEl,
+});
+const prereqCallout = createPrereqCallout({ activateGroup });
+
 _groups.forEach((g) => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "gbtn";
@@ -1245,156 +298,6 @@ _menuEl.addEventListener("click", (e) => {
   }
 });
 
-// =================== Breadcrumb / navigation history ===================
-// Tracks the last N (group, panel) locations the user visited. Renders a
-// strip of clickable chips below the nav. Clicking a chip jumps back to
-// that location and truncates the trail to that point (classic browser-back
-// semantics, but explicit). Alt+Left also pops one step.
-const CRUMB_MAX = 8;
-const _crumbsBar = document.getElementById("breadcrumbs");
-const _crumbList = document.getElementById("crumb-list");
-const _crumbBack = document.getElementById("crumb-back");
-const _crumbClear = document.getElementById("crumb-clear");
-let _navHistory = [];
-let _crumbJumping = false;  // suppress re-recording while we programmatically jump
-
-function _crumbLabelFor(group, panel) {
-  const groupEl = document.querySelector(`.menu-group[data-group="${group}"]`);
-  const rawGroup = groupEl ? groupEl.querySelector(".menu-label").textContent.trim() : group;
-  // Title-case the group key fallback so "setup" → "Setup" if the .menu-label
-  // node isn't reachable for any reason.
-  const groupLabel = rawGroup ? rawGroup.charAt(0).toUpperCase() + rawGroup.slice(1) : group;
-  const tabEl = document.querySelector(`.tab[data-target="${panel}"]`);
-  const tabLabel = tabEl ? tabEl.textContent.trim() : panel;
-  return { groupLabel, tabLabel };
-}
-function _pushCrumb(group, panel) {
-  if (_crumbJumping) return;
-  if (!group || !panel) return;
-  // Collapse consecutive duplicates.
-  const last = _navHistory[_navHistory.length - 1];
-  if (last && last.group === group && last.panel === panel) return;
-  _navHistory.push({ group, panel });
-  if (_navHistory.length > CRUMB_MAX) _navHistory = _navHistory.slice(-CRUMB_MAX);
-  _renderCrumbs();
-}
-function _jumpToCrumb(idx) {
-  const target = _navHistory[idx];
-  if (!target) return;
-  // Truncate trail to and including the clicked entry — the user is "back" there.
-  _navHistory = _navHistory.slice(0, idx + 1);
-  _crumbJumping = true;
-  try {
-    // Activate the group, then click the tab. activateGroup will auto-click the
-    // first tab of the group if none is active; clicking explicitly afterward
-    // ensures the right panel ends up active.
-    activateGroup(target.group);
-    const tabEl = document.querySelector(`.tab[data-target="${target.panel}"]`);
-    if (tabEl) tabEl.click();
-  } finally {
-    _crumbJumping = false;
-  }
-  _renderCrumbs();
-}
-function _renderCrumbs() {
-  if (!_crumbsBar) return;
-  if (_navHistory.length === 0) { _crumbsBar.hidden = true; return; }
-  _crumbsBar.hidden = false;
-  _crumbList.innerHTML = "";
-  // G-2: cap the visible chain to the last CRUMB_VISIBLE entries so the strip
-  // never wraps. When older crumbs are hidden, show a leading "…" that jumps
-  // back to the oldest retained step.
-  const CRUMB_VISIBLE = 4;
-  const overflow = _navHistory.length > CRUMB_VISIBLE;
-  const startIdx = overflow ? _navHistory.length - CRUMB_VISIBLE : 0;
-  if (overflow) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "crumb-link"; btn.textContent = "…";
-    btn.title = `${startIdx} earlier step(s) — jump to the oldest`;
-    btn.addEventListener("click", () => _jumpToCrumb(0));
-    li.appendChild(btn);
-    _crumbList.appendChild(li);
-  }
-  _navHistory.slice(startIdx).forEach((entry, i) => {
-    const idx = startIdx + i;
-    const isCurrent = idx === _navHistory.length - 1;
-    const { groupLabel, tabLabel } = _crumbLabelFor(entry.group, entry.panel);
-    const li = document.createElement("li");
-    if (isCurrent) {
-      const span = document.createElement("span");
-      span.className = "crumb-current";
-      span.textContent = `${groupLabel} › ${tabLabel}`;
-      span.setAttribute("aria-current", "page");
-      li.appendChild(span);
-    } else {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "crumb-link";
-      btn.textContent = `${groupLabel} › ${tabLabel}`;
-      btn.title = `Jump back to ${groupLabel} › ${tabLabel}`;
-      btn.addEventListener("click", () => _jumpToCrumb(idx));
-      li.appendChild(btn);
-    }
-    _crumbList.appendChild(li);
-  });
-  _crumbBack.disabled = _navHistory.length < 2;
-}
-if (_crumbBack) {
-  _crumbBack.addEventListener("click", () => {
-    if (_navHistory.length < 2) return;
-    _jumpToCrumb(_navHistory.length - 2);
-  });
-}
-if (_crumbClear) {
-  _crumbClear.addEventListener("click", () => {
-    // Keep the current location as the only crumb so we don't disappear
-    // mid-task. If nothing recorded yet, just hide.
-    const cur = _navHistory[_navHistory.length - 1];
-    _navHistory = cur ? [cur] : [];
-    _renderCrumbs();
-  });
-}
-// Alt+Left as a keyboard accelerator for "back one step".
-document.addEventListener("keydown", (e) => {
-  if (e.altKey && e.key === "ArrowLeft" && _navHistory.length >= 2) {
-    e.preventDefault();
-    _jumpToCrumb(_navHistory.length - 2);
-  }
-});
-// Initial seed is done by applyAuth() when the user becomes admin — that
-// avoids a race where the boot-time applyAuth(null) clears anything we'd seed
-// here. See the !isAdmin branch in applyAuth above.
-
-
-// Bound every scrollable list to the real space left below it so it never runs
-// off the bottom of the screen, whatever the toolbar height happens to be.
-function sizeLists() {
-  const ls = document.querySelector(".panel.active .list-scroll");
-  const top = ls ? ls.getBoundingClientRect().top : 160;
-  const max = Math.max(140, window.innerHeight - top - 16);
-  document.documentElement.style.setProperty("--list-max", max + "px");
-}
-// Tabulator computes fitColumns widths and resolves vh-based maxHeight at
-// layout time; it does not always re-run on a viewport resize when the table
-// lives inside a flex/tab container, so grids could keep a stale width/height
-// after the window changed. Debounce a redraw of the *active* panel's grids
-// (plus any visible master-detail grids) on resize so both axes track the
-// viewport. 120 ms keeps drag-resize smooth without thrashing layout.
-let _resizeTimer = null;
-function _redrawVisibleGrids() {
-  const activePanel = document.querySelector(".panel.active");
-  if (activePanel && activePanel.id) _redrawPanelGrids(activePanel.id);
-}
-function onViewportResize() {
-  sizeLists();
-  clearTimeout(_resizeTimer);
-  _resizeTimer = setTimeout(_redrawVisibleGrids, 120);
-}
-window.addEventListener("resize", onViewportResize);
-window.addEventListener("load", sizeLists);
-requestAnimationFrame(sizeLists);
-
 // =================== Active tournament state ===================
 let active = null;
 let lastSelectedTournamentId = null;
@@ -1412,7 +315,7 @@ _tstate.onChange(({ active: next, prev }) => {
   document.querySelectorAll(".tpanel form").forEach((f) => { try { f.reset(); } catch (_) {} });
   // Day-of keeps a sticky calendar date; reset so the next load picks a
   // default inside the new tournament's play window (not yesterday's event).
-  if (typeof _DAYOF !== "undefined") _DAYOF.date = null;
+  _resetDayOfDate();
   if (next) toast(`Switched to ${next.name}`, true);
   else if (prev) toast(`Cleared active tournament (${prev.name})`, true);
   refreshNavCounts();  // repaint the per-tab + Inbox badges for the new tournament
@@ -1543,6 +446,10 @@ function _redrawPanelGrids(panelId) {
   if (!grids) return;
   requestAnimationFrame(() => grids.forEach((g) => { try { g.redraw(true); } catch (_) {} }));
 }
+
+// D11: list max-height + resize redraw
+const { sizeLists } = createLayout({ redrawPanelGrids: _redrawPanelGrids });
+
 // Audit A48: an IntersectionObserver also catches *any* panel that becomes
 // visible (history sub-panels, modals revealing a grid, etc.) without each
 // caller having to wire up its own redraw. The Tabulator grids inside that
@@ -1583,20 +490,12 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
   openPlayer360(Number(link.dataset.pid), active ? active.id : null);
 });
-// Shared backdrop for the master/detail edit overlay (one open at a time).
-const _detailBackdrop = document.createElement("div");
-_detailBackdrop.className = "detail-backdrop";
-document.body.appendChild(_detailBackdrop);
-let _closeOpenDetail = null;
-function closeOpenDetail() { if (_closeOpenDetail) _closeOpenDetail(); }
-_detailBackdrop.addEventListener("click", closeOpenDetail);
-document.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape") return;
-  // Let Tabulator cell editors swallow Escape themselves; otherwise the user
-  // canceling a cell edit accidentally closes the surrounding modal (C8).
-  if (document.querySelector(".tabulator-editing")) return;
-  closeOpenDetail();
-});
+// D11: shared detail backdrop + Escape-to-close
+const {
+  detailBackdrop: _detailBackdrop,
+  closeOpenDetail,
+  setCloseOpenDetail,
+} = createDetailChrome();
 
 // wireEntity (the Setup master/detail CRUD factory) lives in ./app/grids.js
 // (P2 #11a) together with makeListGrid/makeReadGrid; instantiated here with
@@ -1604,7 +503,7 @@ document.addEventListener("keydown", (e) => {
 const { wireEntity, makeListGrid, makeReadGrid, makeGrid, _autoHeaderFilters } = createGridFactories({
   api, esc, setMsg, confirmDialog, markInvalid, scheduleComboSync, formObj,
   _csvDownload, _reflectAriaSort, GRIDS, _detailBackdrop,
-  setCloseOpenDetail: (fn) => { _closeOpenDetail = fn; },
+  setCloseOpenDetail,
 });
 
 async function refreshHealth() {
@@ -1733,10 +632,14 @@ const rosterCloseBtn = document.createElement("button");
 rosterCloseBtn.type = "button"; rosterCloseBtn.className = "detail-close"; rosterCloseBtn.textContent = "×"; rosterCloseBtn.title = "Close";
 rosterDetail.insertBefore(rosterCloseBtn, rosterDetail.firstChild);
 function rosterOpenModal() {
-  rosterDetail.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = rosterCloseModal;
+  rosterDetail.classList.add("detail-open"); _detailBackdrop.classList.add("show");
+  setCloseOpenDetail(rosterCloseModal);
   scheduleComboSync();
 }
-function rosterCloseModal() { rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null; _rosterAddQueue = []; }
+function rosterCloseModal() {
+  rosterDetail.classList.remove("detail-open"); _detailBackdrop.classList.remove("show");
+  setCloseOpenDetail(null); _rosterAddQueue = [];
+}
 rosterCloseBtn.addEventListener("click", rosterCloseModal);
 async function loadRoster() {
   if (!active) return;
@@ -3097,7 +2000,7 @@ function renderAssignment(a, availDates) {
   addRow.appendChild(addLbl);
   const certSel = document.createElement("select");
   certSel.setAttribute("aria-label", "Role for the added day(s)");
-  CERTS.forEach(([v, lbl]) => { const o = document.createElement("option"); o.value = v; o.textContent = lbl; certSel.appendChild(o); });
+  _certs.pairs.forEach(([v, lbl]) => { const o = document.createElement("option"); o.value = v; o.textContent = lbl; certSel.appendChild(o); });
   addRow.appendChild(certSel);
 
   const assigned = new Set(a.days.map((d) => d.work_date));
@@ -3406,270 +2309,12 @@ const incidentsGrid = makeListGrid("incidents-table", [
       loadIncidents();
     } catch (e) { setMsg("incident-msg", e.message, false); try { cell.restoreOldValue(); } catch (_) {} loadIncidents(); }
   });
-// ============================== Day-of mode ==============================
-// Venue view for ONE calendar day (defaults to today). State is just the
-// focused date + a name filter; every render re-fetches /day-of and repaints
-// the #dayof-* containers. Mutations reuse the existing per-day-status /
-// incident / coverage-fill endpoints, then reload. Controls are big-touch
-// (≥44px) for tablet use on-site. One delegated click/submit/input handler is
-// wired once (guarded by _dayofWired) so re-renders don't stack listeners.
-const _DAYOF = { date: null, search: "" };
-let _dayofWired = false;
-// LOCAL calendar date (not UTC) — a TD opening the venue view at 6pm Pacific
-// must see today, not tomorrow's UTC date. (toISOString would shift across the
-// UTC boundary in either direction depending on the offset's sign.)
-function _isoLocal(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function _todayIso() { return _isoLocal(new Date()); }
-function _shiftIso(iso, days) {
-  const d = new Date(iso + "T00:00:00");   // local midnight
-  d.setDate(d.getDate() + days);
-  return _isoLocal(d);                       // format local — no UTC round-trip
-}
-
-function _dayOfDefaultDate(tournament) {
-  // Prefer today when the event is live; otherwise open on play_start so the
-  // TD doesn't land on an empty "outside play window" day with every site red
-  // (walkthrough 2026-07-19: Macon 7/9–7/12 opened as empty on 7/19).
-  const today = _todayIso();
-  if (!tournament) return today;
-  const start = tournament.play_start_date;
-  const end = tournament.play_end_date;
-  if (start && end && today >= start && today <= end) return today;
-  return start || today;
-}
-
-async function loadDayOf() {
-  if (!active) return;
-  if (!_DAYOF.date) _DAYOF.date = _dayOfDefaultDate(active);
-  _wireDayOf();
-  let d;
-  try { d = await api(`/tournaments/${active.id}/day-of?on=${_DAYOF.date}`); }
-  catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
-  // If we still landed outside the window (e.g. sticky date from another
-  // tournament) and the API reports play dates, snap once to play_start.
-  if (!d.in_window && d.play_start_date && _DAYOF.date !== d.play_start_date
-      && !(_DAYOF.date >= d.play_start_date && _DAYOF.date <= d.play_end_date)) {
-    _DAYOF.date = d.play_start_date;
-    try { d = await api(`/tournaments/${active.id}/day-of?on=${_DAYOF.date}`); }
-    catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
-  }
-  _dayofData = d;
-  try {
-    _renderDayOfHead(d);
-    _renderDayOfSummary(d);
-    _renderDayOfCoverage(d);
-    _renderDayOfOfficials(d);
-    _renderDayOfIncidents(d);
-  } catch (e) { toast("Couldn't render the day-of view: " + e.message, false); }
-}
-let _dayofData = null;
-
-function _renderDayOfHead(d) {
-  const isToday = d.date === _todayIso();
-  const windowNote = d.in_window
-    ? '<span class="badge badge-ok">during play</span>'
-    : '<span class="badge badge-muted">outside play window</span>';
-  document.getElementById("dayof-head").innerHTML = hstr`
-    <div class="dayof-datebar">
-      <button type="button" class="dayof-step touch-btn" data-step="-1" aria-label="Previous day">◀</button>
-      <div class="dayof-dateline">
-        <strong>${raw(_fmtMDY(d.date))}</strong>
-        ${isToday ? raw('<span class="badge badge-info">today</span>') : ""} ${raw(windowNote)}
-      </div>
-      <button type="button" class="dayof-step touch-btn" data-step="1" aria-label="Next day">▶</button>
-      ${isToday ? "" : raw('<button type="button" class="dayof-today btn-small">Jump to today</button>')}
-      ${(!d.in_window && d.play_start_date) ? raw(`<button type="button" class="dayof-playstart btn-small" data-date="${d.play_start_date}">Jump to play start</button>`) : ""}
-    </div>`;
-}
-
-function _renderDayOfSummary(d) {
-  const r = d.rooms, si = d.signin;
-  const stat = (label, val, cls) =>
-    hstr`<div class="dayof-stat ${cls || ""}"><span class="dayof-stat-n">${val}</span><span class="dayof-stat-l">${label}</span></div>`;
-  document.getElementById("dayof-summary").innerHTML =
-    stat("working", d.officials_count) +
-    stat("checked in", d.present_count, d.present_count ? "ok" : "") +
-    stat("sites covered", d.sites.length - d.uncovered_sites.length + "/" + d.sites.length,
-         d.uncovered_sites.length ? "warn" : "ok") +
-    stat("rooms used", r.assigned + "/" + r.reserved) +
-    stat("players signed in", si.signed_in + "/" + si.selected);
-}
-
-function _renderDayOfCoverage(d) {
-  const box = document.getElementById("dayof-coverage");
-  const gaps = d.uncovered_sites.length
-    ? hstr`<div class="dayof-gaps"><span class="dayof-gaps-l">No official today at:</span> ${
-        d.uncovered_sites.map((s) => html`<span class="badge badge-warn">${s.site_label}</span>`)}</div>`
-    : (d.sites.length ? '<div class="dayof-gaps ok">✓ every site has an official today</div>' : "");
-  // Quick-assign: pick a role, find certified officials free that day, one tap
-  // to fill. Reuses /coverage-candidates + /coverage-fill.
-  const roleOpts = CERTS.map(([v, l]) => hstr`<option value="${v}">${l}</option>`).join("");
-  box.innerHTML = gaps + hstr`
-    <details class="dayof-qa">
-      <summary>＋ Quick-assign an official for ${raw(_fmtMDY(d.date))}</summary>
-      <div class="dayof-qa-body">
-        <label>Role <select class="dayof-qa-role">${raw(roleOpts)}</select></label>
-        <button type="button" class="dayof-qa-go btn-small">Find available officials</button>
-        <div class="dayof-qa-results" aria-live="polite"></div>
-      </div>
-    </details>`;
-}
-
-function _renderDayOfOfficials(d) {
-  const box = document.getElementById("dayof-officials");
-  const q = _DAYOF.search.trim().toLowerCase();
-  const shown = q ? d.officials.filter((o) => o.official_name.toLowerCase().includes(q)) : d.officials;
-  const card = (o) => {
-    const present = o.actual_status === "worked";
-    const noshow = o.actual_status === "no_show";
-    return hstr`
-      <div class="dayof-off">
-        <div class="dayof-off-main">
-          <div class="dayof-off-name">${o.official_name}</div>
-          <div class="dayof-off-meta">${certLabel(o.working_as)} · ${o.site_label || "no site"} ${raw(_respChip(o.response_status))}${
-            noshow ? raw(' <span class="badge badge-bad">no-show</span>') : ""}${
-            o.actual_status === "early_departure" ? raw(' <span class="badge badge-warn">left early</span>') : ""}</div>
-        </div>
-        <div class="dayof-off-actions">
-          <button type="button" class="touch-btn dayof-present${present ? " on" : ""}" data-day="${o.day_id}" data-status="worked">✓ Present</button>
-          <button type="button" class="touch-btn dayof-noshow${noshow ? " on" : ""}" data-day="${o.day_id}" data-status="no_show">✗ No-show</button>
-        </div>
-      </div>`;
-  };
-  const list = shown.length
-    ? shown.map(card).join("")
-    : (d.officials.length ? '<p class="muted">No official matches the search.</p>'
-                          : '<p class="muted">No officials are scheduled to work this day.</p>');
-  box.innerHTML = hstr`<h3>Officials working <span class="muted">(${d.officials_count})</span></h3>
-    <input type="search" class="dayof-search" placeholder="🔍 filter by name…" value="${_DAYOF.search}" aria-label="Filter officials by name" />
-    <div class="dayof-off-list">${raw(list)}</div>`;
-}
-
-function _renderDayOfIncidents(d) {
-  const box = document.getElementById("dayof-incidents");
-  const sev = { info: "muted", minor: "warn", major: "bad" };
-  const row = (i) => hstr`
-    <div class="dayof-inc">
-      <span class="badge badge-${sev[i.severity] || "muted"}">${i.severity}</span>
-      <div class="dayof-inc-body">
-        <div class="dayof-inc-desc">${i.description}</div>
-        <div class="dayof-inc-meta">${i.category}${i.site_label ? " · " + i.site_label : ""} · ${
-          raw(new Date(i.occurred_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))}${
-          i.resolved ? raw(' · <span class="badge badge-ok">resolved</span>') : ""}</div>
-      </div>
-    </div>`;
-  const list = d.incidents.length ? d.incidents.map(row).join("")
-    : '<p class="muted">No incidents logged this day.</p>';
-  box.innerHTML = hstr`<h3>Incidents <span class="muted">(${d.incidents.length})</span></h3>
-    <form class="dayof-inc-form" autocomplete="off">
-      <div class="row">
-        <label>Severity <select name="severity">
-          <option value="info">Info</option><option value="minor">Minor</option><option value="major">Major</option>
-        </select></label>
-        <label>Category <select name="category">
-          <option value="weather">Weather</option><option value="injury">Injury</option>
-          <option value="dispute">Dispute</option><option value="facility">Facility</option>
-          <option value="conduct">Conduct</option><option value="other" selected>Other</option>
-        </select></label>
-      </div>
-      <label class="dayof-inc-what">What happened
-        <input name="description" required maxlength="2000" placeholder="e.g. Rain delay courts 1–3, play suspended 13:05" />
-      </label>
-      <div class="actions-row"><button type="submit" class="touch-btn">Log incident</button><span class="msg dayof-inc-msg"></span></div>
-    </form>
-    <div class="dayof-inc-list">${raw(list)}</div>`;
-}
-
-// One delegated handler set, wired once. Covers the date stepper, check-in
-// toggles, quick-assign, the name filter, and the incident quick-log form.
-function _wireDayOf() {
-  if (_dayofWired) return;
-  _dayofWired = true;
-  const panel = document.getElementById("panel-t-dayof");
-
-  panel.addEventListener("click", async (e) => {
-    const step = e.target.closest(".dayof-step");
-    if (step) { _DAYOF.date = _shiftIso(_DAYOF.date, Number(step.dataset.step)); loadDayOf(); return; }
-    const playStart = e.target.closest(".dayof-playstart");
-    if (playStart && playStart.dataset.date) {
-      _DAYOF.date = playStart.dataset.date;
-      loadDayOf();
-      return;
-    }
-    if (e.target.closest(".dayof-today")) { _DAYOF.date = _todayIso(); loadDayOf(); return; }
-
-    const chk = e.target.closest(".dayof-present, .dayof-noshow");
-    if (chk) {
-      const dayId = chk.dataset.day;
-      // Toggle: tapping the already-active state clears back to "planned".
-      const target = chk.classList.contains("on") ? "planned" : chk.dataset.status;
-      try {
-        await api(`/assignment-days/${dayId}/status`, { method: "PUT", body: JSON.stringify({ actual_status: target }) });
-        loadDayOf();
-      } catch (err) { toast("Couldn't update check-in: " + err.message, false); }
-      return;
-    }
-
-    if (e.target.closest(".dayof-qa-go")) {
-      const details = e.target.closest(".dayof-qa");
-      const role = details.querySelector(".dayof-qa-role").value;
-      const results = details.querySelector(".dayof-qa-results");
-      results.textContent = "Looking…";
-      try {
-        const cands = await api(`/tournaments/${active.id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${_DAYOF.date}`);
-        if (!cands.length) { results.innerHTML = '<p class="muted">No certified official is free that day.</p>'; return; }
-        results.innerHTML = hstr`${cands.slice(0, 12).map((c) => html`
-          <button type="button" class="touch-btn dayof-qa-cand" data-oid="${c.official_id}" data-role="${role}">
-            ${c.official_name}${c.available ? raw(' <span class="badge badge-ok">available</span>') : ""}${
-            c.busy_elsewhere ? raw(' <span class="badge badge-warn">busy elsewhere</span>') : ""}${
-            c.assigned_here ? raw(' <span class="badge badge-info">on roster</span>') : ""}
-          </button>`)}`;
-      } catch (err) { results.textContent = "Error: " + err.message; }
-      return;
-    }
-
-    const cand = e.target.closest(".dayof-qa-cand");
-    if (cand) {
-      try {
-        await api(`/tournaments/${active.id}/coverage-fill`, { method: "POST",
-          body: JSON.stringify({ official_id: Number(cand.dataset.oid), work_date: _DAYOF.date, working_as: cand.dataset.role }) });
-        toast("Assigned for " + _fmtMDY(_DAYOF.date), true);
-        loadDayOf();
-      } catch (err) { toast("Couldn't assign: " + err.message, false); }
-      return;
-    }
-  });
-
-  // Name filter — re-render the officials column only (keep focus in the box).
-  panel.addEventListener("input", (e) => {
-    if (!e.target.classList.contains("dayof-search")) return;
-    _DAYOF.search = e.target.value;
-    if (_dayofData) {
-      _renderDayOfOfficials(_dayofData);
-      const s = document.querySelector("#panel-t-dayof .dayof-search");
-      if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
-    }
-  });
-
-  panel.addEventListener("submit", async (e) => {
-    const form = e.target.closest(".dayof-inc-form");
-    if (!form) return;
-    e.preventDefault();
-    const msg = form.querySelector(".dayof-inc-msg");
-    const body = {
-      severity: form.severity.value, category: form.category.value,
-      description: form.description.value.trim(),
-    };
-    if (!body.description) { msg.textContent = "describe what happened"; return; }
-    try {
-      await api(`/tournaments/${active.id}/incidents`, { method: "POST", body: JSON.stringify(body) });
-      form.reset();
-      loadDayOf();
-    } catch (err) { msg.textContent = err.message; }
-  });
-}
+// D11: day-of venue panel (./app/dayof.js)
+const { loadDayOf, resetStickyDate: _dayOfReset } = createDayOfPanel({
+  api, toast, setMsg, html, hstr, raw, fmtMDY: _fmtMDY, certLabel, respChip: _respChip,
+  getActive: () => active, getCertPairs: () => _certs.pairs,
+});
+_resetDayOfDate = _dayOfReset;
 
 async function loadIncidents() {
   if (!active) return;
@@ -3700,293 +2345,11 @@ onSubmit(incidentForm, async () => {
 });
 incidentForm.querySelector(".cancel").addEventListener("click", incReset);
 
-// =================== Payroll (P4-4 finalize/lock + settle) ===================
-// Live numbers recompute from current rows; "Finalize" freezes one official's
-// computed summary into payroll_record so later day/rate edits can't move
-// money the TD already approved. Drift = finalized ≠ live (re-finalize or
-// investigate). Mark paid tracks settlement; paid records refuse unfinalize.
-const _PAID_METHODS = ["check", "ach", "cash", "venmo", "zelle", "other"];
-// record_ids checked for the next "New batch…". Reset on every payroll reload
-// (record states change) and after a batch is created.
-const _batchSel = new Set();
-async function _payrollMarkPaid(row) {
-  const method = await (async () => {
-    // tiny inline picker via prompt-less confirm flow: build a one-off dialog
-    return new Promise((resolve) => {
-      const m = document.createElement("div"); m.className = "modal";
-      m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
-        hstr`<h3 class="detail-title">Mark paid — ${row.official_name}</h3>` +
-        '<div class="row"><label>Method <select id="pay-method">' +
-        _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") +
-        '</select></label>' +
-        '<label>Note <input id="pay-note" maxlength="500" placeholder="check #1042 / batch 7" /></label></div>' +
-        '<div class="modal-actions"><button type="button" id="pay-ok">Mark paid</button>' +
-        '<button type="button" id="pay-cancel" class="cancel">Cancel</button></div></div>';
-      document.body.appendChild(m);
-      m.querySelector("#pay-ok").addEventListener("click", () => {
-        const v = { method: m.querySelector("#pay-method").value,
-                    note: m.querySelector("#pay-note").value.trim() || null };
-        m.remove(); resolve(v);
-      });
-      m.querySelector("#pay-cancel").addEventListener("click", () => { m.remove(); resolve(null); });
-      m.addEventListener("click", (e) => { if (e.target === m) { m.remove(); resolve(null); } });
-    });
-  })();
-  if (!method) return;
-  try {
-    await api(`/payroll/${row.finalized.record_id}/paid`, { method: "PUT",
-      body: JSON.stringify({ paid: true, paid_method: method.method, paid_note: method.note }) });
-    setMsg("payroll-msg", `paid — ${row.official_name}`, true);
-    loadPayroll();
-  } catch (e) { setMsg("payroll-msg", e.message, false); }
-}
-const payrollGrid = makeReadGrid("payroll-table", [
-  { title: "", field: "_sel", headerSort: false, width: 36, hozAlign: "center",
-    titleFormatter: () => '<span title="Tick finalized, unpaid rows to batch just those (else New batch settles all eligible)">✓</span>',
-    formatter: (cell) => {
-      const m = cell.getData();
-      // only finalized, not-yet-paid, un-batched records can join a new batch
-      if (!m.finalized || m.finalized.paid || m.finalized.batch_id) return "";
-      const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.className = "batch-pick";
-      cb.checked = _batchSel.has(m.finalized.record_id);
-      cb.addEventListener("click", (e) => e.stopPropagation());
-      cb.addEventListener("change", () => {
-        if (cb.checked) _batchSel.add(m.finalized.record_id);
-        else _batchSel.delete(m.finalized.record_id);
-      });
-      return cb;
-    } },
-  { title: "Official", field: "official_name", headerFilter: "input", responsive: 0,  // identity — keep visible when collapsed
-    formatter: (c) => hstr`${c.getValue()}${c.getData().orphaned
-      ? raw(' <span class="badge badge-warn" title="the assignment was deleted after finalization — the money trail remains">assignment gone</span>') : ""}` },
-  { title: "Days", field: "days_worked", width: 80, hozAlign: "right",
-    formatter: (c) => {
-      const m = c.getData();
-      return hstr`${String(c.getValue())}${m.no_show_days
-        ? raw(` <span class="badge badge-warn" title="no-show days (unpaid)">−${m.no_show_days}</span>`) : ""}`;
-    } },
-  { title: "Pay", field: "pay", width: 100, hozAlign: "right", formatter: (c) => money(c.getValue()) },
-  { title: "Mileage", field: "mileage", width: 100, hozAlign: "right",
-    formatter: (c) => c.getData().missing_distance
-      ? '<span class="badge badge-warn" title="no distance on file — mileage can\'t compute">no dist.</span>'
-      : money(c.getValue()) },
-  { title: "Total (live)", field: "total", width: 110, hozAlign: "right", bottomCalc: "sum",
-    bottomCalcFormatter: (c) => money(c.getValue()),
-    formatter: (c) => `<strong>${money(c.getValue())}</strong>` },
-  { title: "Finalized", field: "_fin", width: 130, hozAlign: "right",
-    formatter: (c) => {
-      const m = c.getData();
-      if (!m.finalized) return '<span class="muted">—</span>';
-      const tip = `by ${m.finalized.finalized_by} · ${new Date(m.finalized.finalized_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-      return hstr`<span title="${tip}">${money(m.finalized.total)}</span>${
-        m.drift ? raw(' <span class="badge badge-bad" title="live total no longer matches the finalized amount — unfinalize + re-finalize, or investigate">drift</span>') : ""}`;
-    } },
-  { title: "Status", field: "_status", width: 120,
-    // open / finalized / paid is the field a TD settling pay scans most — let
-    // them filter to "everything still open" or "finalized but unpaid" in one
-    // click. The bucket is derived from finalized/paid, so a headerFilterFunc.
-    headerFilter: "list",
-    headerFilterParams: { values: { "": "All", open: "open", finalized: "finalized", paid: "paid" } },
-    headerFilterFunc: (sel, _v, data) => !sel
-      || (!data.finalized ? "open" : (data.finalized.paid ? "paid" : "finalized")) === sel,
-    formatter: (c) => {
-      const m = c.getData();
-      if (!m.finalized) return '<span class="muted">open</span>';
-      if (!m.finalized.paid) return '<span class="badge badge-info">finalized</span>';
-      const tip = [m.finalized.paid_at, m.finalized.paid_method, m.finalized.paid_note,
-                   m.finalized.batch_id ? `batch #${m.finalized.batch_id}` : null]
-        .filter(Boolean).join(" · ");
-      return hstr`<span class="badge badge-ok" title="${tip}">paid${m.finalized.batch_id ? raw(" <span class=\"muted\">⛁</span>") : ""}</span>`;
-    } },
-  { title: "", field: "_act", headerSort: false, width: 170, cssClass: "grid-actions-cell",
-    formatter: (cell) => {
-      const m = cell.getData();
-      const wrap = document.createElement("div"); wrap.className = "grid-actions";
-      const btn = (label, title, fn) => {
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "btn-link"; b.textContent = label; b.title = title;
-        b.addEventListener("click", (ev) => { ev.stopPropagation(); fn(); });
-        wrap.appendChild(b);
-      };
-      if (!m.finalized) {
-        btn("Finalize", "Freeze this official's computed pay into a payroll record", async () => {
-          try { await api(`/assignments/${m.assignment_id}/finalize`, { method: "POST" });
-                setMsg("payroll-msg", `finalized — ${m.official_name}`, true); loadPayroll(); }
-          catch (e) { setMsg("payroll-msg", e.message, false); }
-        });
-      } else if (!m.finalized.paid) {
-        btn("Mark paid", "Record settlement (date/method/note)", () => _payrollMarkPaid(m));
-        btn("Unfinalize", "Re-open this record so pay recomputes from current rows", async () => {
-          if (!(await confirmDialog(`Unfinalize ${m.official_name}? The frozen amount is discarded.`))) return;
-          try { await api(`/payroll/${m.finalized.record_id}`, { method: "DELETE" });
-                setMsg("payroll-msg", `re-opened — ${m.official_name}`, true); loadPayroll(); }
-          catch (e) { setMsg("payroll-msg", e.message, false); }
-        });
-      } else {
-        btn("Unmark paid", "Walk the payment back (needed before unfinalizing)", async () => {
-          if (!(await confirmDialog(`Unmark ${m.official_name} as paid?`))) return;
-          try { await api(`/payroll/${m.finalized.record_id}/paid`, { method: "PUT",
-                  body: JSON.stringify({ paid: false }) });
-                setMsg("payroll-msg", `payment walked back — ${m.official_name}`, true); loadPayroll(); }
-          catch (e) { setMsg("payroll-msg", e.message, false); }
-        });
-      }
-      return wrap;
-    } },
-], "payroll", "No assignments yet — staff the tournament first.", { index: "assignment_id" });
-async function loadPayroll() {
-  if (!active) return;
-  _batchSel.clear();   // record states change on reload — drop stale ticks
-  const rows = await api(`/tournaments/${active.id}/payroll`);
-  payrollGrid.setData(rows);
-  const fin = rows.filter((r) => r.finalized);
-  const paid = fin.filter((r) => r.finalized.paid);
-  const sum = (xs, f) => xs.reduce((n, r) => n + (f(r) || 0), 0);
-  document.getElementById("payroll-totals").textContent =
-    `${fin.length}/${rows.length} finalized (${money(sum(fin, (r) => r.finalized.total))})` +
-    ` · ${paid.length} paid (${money(sum(paid, (r) => r.finalized.total))})`;
-  // Payment batches ride below the grid; supplemental, so don't block on them.
-  try { _renderBatches(await api(`/tournaments/${active.id}/payroll/batches`)); }
-  catch { /* leave the prior batch list in place on a transient fetch error */ }
-}
-document.getElementById("payroll-finalize-all").addEventListener("click", async () => {
-  if (!active) return;
-  if (!(await confirmDialog("Finalize every open assignment's pay at the current computed amounts?"))) return;
-  try {
-    const out = await api(`/tournaments/${active.id}/payroll/finalize-all`, { method: "POST" });
-    setMsg("payroll-msg", `finalized ${out.finalized} (now ${out.total_finalized} total)`, true);
-    loadPayroll();
-  } catch (e) { setMsg("payroll-msg", e.message, false); }
+// D11: payroll panel lives in ./app/payroll.js (pairs with backend payroll router)
+const { loadPayroll } = createPayrollPanel({
+  api, setMsg, confirmDialog, markInvalid, money, html, hstr, raw,
+  makeReadGrid, printDoc, fmtMDY: _fmtMDY, getActive: () => active,
 });
-document.getElementById("payroll-export").addEventListener("click", async () => {
-  if (!active) return;
-  // Only finalized (frozen) records export. Guard with a fetch so an empty
-  // export tells the TD to finalize first instead of downloading a header row.
-  try {
-    const rows = await api(`/tournaments/${active.id}/payroll`);
-    if (!rows.some((r) => r.finalized)) { setMsg("payroll-msg", "nothing finalized yet — finalize records first", false); return; }
-    // Same-origin GET carries the session cookie; the attachment disposition
-    // makes the browser download rather than navigate.
-    const a = document.createElement("a");
-    a.href = `/api/tournaments/${active.id}/payroll/export.csv`;
-    a.download = "";
-    document.body.appendChild(a); a.click(); a.remove();
-    setMsg("payroll-msg", "CSV exported", true);
-  } catch (e) { setMsg("payroll-msg", e.message, false); }
-});
-document.getElementById("payroll-audit-csv").addEventListener("click", () => {
-  if (!active) return;
-  // Same-origin GET carries the session cookie; the attachment disposition
-  // downloads rather than navigates. No pre-fetch guard — the trail is rarely
-  // empty (creating an assignment already logs), and a header-only CSV is fine.
-  const a = document.createElement("a");
-  a.href = `/api/tournaments/${active.id}/assignment-audit.csv`;
-  a.download = "";
-  document.body.appendChild(a); a.click(); a.remove();
-  setMsg("payroll-msg", "audit CSV exported", true);
-});
-document.getElementById("payroll-batch-new").addEventListener("click", _payrollNewBatch);
-
-// Create one payment batch from every finalized, not-yet-paid, un-batched record
-// (the "pay everyone who's ready in one check run" case). A dialog collects the
-// shared reference/method/date/note; the POST marks all members paid at once.
-async function _payrollNewBatch() {
-  if (!active) return;
-  let eligible;
-  try {
-    const rows = await api(`/tournaments/${active.id}/payroll`);
-    eligible = rows.filter((r) => r.finalized && !r.finalized.paid && !r.finalized.batch_id);
-  } catch (e) { setMsg("payroll-msg", e.message, false); return; }
-  if (!eligible.length) {
-    setMsg("payroll-msg", "no finalized, unpaid record to batch — finalize first", false); return;
-  }
-  // honor row ticks if any eligible row is selected; otherwise batch them all
-  const picked = eligible.filter((r) => _batchSel.has(r.finalized.record_id));
-  const targets = picked.length ? picked : eligible;
-  const scope = picked.length ? "selected" : "finalized, unpaid";
-  const today = new Date().toISOString().slice(0, 10);
-  const info = await new Promise((resolve) => {
-    const m = document.createElement("div"); m.className = "modal";
-    m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true">' +
-      hstr`<h3 class="detail-title">New payment batch</h3>` +
-      hstr`<p class="muted">${String(targets.length)} ${scope} record(s) will be settled together.</p>` +
-      '<div class="row"><label>Reference <input id="batch-ref" maxlength="200" placeholder="Check run 2026-06-15" /></label>' +
-      '<label>Method <select id="batch-method">' +
-      _PAID_METHODS.map((v) => `<option value="${v}">${v}</option>`).join("") + '</select></label></div>' +
-      `<div class="row"><label>Paid on <input id="batch-date" type="date" value="${today}" /></label>` +
-      '<label>Note <input id="batch-note" maxlength="500" placeholder="optional" /></label></div>' +
-      '<div class="modal-actions"><button type="button" id="batch-ok">Create batch</button>' +
-      '<button type="button" id="batch-cancel" class="cancel">Cancel</button></div></div>';
-    document.body.appendChild(m);
-    const close = (v) => { m.remove(); resolve(v); };
-    m.querySelector("#batch-ok").addEventListener("click", () => {
-      const reference = m.querySelector("#batch-ref").value.trim();
-      const paid_on = m.querySelector("#batch-date").value;
-      if (!reference || !paid_on) { markInvalid(m.querySelector("#batch-ref"), "reference and date are required"); return; }
-      close({ reference, method: m.querySelector("#batch-method").value, paid_on,
-              note: m.querySelector("#batch-note").value.trim() || null });
-    });
-    m.querySelector("#batch-cancel").addEventListener("click", () => close(null));
-    m.addEventListener("click", (e) => { if (e.target === m) close(null); });
-  });
-  if (!info) return;
-  try {
-    const out = await api(`/tournaments/${active.id}/payroll/batches`, { method: "POST",
-      body: JSON.stringify({ ...info, record_ids: targets.map((r) => r.finalized.record_id) }) });
-    _batchSel.clear();
-    setMsg("payroll-msg", `batch created — ${out.record_count} record(s), ${money(out.total)}`, true);
-    loadPayroll();
-  } catch (e) { setMsg("payroll-msg", e.message, false); }
-}
-
-// Render the payment-batch list below the grid. Each batch shows reference,
-// method, date, member count + summed total, and a Dissolve action (walks its
-// records back to unpaid — they stay finalized).
-function _renderBatches(batches) {
-  const wrap = document.getElementById("payroll-batches");
-  if (!batches.length) { wrap.innerHTML = ""; return; }
-  const rows = batches.map((b) => hstr`<tr>
-    <td>${b.reference}</td><td>${b.method}</td><td>${b.paid_on}</td>
-    <td class="num">${String(b.record_count)}</td><td class="num">${money(b.total)}</td>
-    <td class="actions"><button type="button" class="btn-link" data-receipt="${String(b.batch_id)}">Receipt</button><button type="button" class="btn-link" data-dissolve="${String(b.batch_id)}">Dissolve</button></td></tr>`).join("");
-  wrap.innerHTML = hstr`<h4 class="batch-h">Payment batches</h4>
-    <table class="list-table batch-table"><thead><tr><th>Reference</th><th>Method</th><th>Paid on</th><th class="num">Records</th><th class="num">Total</th><th></th></tr></thead>
-    <tbody>${raw(rows)}</tbody></table>`;
-  wrap.querySelectorAll("[data-receipt]").forEach((btn) => {
-    btn.addEventListener("click", () => _printBatchReceipt(btn.dataset.receipt));
-  });
-  wrap.querySelectorAll("[data-dissolve]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const b = batches.find((x) => String(x.batch_id) === btn.dataset.dissolve);
-      if (!(await confirmDialog(`Dissolve batch "${b.reference}"? Its ${b.record_count} record(s) go back to unpaid (they stay finalized).`))) return;
-      try { await api(`/payroll/batches/${btn.dataset.dissolve}`, { method: "DELETE" });
-            setMsg("payroll-msg", "batch dissolved", true); loadPayroll(); }
-      catch (e) { setMsg("payroll-msg", e.message, false); }
-    });
-  });
-}
-
-// Printable batch receipt — the paper the TD files with the checks. Reuses the
-// shared printDoc() scaffold; one row per official with the frozen total.
-async function _printBatchReceipt(batchId) {
-  let d;
-  try { d = await api(`/payroll/batches/${batchId}`); }
-  catch (e) { setMsg("payroll-msg", e.message, false); return; }
-  const rows = d.members.length ? d.members.map((m) =>
-    hstr`<tr><td>${m.official_name}</td><td class="num">${String(m.days_worked)}</td><td class="num">${money(m.total)}</td></tr>`).join("")
-    : `<tr><td colspan="3" class="muted">No records in this batch.</td></tr>`;
-  printDoc({
-    title: `Payment batch — ${d.reference}`,
-    styleExtra: `
-      .grand { margin-top: 1rem; padding: 0.5rem 0.7rem; background: #e7f1ea; border: 1px solid #2e6f40; border-radius: 6px; font-size: 13px; }`,
-    body: hstr`
-    <h1>Payment batch receipt</h1>
-    <div class="sub">${d.reference} · ${d.method} · paid ${d.paid_on}${d.note ? ` · ${d.note}` : ""} · generated ${_fmtMDY(new Date().toISOString().slice(0, 10))}</div>
-    <table><thead><tr><th>Official</th><th class="num">Days</th><th class="num">Total</th></tr></thead><tbody>${raw(rows)}</tbody></table>
-    <div class="grand"><strong>Batch total: ${money(d.total)}</strong> · ${String(d.record_count)} official(s)</div>`,
-  });
-}
 
 // Populate the staff Days multi-select from the active tournament's play window;
 // `selected` is an optional Set of ISO dates to pre-check.
@@ -4022,271 +2385,11 @@ onSubmit(staffForm, async (e) => {
 });
 staffForm.querySelector(".cancel").addEventListener("click", staffReset);
 
-// --- Availability (per official, per tournament) ---
-let availAll = [];
-function _datesInRange(start, end) {
-  // Audit N20: parse + step in UTC so a DST spring-forward/fall-back day
-  // doesn't skip or duplicate an ISO output.
-  const out = [];
-  const d = new Date(start + "T00:00:00Z");
-  const e = new Date(end + "T00:00:00Z");
-  while (d <= e) {
-    out.push(d.toISOString().slice(0, 10));
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return out;
-}
-function renderAvailDates() {
-  const sel = document.getElementById("avail-official");
-  const oid = sel.value ? Number(sel.value) : null;
-  const mine = availAll.filter((r) => r.official_id === oid);
-  const checked = new Set(mine.map((r) => r.available_date));
-  document.getElementById("avail-hotel").checked = mine.some((r) => r.hotel_needed);
-  const box = document.getElementById("avail-dates");
-  box.innerHTML = "";
-  if (!active) return;
-  for (const d of _datesInRange(active.play_start_date, active.play_end_date)) {
-    const lbl = document.createElement("label"); lbl.className = "chip";
-    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = d; cb.checked = checked.has(d);
-    lbl.append(cb, document.createTextNode(" " + fmtDOW(d)));
-    box.appendChild(lbl);
-  }
-}
-const availGrid = makeReadGrid("avail-table", [
-  { title: "Official", field: "official_name" },
-  { title: "Available dates", field: "dates_text", headerSort: false },
-  { title: "Hotel", field: "hotel", width: 90, noFilter: true, formatter: (c) => (c.getData().hotel ? "yes" : "") },
-  // Availability-vs-assigned gap: an official who offered dates but has no
-  // assigned day yet is the TD's cue to staff them (audit §Availability).
-  // "Show me who offered dates but isn't staffed yet" is the whole point of this
-  // tab — make Assigned filterable (and a chip, for parity with the app).
-  { title: "Assigned", field: "assigned", width: 130,
-    headerFilter: "list",
-    headerFilterParams: { values: { "": "All", yes: "assigned", no: "not yet" } },
-    headerFilterFunc: (sel, _v, data) => !sel || (sel === "yes" ? !!data.assigned : !data.assigned),
-    formatter: (c) => (c.getData().assigned
-      ? '<span class="badge badge-ok">✓ assigned</span>'
-      : '<span class="badge badge-warn">⚠ not yet</span>') },
-], "availability", "No availability recorded yet.");
-// Official ids that have at least one assigned day in this tournament (set in
-// loadAvailability), so the table + gap callout can flag the unstaffed.
-let availAssignedIds = new Set();
-function renderAvailTable() {
-  const byOff = {};
-  for (const r of availAll) {
-    (byOff[r.official_id] ||= { name: r.official_name, dates: [], hotel: false });
-    byOff[r.official_id].dates.push(r.available_date);
-    if (r.hotel_needed) byOff[r.official_id].hotel = true;
-  }
-  const rows = Object.keys(byOff)
-    .map((id) => ({ id: Number(id), ...byOff[id] }))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((o) => ({
-      official_name: o.name, hotel: o.hotel,
-      dates_text: o.dates.sort().map(fmtDOW).join(", "),
-      assigned: availAssignedIds.has(o.id),
-    }));
-  availGrid.setData(rows);
-  // Gap callout: how many available officials aren't staffed yet.
-  const gap = rows.filter((r) => !r.assigned);
-  const el = document.getElementById("avail-gap");
-  if (gap.length) {
-    el.hidden = false;
-    el.innerHTML = `⚠ ${gap.length} of ${rows.length} available official(s) have no assigned day yet: ` +
-      hstr`<strong>${gap.map((r) => r.official_name).join("; ")}</strong>. ` +
-      `Staff them on the Assignments tab.`;
-  } else {
-    el.hidden = true; el.textContent = "";
-  }
-}
-async function renderAvailCerts(oid) {
-  const box = document.getElementById("avail-certs");
-  box.innerHTML = "";
-  if (!oid) return;
-  const certs = await api(`/officials/${oid}/certifications`);
-  const held = {};
-  certs.forEach((c) => (held[c.cert_type] = c.id));
-  for (const [v, lbl] of CERTS) {
-    const wrap = document.createElement("label"); wrap.className = "chip";
-    const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = v in held;
-    cb.addEventListener("change", async () => {
-      try {
-        if (cb.checked) await api(`/officials/${oid}/certifications`, { method: "POST", body: JSON.stringify({ cert_type: v }) });
-        else if (held[v] != null) await api(`/certifications/${held[v]}`, { method: "DELETE" });
-        renderAvailCerts(oid);
-      } catch (e) { setMsg("avail-msg", e.message, false); cb.checked = !cb.checked; }
-    });
-    wrap.append(cb, document.createTextNode(" " + lbl));
-    box.appendChild(wrap);
-  }
-}
-async function loadAvailability() {
-  if (!active) return;
-  // Audit M34: officialsById may be empty on first load (the Officials Setup
-  // tab hasn't refreshed yet). Fetch directly so the picker is always populated.
-  const sel = document.getElementById("avail-official");
-  const officials = Object.values(officialsById).length
-    ? Object.values(officialsById)
-    : await api("/officials");
-  fillSelect(sel, officials, officialLabel, false);
-  // Availability + assignments together so the table can flag who offered dates
-  // but isn't staffed yet. allSettled so an assignments hiccup doesn't blank the
-  // availability view.
-  const [availR, asgR] = await Promise.allSettled([
-    api(`/tournaments/${active.id}/availability`),
-    api(`/tournaments/${active.id}/assignments`),
-  ]);
-  availAll = availR.status === "fulfilled" ? availR.value : [];
-  const asgList = asgR.status === "fulfilled" ? asgR.value : [];
-  // An official counts as "assigned" only with at least one working day.
-  availAssignedIds = new Set(asgList.filter((a) => a.days && a.days.length).map((a) => a.official_id));
-  // Pick the current value once and feed it through both renderers, instead of
-  // letting renderAvailDates read .value while comboSync may still be settling.
-  const oid = sel.value ? Number(sel.value) : null;
-  renderAvailDates();
-  renderAvailTable();
-  renderAvailCerts(oid);
-  renderAvailHeatmap();
-}
-
-// Staffing heatmap: officials × play-window days. A cell is green when the
-// official declared available, carries a ● when they're actually assigned that
-// day, and the footer tallies available/assigned per day so thin days pop out.
-async function renderAvailHeatmap() {
-  const box = document.getElementById("avail-heatmap");
-  if (!box || !active) return;
-  let g;
-  try { g = await api(`/tournaments/${active.id}/availability/grid`); }
-  catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
-  if (!g.days.length) { box.innerHTML = '<p class="muted">This tournament has no play-date window set.</p>'; return; }
-  if (!g.officials.length) { box.innerHTML = '<p class="muted">No availability declared and nobody assigned yet.</p>'; return; }
-  const head = `<th class="hm-name">Official</th>` +
-    g.days.map((d) => hstr`<th class="hm-day">${fmtDOW(d)}</th>`).join("");
-  const body = g.officials.map((o) => {
-    const avail = new Set(o.available), asg = new Set(o.assigned);
-    const cells = g.days.map((d) => {
-      const a = avail.has(d), s = asg.has(d);
-      // assigned-but-not-declared-available is worth flagging (amber ring).
-      const cls = ["hm-cell"];
-      if (a) cls.push("hm-avail");
-      if (s) cls.push("hm-asg");
-      if (s && !a) cls.push("hm-asg-only");
-      // Non-assigned cells are clickable to staff this official on this day.
-      const click = !s;
-      if (click) cls.push("hm-clickable");
-      const attrs = click ? hstr` data-oid="${o.official_id}" data-date="${d}" data-name="${o.official_name}"` : "";
-      const title = `${o.official_name} · ${fmtDOW(d)}: ` +
-        (a ? "available" : "not declared") + (s ? ", assigned" : " — click to assign");
-      return hstr`<td class="${cls.join(" ")}"${raw(attrs)} title="${title}">${s ? "●" : ""}</td>`;
-    }).join("");
-    const pid = hstr`<span class="hm-off${o.hotel_needed ? " hm-hotel" : ""}">${o.official_name}${o.hotel_needed ? raw(' <span class="hm-hotel-tag" title="needs hotel">🛏</span>') : ""}</span>`;
-    return `<tr><th class="hm-name">${pid}</th>${cells}</tr>`;
-  }).join("");
-  const foot = `<th class="hm-name">Available / assigned</th>` +
-    g.per_day.map((p) => {
-      const thin = p.available_count === 0;
-      return `<td class="hm-tot${thin ? " hm-thin" : ""}" title="${p.available_count} available, ${p.assigned_count} assigned">` +
-        `${p.available_count}<span class="hm-sep">/</span>${p.assigned_count}</td>`;
-    }).join("");
-  box.innerHTML =
-    `<table class="avail-heatmap"><thead><tr>${head}</tr></thead>` +
-    `<tbody>${body}</tbody>` +
-    `<tfoot><tr>${foot}</tr></tfoot></table>`;
-}
-
-// Click a heatmap cell → assign that official on that day. The role isn't in the
-// heatmap, so a small popover offers the official's held certifications (or the
-// full role list when they hold none); picking one runs coverage-fill.
-let _hmPop = null;
-function _closeHmPop() { if (_hmPop) { _hmPop.remove(); _hmPop = null; } }
-document.addEventListener("click", (e) => {
-  const cell = e.target.closest && e.target.closest("#avail-heatmap .hm-clickable");
-  if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeHmPop(); return; }
-  _openAssignCell(cell);
-});
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeHmPop(); });
-
-async function _openAssignCell(cell) {
-  _closeHmPop();
-  if (!active) return;
-  const oid = Number(cell.dataset.oid), date = cell.dataset.date, name = cell.dataset.name;
-  const pop = document.createElement("div");
-  pop.className = "cov-pop";
-  pop.innerHTML = hstr`<div class="cov-pop-head">${name} · ${fmtDOW(date)}</div><p class="muted">Loading…</p>`;
-  document.body.appendChild(pop);
-  _hmPop = pop;
-  const r = cell.getBoundingClientRect();
-  pop.style.top = `${window.scrollY + r.bottom + 4}px`;
-  pop.style.left = `${window.scrollX + Math.min(r.left, window.innerWidth - 280)}px`;
-  let held = [];
-  try { held = await api(`/officials/${oid}/certifications`); }
-  catch (_) {}
-  if (_hmPop !== pop) return;
-  // Offer the roles they're certified for; if none on file, the whole list (the
-  // backend cert guard allows any role when no certs are recorded).
-  const roles = held.length ? held.map((c) => c.cert_type) : CERTS.map(([v]) => v);
-  const note = held.length ? "Assign as:" : "No certifications on file — assign as:";
-  pop.innerHTML = html`<div class="cov-pop-head">Assign ${name} · ${fmtDOW(date)}</div><p class="cov-pop-note">${note}</p><ul class="cov-cand-list">${roles.map((role) =>
-    html`<li class="cov-cand"><span class="cov-cand-name">${certLabel(role)}</span><button type="button" class="cov-fill-btn" data-role="${role}">Assign</button></li>`)}</ul>`;
-  pop.querySelectorAll(".cov-fill-btn").forEach((btn) => btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    try {
-      await api(`/tournaments/${active.id}/coverage-fill`, {
-        method: "POST",
-        body: JSON.stringify({ official_id: oid, work_date: date, working_as: btn.dataset.role }),
-      });
-      toast(`Assigned ${name} as ${certLabel(btn.dataset.role)} on ${fmtDOW(date)}`, true);
-      _closeHmPop();
-      loadAvailability();
-    } catch (err) { toast(err.message, false); btn.disabled = false; }
-  }));
-}
-document.getElementById("avail-official").addEventListener("change", () => {
-  renderAvailDates();
-  renderAvailCerts(Number(document.getElementById("avail-official").value) || null);
-});
-document.getElementById("avail-save").addEventListener("click", async () => {
-  if (!active) return;
-  const sel = document.getElementById("avail-official");
-  if (!sel.value) { setMsg("avail-msg", "pick an official", false); return; }
-  const dates = [...document.querySelectorAll("#avail-dates input:checked")].map((c) => c.value);
-  try {
-    await api(`/tournaments/${active.id}/availability`, {
-      method: "PUT",
-      body: JSON.stringify({ official_id: Number(sel.value), dates, hotel_needed: document.getElementById("avail-hotel").checked }),
-    });
-    setMsg("avail-msg", "saved", true);
-    await loadAvailability();
-  } catch (e) { setMsg("avail-msg", e.message, false); }
-});
-
-// Bulk date selection — toggles the day checkboxes in place (the user still
-// reviews + clicks Save, consistent with the manual flow). 0=Sun … 6=Sat via
-// getUTCDay (dates are midnight-UTC ISO strings, matching _datesInRange).
-function _availDow(iso) { return new Date(iso + "T00:00:00Z").getUTCDay(); }
-document.querySelectorAll("#panel-t-availability .avail-bulk [data-bulk]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const mode = btn.dataset.bulk;
-    const boxes = [...document.querySelectorAll("#avail-dates input")];
-    if (!boxes.length) { setMsg("avail-msg", "no dates in the play window", false); return; }
-    if (mode === "range") {
-      const from = document.getElementById("avail-range-from").value;
-      const to = document.getElementById("avail-range-to").value;
-      if (!from || !to || from > to) { setMsg("avail-msg", "pick a valid from–to range", false); return; }
-      // additive: ticks dates in range, leaves the rest as-is
-      boxes.forEach((cb) => { if (cb.value >= from && cb.value <= to) cb.checked = true; });
-    } else {
-      boxes.forEach((cb) => {
-        const dow = _availDow(cb.value);
-        if (mode === "all") cb.checked = true;
-        else if (mode === "none") cb.checked = false;
-        else if (mode === "weekdays") cb.checked = dow >= 1 && dow <= 5;
-        else if (mode === "weekends") cb.checked = dow === 0 || dow === 6;
-      });
-    }
-    const n = boxes.filter((c) => c.checked).length;
-    setMsg("avail-msg", `${n} day(s) selected — click Save availability`, true);
-  });
+// D11: availability panel (./app/availability.js)
+const { loadAvailability } = createAvailabilityPanel({
+  api, setMsg, toast, html, hstr, raw, fmtDOW, fillSelect, officialLabel, certLabel,
+  makeReadGrid, getActive: () => active, getOfficialsById: () => officialsById,
+  getCertPairs: () => _certs.pairs,
 });
 
 // --- Part B: review inbox + late entries ---
@@ -5827,66 +3930,6 @@ const photelList = wirePlayerList({
   after: () => { loadCvb(); loadHotelSummary(); loadLodgingSummary(); },
 });
 
-// ---- Shared print/PDF window scaffold --------------------------------------
-// The TD-facing exports (hotel report, pay statement(s), 360 export, staffing
-// plan, rooming list, schedule) each open a blank window and write a
-// self-contained, auto-printing HTML document. They differ only in <title>,
-// body markup, and a few doc-specific CSS rules — so the doctype/head, the
-// shared print stylesheet, the pop-up guard, the Print/Close controls, the
-// auto-print trigger, and (optionally) an embedded CSV-download button live
-// here instead of being copy-pasted into every builder.
-//
-// Injection: callers pass a `title` (escaped here) and a pre-built `body`
-// string; every interpolated value inside `body`/`styleExtra` already goes
-// through esc() at the call site (escapes &<>), so a name containing
-// `</style>` becomes `&lt;/style&gt;` and cannot break out of the document.
-// The popup is a fresh document with no shared origin state.
-const PRINT_BASE_CSS = `
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
-      h1 { font-size: 18px; margin: 0 0 0.1rem; }
-      h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
-      .sub, .meta { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
-      .line { font-size: 11px; margin: 0.2rem 0 0.6rem; }
-      .muted { color: #556070; }
-      table { border-collapse: collapse; width: 100%; margin: 0.3rem 0 0.6rem; }
-      th, td { border: 1px solid #d9e0e6; padding: 4px 7px; text-align: left; font-size: 11px; }
-      th { background: #f4f6f8; font-weight: 700; }
-      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-      td.empty { color: #556070; font-style: italic; text-align: center; }
-      tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
-      @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
-      .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }`;
-
-// Opens the print window and writes the wrapped document. Returns false (after a
-// toast) if pop-ups are blocked, so callers can bail. `styleExtra` is appended
-// after the base CSS so a doc can add or override rules (landscape @page, an
-// .h4 heading, a .grand box, …). `csv` (optional) = {data, filename}: embeds a
-// ⬇ CSV button wired to download that blob. `printLabel` overrides the primary
-// button text.
-function printDoc({ title, body, styleExtra = "", printLabel = "Save as PDF / Print", csv = null, popupMsg = "Allow pop-ups to export the PDF" }) {
-  const win = window.open("", "_blank");
-  if (!win) { toast(popupMsg, false); return false; }
-  const csvBtn = csv ? ` <button id="dl">⬇ CSV</button>` : "";
-  const csvScript = csv ? `
-      document.getElementById("dl").addEventListener("click", function () {
-        var blob = new Blob([${JSON.stringify(csv.data)}], {type: "text/csv"});
-        var a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = ${JSON.stringify(csv.filename)};
-        a.click();
-      });` : "";
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
-    <style>${PRINT_BASE_CSS}${styleExtra}</style></head><body>
-    ${body}
-    <div class="noprint"><button onclick="window.print()">${esc(printLabel)}</button>${csvBtn} <button onclick="window.close()">Close</button></div>
-    <script>${csvScript}
-      window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
-    <\/script>
-  </body></html>`);
-  win.document.close();
-  return true;
-}
-
 // Confidential per-hotel roster: summary pivot + initials-only detail; opens
 // in a new window with a print-ready stylesheet and auto-triggers Print so
 // the TD can hand it to ops/CVB/etc. without exposing full player names.
@@ -6827,7 +4870,7 @@ document.getElementById("player360-print")?.addEventListener("click", exportP360
 
 // --- Reports (officials confirmation + pay/mileage) ---
 let reportData = null;
-function money(n) { return n == null ? "—" : "$" + Number(n).toFixed(2); }
+// money() imported from ./app/ui.js (D11)
 
 // Minimum officials/day the TD wants — a day/site below it (but >0) is flagged
 // "thin" (amber); zero stays a hard gap (red). Persisted so it survives reloads.
@@ -7181,12 +5224,12 @@ async function loadReports() {
 function _renderCertPool() {
   const pool = reportData.cert_pool || { officials: [], counts: {} };
   document.querySelector("#cert-pool-table thead").innerHTML =
-    html`<tr><th>Official</th>${CERTS.map(([, lbl]) => html`<th class="num">${lbl}</th>`)}</tr>`;
+    html`<tr><th>Official</th>${_certs.pairs.map(([, lbl]) => html`<th class="num">${lbl}</th>`)}</tr>`;
   const body = document.querySelector("#cert-pool-table tbody");
   body.innerHTML = pool.officials.length
     ? html`${pool.officials.map((o) => {
         const held = new Set(o.certs);
-        const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
+        const cells = _certs.pairs.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
         // An official with no certs can't be assigned ANY role — flag the name.
         const noCert = !o.certs.length;
         const name = noCert
@@ -7194,10 +5237,10 @@ function _renderCertPool() {
           : html`${o.official_name}`;
         return html`<tr><td>${name}</td>${raw(cells)}</tr>`;
       })}`
-    : html`<tr><td class="empty" colspan="${CERTS.length + 1}">No officials in the system yet.</td></tr>`;
+    : html`<tr><td class="empty" colspan="${_certs.pairs.length + 1}">No officials in the system yet.</td></tr>`;
   // Footer: holders per cert (zero flagged as a coverage gap in the pool).
   document.getElementById("cert-pool-totals").innerHTML =
-    `<th>Holders</th>` + CERTS.map(([v]) => {
+    `<th>Holders</th>` + _certs.pairs.map(([v]) => {
       const n = pool.counts[v] || 0;
       return `<th class="num${n === 0 ? " warn" : ""}">${n}</th>`;
     }).join("");
@@ -7306,15 +5349,15 @@ function exportReportPdf() {
     : `<tr><td class="empty" colspan="6">No official room blocks.</td></tr>`;
   // Certification pool matrix (officials × cert types).
   const pool = reportData.cert_pool || { officials: [], counts: {} };
-  const certHead = CERTS.map(([, lbl]) => `<th class="num">${e(lbl)}</th>`).join("");
+  const certHead = _certs.pairs.map(([, lbl]) => `<th class="num">${e(lbl)}</th>`).join("");
   const certRows = pool.officials.length ? pool.officials.map((o) => {
     const held = new Set(o.certs);
-    const cells = CERTS.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
+    const cells = _certs.pairs.map(([v]) => `<td class="num">${held.has(v) ? "✓" : ""}</td>`).join("");
     const name = o.certs.length ? e(o.official_name) : `<span style="color:#c62828">⚠ ${e(o.official_name)}</span>`;
     return `<tr><td>${name}</td>${cells}</tr>`;
   }).join("") + `<tr class="totals"><td>Holders</td>` +
-      CERTS.map(([v]) => { const n = pool.counts[v] || 0; return `<td class="num"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`; }).join("") + `</tr>`
-    : `<tr><td class="empty" colspan="${CERTS.length + 1}">No officials.</td></tr>`;
+      _certs.pairs.map(([v]) => { const n = pool.counts[v] || 0; return `<td class="num"${n === 0 ? ' style="color:#c62828;font-weight:700"' : ""}>${n}</td>`; }).join("") + `</tr>`
+    : `<tr><td class="empty" colspan="${_certs.pairs.length + 1}">No officials.</td></tr>`;
   // Coverage cells honor the same threshold as the on-screen tables: red at 0,
   // amber below the minimum.
   const _covStyle = (n) => n === 0 ? ' style="color:#c62828;font-weight:700"'
@@ -7789,7 +5832,7 @@ const divisionsCrud = wireEntity({
     { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
   ],
   transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
-  onLoad: (rows) => { divisionsAll = rows.slice(); refreshDivisionLists(); },
+  onLoad: (rows) => { _divCatalog.setDivisions(rows); refreshDivisionLists(); },
 });
 
 // Setup → Events catalog (Singles/Doubles for juniors; Men's/Women's/Mixed
@@ -7812,11 +5855,11 @@ const eventsCrud = wireEntity({
     { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
   ],
   transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
-  onLoad: (rows) => { eventsAll = rows.slice(); refreshDivisionLists(); },
+  onLoad: (rows) => { _divCatalog.setEvents(rows); refreshDivisionLists(); },
 });
 
 // =================== Generic CSV export for list tables ===================
-// _csvDownload now imported from ./app/util.js (audit A47).
+// _csvDownload from createCsvExport (./app/export_csv.js — H4.1/H4.2 gate).
 // Visible column headers (skipping the trailing actions/blank column).
 function _visibleHeaders(table) {
   const ths = [...table.querySelectorAll("thead th")];
@@ -7867,162 +5910,9 @@ document.getElementById("report-template").addEventListener("click", reportTempl
   });
 })();
 
-// =================== Workspace add-forms as modal overlays (grid stays primary) ===================
-// Each add-form becomes a centered modal opened by a "＋ Add X" button; the grid
-// owns the page. Closing is driven by the form's `reset` event — every submit
-// handler resets on success and the Cancel button resets too, so success and
-// cancel both close the overlay while a validation error keeps it open.
-const FORM_MODALS = {
-  "withdrawal-form": "Add withdrawal",
-  "sched-form": "Add scheduling avoidance", "divflex-form": "Add division flexibility",
-  "pairing-form": "Add pairing group", "doubles-form": "File doubles request",
-  "photel-form": "Add player hotel", "late-form": "Add late entry", "trb-form": "Add room block",
-  "asg-form": "Assign official", "email-form": "Add email",
-};
-for (const [id, label] of Object.entries(FORM_MODALS)) {
-  const form = document.getElementById(id);
-  if (!form || form.closest(".detail-pane")) continue;
-  const trigger = document.createElement("button");
-  trigger.type = "button"; trigger.className = "new-btn add-trigger"; trigger.textContent = "＋ " + label;
-  const modal = document.createElement("div"); modal.className = "detail-pane form-modal";
-  const close = document.createElement("button"); close.type = "button"; close.className = "detail-close"; close.textContent = "×"; close.title = "Close";
-  const heading = document.createElement("h3"); heading.className = "detail-title"; heading.textContent = label;
-  form.parentNode.insertBefore(trigger, form);
-  form.parentNode.insertBefore(modal, form);
-  modal.append(close, heading, form);
-  const openM = () => { modal.classList.add("detail-open"); _detailBackdrop.classList.add("show"); _closeOpenDetail = closeM; scheduleComboSync(); };
-  const closeM = () => {
-    modal.classList.remove("detail-open"); _detailBackdrop.classList.remove("show"); _closeOpenDetail = null;
-    // If this open was a file-from-email flow, return to the Inbox so the user
-    // can process the next email without an extra trip back.
-    if (form._wasFiling) {
-      form._wasFiling = false;
-      const inboxTab = document.querySelector('.tab[data-target="panel-t-inbox"]');
-      if (inboxTab) inboxTab.click();
-    }
-  };
-  trigger.addEventListener("click", () => { form._wasFiling = false; openM(); });
-  close.addEventListener("click", closeM);
-  form.addEventListener("reset", closeM);  // success path and Cancel both reset → close
-  form._openModal = openM;                  // openForm() (file-from-email) opens it
-}
-
-// Promote every detail-pane to a proper ARIA dialog (role + aria-modal +
-// aria-labelledby) and watch the `detail-open` class to focus the first input
-// on open and restore focus on close. One pass at load — no per-site changes.
-// Design-crit pass 7 #2: focus-trap by marking the rest of the document
-// `inert` while any .detail-open dialog is visible. `inert` removes focus
-// + click + screen-reader access from the subtree.
-//
-// SUBTLETY: every `.detail-pane` lives inside its `<section class="panel">`,
-// which lives inside `<main>`. If we inert `<main>` wholesale, the dialog
-// (a child of main) becomes uninteractable too. Solution: at first use,
-// hoist every .detail-pane to be a direct child of <body>. They're already
-// `position: fixed` so visual layout doesn't shift, but DOM-wise they're
-// now siblings of main rather than descendants — main-inert no longer
-// inherits into them.
-let _detailPanesHoisted = false;
-function _hoistDetailPanes() {
-  if (_detailPanesHoisted) return;
-  for (const dlg of document.querySelectorAll(".detail-pane")) {
-    document.body.appendChild(dlg);  // appendChild moves the existing node
-  }
-  _detailPanesHoisted = true;
-}
-function _setBackgroundInert(on) {
-  if (on) _hoistDetailPanes();
-  // Lock background scroll while a dialog is open so wheel/touch over the
-  // backdrop doesn't bleed through and scroll the page behind it. Compensate for
-  // the now-hidden scrollbar's width so the inert content doesn't shift.
-  if (on) {
-    // The viewport scrollbar is owned by the root (<html>), so lock overflow
-    // there — locking <body> alone is unreliable. Pad for the hidden scrollbar's
-    // width so the inert content doesn't shift.
-    const sbw = window.innerWidth - document.documentElement.clientWidth;
-    if (sbw > 0) document.body.style.paddingRight = sbw + "px";
-    document.documentElement.style.overflow = "hidden";
-  } else {
-    document.documentElement.style.overflow = "";
-    document.body.style.paddingRight = "";
-  }
-  for (const el of [document.querySelector("header"),
-                    document.querySelector("nav.menu-l1"),
-                    document.querySelector("nav.menu"),
-                    document.querySelector("main")]) {
-    if (!el) continue;
-    if (on) el.setAttribute("inert", "");
-    else el.removeAttribute("inert");
-  }
-}
-function _anyDialogOpen() {
-  return !!document.querySelector(".detail-pane.detail-open")
-    || !!document.querySelector(".modal:not([hidden])");
-}
-function _refreshBackgroundInert() { _setBackgroundInert(_anyDialogOpen()); }
-
-// Confirm modal toggles via `hidden`, not class — observe that too.
-new MutationObserver(_refreshBackgroundInert).observe(
-  document.getElementById("confirm-modal"),
-  { attributes: true, attributeFilter: ["hidden"] },
-);
-
-(function _enhanceDetailDialogs() {
-  const obs = new MutationObserver((muts) => {
-    for (const m of muts) {
-      if (m.attributeName !== "class") continue;
-      const dlg = m.target;
-      const opening = dlg.classList.contains("detail-open");
-      const wasOpen = m.oldValue && m.oldValue.split(/\s+/).includes("detail-open");
-      _refreshBackgroundInert();
-      if (opening && !wasOpen) {
-        // Audit P44: snapshot both the DOM node and the row id (if any) — when
-        // the dialog closes and the grid has been re-rendered, the original
-        // node is gone; falling back to a selector by row id lets focus land
-        // on the same logical record instead of body.
-        const a = document.activeElement;
-        const row = a && a.closest && a.closest(".tabulator-row[data-id]");
-        dlg._prevFocus = a;
-        dlg._prevRowId = row ? row.getAttribute("data-id") : null;
-        requestAnimationFrame(() => {
-          const f = dlg.querySelector('input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled])')
-            || dlg.querySelector('button:not([disabled])');
-          if (f) try { f.focus(); } catch (_) {}
-        });
-      } else if (!opening && wasOpen) {
-        const prev = dlg._prevFocus;
-        if (prev && prev.isConnected && typeof prev.focus === "function") {
-          try { prev.focus(); } catch (_) {}
-        } else if (dlg._prevRowId) {
-          const restored = document.querySelector(`.tabulator-row[data-id="${dlg._prevRowId}"]`);
-          if (restored) try { restored.focus(); } catch (_) {}
-        }
-      }
-    }
-  });
-  for (const dlg of document.querySelectorAll(".detail-pane")) {
-    if (!dlg.hasAttribute("role")) {
-      dlg.setAttribute("role", "dialog");
-      dlg.setAttribute("aria-modal", "true");
-      const title = dlg.querySelector(".detail-title");
-      if (title) {
-        if (!title.id) title.id = "dlg-" + Math.random().toString(36).slice(2, 8);
-        dlg.setAttribute("aria-labelledby", title.id);
-      }
-    }
-    obs.observe(dlg, { attributes: true, attributeOldValue: true, attributeFilter: ["class"] });
-  }
-})();
-
-// Give every workspace list table its own scrollbar (like the Setup lists), so a
-// long roster/inbox scrolls within the card instead of the whole page. Runs after
-// the export buttons are inserted so they stay outside the scroll container.
-for (const table of document.querySelectorAll(".tpanel table.list-table")) {
-  if (table.closest(".list-scroll, .tbl-scroll")) continue;
-  const wrap = document.createElement("div");
-  wrap.className = "tbl-scroll";
-  table.parentNode.insertBefore(wrap, table);
-  wrap.appendChild(table);
-}
+// D11: workspace form modals + ARIA detail dialogs
+installFormModals({ scheduleComboSync, detailBackdrop: _detailBackdrop, setCloseOpenDetail });
+enhanceDetailDialogs();
 
 // =================== Auth + role-based views ===================
 let adminLoaded = false;
@@ -8037,8 +5927,7 @@ async function adminInit() {
     const enums = await api("/enums");
     _populateEnumSelects(enums);
     if (Array.isArray(enums.cert_type)) {
-      CERTS = enums.cert_type.map((c) => [c.value, c.label]);
-      CERT_LABEL = Object.fromEntries(CERTS);
+      _certs.pairs = enums.cert_type.map((c) => [c.value, c.label]);
     }
   } catch (_) {}
   for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, divisionsCrud, eventsCrud, tournamentsCrud]) {
@@ -8189,7 +6078,8 @@ document.querySelectorAll("#official-app .avail-bulk [data-mebulk]").forEach((bt
 // forms and the one-shot "session expired" listener.
 const { applyAuth } = createAuth({
   api, setMsg, toast, onSubmit,
-  onRoleResolved: ({ isAdmin, isOfficial }) => {
+  onRoleResolved: ({ who, isAdmin, isOfficial }) => {
+    authUser = who || null;
     // Clear stale crumbs on sign-out; when the user becomes admin (first login
     // OR session restore), seed the trail with the currently active tab so the
     // strip isn't empty until they click something.
@@ -8206,7 +6096,7 @@ const { applyAuth } = createAuth({
     if (isAdmin) adminInit();
     if (isOfficial) officialInit();
   },
-  onLogout: () => { adminLoaded = false; },
+  onLogout: () => { adminLoaded = false; authUser = null; },
 });
 
 // --- Trash (P2 #13): list + restore soft-deleted tournaments / incidents ---

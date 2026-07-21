@@ -3,12 +3,13 @@
 // (auth.js, grids.js, setup.js, workspace.js) once a frontend test harness is
 // in place to catch regressions.
 
-// HTML-escape user content. Escapes &, <, > — together that's enough to keep
-// a hostile name from breaking out of any attribute or text content we emit
-// via template literals; `<` alone defeats `</style>` / `</script>` breakouts.
+// HTML-escape user content. Escapes &, <, >, ", ' so values are safe in both
+// text content and attribute contexts (audit F2 / 2026-07-20 deep dive).
+// `<` alone defeats `</style>` / `</script>` breakouts; quotes stop attribute injection.
 export function esc(v) {
   if (v === null || v === undefined) return "";
-  return String(v).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  return String(v).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 // Audit P38 + N33: every ISO date formatter parses + renders in UTC so a TD
@@ -55,4 +56,58 @@ export function csvDownload(matrix, filename) {
   const a = document.createElement("a");
   a.href = url; a.download = filename + ".csv"; a.click();
   URL.revokeObjectURL(url);
+}
+
+// H4.2: columns stripped in "redacted" minors-PII exports (mirror export_gate.py).
+const _REDACT_HEADERS = new Set([
+  "emails", "email", "phones", "phone", "birthdate", "dob",
+  "year_of_birth", "year-of-birth", "body", "from_address", "from",
+  "parent_email", "parent_phone", "dietary_preference", "dietary",
+]);
+
+/** Drop sensitive columns from a [header, ...rows] matrix. */
+export function redactCsvMatrix(matrix) {
+  if (!Array.isArray(matrix) || !matrix.length || !Array.isArray(matrix[0])) return matrix;
+  const headers = matrix[0];
+  const drop = new Set();
+  headers.forEach((h, i) => {
+    const key = String(h ?? "").trim().toLowerCase().replace(/\s+/g, "_");
+    if (_REDACT_HEADERS.has(key) || _REDACT_HEADERS.has(String(h ?? "").trim().toLowerCase())) {
+      drop.add(i);
+    }
+  });
+  if (!drop.size) return matrix;
+  return matrix.map((row) =>
+    Array.isArray(row) ? row.filter((_, i) => !drop.has(i)) : row);
+}
+
+/** Heuristic: resource/filename looks like bulk junior/parent PII (H4.2). */
+export function isMinorsPiiResource(resource) {
+  const r = String(resource || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/\.csv$/, "");
+  const base = r.split("/").pop() || r;
+  const exact = new Set([
+    "players", "player", "roster", "emails", "email", "late_entries", "late-entries",
+    "withdrawals", "scheduling-avoidances", "scheduling_avoidances",
+    "division-flexibility", "division_flexibility", "pairing-avoidances",
+    "pairing_avoidances", "doubles", "doubles_requests", "doubles-requests",
+    "player-hotels", "player_hotels", "player_hotel", "tshirts", "t-shirts",
+    "adult-lists", "adult_lists",
+  ]);
+  if (exact.has(base) || exact.has(r)) return true;
+  return /^(sign-in|signin|players|roster|emails)/.test(base) ||
+    /(sign-in|signin|players|roster|emails)/.test(base);
+}
+
+
+// Inclusive list of ISO dates from start..end (UTC midnight). Audit N20: UTC
+// step so DST does not skip/duplicate a day.
+export function datesInRange(start, end) {
+  const out = [];
+  const d = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  while (d <= e) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
 }
