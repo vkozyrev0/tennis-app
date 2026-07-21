@@ -18,7 +18,7 @@ Severity: **H** high · **M** medium · **L** low
 
 | ID | Finding | Sev | Notes |
 |----|---------|-----|-------|
-| D11 | `frontend/app.js` monolith; mixed `innerHTML` | M | Ongoing — +`dayof.js` venue panel; availability/payroll/shell/…; ~6.2k LOC left |
+| D11 | `frontend/app.js` monolith; mixed `innerHTML` | M | Ongoing — +assignments_ui/inbox/reports/dayof/…; ~3.6k LOC left in app.js |
 | D13 | No DB connection pool | ⏸️ | Trigger: multi-worker / multi-user |
 | D14 | Login throttle process-local | ⏸️ | Trigger: multi-instance |
 | D18 | CSRF not explicit | ⏸️ | **Deferred:** cookie is `SameSite=Strict` + SPA is same-origin only; add CSRF tokens if cross-site clients or non-browser consumers appear |
