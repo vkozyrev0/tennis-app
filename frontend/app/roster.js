@@ -33,10 +33,10 @@ export function createRosterPanel(ctx) {
     openPlayer360,
     loadInbox,
     playersCrudRefresh,
-    inboxAddToRoster
   } = ctx;
   const _csvDownload = csvDownload;
   const _detailBackdrop = detailBackdrop;
+  void openForm;
 
   // --- Roster (master/detail, like the Setup entities) ---
   const rosterForm = document.getElementById("roster-form");
@@ -71,9 +71,9 @@ export function createRosterPanel(ctx) {
     _renderRosterCompleteness();
   }
 
-  // Roster completeness: surface getActive() entries missing data the TD needs before
-  // the event (division, gender, t-shirt, or an unpaid balance) so they can be
-  // chased. Clicking a flagged player selects them in the grid for editing.
+  // Roster completeness: surface active-tournament entries missing data the TD needs
+  // before the event (division, gender, t-shirt, or an unpaid balance) so they can
+  // be chased. Clicking a flagged player selects them in the grid for editing.
   const _COMPLETE_LABEL = {
     missing_division: "no division", missing_gender: "no gender",
     missing_shirt: "no t-shirt size", outstanding_balance: "balance due",
@@ -86,7 +86,7 @@ export function createRosterPanel(ctx) {
     catch (e) { box.innerHTML = ""; return; }
     if (!c.counts.incomplete_entries) {
       box.innerHTML = c.counts.total_active
-        ? hstr`<p class="rc-clean">✓ All ${c.counts.total_active} getActive() roster entries are complete.</p>` : "";
+        ? hstr`<p class="rc-clean">✓ All ${c.counts.total_active} active roster entries are complete.</p>` : "";
       return;
     }
     const k = c.counts;
@@ -96,7 +96,7 @@ export function createRosterPanel(ctx) {
       k.missing_shirt ? `${k.missing_shirt} no t-shirt` : "",
       k.outstanding_balance ? `${k.outstanding_balance} balance due` : "",
     ].filter(Boolean).join(" · ");
-    box.innerHTML = html`<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} getActive() entr${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${chips})</span></summary><ul class="rc-list">${c.entries.map((e) =>
+    box.innerHTML = html`<details class="rc-details" open><summary>⚠ ${k.incomplete_entries} of ${k.total_active} active entr${k.incomplete_entries === 1 ? "y is" : "ies are"} incomplete <span class="rc-chips">(${chips})</span></summary><ul class="rc-list">${c.entries.map((e) =>
       html`<li class="rc-row" data-eid="${e.entry_id}"><span class="rc-name">${e.player_name} <span class="muted">#${e.usta_number || "—"}</span></span><span class="rc-issues">${e.issues.map((i) =>
         html`<span class="rc-issue${i === "outstanding_balance" ? " rc-issue-pay" : ""}">${_COMPLETE_LABEL[i] || i}${i === "outstanding_balance" && e.amount_outstanding != null ? ` ${money(e.amount_outstanding)}` : ""}</span>`)}</span></li>`)}</ul></details>`;
     box.querySelectorAll(".rc-row").forEach((row) => row.addEventListener("click", () => {
@@ -365,14 +365,14 @@ export function createRosterPanel(ctx) {
     picker.required = mode === "pick";
     picker.disabled = mode !== "pick";
     newRow.querySelectorAll("input, select").forEach((el) => { el.disabled = mode !== "new"; });
-    // Design-crit #4: segmented control reflects the getActive() state via class +
+    // Design-crit #4: segmented control reflects the active mode via class +
     // aria-selected so screen readers also see the toggle.
-    pickBtn.classList.toggle("seg-getActive()", mode === "pick");
-    newBtn.classList.toggle("seg-getActive()", mode === "new");
+    pickBtn.classList.toggle("seg-active", mode === "pick");
+    newBtn.classList.toggle("seg-active", mode === "new");
     pickBtn.setAttribute("aria-selected", mode === "pick" ? "true" : "false");
     newBtn.setAttribute("aria-selected", mode === "new" ? "true" : "false");
     // a11y re-review #2: roving tabindex so the tablist matches the WAI-ARIA
-    // pattern — Tab enters the getActive() tab, then arrow keys move between tabs.
+    // pattern — Tab enters the selected tab, then arrow keys move between tabs.
     pickBtn.tabIndex = mode === "pick" ? 0 : -1;
     newBtn.tabIndex = mode === "new" ? 0 : -1;
   }
@@ -448,6 +448,7 @@ export function createRosterPanel(ctx) {
       const row = saved && saved.id != null && rosterRows.find((r) => r.id === saved.id);
       if (row) rosterSelect(row); else rosterShowNew();
       rosterCloseModal();
+      // "Add both" queue — re-enter this module's prefill (not inbox's free vars).
       if (_nextAdd) setTimeout(() => inboxAddToRoster(_nextAdd.m, _nextAdd.plan), 60);
     } catch (err) { setMsg("roster-msg", err.message, false); markInvalid(rosterForm, err.message); }
   });
@@ -455,6 +456,53 @@ export function createRosterPanel(ctx) {
   rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
   document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
   document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
+
+  // Open the roster form pre-filled from an inbox email (USTA #, name, division).
+  // Owned here so D11 free-vars (rosterForm / rosterShowNew / …) stay in-module.
+  // Called from the inbox panel via the returned `inboxAddToRoster` export.
+  function inboxAddToRoster(m, plan) {
+    plan = plan || {};
+    document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
+    rosterShowNew();
+    _rosterFromEmailId = m.id;   // re-detect this email after the save links it
+    rosterSetMode(plan.mode);
+    if (plan.mode === "pick") {
+      const picker = rosterForm.elements.player_id;
+      if (picker) {
+        picker.value = plan.player_id;
+        if (typeof picker._comboSync === "function") picker._comboSync();
+      }
+      refreshDivisionLists(inferFormGender(rosterForm));
+    } else {
+      if (plan.gender && rosterForm.elements.gender) rosterForm.elements.gender.value = plan.gender;
+      refreshDivisionLists(plan.gender || inferFormGender(rosterForm));
+      if (plan.usta_number != null) rosterForm.elements.usta_number.value = plan.usta_number;
+      if (plan.first_name) rosterForm.elements.first_name.value = plan.first_name;
+      if (plan.last_name) rosterForm.elements.last_name.value = plan.last_name;
+      const g = rosterForm.elements.gender;
+      if (g && typeof g._comboSync === "function") g._comboSync();
+    }
+    const div = rosterForm.elements.age_division;
+    if (div && plan.age_division && [...div.options].some((o) => o.value === plan.age_division)) {
+      div.value = plan.age_division;
+      if (typeof div._comboSync === "function") div._comboSync();
+    }
+    rosterOpenModal();
+    scheduleComboSync();
+    const who = [plan.first_name, plan.last_name].filter(Boolean).join(" ");
+    toast(plan.offRoster
+      ? `${m.detected_player_name || who || "Player"} is in the system — pick a division and Save to add them to this roster`
+      : `Pre-filled ${who || "from the email"} — ${plan.usta_number ? "confirm gender/division" : "add the USTA #, gender/division"}, then Save`, true);
+  }
+  // "Add both" for a name-only doubles pair: open the add-form for the first
+  // player now, queue the second so it opens after the first SAVE.
+  function inboxAddBothToRoster(m, plan0, plan1) {
+    _rosterAddQueue = [{ m, plan: plan1 }];
+    inboxAddToRoster(m, plan0);
+    const who1 = [plan1.first_name, plan1.last_name].filter(Boolean).join(" ");
+    toast(`Adding both — confirm this player, then ${who1 || "the partner"} opens next`, true);
+  }
+
   // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
   // joining the loaded roster with this tournament's player-hotel rows.
   const SIGNIN_HEADERS = ["Status", "Events", "Player", "USTA #", "City", "State",
@@ -483,5 +531,12 @@ export function createRosterPanel(ctx) {
     csvDownload(rows, `sign-in-sheet-${(getActive().name || "").replace(/\s+/g, "_")}`);
   }
 
-  return { loadRoster, rosterSignInExport, rosterSignInTemplate, rosterGrid };
+  return {
+    loadRoster,
+    rosterSignInExport,
+    rosterSignInTemplate,
+    rosterGrid,
+    inboxAddToRoster,
+    inboxAddBothToRoster,
+  };
 }

@@ -11,7 +11,10 @@ export function installAdminUsers(ctx) {
     const rows = await api("/admin/users");
     const tb = document.querySelector("#user-table tbody");
     tb.innerHTML = "";
-    if (!rows.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">No admin users.</td></tr>'; return; }
+    if (!rows.length) {
+      tb.innerHTML = hstr`<tr><td class="empty" colspan="3">No admin users.</td></tr>`;
+      return;
+    }
     for (const u of rows) {
       const isSelf = me && u.username === me.username;
       const tr = document.createElement("tr");

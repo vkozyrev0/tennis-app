@@ -5,7 +5,7 @@ export function createAssignmentsPanel(ctx) {
   const {
     api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, openForm,
     html, hstr, raw, esc, money, fmtDOW, fillSelect, officialLabel, siteLabel,
-    certLabel, chip, makeMenuButton, scheduleComboSync, prereqCallout,
+    certLabel, chip, makeMenuButton, scheduleComboSync, syncCombos, prereqCallout,
     makeListGrid, getActive, getOfficialsById, getSitesById, getHotelsById,
     getCertPairs, datesInRange: datesInRangeFn, activateGroup,
   } = ctx;
@@ -40,10 +40,10 @@ export function createAssignmentsPanel(ctx) {
     let m = document.getElementById("asg-history-modal");
     if (!m) {
       m = document.createElement("div"); m.id = "asg-history-modal"; m.className = "modal"; m.hidden = true;
-      m.innerHTML = '<div class="modal-box modal-box--wide" role="dialog" aria-modal="true" aria-labelledby="asg-hist-title">' +
-        '<h3 id="asg-hist-title" class="detail-title"></h3>' +
-        '<div id="asg-hist-body" style="max-height:60vh;overflow:auto"></div>' +
-        '<div class="modal-actions"><button type="button" id="asg-hist-close">Close</button></div></div>';
+      m.innerHTML = hstr`<div class="modal-box modal-box--wide" role="dialog" aria-modal="true" aria-labelledby="asg-hist-title">
+        <h3 id="asg-hist-title" class="detail-title"></h3>
+        <div id="asg-hist-body" style="max-height:60vh;overflow:auto"></div>
+        <div class="modal-actions"><button type="button" id="asg-hist-close">Close</button></div></div>`;
       document.body.appendChild(m);
       m.querySelector("#asg-hist-close").addEventListener("click", () => { m.hidden = true; });
       m.addEventListener("click", (e) => { if (e.target === m) m.hidden = true; });
@@ -52,7 +52,7 @@ export function createAssignmentsPanel(ctx) {
     m.querySelector("#asg-hist-title").textContent = `History — ${a.official_name}`;
     const body = m.querySelector("#asg-hist-body");
     if (!rows.length) {
-      body.innerHTML = '<p class="muted">No recorded changes yet (the trail starts with migration 0044 — earlier edits predate it).</p>';
+      body.innerHTML = hstr`<p class="muted">No recorded changes yet (the trail starts with migration 0044 — earlier edits predate it).</p>`;
     } else {
       body.innerHTML = html`<table class="list-table"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>${
         rows.map((r) => html`<tr><td>${new Date(r.changed_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td><td>${r.changed_by}</td><td>${_AUDIT_LABEL[r.action] || r.action}</td><td class="muted">${_auditDetail(r)}</td></tr>`)
@@ -147,7 +147,7 @@ export function createAssignmentsPanel(ctx) {
     // the app look the same (✦ icon + centered muted text).
     if (list.length === 0) {
       document.getElementById("asg-respbar").hidden = true;
-      box.innerHTML = '<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — click <strong>+ Assign official</strong> above to start.</div>';
+      box.innerHTML = hstr`<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span> No officials assigned yet — click <strong>+ Assign official</strong> above to start.</div>`;
       return;
     }
     // Stash the list + availability so the response-status filter can re-render
@@ -395,7 +395,7 @@ export function createAssignmentsPanel(ctx) {
     let contact = "";
     if (a.response_status === "pending" && (a.official_email || a.official_phone)) {
       const parts = [];
-      if (a.official_email) parts.push(hstr`<a href="mailto:${a.official_email}?subject=${encodeURIComponent("Assignment confirmation — " + (active ? getActive().name : ""))}">${a.official_email}</a>`);
+      if (a.official_email) parts.push(hstr`<a href="mailto:${a.official_email}?subject=${encodeURIComponent("Assignment confirmation — " + (getActive() ? getActive().name : ""))}">${a.official_email}</a>`);
       if (a.official_phone) parts.push(hstr`<a href="tel:${a.official_phone}">${a.official_phone}</a>`);
       contact = `<div class="asg-contact">awaiting response · ${parts.join(" · ")}</div>`;
     }

@@ -295,9 +295,14 @@ _menuEl.addEventListener("click", (e) => {
   // Opening any counted list (or the Inbox) re-pulls badge counts so a chip
   // can't read stale after the user adds/removes rows on a sibling tab.
   if (active && NAV_COUNT_TABS[tab.dataset.target]) refreshNavCounts();
-  // Pin grid height to the viewport *before* AG Grid measures columns, then redraw.
+  // Pin grid height to the viewport *before* AG Grid measures columns, then
+  // remeasure after layout/fonts settle (toolbars can reflow after loaders run).
   sizeLists();
   _redrawPanelGrids(tab.dataset.target);
+  requestAnimationFrame(() => {
+    sizeLists();
+    _redrawPanelGrids(tab.dataset.target);
+  });
   // a11y #8: focus the newly-active panel so screen readers re-announce the
   // tabpanel context after a tab switch. preventScroll keeps the layout still.
   // Only fire on real user clicks (not programmatic .click()) so the focus
@@ -543,13 +548,17 @@ const { loadTSites, loadTSiteDivisions, renderTSites } = createTournamentSitesPa
 
 
 // D11: Roster panel
-// openPlayer360 / inboxAddToRoster filled after those factories run (mutable refs).
+// openPlayer360 filled after player360 factory; loadInbox after inbox factory.
+// inboxAddToRoster is implemented *inside* roster (owns the form); inbox calls it.
 const _rosterRefs = {
   openPlayer360: (pid, tid) => { if (typeof openPlayer360 === "function") openPlayer360(pid, tid); },
-  inboxAddToRoster: (m, plan) => { if (typeof inboxAddToRoster === "function") inboxAddToRoster(m, plan); },
   playersCrudRefresh: async () => { if (typeof playersCrud !== "undefined" && playersCrud.refresh) await playersCrud.refresh(); },
+  loadInbox: () => { if (typeof loadInbox === "function") loadInbox(); },
 };
-const { loadRoster, rosterSignInExport, rosterSignInTemplate, rosterGrid } = createRosterPanel({
+const {
+  loadRoster, rosterSignInExport, rosterSignInTemplate, rosterGrid,
+  inboxAddToRoster, inboxAddBothToRoster,
+} = createRosterPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
   html, hstr, raw, money, chip, makeMenuButton, makeGrid,
   scheduleComboSync, syncCombos, prereqCallout, openForm,
@@ -558,9 +567,8 @@ const { loadRoster, rosterSignInExport, rosterSignInTemplate, rosterGrid } = cre
   detailBackdrop: _detailBackdrop, setCloseOpenDetail, GRIDS,
   getActive: () => active, getPlayersById: () => playersById,
   openPlayer360: (pid, tid) => _rosterRefs.openPlayer360(pid, tid),
-  loadInbox: () => loadInbox(),
+  loadInbox: () => _rosterRefs.loadInbox(),
   playersCrudRefresh: () => _rosterRefs.playersCrudRefresh(),
-  inboxAddToRoster: (m, plan) => _rosterRefs.inboxAddToRoster(m, plan),
 });
 
 // D11: Import page
@@ -592,7 +600,7 @@ const { gotoImport, buildImportPage } = createImportPage({
 const { loadAssignments, respChip: _respChip, filterByResponse: _filterAsgByResponse } = createAssignmentsPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, openForm,
   html, hstr, raw, esc, money, fmtDOW, fillSelect, officialLabel, siteLabel,
-  certLabel, chip, makeMenuButton, scheduleComboSync, prereqCallout,
+  certLabel, chip, makeMenuButton, scheduleComboSync, syncCombos, prereqCallout,
   makeListGrid, getActive: () => active, getOfficialsById: () => officialsById,
   getSitesById: () => sitesById, getHotelsById: () => hotelsById,
   getCertPairs: () => _certs.pairs, datesInRange: _datesInRange, activateGroup,
@@ -632,7 +640,7 @@ const { loadAvailability } = createAvailabilityPanel({
 });
 
 // D11: review inbox panel
-const { loadInbox, inboxAddToRoster, invalidatePickCache, verifyEmailTargets } = createInboxPanel({
+const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
   html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel, officialLabel,
   makeReadGrid, makeListGrid, makeMenuButton, scheduleComboSync, openForm,
@@ -642,7 +650,10 @@ const { loadInbox, inboxAddToRoster, invalidatePickCache, verifyEmailTargets } =
   gotoImport: typeof gotoImport === "function" ? gotoImport : () => {},
   SHIRT_LABELS,
   progress: _progress, humanizeDetail: _humanizeDetail,
+  rosterAddFromEmail: inboxAddToRoster,
+  rosterAddBothFromEmail: inboxAddBothToRoster,
 });
+_rosterRefs.loadInbox = loadInbox;
 
 // D11: Part B lists (late, withdrawals, sched/divflex, player hotels)
 const {
@@ -680,7 +691,6 @@ const { openPlayer360, openOfficial360, exportP360, exportPayStatement } = creat
   printDoc, getActive: () => active,
 });
 _rosterRefs.openPlayer360 = openPlayer360;
-_rosterRefs.inboxAddToRoster = inboxAddToRoster;
 
 // D11: home dashboard
 const { loadDashboard } = createDashboardPanel({

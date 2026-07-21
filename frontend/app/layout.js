@@ -17,6 +17,10 @@ export function createLayout(ctx) {
    * Bound every scrollable list/grid in the active panel to the space left
    * below it so it never runs past the bottom of the window, whatever the
    * toolbar / breadcrumb / nav height happens to be.
+   *
+   * When a panel has several non-compact mounts stacked, each is sized to the
+   * remaining viewport from *its* top (later ones get a shorter height so the
+   * stack still ends at the viewport bottom rather than forcing a page scroll).
    */
   function sizeLists() {
     const panel = document.querySelector(".panel.active");
@@ -39,11 +43,22 @@ export function createLayout(ctx) {
 
     // AG Grid mounts (Setup wireEntity + workspace makeListGrid/makeReadGrid).
     // Compact summary mounts keep their own fixed heights.
-    panel.querySelectorAll(".grid-mount:not(.grid-mount--compact)").forEach((el) => {
+    // Prefer the last full-height mount in the panel (main list) when several
+    // exist — e.g. a toolbar summary grid above a primary table.
+    const mounts = [...panel.querySelectorAll(".grid-mount:not(.grid-mount--compact)")];
+    mounts.forEach((el, i) => {
       const rect = el.getBoundingClientRect();
       // Not laid out yet (display:none ancestor) — skip until the panel is shown.
       if (rect.top === 0 && rect.bottom === 0 && rect.width === 0) return;
-      const h = Math.max(MIN_H, Math.floor(window.innerHeight - rect.top - BOTTOM_PAD));
+      // When multiple mounts stack, leave a small gap for mounts below this one
+      // so the *last* mount reaches the viewport edge and earlier ones don't
+      // force document overflow.
+      const mountsBelow = mounts.length - 1 - i;
+      const reserveBelow = mountsBelow > 0 ? mountsBelow * (MIN_H + 8) : 0;
+      const h = Math.max(
+        MIN_H,
+        Math.floor(window.innerHeight - rect.top - BOTTOM_PAD - reserveBelow),
+      );
       el.style.height = h + "px";
       el.style.maxHeight = h + "px";
       el.style.minHeight = MIN_H + "px";

@@ -11,15 +11,23 @@ export function createInboxPanel(ctx) {
     // loadInbox uses a raw fetch for X-Total-Count; needs the same progress bar
     // + 422 humanizer that shell.api provides (D11 wiring — was app.js globals).
     progress, humanizeDetail,
+    // Roster form prefill lives in createRosterPanel (owns form + modal state).
+    rosterAddFromEmail, rosterAddBothFromEmail,
   } = ctx;
   const _progress = typeof progress === "function" ? progress : () => {};
   const _humanizeDetail = typeof humanizeDetail === "function"
     ? humanizeDetail
     : (detail, fallback) => (typeof detail === "string" ? detail : (fallback || "error"));
+  const _rosterAddFromEmail = typeof rosterAddFromEmail === "function"
+    ? rosterAddFromEmail
+    : () => { toast("Roster panel not ready", false); };
+  const _rosterAddBothFromEmail = typeof rosterAddBothFromEmail === "function"
+    ? rosterAddBothFromEmail
+    : (m, p0) => _rosterAddFromEmail(m, p0);
   void money; void officialLabel; void makeListGrid; void makeMenuButton;
   void openForm; void getTournamentsById; void gotoImport; void SHIRT_LABELS;
   void confirmDialog; void markInvalid; void formObj; void onSubmit; void fillSelect;
-  void rosterPrefillFromName; void resolveFilePlayerId;
+  void resolveFilePlayerId;
 
   // --- Part B: review inbox + late entries ---
   const EMAIL_CLASSES = ["unclassified", "late_entry", "withdrawal", "doubles",
@@ -223,46 +231,15 @@ export function createInboxPanel(ctx) {
   }
   // Open the roster form pre-filled from this email (USTA #, name, division) —
   // the same plan the ⋯ menu uses, surfaced directly on a parsed-but-unrostered
-  // (✉) player cell. rosterPrefillFromEmail is pure + unit-tested.
+  // (✉) player cell. Prefill plan is pure (roster_prefill.js); form open lives
+  // in createRosterPanel so D11 free-vars stay out of this module.
   function _inboxAddToRoster(m, plan) {
     plan = plan || rosterPrefillFromEmail(m);
-    document.querySelector('.tab[data-target="panel-t-roster"]')?.click();
-    rosterShowNew();
-    _rosterFromEmailId = m.id;   // re-detect this email after the save links it
-    rosterSetMode(plan.mode);
-    if (plan.mode === "pick") {
-      const picker = rosterForm.elements.player_id;
-      if (picker) { picker.value = plan.player_id; if (typeof picker._comboSync === "function") picker._comboSync(); }
-      refreshDivisionLists(_inferFormGender(rosterForm));
-    } else {
-      if (plan.gender && rosterForm.elements.gender) rosterForm.elements.gender.value = plan.gender;
-      refreshDivisionLists(plan.gender || _inferFormGender(rosterForm));
-      rosterForm.elements.usta_number.value = plan.usta_number;
-      if (plan.first_name) rosterForm.elements.first_name.value = plan.first_name;
-      if (plan.last_name) rosterForm.elements.last_name.value = plan.last_name;
-      const g = rosterForm.elements.gender;
-      if (g && typeof g._comboSync === "function") g._comboSync();
-    }
-    const div = rosterForm.elements.age_division;
-    if (div && plan.age_division && [...div.options].some((o) => o.value === plan.age_division)) {
-      div.value = plan.age_division;
-      if (typeof div._comboSync === "function") div._comboSync();
-    }
-    rosterOpenModal();
-    scheduleComboSync();
-    const who = [plan.first_name, plan.last_name].filter(Boolean).join(" ");
-    toast(plan.offRoster
-      ? `${m.detected_player_name} is in the system — pick a division and Save to add them to this roster`
-      : `Pre-filled ${who || "from the email"} — ${plan.usta_number ? "confirm gender/division" : "add the USTA #, gender/division"}, then Save`, true);
+    _rosterAddFromEmail(m, plan);
   }
-  // "Add both" for a name-only doubles pair: open the add-form for the first
-  // player now, queue the second so it opens after the first SAVE. Each player
-  // still gets a confirm step (the TD supplies the USTA # the email lacked).
+  // "Add both" for a name-only doubles pair: first player now, second after SAVE.
   function _inboxAddBothToRoster(m, plan0, plan1) {
-    _rosterAddQueue = [{ m, plan: plan1 }];
-    _inboxAddToRoster(m, plan0);
-    const who1 = [plan1.first_name, plan1.last_name].filter(Boolean).join(" ");
-    toast(`Adding both — confirm this player, then ${who1 || "the partner"} opens next`, true);
+    _rosterAddBothFromEmail(m, plan0, plan1);
   }
   // Run player detection for one email and fold the result back into the row.
   async function _inboxDetectInto(m, row) {
@@ -1231,6 +1208,10 @@ export function createInboxPanel(ctx) {
     const link = document.getElementById("inbox-sum-new");
     if (link) link.addEventListener("click", (e) => {
       e.preventDefault();
+      // Clear unmatched-only so "unfiled" shows the full new-mail queue, not a
+      // subset that can look empty after a PDF import of mostly-matched rows.
+      const cb = document.getElementById("inbox-unmatched-only");
+      if (cb && cb.checked) { cb.checked = false; _inboxUnmatchedOnly = false; loadInbox(); }
       try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
     });
     // "N unmatched" → flip on the server-side unmatched-only drilldown (and sync
@@ -1241,6 +1222,7 @@ export function createInboxPanel(ctx) {
       const cb = document.getElementById("inbox-unmatched-only");
       if (cb && !cb.checked) { cb.checked = true; }
       _inboxUnmatchedOnly = true;
+      try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
       loadInbox();
     });
     _renderInboxAging();
@@ -1301,6 +1283,8 @@ export function createInboxPanel(ctx) {
 
   return {
     loadInbox,
+    // Prefill is owned by roster; keep a thin re-export for any callers that
+    // still expect this name on the inbox factory result.
     inboxAddToRoster: _inboxAddToRoster,
     invalidatePickCache: _invalidatePickCache,
     verifyEmailTargets,
