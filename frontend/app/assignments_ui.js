@@ -12,6 +12,55 @@ export function createAssignmentsPanel(ctx) {
   const datesInRange = datesInRangeFn || datesInRangeUtil;
   void makeListGrid; void getHotelsById; void getSitesById; void esc;
 
+  // =================== Assignment change history (P4-5) ===================
+  const _AUDIT_LABEL = {
+    created: "Assignment created", updated: "Assignment updated",
+    deleted: "Assignment deleted", day_added: "Day added",
+    day_removed: "Day removed", day_status: "Day-of status set",
+    response: "Official responded",
+  };
+  function _auditDetail(row) {
+    const d = row.detail || {};
+    const bits = [];
+    if (d.work_date) bits.push(fmtDOW(d.work_date));
+    if (d.working_as) bits.push(certLabel(d.working_as));
+    if (d.actual_status) bits.push(d.actual_status.replace("_", " "));
+    if (d.status) bits.push(d.status);
+    if (d.via) bits.push(`via ${d.via}`);
+    if (row.action === "updated") {
+      if (d.site_id != null) bits.push(`site #${d.site_id}`);
+      if (d.room_block_id != null) bits.push(`room block #${d.room_block_id}`);
+    }
+    return bits.join(" · ");
+  }
+  async function showAssignmentHistory(a) {
+    let rows;
+    try { rows = await api(`/assignments/${a.id}/audit`); }
+    catch (e) { toast(e.message, false); return; }
+    let m = document.getElementById("asg-history-modal");
+    if (!m) {
+      m = document.createElement("div"); m.id = "asg-history-modal"; m.className = "modal"; m.hidden = true;
+      m.innerHTML = '<div class="modal-box modal-box--wide" role="dialog" aria-modal="true" aria-labelledby="asg-hist-title">' +
+        '<h3 id="asg-hist-title" class="detail-title"></h3>' +
+        '<div id="asg-hist-body" style="max-height:60vh;overflow:auto"></div>' +
+        '<div class="modal-actions"><button type="button" id="asg-hist-close">Close</button></div></div>';
+      document.body.appendChild(m);
+      m.querySelector("#asg-hist-close").addEventListener("click", () => { m.hidden = true; });
+      m.addEventListener("click", (e) => { if (e.target === m) m.hidden = true; });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !m.hidden) m.hidden = true; });
+    }
+    m.querySelector("#asg-hist-title").textContent = `History — ${a.official_name}`;
+    const body = m.querySelector("#asg-hist-body");
+    if (!rows.length) {
+      body.innerHTML = '<p class="muted">No recorded changes yet (the trail starts with migration 0044 — earlier edits predate it).</p>';
+    } else {
+      body.innerHTML = html`<table class="list-table"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>${
+        rows.map((r) => html`<tr><td>${new Date(r.changed_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td><td>${r.changed_by}</td><td>${_AUDIT_LABEL[r.action] || r.action}</td><td class="muted">${_auditDetail(r)}</td></tr>`)
+      }</tbody></table>`;
+    }
+    m.hidden = false;
+  }
+
   // --- Assignments ---
   const asgForm = document.getElementById("asg-form");
   let asgEditId = null;
@@ -663,5 +712,11 @@ export function createAssignmentsPanel(ctx) {
   trbForm.querySelector(".cancel").addEventListener("click", trbReset);
 
 
-  return { loadAssignments, respChip };
+  /** Dashboard deep-link: filter assignment cards by response status. */
+  function filterByResponse(status) {
+    _asgRespFilter = status || "all";
+    _renderAsgList();
+  }
+
+  return { loadAssignments, respChip, filterByResponse };
 }
