@@ -70,6 +70,9 @@ backend/
     importer.py        # staged spreadsheet import: per-type registry, parse/validate/merge
                        # (+ PDF inbox import: a tournament-emails PDF -> staged email rows)
     email_targets.py   # single source of truth: classification -> target list registry
+    email_detect.py    # C2: layered player detection (shared by emails + importer)
+    email_stamp.py     # C2: D9 extracted-field stamp
+    assignment_ops.py  # C2: assignment summaries, refs, snapshots, audit helpers
     playerops.py       # upsert_player, mark_email_filed (shared helpers)
     shirtops.py        # t-shirt size normalization
     geocode.py         # great-circle mileage estimate; also the Google Maps Distance Matrix
@@ -199,17 +202,18 @@ workspace vs Part B vs reporting:
   `distances` (official↔site mileage, manual + `geocode` auto), `tournaments`,
   `players`, `staff` (non-official tournament staff).
 - **Tournament workspace:** `roster` (entries + CSV import + alternates +
-  completeness), `assignments` (the big one — per-day roles, pay/mileage
-  snapshots, conflicts, bulk-invite, coverage candidates/fill, invite text, pay
-  statements), `availability` (TD-entered + the heatmap grid), `dashboard`
+  completeness), `assignments` + `assignments_bulk` (CRUD/days/conflicts/pay;
+  bulk-invite + invite-text + coverage fill in the bulk module — C2 2026-07-21;
+  helpers in `assignment_ops.py`), `availability` (TD-entered + the heatmap grid), `dashboard`
   (per-tournament + cross-tournament digest/deadlines + readiness), `reports`
   (staffing plan, coverage, schedule, rooming list, dietary, missing-distance,
   officials-without-login), `incidents` (day-of incident log: weather, injury,
   dispute, facility, conduct — logged as one-liners, optionally resolved later),
   `payroll` (payroll finalization + mark-paid + CSV export; freezes computed pay
   into an immutable `payroll_record`, migration 0045).
-- **Part B inbox:** `emails` (the review inbox: list/search/status, triage =
-  classify→detect→populate, aging, unmatched), and the per-classification list
+- **Part B inbox:** `emails` + `emails_bulk` (CRUD/single detect/targets vs
+  bulk reassign/status/detect/classify/populate/triage — C2 2026-07-21;
+  detection/stamp in `email_detect`/`email_stamp`), and the per-classification list
   routers `late_entries`, `withdrawals`, `doubles`, `pairing_avoidances`,
   `player_hotels`, `adult_lists` (scheduling avoidance + division flex),
   `imports` (staged spreadsheet import for every type).
@@ -235,7 +239,7 @@ and bulk populate so they can't drift), `shirtops.norm_shirt`, `crypto`,
 
 ## 7. Key domain rules (the non-obvious logic)
 
-**Pay & mileage (`assignments.py`).** An assignment has per-day rows
+**Pay & mileage (`assignments` + `assignment_ops`).** An assignment has per-day rows
 (`assignment_day`), each with a `working_as` role and a snapshotted
 `rate_applied` (the certification rate in effect that day). Then:
 - `pay = Σ rate_applied over worked days`

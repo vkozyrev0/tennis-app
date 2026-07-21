@@ -12,6 +12,7 @@ from .routers import (
     access_audit,
     adult_lists,
     assignments,
+    assignments_bulk,
     auth,
     availability,
     certifications,
@@ -74,7 +75,7 @@ app.include_router(ingest.router)
 # Admin-only: every TD/back-office router requires an admin session.
 _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
-          distances, divisions, roster, assignments, reports, dashboard, certifications, availability,
+          distances, divisions, roster, assignments, assignments_bulk, reports, dashboard, certifications, availability,
           emails, emails_bulk, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users,
           export_audit, access_audit, coppa):

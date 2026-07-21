@@ -110,7 +110,7 @@ export function createDashboardPanel(ctx) {
     if (!box) return;
     let w;
     try { w = await api("/officials/workload"); } catch (_) { box.innerHTML = ""; return; }
-    if (!w.officials.length) { box.innerHTML = '<p class="muted">No officials yet.</p>'; return; }
+    if (!w.officials.length) { box.innerHTML = hstr`<p class="muted">No officials yet.</p>`; return; }
     const t = w.totals;
     const maxDays = Math.max(1, ...w.officials.map((o) => o.days));
     const rows = w.officials.map((o) => {

@@ -231,7 +231,7 @@ export function createDayOfPanel(ctx) {
         results.textContent = "Looking…";
         try {
           const cands = await api(`/tournaments/${getActive().id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${_DAYOF.date}`);
-          if (!cands.length) { results.innerHTML = '<p class="muted">No certified official is free that day.</p>'; return; }
+          if (!cands.length) { results.innerHTML = hstr`<p class="muted">No certified official is free that day.</p>`; return; }
           results.innerHTML = hstr`${cands.slice(0, 12).map((c) => html`
             <button type="button" class="touch-btn dayof-qa-cand" data-oid="${c.official_id}" data-role="${role}">
               ${c.official_name}${c.available ? raw(' <span class="badge badge-ok">available</span>') : ""}${

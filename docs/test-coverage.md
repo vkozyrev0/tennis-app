@@ -7,6 +7,10 @@ against a Postgres 16 service on every push/PR and gates the Docker image build
 on it (`.github/workflows/docker.yml`). Count is from static `def test_` scan;
 re-run `pytest --collect-only -q` after large adds.
 
+**C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
+are split out of the large routers; API paths and re-exports for tests are
+unchanged. Prefer `app.assignment_ops` / `app.email_detect` for new helpers.
+
 Recent additions (2026-06-09 → 06-10): `test_zz_players_paging` /
 `test_zz_officials_paging` (server q/limit/offset + X-Total-Count),
 `test_zz_ical` (RFC 5545 schedule export), `test_zz_db_errors` (global
