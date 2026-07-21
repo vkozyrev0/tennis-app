@@ -515,7 +515,7 @@ free-text-duplicated.
 
 ---
 
-## Auth — accounts + sessions  ✅ *built (migrations 0008 + 0017)*
+## Auth — accounts + sessions  ✅ *built (migrations 0008 + 0017 + 0053 + 0055)*
 POC auth: pbkdf2 password hashes + a server-side session token in an HttpOnly
 cookie. Two roles — `admin` (the TD) and `official` (self-service); an
 `official` account links to an `official` record.
@@ -528,6 +528,8 @@ cookie. Two roles — `admin` (the TD) and `official` (self-service); an
 | `password_hash` | pbkdf2, NOT NULL |
 | `role` | `admin` \| `official` (enum `user_role`, default `official`) |
 | `official_id` | FK → Official, ON DELETE CASCADE (nullable; set for `official` accounts) |
+| `can_export_pii` | bool (0053 / H4.2); full minors-PII CSV gate; new admins default false |
+| `must_change_password` | bool (0055 / D3); prod API gate until password rotated; POC admin/admin seeds true |
 | `created_at` | timestamptz |
 
 ### session
@@ -536,7 +538,15 @@ cookie. Two roles — `admin` (the TD) and `official` (self-service); an
 | `token` | PK (the cookie value) |
 | `user_id` | FK → user_account, ON DELETE CASCADE |
 | `created_at` | timestamptz |
-| `expires_at` | timestamptz, default `now() + 30 days` (migration 0017); expired tokens are rejected + cleaned up on login |
+| `expires_at` | timestamptz; TTL from `COURTOPS_SESSION_DAYS` (default 30 dev / 7 prod, clamp 1–90) |
+
+### export_audit ✅ *0052 / H4.1*
+Append-only who/what/when for CSV exports (never row PII). Browser POSTs
+`/api/export-audit`; server CSVs insert directly.
+
+### access_audit ✅ *0054 / D19*
+Append-only who opened player 360 (`view_player_360` + player id). List via
+`GET /api/access-audit`.
 
 ---
 

@@ -1,10 +1,9 @@
 # PII H2 — Key management & rotation design
 
-> **Status:** design only (no code in this document). Companion to
-> [pii-hardening-plan.md](pii-hardening-plan.md) §H2; it designs the one
-> remaining H2 slice — **key storage + rotation** — that the plan stubs as
-> "Remaining: a real secret-manager/KMS + rotation." Column-level encryption
-> itself already ships (see "Current state").
+> **Status:** MultiFernet + re-encrypt backfill **implemented** (2026-07-20) in
+> `backend/app/crypto.py` and `backend/reencrypt_pii.py`. Secret-manager choice
+> and backup-key retention remain deploy/runbook decisions. Companion to
+> [pii-hardening-plan.md](pii-hardening-plan.md) §H2.
 
 ## 1. Current state (what already ships)
 
@@ -27,9 +26,9 @@ stay `text` and need no schema change):
   (`config.py validate()` → `crypto.using_dev_key()`) **refuses to start a prod
   deployment** still using the dev key.
 
-What's missing for production: (a) the key must live in a real secret store, not
-an env var pasted by hand; (b) there is **no rotation path** — a single key with
-no way to roll it without re-encrypting everything by hand.
+What's missing for production: (a) the key should live in a real secret store, not
+an env var pasted by hand; (b) ~~there is no rotation path~~ ✅ MultiFernet +
+`reencrypt_pii.py` (2026-07-20) — ops still need a key-generation/backup runbook.
 
 ## 2. H2.1 — Disk/volume encryption (baseline, deploy-time)
 
@@ -68,8 +67,8 @@ f_old, …])`: it **encrypts with the first** key and **decrypts by trying each*
 in order. That gives a window where both keys are valid, so old ciphertext still
 reads while new writes use the new key — the basis for online rotation.
 
-Proposed `crypto.py` change (plural keys, newest first; back-compatible — a
-single key behaves exactly as today):
+**Shipped** in `app/crypto.py` (plural keys, newest first; back-compatible — a
+single `PII_ENCRYPTION_KEY` behaves exactly as before):
 
 ```python
 # PII_ENCRYPTION_KEYS: comma-separated Fernet keys, NEWEST FIRST.
@@ -81,6 +80,7 @@ def _keys() -> list[str]:
 def _fernet() -> MultiFernet:
     return MultiFernet([Fernet(k.encode()) for k in _keys()])
 # encrypt() → token under keys[0]; decrypt() → tries all, else pass-through.
+# rotate_token() → MultiFernet.rotate (no plaintext in caller).
 ```
 
 **Rotation sequence (zero-downtime):**
@@ -95,21 +95,16 @@ def _fernet() -> MultiFernet:
    from the secret (`PII_ENCRYPTION_KEYS=NEWKEY`) and redeploy. OLDKEY is now
    retired and can be destroyed per policy.
 
-**Re-encrypt backfill (new admin command / one-off script, not an endpoint).**
-Walks the encrypted columns in batches and re-saves; `MultiFernet.rotate()` is
-purpose-built (`token = mf.rotate(token)` re-wraps under the primary key without
-exposing plaintext). Sketch:
+**Re-encrypt backfill — shipped as `backend/reencrypt_pii.py`.**
 
-```python
-# backend/reencrypt_pii.py  (run on the box, like migrate.py)
-TARGETS = [("email_message", "id", ["body"]),
-           ("player", "id", ["emails", "phones", "birthdate"])]
-mf = crypto._fernet()
-for table, pk, cols in TARGETS:
-    for row in batched(select pk, cols from table):
-        sets = {c: mf.rotate(row[c]) for c in cols if _looks_like_token(row[c])}
-        if sets: update table set <sets> where pk = row[pk]
+```bash
+cd backend
+python reencrypt_pii.py              # dry-run counts only
+python reencrypt_pii.py --apply      # re-wrap under primary key
 ```
+
+Walks encrypted columns in batches; uses `crypto.rotate_token()` /
+`MultiFernet.rotate()` so plaintext never materializes in the script.
 
 - Use `mf.rotate()` (not decrypt→encrypt) so plaintext never materializes in a
   variable. Skip legacy-plaintext / NULL (not a token) — they get encrypted

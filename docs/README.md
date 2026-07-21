@@ -26,10 +26,15 @@ master data) and a per-tournament workspace (scoped operations).
 | 8 | [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
 | 9 | [pii-hardening-plan.md](pii-hardening-plan.md) | PII hardening plan for minors' data (COPPA): inventory, obligations, phased remediation. |
 | 10 | [pii-h2-key-management.md](pii-h2-key-management.md) | H2 PII key-management & rotation design (Fernet MultiFernet, re-encrypt backfill, deploy runbook). |
+| 10b | [coppa-policy.md](coppa-policy.md) | **D16** thin COPPA policy: residual plaintext decision, under-13 gate (`ALLOW_UNDER13_PII`). |
 | 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
 | 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 | 13 | [email-ingest.md](email-ingest.md) | Auto-ingest webhook (D4): token auth, routing, provider sketches. |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
+
+Backend suite ~**591** tests / **89** files (migrations through **0055**); see
+[test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
+(`util`, `html`, `ui`, `combobox`, `print`, `grids`, `auth`, …).
 
 ## Quickstart
 

@@ -1,10 +1,11 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status:** 528 tests, all passing (migrations through 0048) — deterministic
-(login-throttle state leak fixed). CI runs the suite against a Postgres 16
-service on every push/PR and gates the Docker image build on it
-(`.github/workflows/docker.yml`).
+**Status (2026-07-21):** **~591 tests** across **89** files (migrations through
+**0055**) — deterministic (login-throttle state leak fixed). CI runs the suite
+against a Postgres 16 service on every push/PR and gates the Docker image build
+on it (`.github/workflows/docker.yml`). Count is from static `def test_` scan;
+re-run `pytest --collect-only -q` after large adds.
 
 Recent additions (2026-06-09 → 06-10): `test_zz_players_paging` /
 `test_zz_officials_paging` (server q/limit/offset + X-Total-Count),
@@ -36,21 +37,14 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-**Frontend unit checks (JS):** two pieces of pure frontend logic that are
-risky to verify only through the live grid are factored out and asserted by
-DOM-free node test files:
+**Frontend unit checks (JS):** pure frontend logic factored out and asserted by
+DOM-free node test files (independent of AG Grid):
 
-- `frontend/app/roster_prefill.test.mjs` (run: `node frontend/app/roster_prefill.test.mjs`,
-  16 checks) — seeding the roster add-form from an inbox email
-  (`roster_prefill.js`): the off-roster→pick-mode and unmatched→new-mode plans,
-  the name-only doubles-pair add path, `Last, First` handling, the
-  `resolveFilePlayerId` resolver, plus the "can't add" gates.
-- `frontend/app/html.test.mjs` (run: `node frontend/app/html.test.mjs`,
-  11 checks) — the `html`` ` template helper (`html.js`): default HTML-escaping,
-  `raw()` verbatim insertion, nested composition without double-escaping, array
-  concatenation, and `hstr` returning a plain string for formatters.
+- `frontend/app/roster_prefill.test.mjs` — roster add-form prefill from inbox email.
+- `frontend/app/html.test.mjs` — `html`` / `hstr` / `raw()` escaping (incl. quotes).
+- `frontend/app/ui.test.mjs` — `money` / `chip` helpers (D11 slice).
 
-Both run independently of AG Grid rendering.
+Run: `node frontend/app/<name>.test.mjs`.
 
 **Test client:** every test module instantiates a FastAPI `TestClient` and
 logs in as `admin/admin` at start (lazy login inside the function for the
@@ -404,7 +398,12 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **528 tests, all passing** (see the status line at the top).
+Total suite count: **~591 tests** across **89** files (see the status line at the top).
+Recent hardening additions (2026-07-19 → 07-21): `test_zz_export_audit`,
+`test_zz_export_gate`, `test_zz_coppa`, `test_zz_h2_rotation`,
+`test_zz_access_audit`, `test_zz_security_headers`, D3 session/password-change
+guards in `test_config_guard`, D8 `/me/tournaments` cases in
+`test_zz_me_availability`.
 `test_zz_chase_pending.py` (6) — assignment summary carries official contact;
 null when not on file; the **pending-nudge list** (`/pending`) names each
 unconfirmed official with email + first_name, null email when none on file; 404;

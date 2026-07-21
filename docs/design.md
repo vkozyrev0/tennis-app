@@ -87,18 +87,15 @@ backend/
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (per-feature)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (~591 tests / 89 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~8.0k lines: all behaviour (ES module)
-  app/util.js, app/shirts.js, app/roster_prefill.js   # extracted pure helpers (+ a .test.mjs)
-  app/grids.js         # AG Grid factories (createGridFactories(ctx) — P2 #11a); Tabulator-
-                       #   shaped colDefs translated to AG; custom dropdown/text header filters,
-                       #   sort persistence, mobile responsive-collapse (overflow cols → ▸ tap-popup)
-  app/auth.js          # login + session view (sign-in/out, change-password, role-split header)
-  app/state.js         # active-tournament state + change event
-  app/player_list.js   # Part B list-page factory (wirePlayerList)
-  app/html.js          # auto-escaping html`` / hstr tagged-template helper
+  app.js               # ~7.9k lines: remaining behaviour (ES module; D11 still ongoing)
+  app/                 # extracted ESM slices:
+    util.js, shirts.js, roster_prefill.js   # pure helpers (+ *.test.mjs)
+    html.js, ui.js, combobox.js, print.js   # templates, chips/money/menu, type-in selects, print scaffold
+    grids.js           # AG Grid factories (createGridFactories(ctx))
+    auth.js, state.js, player_list.js
   styles.css, tokens.css
   vendor/ag-grid-community.min.js, ag-grid.css, ag-theme-quartz.css   # vendored grid lib
 scripts/
@@ -126,6 +123,10 @@ fly.toml / render.yaml / Caddyfile   # hosting configs (see docs/deploy.md)
 - A `@app.middleware("http")` sets `Cache-Control: no-store` on **non-`/api`**
   responses (the frontend), so the dev edit loop isn't defeated by Chromium's
   aggressive ES-module caching. (Production: hashed filenames instead.)
+- A second middleware applies **security headers** (D17): CSP, `nosniff`,
+  `X-Frame-Options: DENY`, referrer/permissions/COOP; HSTS when `ENV=prod`.
+- **CSRF (D18 deferred):** session cookie is `HttpOnly` + `SameSite=Strict`;
+  the SPA is same-origin only. No CSRF token until a cross-site client appears.
 - `StaticFiles(directory=frontend, html=True)` mounted at `/` serves the SPA.
 
 The API lives under `/api/...`; the frontend at `/`.

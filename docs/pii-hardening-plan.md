@@ -1,13 +1,12 @@
 # CourtOps Tennis — PII Hardening Plan (minors' data / COPPA)
 
-> **Status:** H1 + H3 shipped (per-item marks below); H2.2 column-level
-> encryption shipped (`app/crypto.py`, migration 0037); H2.3
-> key-management/rotation is designed in
-> [pii-h2-key-management.md](pii-h2-key-management.md) (deploy-time to
-> implement). The document itself remains the plan of record. It operationalizes
-> the roadmap's parked *"PII-at-rest encryption + DB hardening"* item
-> ([roadmap.md](roadmap.md) §On hold) and the audit's §5.1/§5.3 constraints,
-> grounded in COPPA obligations confirmed by external research.
+> **Status (2026-07-21):** H1 enforcement, H2.2 column encryption, **H2.3
+> MultiFernet rotation + `reencrypt_pii.py`**, H3 retention/erasure mechanics,
+> H4.1 export + view audit, H4.2 export gate, D16 under-13 policy — all ship
+> (per-item marks below). Still deploy-time: H1.1 least-priv DB role, H1.4 app
+> TLS, H2.1 disk encryption, secret-manager hosting for keys, H3.3 cron, H4.3
+> multi-role least privilege. Plan of record for COPPA-oriented hardening;
+> operational companion: [coppa-policy.md](coppa-policy.md).
 >
 > **Why now:** CourtOps stores minors' personal data (junior players: names,
 > USTA #, birth year/date, city/state, parent emails/phones, free-text emails).
@@ -30,10 +29,11 @@
 | `official` | name, home street/city/state/zip, `phone`, `email`, `dietary_restrictions` | Adults | Not COPPA, but still PII subject to §312.8-style care + state law. |
 | `user_account`, `session` | login, `pbkdf2` hash, session token + expiry | Admin/officials | Auth (migration 0008/0017). Hash + expiry already in place. |
 
-**Action A0 — confirm the population.** COPPA's strict obligations attach to
-**under-13** data. Determine the actual age distribution (USTA junior divisions
-run 10U–18U, so under-13 data *is* collected). If any under-13 → full COPPA
-applies. Document this finding; it sets the compliance baseline.
+**Action A0 — confirm the population.** ✅ **Documented (2026-07-20).** COPPA's
+strict obligations attach to **under-13** data. USTA junior divisions run
+10U–18U, so under-13 data *is* expected for real junior events. See
+[coppa-policy.md](coppa-policy.md) §5. Prod refuses under-13 **birthdate**
+writes unless `ALLOW_UNDER13_PII=1`.
 
 ---
 
@@ -66,25 +66,38 @@ for the deployment's jurisdiction — not researched here.
 
 ---
 
-## 3. Current gaps (CourtOps as built)
+## 3. Gaps vs remaining work (CourtOps as built, 2026-07-21)
 
-1. **DB auth:** default `postgres` superuser, password `postgres` in
-   `config.py` defaults; DSN has **no `sslmode`** → no TLS. (`backend/app/config.py`)
-2. **Encryption at rest:** none (no disk/volume encryption assumed; no
-   column-level encryption for `emails`/`phones`/`birthdate`/email `body`).
-3. **Retention/deletion:** no policy, no purge job; deletes (where they exist)
-   don't guarantee `player_history` / `email_message` cleanup.
-4. **Access logging / audit:** money calc has snapshots (audit §5.3), but there
-   is **no audit trail for PII access** (who viewed/exported minors' data).
-5. **Third-party assurances:** email auto-ingest + Maps geocoding are deferred;
-   when added they become **processors** needing §312.8 written assurances.
-6. **Data minimization:** CSV export of every list (incl. minors' PII) is
-   ungated — any admin can bulk-export. No field-level redaction.
+### Still open (deploy or product)
+
+1. **Least-privilege DB role + disk encryption + app TLS** — H1.1 / H1.4 / H2.1
+   (enforcement of non-default DB creds + `PGSSLMODE` already ships in H1.2/H1.3).
+2. **Secret manager / KMS** for Fernet keys — app MultiFernet rotation ships;
+   hosting keys outside the process env is still ops.
+3. **Retention cron** — `POST /api/retention/sweep` ships; schedule is deploy-time.
+4. **Third-party assurances** — email provider / Maps geocoding as processors
+   when wired for real junior data.
+5. **H4.3 multi-user least privilege** — beyond single-TD + `can_export_pii`.
+6. **Catalog list / single-GET view logging** — optional noise tradeoff (D19
+   covers player 360 only).
+
+### Closed in app code (do not re-open as gaps)
+
+| Area | Status |
+|------|--------|
+| Column encryption (body, emails, phones, birthdate) | ✅ H2.2 |
+| MultiFernet + `reencrypt_pii.py` | ✅ H2.3 app path |
+| Export audit + SPA CSV log | ✅ H4.1 / D1 |
+| Player-360 view audit | ✅ D19 / `access_audit` |
+| Minors-PII export gate | ✅ H4.2 |
+| Under-13 write gate + policy doc | ✅ D16 |
+| Secure cookie auto prod; session days; force password change | ✅ B1 / D3 |
+| Security headers / CSP | ✅ D17 |
+| Official tournament list scoped | ✅ D8 |
 
 **Already in place (don't re-do):** admin/official **RBAC**, HttpOnly +
 `SameSite=Strict` + `Secure` cookies, **session expiry + rotation** (0017),
-pbkdf2 hashing, per-route cross-account guards. These are the parts of §312.8
-that don't need new infrastructure.
+pbkdf2 hashing, per-route cross-account guards.
 
 ---
 
@@ -129,18 +142,16 @@ provisioning steps.
   they back the server-side inbox search (SQL `ILIKE`) and the detector's
   subject/sender matching, so encrypting them would break both (documented
   trade-off; covered by disk-level H2.1 instead).
-- **H2.3 Key management.** `PII_ENCRYPTION_KEY` (Fernet) from the environment; a
-  POC dev default is used locally and the **boot guard refuses prod** without a
-  real key (`config.py` `validate()`). *Remaining:* a real secret-manager/KMS +
-  zero-downtime rotation — **designed** in
-  [pii-h2-key-management.md](pii-h2-key-management.md) (MultiFernet plural keys,
-  re-encrypt backfill, deploy runbook); deploy-time to implement.
+- **H2.3 Key management.** ✅ **App path done (2026-07-20).** `PII_ENCRYPTION_KEY`
+  and plural `PII_ENCRYPTION_KEYS` (MultiFernet, newest first) in
+  `app/crypto.py`; `reencrypt_pii.py` backfill; prod boot guard refuses the
+  POC dev key. *Remaining deploy-time:* secret-manager/KMS hosting + backup
+  retention (runbook still in [pii-h2-key-management.md](pii-h2-key-management.md)).
 
 **Done when:** disk + the listed columns are encrypted; detection/extraction
 still works against decrypted-in-memory values; keys live outside the DB.
-**Status:** ✅ the highest-risk column (email body) + the app-layer mechanism +
-the prod key-guard ship; remaining columns are the same pattern; disk/KMS are
-deploy-time.
+**Status:** ✅ column crypto + MultiFernet + re-encrypt tool + prod key-guard;
+disk encryption + KMS hosting remain deploy-time.
 
 ### Phase H3 — Retention & deletion *(§312.10)*
 - **H3.1 Retention schedule.** ✅ **Done (email bodies).** The written schedule
@@ -167,15 +178,24 @@ email-body redaction endpoint) ship + are tested; the *schedule/policy/job*
 (H3.1 doc + H3.3 automation) remain.
 
 ### Phase H4 — Access control & audit
-- **H4.1 PII-access audit log.** Append-only record of *who exported/viewed*
-  minors' data (admin id, action, table, row-scope, timestamp) — store the
-  *event*, not the PII. Surfaces accountability the money-snapshot pattern
-  already models.
-- **H4.2 Gate bulk export.** Make CSV export of minors'-PII lists a
-  permissioned action (and audited via H4.1); consider field redaction for
-  non-essential exports.
-- **H4.3 Multi-user least privilege** (ties to D8): if more than the single TD
-  gets access, scope roles so not everyone can read all minors' PII.
+- **H4.1 PII-access audit log.** ✅ **Done (export 2026-07-19 + view 2026-07-21).**
+  Append-only `export_audit` (migration 0052): who / resource / tournament /
+  time / client_kind / detail (row_count, filename — never row PII). Browser
+  CSVs POST `/api/export-audit`; server CSVs insert directly. List via
+  `GET /api/export-audit`. **View trail (D19):** `access_audit` (migration
+  0054) on `GET /api/players/{id}/overview` (`view_player_360` + player id);
+  list via `GET /api/access-audit`. No dedicated SPA surface yet (API is enough
+  for POC accountability).
+- **H4.2 Gate bulk export.** ✅ **Done (2026-07-20).** `user_account.can_export_pii`
+  (migration 0053; new admins default **false**, seed admin **true**). Minors-PII
+  browser exports POST `/api/export-audit` only with capability +
+  `detail.confirmed` (SPA confirm) or `detail.redacted`. Resource classifier +
+  redaction helpers in `app/export_gate.py`. Toggle via
+  `PATCH /api/admin/users/{id}`.
+- **H4.3 Multi-user least privilege:** if more than the single TD gets access,
+  scope roles so not everyone can read all minors' PII. *(Related: officials'
+  tournament list is now scoped — audit **D8** — but admin multi-role PII
+  isolation is still open.)*
 
 ### Phase H5 — Processors & policy *(§312.8 downstream)*
 - **H5.1 Written assurances** from any third party that touches the data:
@@ -207,21 +227,24 @@ on `postgres`/`postgres` or a non-TLS DSN; tests still pass against a dev DB.
 ---
 
 ## 6. Open questions (must answer before relying on the plan)
-1. **Age distribution** — is under-13 data actually stored? (Sets COPPA baseline; §A0.)
+1. ~~**Age distribution**~~ ✅ USTA 10U–18U ⇒ under-13 in scope; gate + policy in
+   [coppa-policy.md](coppa-policy.md) (A0 / D16).
 2. **Final 2025 COPPA Rule text** — which of {written security program, written
    retention policy, separate consent for third-party/AI disclosure} are binding
    by **2026-04-22**? (Research couldn't confirm; read the Federal Register.)
 3. **State youth-privacy laws** for the deployment jurisdiction (not researched).
 4. **Deployment target** — managed Postgres (encryption-at-rest + TLS often
    turnkey) vs self-hosted (must configure LUKS/KMS + certs). Drives H1/H2 effort.
-5. **Search vs encryption trade-off** — confirm the triage/detector can run on
-   decrypted-in-memory `subject`/`body` so H2.2 doesn't break Part B (§4 H2.2).
+5. ~~**Search vs encryption trade-off**~~ ✅ H2.2: body/contact/DOB encrypted;
+   subject/from + names stay plaintext for search (D16 decision).
 
 ---
 
 ## 7. Cross-references
+- [coppa-policy.md](coppa-policy.md) — **D16** written decision + under-13 gate (`ALLOW_UNDER13_PII`).
 - [roadmap.md](roadmap.md) — §On hold "PII encryption at rest / DB hardening".
 - [audit.md](audit.md) — §5.1 (minors' PII / non-public), §5.3 (auditability).
 - `backend/app/config.py` — DB DSN + default creds (H1).
+- `backend/app/coppa.py` — under-13 age math + gate + `GET /api/coppa/policy`.
 - [pii-h2-key-management.md](pii-h2-key-management.md) — H2.3 key-management & rotation design.
 - FTC COPPA FAQ + 16 CFR Part 312 — primary obligations (§2).
