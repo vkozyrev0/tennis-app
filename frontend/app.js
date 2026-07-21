@@ -295,9 +295,9 @@ _menuEl.addEventListener("click", (e) => {
   // Opening any counted list (or the Inbox) re-pulls badge counts so a chip
   // can't read stale after the user adds/removes rows on a sibling tab.
   if (active && NAV_COUNT_TABS[tab.dataset.target]) refreshNavCounts();
-  // Tabulator can't lay out columns while hidden — redraw the grid(s) when shown.
-  _redrawPanelGrids(tab.dataset.target);
+  // Pin grid height to the viewport *before* AG Grid measures columns, then redraw.
   sizeLists();
+  _redrawPanelGrids(tab.dataset.target);
   // a11y #8: focus the newly-active panel so screen readers re-announce the
   // tabpanel context after a tab switch. preventScroll keeps the layout still.
   // Only fire on real user clicks (not programmatic .click()) so the focus

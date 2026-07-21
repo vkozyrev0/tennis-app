@@ -568,8 +568,21 @@ button[type="submit"]:hover { filter: brightness(1.05); }
 .msg.ok { color: var(--ok); }
 .msg.bad { color: var(--bad); }
 
-/* ---- Tabulator grid (Setup lists) themed to our palette (light + dark) ---- */
-.grid-mount { margin-top: 0.1rem; }
+/* ---- AG Grid mounts (Setup + workspace lists) ----
+   Height is set in px by sizeLists() (layout.js) so the bottom of the grid
+   sits at the viewport edge — the browser page scrollbar should not appear
+   for master-detail Setup panels. Compact summary mounts keep fixed heights. */
+.grid-mount {
+  margin-top: 0.1rem;
+  box-sizing: border-box;
+  min-height: 140px;
+  /* Internal scroll lives on the AG body; overflow hidden keeps chrome tight. */
+  overflow: hidden;
+}
+.grid-mount--compact {
+  max-height: none; /* don't force viewport-fill on small summary grids */
+  max-width: 520px;
+}
 .tabulator {
   background: var(--card); border: 1px solid var(--border); border-radius: 8px;
   font-family: inherit; font-size: 0.85rem; color: var(--ink);
@@ -654,11 +667,6 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
    specificity so our visible-overflow always wins and the 44×44 edit/delete
    icons can't be cropped by the neighbouring cell's edge. */
 .tabulator .tabulator-cell.grid-actions-cell { overflow: visible; }
-/* Compact, content-sized grids for small aggregate summaries (Hotel summary,
-   Lodging summary, CVB totals). Otherwise they stretch to the panel width and
-   the data sits in a tiny left-island with a sea of whitespace. */
-.grid-mount--compact { max-width: 520px; }
-
 /* Keyboard shortcuts help modal */
 table.shortcuts { border-collapse: collapse; }
 table.shortcuts th { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; font-weight: normal; min-width: 3rem; }

@@ -522,7 +522,8 @@ export function createGridFactories(ctx) {
       },
     });
     let built = false, pending = null;
-    mount.style.height = mount.style.height || "55vh";
+    // Viewport-fill height applied by sizeLists(); interim until first measure.
+    mount.style.height = mount.style.height || "50vh";
     const grid = _makeAgGrid(mount, {
       index: "id", placeholder, editTriggerEvent: "click",
       columnDefaults: { tooltip: true }, columns: cols,
@@ -645,6 +646,8 @@ export function createGridFactories(ctx) {
     const titles = [...tableEl.querySelectorAll("thead th")].map((t) => t.textContent.trim());
     const mount = tableEl.closest(".list-scroll") || tableEl.parentElement;
     mount.classList.remove("list-scroll"); mount.innerHTML = ""; mount.classList.add("grid-mount");
+    // height filled by sizeLists() to the remaining viewport; interim value until then.
+    mount.style.height = mount.style.height || "50vh";
 
     // Columns may opt into in-grid editing via `c.edit` (double-click a cell).
     // Only columns whose `key` maps 1:1 to a writable DB field should set it;
@@ -716,7 +719,6 @@ export function createGridFactories(ctx) {
       },
     });
 
-    mount.style.height = mount.style.height || "calc(100vh - 16rem)";
     const table = _makeAgGrid(mount, {
       index: "id", editTriggerEvent: "click",
       placeholder: `No ${cfg.singular}s yet — use the form to add one.`,
