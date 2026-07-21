@@ -129,16 +129,21 @@ export function createDayOfPanel(ctx) {
     const card = (o) => {
       const present = o.actual_status === "worked";
       const noshow = o.actual_status === "no_show";
+      const early = o.actual_status === "early_departure";
+      const phone = o.phone
+        ? hstr` <a class="dayof-phone" href="tel:${o.phone}" title="Call ${o.official_name}">☎ ${o.phone}</a>`
+        : "";
       return hstr`
         <div class="dayof-off">
           <div class="dayof-off-main">
-            <div class="dayof-off-name">${o.official_name}</div>
+            <div class="dayof-off-name">${o.official_name}${phone}</div>
             <div class="dayof-off-meta">${certLabel(o.working_as)} · ${o.site_label || "no site"} ${raw(respChip(o.response_status))}${
               noshow ? raw(' <span class="badge badge-bad">no-show</span>') : ""}${
-              o.actual_status === "early_departure" ? raw(' <span class="badge badge-warn">left early</span>') : ""}</div>
+              early ? raw(' <span class="badge badge-warn">left early</span>') : ""}</div>
           </div>
           <div class="dayof-off-actions">
             <button type="button" class="touch-btn dayof-present${present ? " on" : ""}" data-day="${o.day_id}" data-status="worked">✓ Present</button>
+            <button type="button" class="touch-btn dayof-early${early ? " on" : ""}" data-day="${o.day_id}" data-status="early_departure">◔ Left early</button>
             <button type="button" class="touch-btn dayof-noshow${noshow ? " on" : ""}" data-day="${o.day_id}" data-status="no_show">✗ No-show</button>
           </div>
         </div>`;
@@ -205,7 +210,9 @@ export function createDayOfPanel(ctx) {
       }
       if (e.target.closest(".dayof-today")) { _DAYOF.date = _todayIso(); loadDayOf(); return; }
 
-      const chk = e.target.closest(".dayof-present, .dayof-noshow");
+      // Don't treat phone links as check-in taps.
+      if (e.target.closest(".dayof-phone")) return;
+      const chk = e.target.closest(".dayof-present, .dayof-noshow, .dayof-early");
       if (chk) {
         const dayId = chk.dataset.day;
         // Toggle: tapping the already-active state clears back to "planned".

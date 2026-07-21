@@ -313,9 +313,9 @@ export function createImportPage(ctx) {
   async function buildImportPage() {
     const tabsRoot = document.getElementById("import-tabs");
     const panelRoot = document.getElementById("import-panel");
-    const note = document.getElementById("import-needs-getActive()");
+    const note = document.getElementById("import-needs-active");
     if (!tabsRoot || !panelRoot) return;
-    // Toggle the needs-getActive() hint based on current selection.
+    // Toggle the needs-active hint based on current selection.
     if (note) note.hidden = !!getActive();
     if (tabsRoot.dataset.built) return;
     // Set the guard BEFORE the await so a second concurrent call (e.g. the tab
@@ -331,7 +331,7 @@ export function createImportPage(ctx) {
       if (!sections[key]) return;
       Object.entries(sections).forEach(([k, sec]) => { sec.hidden = k !== key; });
       Object.entries(tabBtns).forEach(([k, btn]) => {
-        const on = k === key; btn.classList.toggle("getActive()", on);
+        const on = k === key; btn.classList.toggle("active", on);
         btn.setAttribute("aria-selected", on ? "true" : "false"); btn.tabIndex = on ? 0 : -1;
       });
     };

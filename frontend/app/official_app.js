@@ -43,7 +43,8 @@ export function createOfficialApp(ctx) {
     const box = document.getElementById("me-pay");
     if (!box) return;
     let s;
-    try { s = await api("/me/pay-summary"); } catch (_) { return; }
+    try { s = await api("/me/pay-summary"); }
+    catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
     if (!s.tournaments.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
     const rows = s.tournaments.map((t) =>
       html`<tr><td>${t.tournament_name || ("Tournament " + t.tournament_id)}</td><td>${t.days}</td><td>${raw(respChip(t.response_status))}</td><td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td></tr>`).join("");
@@ -57,7 +58,8 @@ export function createOfficialApp(ctx) {
     const box = document.getElementById("me-assignments");
     if (!box) return;
     let rows = [];
-    try { rows = await api("/me/assignments"); } catch (_) {}
+    try { rows = await api("/me/assignments"); }
+    catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }
     if (!rows.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
     box.innerHTML = "";
     for (const a of rows) {
@@ -87,9 +89,12 @@ export function createOfficialApp(ctx) {
         b.className = "btn-link" + (danger ? " danger" : ""); b.textContent = txt;
         b.disabled = a.response_status === status;
         b.addEventListener("click", async () => {
-          try { await api(`/me/assignments/${a.id}/respond`, { method: "POST", body: JSON.stringify({ status }) });
-            toast(`Marked ${status}`, true); loadMyAssignments(); }
-          catch (e) { toast(e.message, false); }
+          try {
+            await api(`/me/assignments/${a.id}/respond`, { method: "POST", body: JSON.stringify({ status }) });
+            toast(`Marked ${status}`, true);
+            await loadMyAssignments();
+            await loadMyPay();  // response changes season pay totals
+          } catch (e) { toast(e.message, false); }
         });
         return b;
       };
@@ -102,9 +107,13 @@ export function createOfficialApp(ctx) {
   async function loadMyAvailability() {
     const sel = document.getElementById("me-tournament");
     const box = document.getElementById("me-dates");
-    if (!sel.value) { box.innerHTML = ""; return; }
+    if (!box) return;
+    if (!sel || !sel.value) { box.innerHTML = ""; return; }
     const t = meTournaments.find((x) => String(x.id) === sel.value);
-    const av = await api(`/me/availability/${sel.value}`);
+    if (!t) { box.innerHTML = '<p class="muted">Select a tournament.</p>'; return; }
+    let av;
+    try { av = await api(`/me/availability/${sel.value}`); }
+    catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }
     document.getElementById("me-hotel").checked = !!av.hotel_needed;
     const checked = new Set(av.dates || []);
     box.innerHTML = "";

@@ -5,7 +5,7 @@ export function createInboxPanel(ctx) {
     api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
     html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel,
     officialLabel, makeReadGrid, makeListGrid, makeMenuButton, scheduleComboSync,
-    openForm, getActive, getPlayersById, getPlayersByUsta, getTournamentsById,
+    openForm, getActive, setActive, getPlayersById, getPlayersByUsta, getTournamentsById,
     rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId,
     gotoImport, SHIRT_LABELS,
   } = ctx;
@@ -469,7 +469,7 @@ export function createInboxPanel(ctx) {
           // /tournaments/<active>/… , so re-scope the workspace to the email's
           // tournament first (setActive toasts the switch). An unassigned email
           // (no tournament_id) falls through and files under the active workspace.
-          if (m.tournament_id && (!active || m.tournament_id !== getActive().id)) {
+          if (m.tournament_id && (!getActive() || m.tournament_id !== getActive().id)) {
             setActive(String(m.tournament_id));
           }
           // Switch tab FIRST — the tab handler refreshes some player selects, which
@@ -579,7 +579,7 @@ export function createInboxPanel(ctx) {
           && m.detected_partner_id && m.detected_usta && m.detected_partner_usta;
         const doFilePair = async () => {
           try {
-            if (m.tournament_id && (!active || m.tournament_id !== getActive().id)) setActive(String(m.tournament_id));
+            if (m.tournament_id && (!getActive() || m.tournament_id !== getActive().id)) setActive(String(m.tournament_id));
             const r = await api(`/tournaments/${m.tournament_id || getActive().id}/doubles-pairs`, {
               method: "POST",
               body: JSON.stringify({ usta_number: m.detected_usta, partner_usta: m.detected_partner_usta,

@@ -595,7 +595,7 @@ const { loadAssignments, respChip: _respChip, filterByResponse: _filterAsgByResp
   certLabel, chip, makeMenuButton, scheduleComboSync, prereqCallout,
   makeListGrid, getActive: () => active, getOfficialsById: () => officialsById,
   getSitesById: () => sitesById, getHotelsById: () => hotelsById,
-  getCertPairs: () => _certs.pairs, datesInRange: _datesInRange,
+  getCertPairs: () => _certs.pairs, datesInRange: _datesInRange, activateGroup,
 });
 
 // D11: staff panel (./app/staff.js)
@@ -636,7 +636,7 @@ const { loadInbox, inboxAddToRoster, invalidatePickCache, verifyEmailTargets } =
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
   html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel, officialLabel,
   makeReadGrid, makeListGrid, makeMenuButton, scheduleComboSync, openForm,
-  getActive: () => active, getPlayersById: () => playersById, getPlayersByUsta: () => playersByUsta,
+  getActive: () => active, setActive, getPlayersById: () => playersById, getPlayersByUsta: () => playersByUsta,
   getTournamentsById: () => tournamentsById,
   rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId,
   gotoImport: typeof gotoImport === "function" ? gotoImport : () => {},

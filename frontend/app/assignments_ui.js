@@ -7,7 +7,7 @@ export function createAssignmentsPanel(ctx) {
     html, hstr, raw, esc, money, fmtDOW, fillSelect, officialLabel, siteLabel,
     certLabel, chip, makeMenuButton, scheduleComboSync, prereqCallout,
     makeListGrid, getActive, getOfficialsById, getSitesById, getHotelsById,
-    getCertPairs, datesInRange: datesInRangeFn,
+    getCertPairs, datesInRange: datesInRangeFn, activateGroup,
   } = ctx;
   const datesInRange = datesInRangeFn || datesInRangeUtil;
   void makeListGrid; void getHotelsById; void getSitesById; void esc;
@@ -172,8 +172,16 @@ export function createAssignmentsPanel(ctx) {
       hstr`${o.official_name}${o.has_email ? "" : raw(' <span class="muted">(no email)</span>')}`).join("; ");
     box.hidden = false;
     box.innerHTML = html`<span class="asg-nologin-text">🔑 ${d.count} assigned official${d.count === 1 ? "" : "s"} can't accept/decline — no login: <strong>${raw(names)}</strong>.</span> <button type="button" id="asg-nologin-go" class="btn-small">Set up logins →</button>`;
-    document.getElementById("asg-nologin-go")?.addEventListener("click", () =>
-      _dashGo("setup", "panel-officials"));
+    document.getElementById("asg-nologin-go")?.addEventListener("click", () => {
+      // Jump to Setup → Officials (where the TD creates logins).
+      if (typeof activateGroup === "function") activateGroup("setup");
+      else {
+        const g = document.querySelector('[data-group="setup"]');
+        if (g) g.click();
+      }
+      const tab = document.querySelector('[data-target="panel-officials"]');
+      if (tab) tab.click();
+    });
   }
 
   // Bulk invite: pick several not-yet-assigned officials and create a pending

@@ -299,7 +299,7 @@ export function createRosterPanel(ctx) {
       .filter(Boolean).join(" ").toLowerCase();
     return hay.includes(q);
   }
-  function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("getActive()").map((r) => r.getData()) : rosterRows; }
+  function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("active").map((r) => r.getData()) : rosterRows; }
   function rosterMarkRows() {
     if (!rosterBuilt) return;
     rosterGrid.redrawRows();   // re-evaluates rowClassRules { row-selected }

@@ -27,6 +27,18 @@ export function createDashboardPanel(ctx) {
     const el = document.querySelector(`.tab[data-target="${tab}"]`);
     if (el) el.click();
   }
+  /** During live play (or on play-start day), open Day-of; otherwise Reports. */
+  function _coverageGo() {
+    const t = getActive();
+    if (!t || !t.play_start_date) {
+      _dashGo("staffing", "panel-t-reports");
+      return;
+    }
+    const n = _daysUntil(t.play_start_date);
+    // Live or past start → venue view; still pre-event → coverage report.
+    if (n != null && n <= 0) _dashGo("staffing", "panel-t-dayof");
+    else _dashGo("staffing", "panel-t-reports");
+  }
   const _DEADLINE_LABEL = { registration: "Registration deadline", late_entry: "Late-entry deadline", play_start: "Play starts" };
   async function _renderDeadlines() {
     const el = document.getElementById("dash-deadlines");
@@ -158,7 +170,11 @@ export function createDashboardPanel(ctx) {
       tile(`unfiled email${d.inbox.new === 1 ? "" : "s"}`, d.inbox.new, { alert: true, go: ["inbox", "panel-t-inbox"] }) +
       tile("officials awaiting reply", d.officials.pending, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
       tile("declined — re-staff", d.officials.declined, { alert: true, go: ["staffing", "panel-t-assignments"] }) +
-      tile("uncovered day(s)", d.coverage.uncovered_days_count, { alert: true, go: ["staffing", "panel-t-reports"] }) +
+      tile("uncovered day(s)", d.coverage.uncovered_days_count, {
+        alert: true,
+        go: (_daysUntil(getActive()?.play_start_date) != null && _daysUntil(getActive().play_start_date) <= 0)
+          ? ["staffing", "panel-t-dayof"] : ["staffing", "panel-t-reports"],
+      }) +
       tile("staffing conflict(s)", d.conflicts ?? 0, { alert: true, go: ["staffing", "panel-t-reports"] }) +
       tile("rooms unused", d.rooms.unused, { alert: true, go: ["staffing", "panel-t-reports"] }) +
       tile("on roster", d.roster.selected, { go: ["tournament", "panel-t-roster"] }) +
@@ -184,14 +200,21 @@ export function createDashboardPanel(ctx) {
     if (!days.length) { box.hidden = true; box.innerHTML = ""; return; }
     const item = (iso) => html`<li class="dash-pend-item"><span class="dash-pend-name">${fmtDOW(iso)}</span></li>`;
     box.hidden = false;
-    box.innerHTML = html`<div class="dash-pend-head">📅 ${String(days.length)} play day${days.length === 1 ? raw("") : raw("s")} with no official</div><ul class="dash-pend-list">${days.map(item)}</ul><button type="button" id="dash-cov-go" class="btn-small">View coverage on Reports →</button>`;
-    document.getElementById("dash-cov-go")?.addEventListener("click", () => _dashGo("staffing", "panel-t-reports"));
+    const live = _daysUntil(getActive()?.play_start_date) != null && _daysUntil(getActive().play_start_date) <= 0;
+    const covBtn = live ? "Open Day-of venue →" : "View coverage on Reports →";
+    box.innerHTML = html`<div class="dash-pend-head">📅 ${String(days.length)} play day${days.length === 1 ? raw("") : raw("s")} with no official</div><ul class="dash-pend-list">${days.map(item)}</ul><button type="button" id="dash-cov-go" class="btn-small">${covBtn}</button>`;
+    document.getElementById("dash-cov-go")?.addEventListener("click", _coverageGo);
   }
 
   // Pre-tournament readiness scorecard: one pass/warn/fail row per area, with an
   // overall "ready / N blockers" headline. Each row deep-links to where it's fixed.
+  function _readyGoCoverage() {
+    const live = _daysUntil(getActive()?.play_start_date) != null && _daysUntil(getActive().play_start_date) <= 0;
+    return live ? ["staffing", "panel-t-dayof"] : ["staffing", "panel-t-reports"];
+  }
   const _READY_GO = {
-    coverage: ["staffing", "panel-t-reports"], conflicts: ["staffing", "panel-t-reports"],
+    // coverage resolved at click time via _readyGoCoverage (live → Day-of)
+    coverage: null, conflicts: ["staffing", "panel-t-reports"],
     declined: ["staffing", "panel-t-assignments"], responses: ["staffing", "panel-t-assignments"],
     roster: ["tournament", "panel-t-roster"], rooms: ["staffing", "panel-t-reports"],
     inbox: ["inbox", "panel-t-inbox"],
@@ -212,7 +235,7 @@ export function createDashboardPanel(ctx) {
     box.innerHTML = html`<div class="rdy-head ${headClass}">${headText}</div><ul class="rdy-list">${r.checks.map((c) =>
       html`<li class="rdy-row rdy-${c.status}" data-key="${c.key}" tabindex="0" role="button"><span class="rdy-icon">${_READY_ICON[c.status]}</span><span class="rdy-label">${c.label}</span><span class="rdy-detail">${c.detail}</span></li>`)}</ul>`;
     box.querySelectorAll(".rdy-row").forEach((row) => {
-      const go = _READY_GO[row.dataset.key];
+      const go = row.dataset.key === "coverage" ? _readyGoCoverage() : _READY_GO[row.dataset.key];
       if (!go) return;
       const jump = () => _dashGo(go[0], go[1]);
       row.addEventListener("click", jump);
