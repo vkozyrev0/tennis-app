@@ -688,5 +688,16 @@ export function createReportsPanel(ctx) {
   }
 
 
-  return { loadReports, reportCsvExport, reportTemplateExport, exportReportPdf, exportPayStatementsBatch, exportRoomingList, exportSchedule };
+  function getCoverageMin() { return _coverageMin; }
+  function setCoverageMin(n) {
+    _coverageMin = Math.max(0, parseInt(n, 10) || 0);
+    localStorage.setItem("courtops.coverageMin", String(_coverageMin));
+    _renderCoverage();
+  }
+
+  return {
+    loadReports, reportCsvExport, reportTemplateExport, exportReportPdf,
+    exportPayStatementsBatch, exportRoomingList, exportSchedule,
+    getCoverageMin, setCoverageMin, renderCoverage: _renderCoverage,
+  };
 }

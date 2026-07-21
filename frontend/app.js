@@ -192,7 +192,12 @@ function activateGroup(key) {
 }
 
 // D11: breadcrumb history (needs activateGroup)
-const { pushCrumb: _pushCrumb } = createBreadcrumbs({ activateGroup });
+const {
+  pushCrumb: _pushCrumb,
+  clearHistory: clearNavHistory,
+  seedIfEmpty: seedNavIfEmpty,
+  renderCrumbs: renderNavCrumbs,
+} = createBreadcrumbs({ activateGroup });
 
 // D11: nav badges + prereq callout
 const { refreshNavCounts } = createNavCounts({
@@ -629,7 +634,7 @@ const { loadAvailability } = createAvailabilityPanel({
 });
 
 // D11: review inbox panel
-const { loadInbox, inboxAddToRoster } = createInboxPanel({
+const { loadInbox, inboxAddToRoster, invalidatePickCache, verifyEmailTargets } = createInboxPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
   html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel, officialLabel,
   makeReadGrid, makeListGrid, makeMenuButton, scheduleComboSync, openForm,
@@ -685,58 +690,16 @@ const { loadDashboard } = createDashboardPanel({
   filterAssignments: _filterAsgByResponse,
 });
 
-// --- Global search (top bar → players AND officials) ---
-(() => {
-  const input = document.getElementById("player-search");
-  const box = document.getElementById("player-search-results");
-  if (!input || !box) return;
-  let timer = null;
-  const close = () => { box.hidden = true; box.innerHTML = ""; input.setAttribute("aria-expanded", "false"); };
-  const render = (rows, q) => {
-    if (!rows.length) {
-      box.innerHTML = hstr`<div class="ps-empty">No players or officials match “${q}”.</div>`;
-    } else {
-      box.innerHTML = rows.map((r) =>
-        hstr`<button type="button" class="ps-item" role="option" data-type="${r.type}" data-id="${r.id}"><span class="ps-name">${r.name} <span class="ps-tag ps-tag-${r.type}">${r.type === "official" ? "Official" : "Player"}</span></span><span class="ps-meta">${r.meta}</span></button>`).join("");
-      box.querySelectorAll(".ps-item").forEach((b) => b.addEventListener("click", () => {
-        if (b.dataset.type === "official") openOfficial360(Number(b.dataset.id));
-        else openPlayer360(Number(b.dataset.id), active ? active.id : null);
-        input.value = ""; close();
-      }));
-    }
-    box.hidden = false; input.setAttribute("aria-expanded", "true");
-  };
-  input.addEventListener("input", () => {
-    const q = input.value.trim();
-    clearTimeout(timer);
-    if (q.length < 2) { close(); return; }
-    timer = setTimeout(async () => {
-      try {
-        const [players, officials] = await Promise.all([
-          api(`/players/search?q=${encodeURIComponent(q)}`).catch(() => []),
-          api(`/officials/search?q=${encodeURIComponent(q)}`).catch(() => []),
-        ]);
-        const loc = (x) => [x.city, x.state].filter(Boolean).join(", ");
-        const rows = [
-          ...players.map((p) => ({ type: "player", id: p.id,
-            name: [p.last_name, p.first_name].filter(Boolean).join(", "),
-            meta: `USTA #${p.usta_number || "—"}${loc(p) ? " · " + loc(p) : ""}` })),
-          ...officials.map((o) => ({ type: "official", id: o.id,
-            name: [o.last_name, o.first_name].filter(Boolean).join(", "),
-            meta: loc(o) || "official" })),
-        ];
-        render(rows, q);
-      } catch (_) { close(); }
-    }, 200);
-  });
-  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { input.value = ""; close(); } });
-  document.addEventListener("click", (e) => { if (!e.target.closest("#player-search-wrap")) close(); });
-})();
+// D11: global player/official search
+installGlobalSearch({
+  api, hstr, getActive: () => active, openPlayer360, openOfficial360,
+});
 
 // D11: reports panel
 const {
   loadReports, reportCsvExport, reportTemplateExport, exportReportPdf,
   exportPayStatementsBatch, exportRoomingList, exportSchedule,
+  getCoverageMin, setCoverageMin, renderCoverage,
 } = createReportsPanel({
   api, setMsg, toast, confirmDialog, markInvalid,
   html, hstr, raw, esc, money, fmtDOW, fmtMDY: _fmtMDY, dowLong: _dowLong, certLabel, officialLabel,
@@ -745,782 +708,93 @@ const {
   datesInRange: _datesInRange,
 });
 
-// =================== Setup entity configs ===================
-// Audit M33: removed the form-detail "Work on this →" button — the per-row
-// rowAction button (below) is more discoverable and does the same thing.
-
-const tournamentsCrud = wireEntity({
-  path: "/tournaments", singular: "tournament", panelId: "panel-tournaments", formId: "tournament-form", msgId: "tournament-msg",
-  columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } },
-    { key: "type", edit: { editor: "list", params: { values: ["junior", "adult"] } } }],
-  exportCols: [
-    { header: "name", key: "name" },
-    { header: "type", key: "type" },
-    { header: "play_start_date", key: "play_start_date" },
-    { header: "play_end_date", key: "play_end_date" },
-    { header: "registration_deadline", key: "registration_deadline" },
-    { header: "late_entry_deadline", key: "late_entry_deadline" },
-    { header: "ingest_address", key: "ingest_address" },
-  ],
-  onLoad: (rows) => {
-    for (const k in tournamentsById) delete tournamentsById[k];
-    rows.forEach((t) => (tournamentsById[t.id] = t));
-    fillActiveSelect(rows);
-    if (active && tournamentsById[active.id]) { active = tournamentsById[active.id]; updateActiveUI(); }
-  },
-  onSelect: (t) => { lastSelectedTournamentId = t.id; },
-  onNew: () => { lastSelectedTournamentId = null; },
-  // "Open ▸" right on the row: jump straight into the workspace for that tournament.
-  rowAction: (t) => {
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "btn-link"; b.textContent = "Open ▸";
-    b.title = "Make this the active tournament and open its workspace";
-    b.addEventListener("click", (ev) => {
-      ev.stopPropagation();
-      setActive(t.id);
-      activateGroup("tournament");
-      document.querySelector('.tab[data-target="panel-t-sites"]').click();
-    });
-    return b;
-  },
+// D11: Setup entity CRUD configs
+const {
+  tournamentsCrud, sitesCrud, officialsCrud, playersCrud,
+  ratesCrud, hotelsCrud, distancesCrud, divisionsCrud, eventsCrud,
+} = createSetupCrud({
+  api, setMsg, toast, wireEntity, makeGrid, makeReadGrid, hstr, playerCell: _playerCell,
+  officialLabel, siteLabel, syncCombos,
+  fillActiveSelect, setActive, activateGroup, updateActiveUI, refreshAllSelects,
+  refreshDivisionLists, divCatalog: _divCatalog,
+  tournamentsById, sitesById, officialsById, playersById, playersByUsta, hotelsById,
+  getActive: () => active,
+  setActiveRef: (t) => { active = t; },
+  setLastSelectedTournamentId: (id) => { lastSelectedTournamentId = id; },
+  renderTSites: () => renderTSites(),
+  invalidatePickCache: () => invalidatePickCache(),
 });
 
-const sitesCrud = wireEntity({
-  path: "/sites", singular: "site", panelId: "panel-sites", formId: "site-form", msgId: "site-msg",
-  columns: [{ key: "id" }, { key: "code", edit: { editor: "input" } },
-    { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
-  exportCols: [
-    { header: "code", key: "code" }, { header: "name", key: "name" },
-    { header: "street", key: "street" }, { header: "city", key: "city" },
-    { header: "state", key: "state" }, { header: "zip", key: "zip" },
-    { header: "lat", key: "lat" }, { header: "lng", key: "lng" },
-  ],
-  onLoad: (rows) => { for (const k in sitesById) delete sitesById[k]; rows.forEach((s) => (sitesById[s.id] = s)); refreshAllSelects(); if (active) renderTSites(); },
+// D11: remaining CSV export wiring + coverage-min control
+installExportWiring({
+  csvDownload: _csvDownload, rosterGrid, rosterSignInExport, rosterSignInTemplate,
+  reportCsvExport, reportTemplateExport,
+  getCoverageMin, setCoverageMin, renderCoverage,
 });
-let certOfficialId = null;
-async function loadCerts(id) {
-  certOfficialId = id;
-  const box = document.getElementById("official-certs");
-  box.hidden = false;
-  const chips = document.getElementById("cert-chips");
-  const certs = await api(`/officials/${id}/certifications`);
-  chips.innerHTML = "";
-  if (!certs.length) chips.innerHTML = '<span class="muted">none on file</span>';
-  for (const c of certs) {
-    const chip = document.createElement("span");
-    chip.className = "chip";
-    chip.textContent = c.cert_type + " ";
-    const x = document.createElement("button");
-    x.type = "button"; x.className = "chip-x"; x.textContent = "×";
-    x.addEventListener("click", async () => {
-      try { await api(`/certifications/${c.id}`, { method: "DELETE" }); loadCerts(id); }
-      catch (e) { setMsg("cert-msg", e.message, false); }
-    });
-    chip.appendChild(x); chips.appendChild(chip);
-  }
-}
-document.getElementById("cert-add-btn").addEventListener("click", async () => {
-  if (!certOfficialId) return;
-  try {
-    await api(`/officials/${certOfficialId}/certifications`, {
-      method: "POST", body: JSON.stringify({ cert_type: document.getElementById("cert-type").value }),
-    });
-    loadCerts(certOfficialId);
-  } catch (e) { setMsg("cert-msg", e.message, false); }
-});
-
-const officialsCrud = wireEntity({
-  path: "/officials", singular: "official", panelId: "panel-officials", formId: "official-form", msgId: "official-msg",
-  columns: [
-    { key: "id", responsive: 10 },
-    // Inline-editable composite: shown "Last, First" → split back into last/first.
-    { key: "name", fmt: officialLabel, responsive: 0,  // identity — never collapse
-      edit: { editor: "input", composite: { get: officialLabel, set: (val) => _splitName(val) } } },
-    // Inline-editable composite: "City, ST" → city / state.
-    { key: "loc", fmt: (o) => [o.city, o.state].filter(Boolean).join(", "), responsive: 4,
-      edit: { editor: "input", composite: { get: (o) => [o.city, o.state].filter(Boolean).join(", "), set: (val) => _splitCityState(val) } } },
-    { key: "phone", responsive: 3, edit: { editor: "input" } },
-    { key: "email", responsive: 2, edit: { editor: "input" } },
-    { key: "dietary_restrictions", responsive: 6, edit: { editor: "input" } },
-  ],
-  exportCols: [
-    { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
-    { header: "street", key: "street" }, { header: "city", key: "city" },
-    { header: "state", key: "state" }, { header: "zip", key: "zip" },
-    { header: "phone", key: "phone" }, { header: "email", key: "email" },
-    { header: "dietary_restrictions", key: "dietary_restrictions" },
-    { header: "lat", key: "lat" }, { header: "lng", key: "lng" },
-  ],
-  // Server-side search + capped page (same as Players; UI backlog).
-  serverSearch: { pageSize: 500 },
-  onLoad: (rows, info) => {
-    // Keep the picker cache full — don't rebuild it from a search-narrowed page.
-    if (info && info.q) return;
-    for (const k in officialsById) delete officialsById[k]; rows.forEach((o) => (officialsById[o.id] = o)); refreshAllSelects();
-  },
-  onSelect: (o) => {
-    loadCerts(o.id);
-    document.getElementById("official-account").hidden = false;
-    document.getElementById("acct-user").value = "";
-    document.getElementById("acct-pass").value = "";
-  },
-  onNew: () => {
-    certOfficialId = null;
-    document.getElementById("official-certs").hidden = true;
-    document.getElementById("official-account").hidden = true;
-  },
-});
-const phHistGrid = makeReadGrid("player-history-table", [
-  { title: "When", field: "_when", headerSort: false,
-    formatter: (c) => { const h = c.getData(); return hstr`${(h.valid_from || "").slice(0, 10) + " → " + (h.valid_to || "").slice(0, 10)}`; } },
-  { title: "Name", field: "last_name", formatter: _playerCell },
-  { title: "USTA #", field: "usta_number" },
-  { title: "Change", field: "change_type" },
-], null, "No prior versions — this is the original record.", { maxHeight: "30vh" });
-async function loadPlayerHistory(id) {
-  const box = document.getElementById("player-history");
-  box.hidden = false;
-  try {
-    phHistGrid.setData(await api(`/players/${id}/history`));
-  } catch (e) { phHistGrid.setData([]); setMsg("player-msg", e.message, false); }
-  // the box was hidden at build time; lay the grid out now that it's visible
-  requestAnimationFrame(() => { try { phHistGrid.grid.redraw(true); } catch (_) {} });
-}
-
-// Parse the combined Name / City-St cells back into their DB fields for inline
-// edit. Name: "Last, First" honours the comma; otherwise the last token is the
-// surname and everything before it the given name(s). City/St: split on the last
-// comma so multi-word cities ("San Francisco, CA") survive.
-function _splitName(val) {
-  const s = String(val == null ? "" : val).trim();
-  if (!s) return { first_name: "", last_name: "" };
-  if (s.includes(",")) { const [last, ...rest] = s.split(","); return { last_name: last.trim(), first_name: rest.join(",").trim() }; }
-  const parts = s.split(/\s+/);
-  if (parts.length === 1) return { first_name: parts[0], last_name: "" };
-  return { first_name: parts.slice(0, -1).join(" "), last_name: parts[parts.length - 1] };
-}
-function _splitCityState(val) {
-  const s = String(val == null ? "" : val).trim();
-  if (!s) return { city: "", state: "" };
-  const i = s.lastIndexOf(",");
-  if (i < 0) return { city: s, state: "" };
-  return { city: s.slice(0, i).trim(), state: s.slice(i + 1).trim() };
-}
-
-const playersCrud = wireEntity({
-  path: "/players", singular: "player", panelId: "panel-players", formId: "player-form", msgId: "player-msg",
-  optimisticConcurrency: true,  // audit M19/M8: send X-If-Updated-At on PUT
-  columns: [
-    { key: "id", responsive: 10 },
-    { key: "usta_number", responsive: 5, edit: { editor: "input" } },
-    { key: "name", responsive: 0, fmt: (p) => [p.first_name, p.last_name].filter(Boolean).join(" "),
-      // Inline-editable composite: type "First Last" (or "Last, First") → split back
-      // into first_name / last_name. Edit the modal for anything fancier.
-      edit: { editor: "input", composite: {
-        get: (r) => [r.first_name, r.last_name].filter(Boolean).join(" "),
-        set: (val) => _splitName(val) } } },
-    { key: "gender", responsive: 3, fmt: (p) => p.gender === "male" ? "Male" : p.gender === "female" ? "Female" : "—",
-      edit: { editor: "list", params: { values: [{ label: "Male", value: "male" }, { label: "Female", value: "female" }] } } },
-    { key: "loc", responsive: 4, fmt: (p) => [p.city, p.state].filter(Boolean).join(", "),
-      // Inline-editable composite: type "City, ST" → split into city / state.
-      edit: { editor: "input", composite: {
-        get: (r) => [r.city, r.state].filter(Boolean).join(", "),
-        set: (val) => _splitCityState(val) } } },
-  ],
-  exportCols: [
-    { header: "usta_number", key: "usta_number" },
-    { header: "first_name", key: "first_name" }, { header: "last_name", key: "last_name" },
-    { header: "gender", key: "gender" }, { header: "birthdate", key: "birthdate" },
-    { header: "city", key: "city" }, { header: "state", key: "state" },
-  ],
-  // Server-side search + capped page (the inbox pattern; UI backlog). 500 covers
-  // any realistic single-TD roster pool; past that the grid stays fast and the
-  // note says to refine. q/limit/offset + X-Total-Count live on GET /api/players.
-  serverSearch: { pageSize: 500 },
-  onLoad: (rows, info) => {
-    // Don't rebuild the picker cache from a SEARCH-narrowed page — pickers
-    // (roster add, Part B player refs) need the full roster, and a stale-but-
-    // complete cache beats a fresh-but-filtered one.
-    if (info && info.q) return;
-    for (const k in playersById) delete playersById[k];
-    for (const k in playersByUsta) delete playersByUsta[k];
-    rows.forEach((p) => { playersById[p.id] = p; if (p.usta_number) playersByUsta[p.usta_number] = p; });
-    _invalidatePickCache();
-    refreshAllSelects();
-  },
-  onSelect: (p) => loadPlayerHistory(p.id),
-  onNew: () => { document.getElementById("player-history").hidden = true; },
-});
-const ratesCrud = wireEntity({
-  path: "/rates", singular: "rate", panelId: "panel-rates", formId: "rate-form", msgId: "rate-msg",
-  columns: [{ key: "id" },
-    { key: "cert_type", edit: { editor: "list", params: { values: ["roving_official", "chair_umpire", "tournament_referee", "deputy_referee", "referee_in_training"] } } },
-    { key: "rate_per_day", hozAlign: "right", fmt: (r) => "$" + Number(r.rate_per_day).toFixed(2), edit: { editor: "number", params: { min: 0, step: 0.01 } } },
-    { key: "effective_from", edit: { editor: "date" } }],
-  exportCols: [
-    { header: "cert_type", key: "cert_type" },
-    { header: "rate_per_day", key: "rate_per_day" },
-    { header: "effective_from", key: "effective_from" },
-  ],
-  transform: (o) => { o.rate_per_day = Number(o.rate_per_day); if (o.effective_from == null) delete o.effective_from; return o; },
-});
-const hotelsCrud = wireEntity({
-  path: "/hotels", singular: "hotel", panelId: "panel-hotels", formId: "hotel-form", msgId: "hotel-msg",
-  columns: [{ key: "id" }, { key: "name", edit: { editor: "input" } }, { key: "city", edit: { editor: "input" } }],
-  exportCols: [
-    { header: "name", key: "name" }, { header: "website", key: "website" },
-    { header: "street", key: "street" }, { header: "city", key: "city" },
-    { header: "state", key: "state" }, { header: "zip", key: "zip" },
-    { header: "phone", key: "phone" },
-  ],
-  onLoad: (rows) => { for (const k in hotelsById) delete hotelsById[k]; rows.forEach((h) => (hotelsById[h.id] = h)); refreshAllSelects(); },
-});
-const distancesCrud = wireEntity({
-  path: "/distances", singular: "distance", panelId: "panel-distances", formId: "distance-form", msgId: "distance-msg",
-  columns: [
-    { key: "id" },
-    { key: "official", fmt: (d) => (officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : d.official_id) },
-    { key: "site", fmt: (d) => (sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : d.site_id) },
-    { key: "one_way_miles", hozAlign: "right", width: 110, edit: { editor: "number", params: { min: 0, step: 0.1 } } },
-  ],
-  // Distances export resolves the FK ids to human labels so the spreadsheet is
-  // usable on its own (re-import would need a matching tool to map back).
-  exportCols: [
-    { header: "official_id", key: "official_id" },
-    { header: "official", fmt: (d) => officialsById[d.official_id] ? officialLabel(officialsById[d.official_id]) : "" },
-    { header: "site_id", key: "site_id" },
-    { header: "site", fmt: (d) => sitesById[d.site_id] ? siteLabel(sitesById[d.site_id]) : "" },
-    { header: "one_way_miles", key: "one_way_miles" },
-    { header: "source", key: "source" },
-  ],
-  transform: (o) => { o.official_id = Number(o.official_id); o.site_id = Number(o.site_id); o.one_way_miles = Number(o.one_way_miles); return o; },
-});
-// Auto-distance: estimate one-way miles from the official's + site's coordinates
-// (great-circle × road factor — a key-free fallback, source='geocoded'). It
-// upserts the row immediately, so we refresh the list and reset the form; the
-// estimate is editable and clearly flagged geocoded for the TD to review.
-document.getElementById("dist-estimate").addEventListener("click", async () => {
-  const f = document.getElementById("distance-form");
-  const oid = f.official_id.value, sid = f.site_id.value;
-  if (!oid || !sid) { setMsg("distance-msg", "pick an official and a site first", false); return; }
-  try {
-    const res = await api("/distances/auto", { method: "POST",
-      body: JSON.stringify({ official_id: Number(oid), site_id: Number(sid) }) });
-    distancesCrud.refresh();
-    f.reset(); if (typeof syncCombos === "function") syncCombos();
-    toast(`Estimated ${res.one_way_miles} mi (great-circle — review before it drives pay)`, true);
-  } catch (e) { setMsg("distance-msg", e.message, false); }
-});
-
-// Setup → Divisions catalog (rows back the form datalists; gender = null means
-// the row applies to both genders, e.g. Combo doubles).
-const divisionsCrud = wireEntity({
-  path: "/divisions", singular: "division", panelId: "panel-divisions", formId: "division-form", msgId: "division-msg",
-  columns: [
-    { key: "id" },
-    { key: "code", edit: { editor: "input" } },
-    { key: "label", edit: { editor: "input" } },
-    { key: "tournament_type",
-      edit: { editor: "list", params: { values: ["junior", "adult"] } } },
-    { key: "gender", fmt: (d) => d.gender || "any",
-      edit: { editor: "list", params: { values: [{label:"any", value:""}, {label:"male", value:"male"}, {label:"female", value:"female"}] } } },
-    { key: "sort_order", hozAlign: "right", width: 80,
-      edit: { editor: "number", params: { min: 0, step: 10 } } },
-  ],
-  exportCols: [
-    { header: "code", key: "code" }, { header: "label", key: "label" },
-    { header: "tournament_type", key: "tournament_type" },
-    { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
-  ],
-  transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
-  onLoad: (rows) => { _divCatalog.setDivisions(rows); refreshDivisionLists(); },
-});
-
-// Setup → Events catalog (Singles/Doubles for juniors; Men's/Women's/Mixed
-// Singles/Doubles for adults — gender = null means "any").
-const eventsCrud = wireEntity({
-  path: "/events", singular: "event", panelId: "panel-events", formId: "event-form", msgId: "event-msg",
-  columns: [
-    { key: "id" },
-    { key: "name", edit: { editor: "input" } },
-    { key: "tournament_type",
-      edit: { editor: "list", params: { values: ["junior", "adult"] } } },
-    { key: "gender", fmt: (e) => e.gender || "any",
-      edit: { editor: "list", params: { values: [{label:"any", value:""}, {label:"male", value:"male"}, {label:"female", value:"female"}] } } },
-    { key: "sort_order", hozAlign: "right", width: 80,
-      edit: { editor: "number", params: { min: 0, step: 10 } } },
-  ],
-  exportCols: [
-    { header: "name", key: "name" },
-    { header: "tournament_type", key: "tournament_type" },
-    { header: "gender", key: "gender" }, { header: "sort_order", key: "sort_order" },
-  ],
-  transform: (o) => { o.sort_order = Number(o.sort_order) || 0; if (!o.gender) o.gender = null; return o; },
-  onLoad: (rows) => { _divCatalog.setEvents(rows); refreshDivisionLists(); },
-});
-
-// =================== Generic CSV export for list tables ===================
-// _csvDownload from createCsvExport (./app/export_csv.js — H4.1/H4.2 gate).
-// Visible column headers (skipping the trailing actions/blank column).
-function _visibleHeaders(table) {
-  const ths = [...table.querySelectorAll("thead th")];
-  const keep = ths.map((th) => th.textContent.trim() !== "");
-  return { keep, headers: ths.filter((_, i) => keep[i]).map((th) => th.textContent.trim()) };
-}
-function exportTable(table, name) {
-  const { keep, headers } = _visibleHeaders(table);
-  const rows = [...table.querySelectorAll("tbody tr")]
-    .filter((tr) => !tr.querySelector(".empty"))
-    .map((tr) => [...tr.children].filter((_, i) => keep[i]).map((td) => td.textContent.replace(/\s+/g, " ").trim()));
-  _csvDownload([headers, ...rows], name);
-}
-// --- Per-page CSV export for the remaining hand-built tables ---
-// Every list/summary is now a Tabulator grid with its own native ⬇ CSV; only the
-// Inbox (interactive per-row controls) stays a plain table and scrapes for CSV.
-const EXPORTABLE = {
-  "inbox-table": "inbox",
-};
-for (const [id, name] of Object.entries(EXPORTABLE)) {
-  const table = document.getElementById(id);
-  if (!table) continue;
-  const btn = document.createElement("button");
-  btn.type = "button"; btn.className = "export-btn no-print"; btn.textContent = "⬇ CSV";
-  btn.addEventListener("click", () => exportTable(table, name));
-  const anchor = table.closest(".tbl-scroll") || table;  // keep the button outside the scroller
-  anchor.parentNode.insertBefore(btn, anchor);
-}
-// Bespoke per-page exports (data isn't a plain table scrape).
-document.getElementById("roster-csv").addEventListener("click", () => rosterGrid.download("csv", "roster.csv"));
-document.getElementById("roster-signin-csv").addEventListener("click", rosterSignInExport);
-// Import/export #5: wire the previously-orphan template helper.
-document.getElementById("roster-signin-template").addEventListener("click", rosterSignInTemplate);
-// tshirt-order-csv wired inside createTshirtsPanel (D11)
-document.getElementById("report-csv").addEventListener("click", reportCsvExport);
-// Design-crit pass 6: wire the previously-orphan reportTemplateExport.
-document.getElementById("report-template").addEventListener("click", reportTemplateExport);
-// Thin-coverage threshold: re-highlight the coverage tables from memory (no
-// refetch) when the TD changes the minimum, and persist their choice.
-(() => {
-  const inp = document.getElementById("report-min-cov");
-  if (!inp) return;
-  inp.value = _coverageMin;
-  inp.addEventListener("input", () => {
-    _coverageMin = Math.max(0, parseInt(inp.value, 10) || 0);
-    localStorage.setItem("courtops.coverageMin", String(_coverageMin));
-    _renderCoverage();
-  });
-})();
 
 // D11: workspace form modals + ARIA detail dialogs
 installFormModals({ scheduleComboSync, detailBackdrop: _detailBackdrop, setCloseOpenDetail });
 enhanceDetailDialogs();
 
-// =================== Auth + role-based views ===================
-let adminLoaded = false;
-async function adminInit() {
-  if (adminLoaded) return;
-  adminLoaded = true;
-  // Audit M28/M29: populate every <select data-enum="…"> from /api/enums so
-  // there's one source of truth for cert / gender / status / shirt options.
-  // Audit F23: also seed the JS-side cert label map from the same payload so
-  // certLabel() never drifts from what the dropdowns show.
-  try {
-    const enums = await api("/enums");
-    _populateEnumSelects(enums);
-    if (Array.isArray(enums.cert_type)) {
-      _certs.pairs = enums.cert_type.map((c) => [c.value, c.label]);
-    }
-  } catch (_) {}
-  for (const c of [sitesCrud, officialsCrud, playersCrud, hotelsCrud, ratesCrud, distancesCrud, divisionsCrud, eventsCrud, tournamentsCrud]) {
-    try { await c.refresh(); } catch (e) { /* health pill surfaces DB issues */ }
-  }
-  const saved = localStorage.getItem("activeTid");
-  if (saved && tournamentsById[saved]) setActive(saved);
-  else updateActiveUI();
-}
-function _populateEnumSelects(enums) {
-  for (const sel of document.querySelectorAll("select[data-enum]")) {
-    const key = sel.getAttribute("data-enum");
-    const values = enums[key] || [];
-    const frag = document.createDocumentFragment();
-    for (const v of values) {
-      const o = document.createElement("option");
-      if (typeof v === "string") { o.value = v; o.textContent = v; }
-      else { o.value = v.value; o.textContent = v.label; }
-      frag.appendChild(o);
-    }
-    sel.replaceChildren(frag);
-  }
-}
-
-let meTournaments = [];
-async function officialInit() {
-  const me = await api("/me");
-  const o = me.official || {};
-  _meOfficialGeo = { lat: o.lat ?? null, lng: o.lng ?? null };
-  for (const el of document.getElementById("me-form").elements) {
-    if (el.name) el.value = o[el.name] == null ? "" : o[el.name];
-  }
-  meTournaments = await api("/me/tournaments");
-  const sel = document.getElementById("me-tournament");
-  sel.innerHTML = "";
-  if (!meTournaments.length) {
-    const op = document.createElement("option");
-    op.value = ""; op.textContent = "— no tournaments yet —";
-    sel.appendChild(op);
-  } else {
-    for (const t of meTournaments) {
-      const op = document.createElement("option");
-      op.value = t.id; op.textContent = `${t.name} (${t.play_start_date} → ${t.play_end_date})`;
-      sel.appendChild(op);
-    }
-  }
-  await loadMyAvailability();
-  await loadMyAssignments();
-  await loadMyPay();
-}
-async function loadMyPay() {
-  const box = document.getElementById("me-pay");
-  if (!box) return;
-  let s;
-  try { s = await api("/me/pay-summary"); } catch (_) { return; }
-  if (!s.tournaments.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
-  const rows = s.tournaments.map((t) =>
-    html`<tr><td>${t.tournament_name || ("Tournament " + t.tournament_id)}</td><td>${t.days}</td><td>${raw(_respChip(t.response_status))}</td><td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td></tr>`).join("");
-  box.innerHTML = `<table class="list-table"><thead><tr><th>Tournament</th><th>Days</th><th>Status</th>` +
-    `<th class="num">Pay</th><th class="num">Mileage</th><th class="num">Total</th></tr></thead><tbody>${rows}` +
-    `<tr><th colspan="3">Season total — ${s.totals.assignments} assignment(s), ${s.totals.days} day(s)</th>` +
-    `<th class="num">${money(s.totals.pay)}</th><th class="num">${money(s.totals.mileage)}</th>` +
-    `<th class="num">${money(s.totals.total)}</th></tr></tbody></table>`;
-}
-async function loadMyAssignments() {
-  const box = document.getElementById("me-assignments");
-  if (!box) return;
-  let rows = [];
-  try { rows = await api("/me/assignments"); } catch (_) {}
-  if (!rows.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
-  box.innerHTML = "";
-  for (const a of rows) {
-    const tname = (meTournaments.find((t) => t.id === a.tournament_id) || {}).name || `Tournament ${a.tournament_id}`;
-    const days = a.days.map((d) => fmtDOW(d.work_date)).join(", ") || "—";
-    const card = document.createElement("div"); card.className = "asg";
-    // Pay/mileage the official actually cares about.
-    const mileage = a.missing_distance ? "—" : (a.mileage == null ? "—" : "$" + a.mileage.toFixed(2));
-    // Day-level issues the official should see and can act on (decline / contact
-    // the TD): scheduled outside their availability, on a role they aren't
-    // certified for, or double-booked with another tournament.
-    const issues = [];
-    for (const d of (a.days_outside_availability || [])) issues.push(`${fmtDOW(d)} — outside the dates you marked available`);
-    for (const u of (a.uncertified_days || [])) issues.push(`${fmtDOW(u.work_date)} — ${certLabel(u.working_as)}, which isn't in your certifications`);
-    // plain text — escaped once when rendered (issuesHtml below). (Previously
-    // esc()'d here AND again via issues.map(esc) — a latent double-escape.)
-    if (a.has_conflict) for (const c of (a.conflicts || [])) issues.push(`${fmtDOW(c.work_date)} — also booked at ${c.other_tournament}`);
-    const issuesHtml = issues.length
-      ? html`<div class="asg-flags">⚠ Heads-up: ${issues.join("; ")}.</div>` : "";
-    const prompt = a.response_status === "pending"
-      ? '<div class="asg-prompt">Please <strong>accept</strong> or <strong>decline</strong> below.</div>' : "";
-    const card_head = html`<div class="asg-head"><strong>${tname}</strong> ${raw(_respChip(a.response_status))}<div class="asg-meta">site: ${a.site_label || "—"} · days: ${days} · pay $${a.pay.toFixed(2)} · mileage ${mileage}</div></div>`;
-    card.innerHTML = `${card_head}${prompt}${issuesHtml}`;
-    const actions = document.createElement("div"); actions.className = "add-day";
-    const mk = (status, txt, danger) => {
-      const b = document.createElement("button"); b.type = "button";
-      b.className = "btn-link" + (danger ? " danger" : ""); b.textContent = txt;
-      b.disabled = a.response_status === status;
-      b.addEventListener("click", async () => {
-        try { await api(`/me/assignments/${a.id}/respond`, { method: "POST", body: JSON.stringify({ status }) });
-          toast(`Marked ${status}`, true); loadMyAssignments(); }
-        catch (e) { toast(e.message, false); }
-      });
-      return b;
-    };
-    actions.append(mk("accepted", "Accept"), mk("declined", "Decline", true));
-    if (a.response_status !== "pending") actions.append(mk("pending", "Clear"));
-    card.appendChild(actions);
-    box.appendChild(card);
-  }
-}
-async function loadMyAvailability() {
-  const sel = document.getElementById("me-tournament");
-  const box = document.getElementById("me-dates");
-  if (!sel.value) { box.innerHTML = ""; return; }
-  const t = meTournaments.find((x) => String(x.id) === sel.value);
-  const av = await api(`/me/availability/${sel.value}`);
-  document.getElementById("me-hotel").checked = !!av.hotel_needed;
-  const checked = new Set(av.dates || []);
-  box.innerHTML = "";
-  for (const d of _datesInRange(t.play_start_date, t.play_end_date)) {
-    const lbl = document.createElement("label"); lbl.className = "chip";
-    const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = d; cb.checked = checked.has(d);
-    lbl.append(cb, document.createTextNode(" " + fmtDOW(d)));
-    box.appendChild(lbl);
-  }
-}
-
-// Quick-select for the official's own availability grid (mirrors the admin
-// editor's bulk buttons): toggle the #me-dates checkboxes in place; the official
-// still reviews + clicks Save.
-document.querySelectorAll("#official-app .avail-bulk [data-mebulk]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const mode = btn.dataset.mebulk;
-    document.querySelectorAll("#me-dates input").forEach((cb) => {
-      const dow = _availDow(cb.value);  // 0=Sun … 6=Sat
-      if (mode === "all") cb.checked = true;
-      else if (mode === "none") cb.checked = false;
-      else if (mode === "weekdays") cb.checked = dow >= 1 && dow <= 5;
-      else if (mode === "weekends") cb.checked = dow === 0 || dow === 6;
-    });
-  });
+// D11: admin boot (enums + Setup CRUD refresh)
+const { adminInit, resetAdminLoaded } = createAdminBoot({
+  api, certs: _certs, tournamentsById, setActive, updateActiveUI,
+  getCruds: () => ({
+    sites: sitesCrud, officials: officialsCrud, players: playersCrud,
+    hotels: hotelsCrud, rates: ratesCrud, distances: distancesCrud,
+    divisions: divisionsCrud, events: eventsCrud, tournaments: tournamentsCrud,
+  }),
 });
 
-// Auth / session / role-view wiring lives in app/auth.js (P2 #11b). What to
-// LOAD when the role resolves stays here (nav history, breadcrumbs, admin /
-// official init) and is injected via onRoleResolved; onLogout resets the
-// admin-loaded latch. createAuth also wires the login / logout / change-password
-// forms and the one-shot "session expired" listener.
+// D11: official self-service portal
+const { officialInit } = createOfficialApp({
+  api, setMsg, toast, onSubmit, html, hstr, raw, money, esc,
+  fmtDOW, certLabel, respChip: _respChip, datesInRange: _datesInRange,
+});
+
+// Auth / session (./app/auth.js) — role reactions stay here
 const { applyAuth } = createAuth({
   api, setMsg, toast, onSubmit,
   onRoleResolved: ({ who, isAdmin, isOfficial }) => {
     authUser = who || null;
-    // Clear stale crumbs on sign-out; when the user becomes admin (first login
-    // OR session restore), seed the trail with the currently active tab so the
-    // strip isn't empty until they click something.
     if (!isAdmin) {
-      _navHistory = [];
-    } else if (_navHistory.length === 0) {
+      clearNavHistory();
+    } else {
       const activeTab = document.querySelector(".tab.active");
       const grp = activeTab ? activeTab.closest(".menu-group") : null;
-      if (activeTab && grp) {
-        _navHistory = [{ group: grp.dataset.group, panel: activeTab.dataset.target }];
-      }
+      if (activeTab && grp) seedNavIfEmpty(grp.dataset.group, activeTab.dataset.target);
     }
-    if (typeof _renderCrumbs === "function") _renderCrumbs();
+    renderNavCrumbs();
     if (isAdmin) adminInit();
     if (isOfficial) officialInit();
   },
-  onLogout: () => { adminLoaded = false; authUser = null; },
+  onLogout: () => { resetAdminLoaded(); authUser = null; },
 });
 
-// --- Trash (P2 #13): list + restore soft-deleted tournaments / incidents ---
-const _trashModal = document.getElementById("trash-modal");
-function _closeTrash() { _trashModal.hidden = true; }
-function _trashWhen(iso) {
-  return new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-function _renderTrash(data) {
-  const body = document.getElementById("trash-body");
-  const tRows = (data.tournaments || []).map((t) => html`
-    <tr><td>${t.name}</td><td class="muted">${t.type} · ${t.play_start_date}→${t.play_end_date}</td>
-    <td class="muted">${_trashWhen(t.deleted_at)}</td>
-    <td><button type="button" class="btn-link" data-restore="tournament" data-id="${t.id}">Restore</button></td></tr>`);
-  const iRows = (data.incidents || []).map((i) => html`
-    <tr><td>${i.description}</td><td class="muted">${i.tournament_name} · ${i.category}/${i.severity}</td>
-    <td class="muted">${_trashWhen(i.deleted_at)}</td>
-    <td><button type="button" class="btn-link" data-restore="incident" data-id="${i.id}">Restore</button></td></tr>`);
-  if (!tRows.length && !iRows.length) { body.innerHTML = '<p class="muted">Trash is empty — nothing to restore.</p>'; return; }
-  body.innerHTML = html`
-    ${tRows.length ? html`<h4>Tournaments</h4><table class="list-table"><thead><tr><th>Name</th><th>When</th><th>Trashed</th><th></th></tr></thead><tbody>${tRows}</tbody></table>` : ""}
-    ${iRows.length ? html`<h4>Incidents</h4><table class="list-table"><thead><tr><th>What happened</th><th>Tournament</th><th>Trashed</th><th></th></tr></thead><tbody>${iRows}</tbody></table>` : ""}`;
-}
-async function _openTrash() {
-  const body = document.getElementById("trash-body");
-  body.innerHTML = '<p class="muted">Loading…</p>';
-  _trashModal.hidden = false;
-  try { _renderTrash(await api("/trash")); }
-  catch (e) { body.innerHTML = html`<p class="msg-err">${e.message}</p>`; }
-}
-document.getElementById("trash-btn").addEventListener("click", _openTrash);
-document.getElementById("trash-close").addEventListener("click", _closeTrash);
-_trashModal.addEventListener("click", (e) => { if (e.target.id === "trash-modal") _closeTrash(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !_trashModal.hidden) _closeTrash(); });
-document.getElementById("trash-body").addEventListener("click", async (e) => {
-  const btn = e.target.closest("[data-restore]");
-  if (!btn) return;
-  const { restore: kind, id } = btn.dataset;
-  try {
-    if (kind === "tournament") {
-      await api(`/tournaments/${id}/restore`, { method: "POST" });
-      tournamentsCrud.refresh();        // back into the Setup list + active picker
-    } else {
-      await api(`/incidents/${id}/restore`, { method: "POST" });
-      if (active) loadIncidents();
-    }
-    toast("Restored", true);
-    _openTrash();                       // refresh the trash list in place
-  } catch (err) { toast(err.message, false); }
+// D11: trash restore
+installTrash({
+  api, toast, html, getActive: () => active,
+  tournamentsCrud, loadIncidents: () => loadIncidents(),
 });
 
-// Audit F27: explicit allow-list matches OfficialCreate so a future template
-// change can't silently introduce an extra input that breaks the PUT with a
-// confusing 422.
-const _ME_PROFILE_FIELDS = [
-  "first_name", "last_name", "street", "city", "state", "zip",
-  "phone", "email", "dietary_restrictions", "lat", "lng",
-];
-// Cached from last /me load so a profile Save that only posts form fields
-// cannot null out geocoded lat/lng (walkthrough: form has no lat/lng inputs).
-let _meOfficialGeo = { lat: null, lng: null };
-onSubmit(document.getElementById("me-form"), async (e) => {
-  const b = {};
-  for (const el of e.target.elements) {
-    if (!el.name) continue;
-    if (!_ME_PROFILE_FIELDS.includes(el.name)) continue;  // ignore stray inputs
-    b[el.name] = el.value === "" ? null : el.value;
-  }
-  // Preserve coordinates the form doesn't expose.
-  if (b.lat == null) b.lat = _meOfficialGeo.lat;
-  if (b.lng == null) b.lng = _meOfficialGeo.lng;
-  try {
-    await api("/me/profile", { method: "PUT", body: JSON.stringify(b) });
-    setMsg("me-msg", "saved", true);
-  } catch (err) { setMsg("me-msg", err.message, false); }
-});
-document.getElementById("me-tournament").addEventListener("change", loadMyAvailability);
-document.getElementById("me-avail-save").addEventListener("click", async () => {
-  const sel = document.getElementById("me-tournament");
-  if (!sel.value) return;
-  const dates = [...document.querySelectorAll("#me-dates input:checked")].map((c) => c.value);
-  try {
-    await api(`/me/availability/${sel.value}`, { method: "PUT", body: JSON.stringify({ dates, hotel_needed: document.getElementById("me-hotel").checked }) });
-    setMsg("me-avail-msg", "saved", true);
-  } catch (err) { setMsg("me-avail-msg", err.message, false); }
-});
-document.getElementById("acct-save").addEventListener("click", async () => {
-  if (!certOfficialId) return;
-  try {
-    await api(`/officials/${certOfficialId}/account`, { method: "PUT", body: JSON.stringify({ username: document.getElementById("acct-user").value, password: document.getElementById("acct-pass").value }) });
-    setMsg("acct-msg", "login set", true);
-  } catch (err) { setMsg("acct-msg", err.message, false); }
+// D11: form required markers + toolbar consolidation
+const { markRequiredFields, consolidateInboxToolbar, consolidateRosterToolbar } = installFormA11y({
+  makeMenuButton, gotoImport,
 });
 
-// Mark required fields with a red asterisk inline with the label text (the label
-// is a flex column, so the text + star must share one inline element).
-function markRequiredFields() {
-  document.querySelectorAll("form .row label").forEach((label) => {
-    if (!label.querySelector("[required]") || label.querySelector(".req")) return;
-    const tn = [...label.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-    if (!tn) return;
-    const wrap = document.createElement("span");
-    wrap.className = "label-text";
-    wrap.textContent = tn.textContent.replace(/\s+$/, "");
-    const star = document.createElement("span");
-    star.className = "req"; star.textContent = " *"; star.title = "required";
-    wrap.appendChild(star);
-    tn.replaceWith(wrap);
-  });
-}
-
-// Consolidate the Inbox panel's top toolbar so "+ Add email", "⬆ Import PDF"
-// and "⬇ CSV" sit inline on the same row. The trigger and the CSV button
-// are both injected by other init code; this runs after both so it can wrap
-// all three into a shared flex container.
-function _consolidateInboxToolbar() {
-  const trigger = document.querySelector('#panel-t-inbox .add-trigger');
-  const importBtn = document.getElementById("inbox-import-pdf-btn");
-  const importInput = document.getElementById("inbox-import-pdf-input");
-  const importMsg = document.getElementById("inbox-import-pdf-msg");
-  const csv = [...document.querySelectorAll('#panel-t-inbox .export-btn')]
-    .find((b) => /CSV/.test(b.textContent) && b.id !== "inbox-import-pdf-btn"
-      && !b.classList.contains("menu-btn-trigger"));
-  if (!trigger || !importBtn) return;
-  if (document.getElementById("inbox-toolbar-row")) return;  // idempotent
-  const row = document.createElement("div");
-  row.id = "inbox-toolbar-row"; row.className = "actions-row mb-half";
-  trigger.parentNode.insertBefore(row, trigger);
-  // design-crit I-8: a single "⬆ Import ▾" menu replaces the separate
-  // "Import PDF" + auto-injected "Import…" buttons. The original PDF button is
-  // hidden but kept wired (its hidden file input does the upload); the menu's
-  // first item just delegates to that input.
-  importBtn.hidden = true;
-  const importMenu = makeMenuButton(`<span aria-hidden="true">⬆</span> Import`, [
-    { label: "PDF email thread", title: "Upload a printed email-thread PDF directly into this inbox", onClick: () => importInput.click() },
-    { label: "Staged import…", title: "Open the Import page to preview + merge", onClick: () => gotoImport("emails_pdf") },
-  ], { className: "export-btn no-print" });
-  row.append(trigger, importMenu, importBtn);
-  if (importInput) row.append(importInput);
-  if (importMsg) row.append(importMsg);
-  if (csv) row.append(csv);
-}
-
-// design-crit R-1: collapse the Roster's three download buttons (CSV /
-// Sign-in / Sign-in template) into a single "⬇ Download ▾" menu so the
-// toolbar stops truncating with "…". The originals stay in the DOM (hidden)
-// so their existing by-id click handlers keep working; the menu delegates.
-function _consolidateRosterToolbar() {
-  const toolbar = document.querySelector("#panel-t-roster .list-toolbar");
-  if (!toolbar || toolbar.querySelector(".roster-download-menu")) return;
-  const csv = document.getElementById("roster-csv");
-  const signin = document.getElementById("roster-signin-csv");
-  const template = document.getElementById("roster-signin-template");
-  if (!csv || !signin || !template) return;
-  const menu = makeMenuButton(`<span aria-hidden="true">⬇</span> Download`, [
-    { label: "Roster CSV", title: "Full roster as CSV", onClick: () => csv.click() },
-    { label: "Sign-in sheet", title: "Sign-in sheet (status, events, size, hotel, lodging)", onClick: () => signin.click() },
-    { label: "Sign-in template (blank)", title: "Empty sign-in sheet template", onClick: () => template.click() },
-  ], { className: "export-btn no-print roster-download-menu" });
-  csv.parentNode.insertBefore(menu, csv);
-  [csv, signin, template].forEach((b) => { b.hidden = true; });
-}
-
-// --- Admin users (Setup; multi-user TD access, D8) ---
-const userForm = document.getElementById("user-form");
-async function loadUsers() {
-  let me = null;
-  try { me = await api("/auth/me"); } catch (_) {}
-  const rows = await api("/admin/users");
-  const tb = document.querySelector("#user-table tbody");
-  tb.innerHTML = "";
-  if (!rows.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">No admin users.</td></tr>'; return; }
-  for (const u of rows) {
-    const isSelf = me && u.username === me.username;
-    const tr = document.createElement("tr");
-    const nameCell = document.createElement("td");
-    nameCell.innerHTML = hstr`${u.username}${isSelf ? raw(' <span class="badge badge-info">you</span>') : ""}`;
-    const dateCell = document.createElement("td");
-    dateCell.textContent = (u.created_at || "").slice(0, 10);
-    const actCell = document.createElement("td"); actCell.className = "grid-actions-cell";
-    const reset = document.createElement("button");
-    reset.type = "button"; reset.className = "btn-link"; reset.textContent = "Reset password";
-    reset.addEventListener("click", async () => {
-      const pw = window.prompt(`New password for ${u.username}:`);
-      if (!pw) return;
-      try {
-        await api(`/admin/users/${u.id}/password`, { method: "POST", body: JSON.stringify({ password: pw }) });
-        toast(`Password reset — ${u.username} must sign in again`, true);
-      } catch (e) { toast(e.message, false); }
-    });
-    actCell.appendChild(reset);
-    if (!isSelf) {  // can't delete your own account (the backend also guards this)
-      const del = document.createElement("button");
-      del.type = "button"; del.className = "btn-link danger"; del.textContent = "Delete";
-      del.addEventListener("click", async () => {
-        if (!(await confirmDialog(`Delete admin "${u.username}"?`))) return;
-        try { await api(`/admin/users/${u.id}`, { method: "DELETE" }); loadUsers(); }
-        catch (e) { toast(e.message, false); }
-      });
-      actCell.append(" ", del);
-    }
-    tr.append(nameCell, dateCell, actCell);
-    tb.appendChild(tr);
-  }
-}
-onSubmit(userForm, async () => {
-  try {
-    await api("/admin/users", { method: "POST", body: JSON.stringify(formObj(userForm)) });
-    setMsg("user-msg", "admin added", true); userForm.reset(); loadUsers();
-  } catch (err) { setMsg("user-msg", err.message, false); markInvalid(userForm, err.message); }
+// D11: admin users panel
+installAdminUsers({
+  api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, hstr, raw,
 });
 
 (async function init() {
-  enhanceAllSelects();  // turn every <select> into a type-in dropdown
+  enhanceAllSelects();
   markRequiredFields();
-  _consolidateInboxToolbar();
-  _consolidateRosterToolbar();
+  consolidateInboxToolbar();
+  consolidateRosterToolbar();
   await refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
   applyAuth(who);
-  // Reconcile the inbox File-target labels/keys with the backend registry
-  // (admin-only endpoint). Fire-and-forget: refines labels + surfaces drift, but
-  // the literal FILE_TARGETS already works if this is slow or unavailable.
   if (who && who.role === "admin") verifyEmailTargets();
 })();

@@ -112,5 +112,20 @@ export function createBreadcrumbs(ctx) {
     }
   });
 
-  return { pushCrumb };
+  /** Clear history (e.g. on sign-out). */
+  function clearHistory() {
+    _navHistory = [];
+    _renderCrumbs();
+  }
+  /** Seed with current tab if empty (first admin login / session restore). */
+  function seedIfEmpty(group, panel) {
+    if (_navHistory.length === 0 && group && panel) {
+      _navHistory = [{ group, panel }];
+      _renderCrumbs();
+    }
+  }
+  function renderCrumbs() { _renderCrumbs(); }
+  function historyLength() { return _navHistory.length; }
+
+  return { pushCrumb, clearHistory, seedIfEmpty, renderCrumbs, historyLength };
 }
