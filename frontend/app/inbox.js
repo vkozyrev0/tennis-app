@@ -8,7 +8,14 @@ export function createInboxPanel(ctx) {
     openForm, getActive, setActive, getPlayersById, getPlayersByUsta, getTournamentsById,
     rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId,
     gotoImport, SHIRT_LABELS,
+    // loadInbox uses a raw fetch for X-Total-Count; needs the same progress bar
+    // + 422 humanizer that shell.api provides (D11 wiring — was app.js globals).
+    progress, humanizeDetail,
   } = ctx;
+  const _progress = typeof progress === "function" ? progress : () => {};
+  const _humanizeDetail = typeof humanizeDetail === "function"
+    ? humanizeDetail
+    : (detail, fallback) => (typeof detail === "string" ? detail : (fallback || "error"));
   void money; void officialLabel; void makeListGrid; void makeMenuButton;
   void openForm; void getTournamentsById; void gotoImport; void SHIRT_LABELS;
   void confirmDialog; void markInvalid; void formObj; void onSubmit; void fillSelect;

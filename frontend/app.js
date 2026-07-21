@@ -641,6 +641,7 @@ const { loadInbox, inboxAddToRoster, invalidatePickCache, verifyEmailTargets } =
   rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId,
   gotoImport: typeof gotoImport === "function" ? gotoImport : () => {},
   SHIRT_LABELS,
+  progress: _progress, humanizeDetail: _humanizeDetail,
 });
 
 // D11: Part B lists (late, withdrawals, sched/divflex, player hotels)
