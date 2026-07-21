@@ -42,7 +42,7 @@ export function installTrash(ctx) {
     try {
       if (kind === "tournament") {
         await api(`/tournaments/${id}/restore`, { method: "POST" });
-        tournamentsCrud.refresh();        // back into the Setup list + getActive() picker
+        tournamentsCrud.refresh();        // back into the Setup list + active picker
       } else {
         await api(`/incidents/${id}/restore`, { method: "POST" });
         if (getActive()) loadIncidents();

@@ -259,7 +259,7 @@ export function createImportPage(ctx) {
       catch (e) { toast(e.message, false); }
     });
   }
-  // Which import types are Setup catalogs (no getActive() tournament needed) vs
+  // Which import types are Setup catalogs (no active tournament needed) vs
   // tournament-scoped. Used to split the Import page into two groups and to
   // gate the getActive()-tournament needs-note.
   const _IMPORT_SETUP_KEYS = new Set(["distances", "divisions", "events", "players", "officials"]);
@@ -272,8 +272,8 @@ export function createImportPage(ctx) {
     sec.id = "import-" + t.key;     // deep-link target for per-panel ⬆ Import buttons
     sec.hidden = true;
     const needsT = !_IMPORT_SETUP_KEYS.has(t.key)
-      ? '<span class="import-scope-chip" title="Imports into the getActive() tournament">tournament</span>'
-      : '<span class="import-scope-chip setup" title="Global Setup catalog — no getActive() tournament needed">Setup catalog</span>';
+      ? '<span class="import-scope-chip" title="Imports into the active tournament">tournament</span>'
+      : '<span class="import-scope-chip setup" title="Global Setup catalog — no active tournament needed">Setup catalog</span>';
     // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable so
     // gotoImport() can land focus here after switching tabs.
     sec.innerHTML = hstr`<h4 tabindex="-1">${t.label} ${raw(needsT)}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
@@ -338,7 +338,7 @@ export function createImportPage(ctx) {
     buildImportPage._activate = activate;   // gotoImport() drives this
 
     // Each import type gets its own tab. Tournament-data importers first, then the
-    // global Setup catalogs (which don't need an getActive() tournament). Within a
+    // global Setup catalogs (which don't need an active tournament). Within a
     // group, order by _IMPORT_TAB_ORDER (roster variants grouped together).
     const _ord = (t) => { const i = _IMPORT_TAB_ORDER.indexOf(t.key); return i < 0 ? 99 : i; };
     const groups = [

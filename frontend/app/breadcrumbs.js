@@ -5,7 +5,13 @@ const CRUMB_MAX = 8;
 
 /**
  * @param {{ activateGroup: (key: string) => void }} ctx
- * @returns {{ pushCrumb: (group: string, panel: string) => void }}
+ * @returns {{
+ *   pushCrumb: (group: string, panel: string) => void,
+ *   clearHistory: () => void,
+ *   seedIfEmpty: (group: string, panel: string) => void,
+ *   renderCrumbs: () => void,
+ *   historyLength: () => number,
+ * }}
  */
 export function createBreadcrumbs(ctx) {
   const { activateGroup } = ctx;

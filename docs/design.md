@@ -41,7 +41,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | One big `app.js` (ES module) + 8 small helper modules (`util, shirts, roster_prefill, grids, auth, state, player_list, html`); **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (~740 LOC, ES module) + **~49** ESM factories under `frontend/app/`; **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -90,12 +90,14 @@ backend/
   tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (~591 tests / 89 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~7.9k lines: remaining behaviour (ES module; D11 still ongoing)
-  app/                 # extracted ESM slices:
-    util.js, shirts.js, roster_prefill.js   # pure helpers (+ *.test.mjs)
-    html.js, ui.js, combobox.js, print.js   # templates, chips/money/menu, type-in selects, print scaffold
-    grids.js           # AG Grid factories (createGridFactories(ctx))
-    auth.js, state.js, player_list.js
+  app.js               # ~740 LOC composition root (D11 complete 2026-07-21)
+  app/                 # ~49 ESM factories (createX / installX), including:
+    util.js, shirts.js, roster_prefill.js, origin_col.js
+    html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
+    grids.js, auth.js, state.js, player_list.js, catalog.js, labels.js
+    roster.js, import_ui.js, assignments_ui.js, inbox.js, reports.js,
+    dayof.js, payroll.js, availability.js, staff.js, dashboard.js,
+    player360.js, setup_crud.js, official_app.js, …
   styles.css, tokens.css
   vendor/ag-grid-community.min.js, ag-grid.css, ag-theme-quartz.css   # vendored grid lib
 scripts/
@@ -333,34 +335,29 @@ the erasure guarantee.
 
 ## 8. Frontend design
 
-**No build, one page, one big module.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~8.0k lines,
-loaded as `<script type="module">`) holds all behaviour; eight ESM helpers under
-`app/` split out logic (`util.js` formatting/CSV, `shirts.js` size
-normalisation, `roster_prefill.js`, `grids.js` — see below — plus `auth.js`
-login/session view, `state.js` active-tournament state, `player_list.js` the
-Part B list-page factory, and `html.js` the auto-escaping `html``/`hstr` helper).
-AG Grid Community is vendored.
+**No build, one page, composition root.** `index.html` contains every panel
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~740 LOC,
+loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
+`setActive`, factory wiring, and `init()`. Behaviour lives in `frontend/app/*.js`
+ESM factories (`createXPanel(ctx)` / `installX(ctx)`). Shared primitives:
+`util.js`, `html.js` (`html``/`hstr`), `ui.js`, `shell.js` (`api`/toast/confirm),
+`grids.js`, `auth.js`, `state.js`. AG Grid Community is vendored.
 
 **Grid factories live in `app/grids.js`** (P2 #11a):
 `createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,
-makeGrid, _autoHeaderFilters }` — the Setup master/detail CRUD factory, the
-workspace list grid, the read-only summary grid, the low-level AG grid builder,
-and the auto header-filter helper.
-`app.js` calls it **once**, passing a `ctx` object of its own helpers (`api`,
-`esc`, `setMsg`, `confirmDialog`, the `GRIDS` registry, …) — the factories are
-deliberately coupled to the app's toast/message/modal conventions, so only the
-construction seam is new; the moved bodies are unchanged. `makeReadGrid`
-supports opt-in in-grid editing via `opts.editable` (the `editTriggerEvent`,
-e.g. `"dblclick"` so single-click links keep working in editable cells) +
-`opts.onCellEdited`. `wirePlayerList` (the Part B list-page factory) has moved to
-`app/player_list.js`.
+makeGrid, _autoHeaderFilters }` — Setup master/detail CRUD, workspace lists,
+read-only summaries, low-level AG builder, auto header filters.
+`app.js` constructs factories once with a `ctx` of app helpers (`api`, `esc`,
+`setMsg`, `confirmDialog`, the `GRIDS` registry, …). `makeReadGrid` supports
+opt-in in-grid editing via `opts.editable` + `opts.onCellEdited`.
+`wirePlayerList` lives in `app/player_list.js`; Setup entity configs in
+`app/setup_crud.js`; workspace panels each have their own module
+(roster, assignments, inbox, reports, day-of, payroll, …).
 
-**Structure (rough sections, headers in the file):** theme + small helpers →
-keyboard shortcuts → searchable comboboxes → caches/labels/tabs/menu → active-
-tournament state → **GRIDS registry + grid factories** (constructed from
-`app/grids.js`; `wirePlayerList` from `app/player_list.js`) → workspace pages → Setup entity
-configs → CSV/print exporters → Player/Official 360 → dashboards.
+**`app.js` structure (composition order):** shell/csv/print → caches/labels/tabs →
+active-tournament state → grid factories → workspace panel factories → Setup
+CRUD → export wiring → form modals → admin boot + official portal + auth →
+trash / admin users → `init()`.
 
 **Conventions:**
 - `api(path, opts)` wrapper — prefixes `/api`, sends cookies, runs a progress

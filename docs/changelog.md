@@ -9,6 +9,19 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-21 — Frontend D11 complete + security hardening
+
+- **D11 (app.js decomposition):** `frontend/app.js` is a thin composition root
+  (~740 LOC). Behaviour is ~49 ESM factories under `frontend/app/` (roster,
+  import, assignments, inbox, reports, day-of, payroll, setup CRUD, official
+  portal, trash, admin users, global search, …). Audit **D11** / **C1** closed.
+- **Security / privacy (same train):** COPPA under-13 gate, export + player-360
+  view audit, CSP/security headers, prod session TTL + force password change,
+  official tournament scoping — migrations through **0055**. Suite **591** green.
+- **Docs:** design §3/§8 module map; audit-register D11 resolved.
+
+---
+
 ## 2026-07-19 — Email auto-ingest (D4)
 
 Token-authenticated inbound email webhook so a dedicated tournament address can

@@ -18,7 +18,7 @@ Severity: **H** high · **M** medium · **L** low
 
 | ID | Finding | Sev | Notes |
 |----|---------|-----|-------|
-| D11 | `frontend/app.js` monolith; mixed `innerHTML` | M | Ongoing — +assignments_ui/inbox/reports/dayof/…; ~3.6k LOC left in app.js |
+
 | D13 | No DB connection pool | ⏸️ | Trigger: multi-worker / multi-user |
 | D14 | Login throttle process-local | ⏸️ | Trigger: multi-instance |
 | D18 | CSRF not explicit | ⏸️ | **Deferred:** cookie is `SameSite=Strict` + SPA is same-origin only; add CSRF tokens if cross-site clients or non-browser consumers appear |
@@ -34,6 +34,7 @@ Severity: **H** high · **M** medium · **L** low
 | D17 | No CSP / security headers on app | ✅ 2026-07-21 — middleware CSP + nosniff/frame/referrer/COOP; HSTS in prod |
 | D3 | 30-day sessions + default `admin/admin` | ✅ 2026-07-21 — prod session default 7d; `must_change_password` + prod API gate; SPA force modal |
 | D8 | Officials can list all tournaments | ✅ 2026-07-21 — `/me/tournaments` + availability scoped to assignment / prior avail / open events |
+| D11 | `frontend/app.js` monolith; mixed `innerHTML` | ✅ 2026-07-21 — composition root ~740 LOC; ~49 ESM factories under `frontend/app/`; residual raw `innerHTML` only where grids/print require it |
 | D15 | Docs drift (suite counts, PII plan §3, design tree) | ✅ 2026-07-21 — ~591 tests / 89 files; migrations through 0055; plan/status sync |
 | D16 | Residual plaintext / under-13 without policy | ✅ 2026-07-20 — `docs/coppa-policy.md`; `ALLOW_UNDER13_PII` gate; `GET /api/coppa/policy` |
 | D2 | Fernet key rotation not operational | ✅ 2026-07-20 — MultiFernet + `PII_ENCRYPTION_KEYS` + `reencrypt_pii.py` |
@@ -61,9 +62,9 @@ Severity: **H** high · **M** medium · **L** low
 | A5 | Key rotation not wired | M | = **D2** ✅ |
 | B1 | `Secure` cookie | M | ✅ 2026-07-20 |
 | B2 | Login rate limit process-local | M | = **D14** |
-| B4 | Partial `html`` adoption | L | Ongoing with D11 |
+| B4 | Partial `html`` adoption | L | Ongoing where raw markup remains; preferred path is `html`/`hstr` |
 | B5 | Unpinned deps | M | = **D12** ✅ |
-| C1 | Huge `app.js` | H velocity | = **D11** |
+| C1 | Huge `app.js` | H velocity | = **D11** ✅ |
 | C2 | Large routers (`assignments`, `emails`, `importer`) | M | Optional splits |
 | C4 | Docs slightly stale | L | = **D15** ✅ 2026-07-21 |
 
@@ -83,7 +84,7 @@ key rotation operability; SPA XSS primitives.
 | **View audit** | Player 360 (`GET /api/players/{id}/overview`) appends `access_audit` (**D19**). List: `GET /api/access-audit`. Catalog list / single GET not logged (noise). |
 | **Ingest** | Header/Bearer preferred; `?token=` still for dev providers; **prod rejects query token** by default (**D4**) |
 | **Sessions** | HttpOnly + SameSite=Strict; Secure auto in prod; TTL default 7d prod / 30d dev; force password change on default admin (**B1**, **D3**) |
-| **XSS** | `html`/`hstr`/`esc` good path; residual raw `innerHTML` in monolith (**D11**); quote escape closed |
+| **XSS** | `html`/`hstr`/`esc` preferred path; residual raw `innerHTML` mostly AG Grid / print scaffolds; quote escape closed |
 | **SQL** | Parameterized; f-strings only for fixed table/column fragments |
 
 ### Release gates (before real under-13 / shared host)
@@ -100,7 +101,7 @@ key rotation operability; SPA XSS primitives.
 1. ~~MultiFernet rotation (D2)~~ ✅  
 2. ~~Prod ingest query ban (D4) / Secure cookie default (B1) / dep pins (D12)~~ ✅  
 3. ~~Thin COPPA policy for real junior data (**D16**)~~ ✅ — written policy + under-13 gate  
-4. Continue `app.js` slices (**D11**)  
+4. ~~Continue `app.js` slices (**D11**)~~ ✅ — composition root + factories  
 5. ~~H4.2 / D19 / D10 / D17 / D3 / D8 / D15~~ ✅  
 6. Mail provider wiring when public HTTPS + domain exist  
 7. Optional later: log catalog single-GET / history  

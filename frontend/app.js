@@ -54,30 +54,28 @@ import { createPartBPanels } from "./app/partb.js";
 import { createTournamentSitesPanel } from "./app/tournament_sites.js";
 import { createRosterPanel } from "./app/roster.js";
 import { createImportPage } from "./app/import_ui.js";
-
+import { installGlobalSearch } from "./app/global_search.js";
+import { createSetupCrud } from "./app/setup_crud.js";
+import { installExportWiring } from "./app/export_wiring.js";
+import { createOfficialApp } from "./app/official_app.js";
+import { installTrash } from "./app/trash.js";
+import { installAdminUsers } from "./app/admin_users.js";
+import { installFormA11y } from "./app/form_a11y.js";
+import { createAdminBoot } from "./app/admin_boot.js";
 import { datesInRange as _datesInRange } from "./app/util.js";
 
 // ============================================================================
-// CourtOps Tennis — frontend (single file, vanilla JS, no framework).
+// CourtOps Tennis — frontend composition root (vanilla JS, no build step).
 //
 // Two areas:
-//  * Setup — persistent master data (tournaments catalog, sites, officials,
-//    players, rates, hotels, distances) via generic master-detail CRUD.
-//  * Tournament workspace — an active tournament (shown in the context bar,
-//    persisted) scopes Sites / Roster / Assignments / Room blocks / Part B.
+//  * Setup — persistent master data (tournaments, sites, officials, players,
+//    rates, hotels, distances, divisions, events) via wireEntity factories.
+//  * Tournament workspace — active tournament scopes Sites / Roster /
+//    Assignments / Room blocks / Part B / Day-of / Reports / …
 //
-// Sections (rough line ranges — search the headers if these drift):
-//   ESM shell: shell (api/toast/confirm), export_csv, theme, shortcuts
-//   ESM slices: util, html, ui, combobox, print, catalog, breadcrumbs,
-//     grids, auth, state, player_list, shirts, roster_prefill
-//   Caches + labels + tabs + two-level menu + sizeLists
-//   Active tournament state (setActive / updateActiveUI)
-//   GRIDS registry + grid helpers (wireEntity, makeListGrid, makeReadGrid,
-//     wirePlayerList)
-//   Tournament workspace pages (Sites, Roster, Import, Assignments, …)
-//   Setup entity configs (tournamentsCrud … distancesCrud)
-//   FORM_MODALS + ARIA detail-pane
-//   Auth + role-based views (admin vs official)
+// Architecture (D11, 2026-07-21): `app.js` is the thin orchestrator (~740 LOC).
+// Behaviour lives in `frontend/app/*.js` ESM factories (createX / installX).
+// AG Grid Community is vendored. See docs/design.md §8 for the module map.
 // ============================================================================
 
 // D11: API + toast + confirm live in ./app/shell.js
