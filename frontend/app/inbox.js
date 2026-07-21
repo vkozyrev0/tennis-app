@@ -1292,5 +1292,5 @@ export function createInboxPanel(ctx) {
   const _ORIGIN_COL = { title: "Origin", field: "source_email_id", headerSort: false,
     width: 100, formatter: _originCell };
 
-  return { loadInbox };
+  return { loadInbox, inboxAddToRoster: _inboxAddToRoster };
 }
