@@ -29,10 +29,11 @@ def _ok(r, code=201):
     return r.json()
 
 
-def _tournament():
+def _tournament(start="2027-06-01", end="2027-06-04"):
+    # Future window so D8 "open event" access applies (play_end >= today).
     return _ok(client.post("/api/tournaments", json={
         "name": "T " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+        "play_start_date": start, "play_end_date": end}))
 
 
 def _official_with_login():
@@ -50,10 +51,10 @@ def test_official_sets_own_availability():
     t = _tournament()
     o, sess = _official_with_login()
     r = sess.put(f"/api/me/availability/{t['id']}",
-                 json={"dates": ["2026-06-01", "2026-06-03"], "hotel_needed": True})
+                 json={"dates": ["2027-06-01", "2027-06-03"], "hotel_needed": True})
     assert r.status_code == 200, r.text
     got = _ok(sess.get(f"/api/me/availability/{t['id']}"), 200)
-    assert got["dates"] == ["2026-06-01", "2026-06-03"]
+    assert got["dates"] == ["2027-06-01", "2027-06-03"]
     assert got["hotel_needed"] is True
     # and the TD sees it on the admin availability list
     adm = client.get(f"/api/tournaments/{t['id']}/availability").json()
@@ -64,7 +65,7 @@ def test_out_of_window_date_rejected():
     t = _tournament()
     _o, sess = _official_with_login()
     r = sess.put(f"/api/me/availability/{t['id']}",
-                 json={"dates": ["2026-07-15"], "hotel_needed": False})
+                 json={"dates": ["2027-07-15"], "hotel_needed": False})
     assert r.status_code == 400
     assert "window" in r.json()["detail"].lower()
 
@@ -73,4 +74,34 @@ def test_admin_account_cannot_use_me_availability():
     t = _tournament()
     # the admin account has no linked official → 403
     assert client.put(f"/api/me/availability/{t['id']}",
-                      json={"dates": ["2026-06-01"], "hotel_needed": False}).status_code == 403
+                      json={"dates": ["2027-06-01"], "hotel_needed": False}).status_code == 403
+
+
+def test_me_tournaments_hides_unrelated_past_events():
+    """D8: past events with no assignment/availability are not listed."""
+    past = _tournament(start="2020-01-01", end="2020-01-04")
+    future = _tournament(start="2027-08-01", end="2027-08-04")
+    _o, sess = _official_with_login()
+    listed = _ok(sess.get("/api/me/tournaments"), 200)
+    ids = {t["id"] for t in listed}
+    assert future["id"] in ids
+    assert past["id"] not in ids
+
+
+def test_me_tournaments_includes_past_when_assigned():
+    past = _tournament(start="2020-02-01", end="2020-02-04")
+    o, sess = _official_with_login()
+    _ok(client.post(f"/api/tournaments/{past['id']}/assignments",
+                    json={"official_id": o["id"]}))
+    listed = _ok(sess.get("/api/me/tournaments"), 200)
+    assert past["id"] in {t["id"] for t in listed}
+
+
+def test_past_unrelated_availability_is_404():
+    past = _tournament(start="2020-03-01", end="2020-03-04")
+    _o, sess = _official_with_login()
+    assert sess.get(f"/api/me/availability/{past['id']}").status_code == 404
+    assert sess.put(
+        f"/api/me/availability/{past['id']}",
+        json={"dates": ["2020-03-01"], "hotel_needed": False},
+    ).status_code == 404

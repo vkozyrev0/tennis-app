@@ -1340,11 +1340,12 @@ def test_auth_gating_and_official_self_service():
     upd = off.put("/api/me/profile", json={"first_name": "Self", "last_name": "Serve", "phone": "555-9"})
     assert upd.status_code == 200 and upd.json()["phone"] == "555-9"
 
-    # official sets own availability for a tournament
-    t = _tournament()
-    off.put(f"/api/me/availability/{t['id']}", json={"dates": ["2026-06-01"], "hotel_needed": True})
+    # official sets own availability for a tournament (D8: open/future event)
+    t = _tournament(play_start_date="2027-06-01", play_end_date="2027-06-04")
+    assert off.put(f"/api/me/availability/{t['id']}",
+                   json={"dates": ["2027-06-01"], "hotel_needed": True}).status_code == 200
     got = off.get(f"/api/me/availability/{t['id']}").json()
-    assert got["dates"] == ["2026-06-01"] and got["hotel_needed"] is True
+    assert got["dates"] == ["2027-06-01"] and got["hotel_needed"] is True
     # and the admin availability view sees it
     rows = client.get(f"/api/tournaments/{t['id']}/availability").json()
     assert any(r["official_id"] == o["id"] for r in rows)

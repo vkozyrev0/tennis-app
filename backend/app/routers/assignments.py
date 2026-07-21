@@ -695,12 +695,14 @@ _AUDIT_CSV_HEADERS = ["When", "Official", "Action", "Detail", "By"]
 
 
 @router.get("/api/tournaments/{tournament_id}/assignment-audit.csv")
-def assignment_audit_csv(tournament_id: int, conn=Depends(db_dep)):
+def assignment_audit_csv(tournament_id: int, user=Depends(require_admin),
+                         conn=Depends(db_dep)):
     """The whole assignment audit trail for a tournament as a CSV — the
     dispute-resolution record (who changed what, when) the bookkeeper or a
     grievance review can keep. Chronological (oldest first) so it reads as a
     timeline. utf-8-sig so Excel reads the encoding. Includes rows whose
     assignment was later deleted (identity is denormalized on the trail)."""
+    from ..export_audit import log_export
     with conn.cursor() as cur:
         cur.execute("SELECT name FROM tournament WHERE id = %s", (tournament_id,))
         t = cur.fetchone()
@@ -713,6 +715,11 @@ def assignment_audit_csv(tournament_id: int, conn=Depends(db_dep)):
             (tournament_id,),
         )
         rows = cur.fetchall()
+        log_export(
+            cur, username=user["username"], resource="assignment_audit",
+            tournament_id=tournament_id, client_kind="api",
+            detail={"row_count": len(rows)},
+        )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(_AUDIT_CSV_HEADERS)
@@ -897,9 +904,10 @@ def tournament_invite_texts(tournament_id: int, conn=Depends(db_dep)):
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name, o.first_name",
                     (tournament_id,))
         rows = cur.fetchall()
+        # D10: batch summaries (5 set-based queries) instead of 5×N.
+        summaries = _summaries(cur, rows)
         invites = []
-        for row in rows:
-            s = _summary(cur, row)
+        for row, s in zip(rows, summaries):
             composed = _compose_invite(s, row["first_name"] or "official")
             invites.append({
                 "assignment_id": s["id"], "official_name": s["official_name"],

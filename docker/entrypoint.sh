@@ -52,9 +52,11 @@ conn = get_conn()
 try:
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO user_account (username, password_hash, role) "
-            "VALUES ('admin', %s, 'admin') "
-            "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
+            "INSERT INTO user_account (username, password_hash, role, must_change_password) "
+            "VALUES ('admin', %s, 'admin', false) "
+            "ON CONFLICT (username) DO UPDATE SET "
+            "  password_hash = EXCLUDED.password_hash, "
+            "  must_change_password = false",
             (hash_pw(os.environ["ADMIN_PASSWORD"]),),
         )
     conn.commit()

@@ -128,6 +128,25 @@ def test_finalize_all_is_idempotent_and_skips_finalized():
     assert again["finalized"] == 0 and again["total_finalized"] == 2
 
 
+def test_finalize_all_totals_match_single_finalize():
+    """D10: batched finalize-all freezes the same money as one-by-one finalize."""
+    t1, o1, a1, s1 = _staffed()
+    o2 = _ok(client.post("/api/officials", json={
+        "first_name": "Pay", "last_name": "B" + uuid.uuid4().hex[:6]}))
+    _ok(client.post(f"/api/officials/{o2['id']}/certifications",
+                    json={"cert_type": "roving_official"}))
+    a2 = _ok(client.post(f"/api/tournaments/{t1['id']}/assignments",
+                         json={"official_id": o2["id"]}))
+    _ok(client.post(f"/api/assignments/{a2['id']}/days",
+                    json={"work_date": "2026-09-02", "working_as": "roving_official"}))
+    live = _ok(client.get(f"/api/tournaments/{t1['id']}/payroll"), 200)
+    by_aid = {r["assignment_id"]: r for r in live}
+    out = _ok(client.post(f"/api/tournaments/{t1['id']}/payroll/finalize-all"), 200)
+    assert out["finalized"] == 2
+    for rec in out["records"]:
+        assert rec["total"] == by_aid[rec["assignment_id"]]["total"]
+
+
 def test_payroll_lifecycle_lands_in_assignment_audit():
     t, o, a, s = _staffed()
     rec = _ok(client.post(f"/api/assignments/{a['id']}/finalize"))

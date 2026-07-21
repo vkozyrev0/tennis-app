@@ -19,6 +19,14 @@ class AccountCreate(BaseModel):
 class AdminUserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
+    # H4.2: new admins default to NO full PII export (least privilege for
+    # secondary TDs). Seed/primary admin keeps can_export_pii=true via DEFAULT.
+    can_export_pii: bool = False
+
+
+class AdminUserPatch(BaseModel):
+    """Toggle export permission (and later other admin flags)."""
+    can_export_pii: bool | None = None
 
 
 class PasswordReset(BaseModel):
@@ -37,4 +45,5 @@ class AdminUserOut(BaseModel):
     id: int
     username: str
     role: str
+    can_export_pii: bool = True
     created_at: datetime

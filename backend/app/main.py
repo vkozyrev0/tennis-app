@@ -9,16 +9,19 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
 from .routers import (
+    access_audit,
     adult_lists,
     assignments,
     auth,
     availability,
     certifications,
+    coppa,
     dashboard,
     distances,
     divisions,
     doubles,
     emails,
+    export_audit,
     health,
     hotels,
     imports,
@@ -46,6 +49,7 @@ from .routers import (
 from .config import settings
 from .db_errors import install as install_db_error_handlers
 from .security import require_admin
+from .security_headers import build_security_headers, security_headers_enabled
 
 # PII hardening H1: refuse to start a shared/hosted deployment that still carries
 # the POC defaults (superuser creds / no TLS). No-op in dev/test.
@@ -71,7 +75,8 @@ _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, divisions, roster, assignments, reports, dashboard, certifications, availability,
           emails, late_entries, withdrawals, adult_lists, player_hotels,
-          pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users):
+          pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users,
+          export_audit, access_audit, coppa):
     app.include_router(r.router, dependencies=_admin)
 
 # Disable browser caching of the frontend assets. POC dev loop edits HTML +
@@ -85,6 +90,19 @@ async def _no_cache_frontend(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+    return response
+
+
+# D17: baseline security headers (CSP, framing, MIME sniffing, referrer).
+# Runs on API + static responses. HSTS only when ENV=prod or COURTOPS_HSTS=1.
+@app.middleware("http")
+async def _security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if security_headers_enabled():
+        for name, value in build_security_headers(is_prod=settings.is_prod()).items():
+            # Don't clobber a more specific value set by a route or outer proxy.
+            if name not in response.headers:
+                response.headers[name] = value
     return response
 
 

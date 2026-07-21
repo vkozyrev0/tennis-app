@@ -46,7 +46,9 @@ class Settings:
     _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}
 
     def is_prod(self) -> bool:
-        return self.env.strip().lower() not in self._DEV_ENVS
+        # Read ENV live so tests can monkeypatch without reconstructing Settings
+        # (same pattern as ingest_token / COURTOPS_* flags).
+        return os.getenv("ENV", self.env).strip().lower() not in self._DEV_ENVS
 
     @property
     def dsn(self) -> str:

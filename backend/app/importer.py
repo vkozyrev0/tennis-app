@@ -10,6 +10,7 @@ import re
 
 from openpyxl import Workbook, load_workbook
 
+from .coppa import refuse_under13_birthdate  # D16 under-13 gate
 from .crypto import encrypt as _enc_pii  # PII H2: player contact fields
 
 from .playerops import upsert_hotel, upsert_player
@@ -623,6 +624,12 @@ def _ext_player_initial(cur, pid, d):
     """B2a: after upsert_player has created/touched the row, propagate the
     extended player-catalog fields the Excel file carries. Idempotent —
     COALESCE-style so re-running doesn't blank a column the new file omits."""
+    yob = _year_to_date(d.get("year_of_birth"))
+    # D16: year-of-birth that implies under-13 is refused (or stripped when the
+    # caller is mid-merge and would rather keep contact fields). We raise so
+    # the merge path surfaces a clear 403 instead of silently storing a DOB.
+    if yob is not None:
+        refuse_under13_birthdate(yob, precision="year")
     cur.execute(
         """
         UPDATE player SET
@@ -651,8 +658,8 @@ def _ext_player_initial(cur, pid, d):
             _s(d.get("city")), _s(d.get("state")),
             _coerce_decimal(d.get("wtn_singles")), _s(d.get("wtn_singles_conf")),
             _coerce_decimal(d.get("wtn_doubles")), _s(d.get("wtn_doubles_conf")),
-            _enc_pii(_year_to_date(d.get("year_of_birth"))),  # stored: encrypted (PII H2)
-            _year_to_date(d.get("year_of_birth")),            # precision check: raw ::date
+            _enc_pii(yob),  # stored: encrypted (PII H2)
+            yob,            # precision check: raw ::date
             pid,
         ),
     )

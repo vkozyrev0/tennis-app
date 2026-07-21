@@ -42,6 +42,19 @@ def _configured_token() -> str:
     return os.getenv("INGEST_TOKEN", "").strip()
 
 
+def _query_token_allowed() -> bool:
+    """Query-string secrets leak via access logs / Referer. Allowed in dev for
+    providers that only accept a URL secret; refused in prod unless explicitly
+    re-enabled (INGEST_ALLOW_QUERY_TOKEN=1). Audit D4."""
+    override = os.getenv("INGEST_ALLOW_QUERY_TOKEN", "").strip().lower()
+    if override in {"1", "true", "yes"}:
+        return True
+    if override in {"0", "false", "no"}:
+        return False
+    from ..config import settings
+    return not settings.is_prod()
+
+
 def _require_ingest_token(
     request: Request,
     token: str | None = Query(default=None, description="Shared secret (prefer headers)"),
@@ -59,6 +72,12 @@ def _require_ingest_token(
     if not presented:
         presented = (request.headers.get("x-ingest-token") or "").strip() or None
     if not presented and token:
+        if not _query_token_allowed():
+            raise HTTPException(
+                status_code=401,
+                detail="query-string token disabled — use Authorization: Bearer "
+                "or X-Ingest-Token (set INGEST_ALLOW_QUERY_TOKEN=1 only if required)",
+            )
         presented = token.strip()
     if not presented or not secrets.compare_digest(presented, expected):
         raise HTTPException(status_code=401, detail="invalid or missing ingest token")

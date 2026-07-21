@@ -45,6 +45,10 @@ def policy() -> dict:
                 "action": "redact (provenance row kept)",
             }
         ],
+        # Cross-link: under-13 gate + residual-plaintext decision live on the
+        # COPPA surface (audit D16), not in the retention day-count schedule.
+        "coppa_policy": "/api/coppa/policy",
+        "coppa_doc": "docs/coppa-policy.md",
     }
 
 

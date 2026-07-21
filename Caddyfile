@@ -19,5 +19,7 @@
 # a valid cert.
 
 courtops.example.com {
+	# App already sets CSP / nosniff / X-Frame-Options / Referrer-Policy (D17).
+	# Caddy still terminates TLS; ENV=prod enables HSTS on the app responses.
 	reverse_proxy 127.0.0.1:8000
 }

@@ -5,13 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from ..db import db_dep
 from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
-from ..security import get_current_user
+from ..security import get_current_user, require_usable_session
 from .assignments import _ASG_SELECT, _audit, _summaries, _summary, pay_summary
 
-# Belt-and-suspenders: every endpoint also takes `Depends(get_current_user)` to
-# get `user`, but mounting the dep on the router means nothing here can ever be
-# accidentally exposed by leaving the dep off a future handler. (Audit C7.)
-router = APIRouter(prefix="/api/me", tags=["me"], dependencies=[Depends(get_current_user)])
+# Belt-and-suspenders: every endpoint also takes `Depends(require_usable_session)`
+# so nothing here can ever be accidentally exposed by leaving the dep off a
+# future handler (Audit C7). require_usable_session also enforces D3 password
+# rotation in prod when must_change_password is set.
+router = APIRouter(
+    prefix="/api/me", tags=["me"], dependencies=[Depends(require_usable_session)]
+)
 
 _OFF_COLS = (
     "id, first_name, last_name, street, city, state, zip, phone, email, "
@@ -23,6 +26,34 @@ def _my_official_id(user: dict) -> int:
     if user["role"] == "official" and user["official_id"]:
         return user["official_id"]
     raise HTTPException(status_code=403, detail="no official profile is linked to this account")
+
+
+def _official_may_access_tournament(cur, official_id: int, tournament_id: int) -> bool:
+    """D8: officials must not see / target arbitrary tournaments.
+
+    Allowed when they have an assignment, already declared availability, or the
+    event is still open (play_end_date >= today) so they can self-declare
+    availability before being assigned.
+    """
+    cur.execute(
+        """
+        SELECT 1 FROM tournament t
+        WHERE t.id = %s AND t.deleted_at IS NULL
+          AND (
+            EXISTS (
+              SELECT 1 FROM assignment a
+              WHERE a.official_id = %s AND a.tournament_id = t.id
+            )
+            OR EXISTS (
+              SELECT 1 FROM availability av
+              WHERE av.official_id = %s AND av.tournament_id = t.id
+            )
+            OR t.play_end_date >= CURRENT_DATE
+          )
+        """,
+        (tournament_id, official_id, official_id),
+    )
+    return cur.fetchone() is not None
 
 
 def my_official_id_dep(user=Depends(get_current_user)) -> int:
@@ -69,11 +100,33 @@ def update_my_profile(body: OfficialCreate, user=Depends(get_current_user), conn
 
 @router.get("/tournaments")
 def my_tournaments(user=Depends(get_current_user), conn=Depends(db_dep)):
-    _my_official_id(user)
+    """Tournaments this official may see (audit D8).
+
+    Not the full catalog — only events they are assigned to, have already
+    declared availability for, or that are still open (play_end >= today) so
+    they can volunteer availability before invite.
+    """
+    oid = _my_official_id(user)
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, type, play_start_date, play_end_date "
-            "FROM tournament WHERE deleted_at IS NULL ORDER BY play_start_date DESC"
+            """
+            SELECT t.id, t.name, t.type, t.play_start_date, t.play_end_date
+            FROM tournament t
+            WHERE t.deleted_at IS NULL
+              AND (
+                EXISTS (
+                  SELECT 1 FROM assignment a
+                  WHERE a.official_id = %s AND a.tournament_id = t.id
+                )
+                OR EXISTS (
+                  SELECT 1 FROM availability av
+                  WHERE av.official_id = %s AND av.tournament_id = t.id
+                )
+                OR t.play_end_date >= CURRENT_DATE
+              )
+            ORDER BY t.play_start_date DESC
+            """,
+            (oid, oid),
         )
         return cur.fetchall()
 
@@ -141,6 +194,8 @@ def respond_to_assignment(assignment_id: int, body: AssignmentResponse,
 def my_availability(tournament_id: int, user=Depends(get_current_user), conn=Depends(db_dep)):
     oid = _my_official_id(user)
     with conn.cursor() as cur:
+        if not _official_may_access_tournament(cur, oid, tournament_id):
+            raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
             "SELECT available_date, hotel_needed FROM availability "
             "WHERE official_id = %s AND tournament_id = %s ORDER BY available_date",
@@ -158,6 +213,9 @@ def set_my_availability(tournament_id: int, body: MyAvailabilitySet,
                         user=Depends(get_current_user), conn=Depends(db_dep)):
     oid = _my_official_id(user)
     with conn.cursor() as cur:
+        # D8: same scope as GET /me/tournaments (no ID-oracle on past events).
+        if not _official_may_access_tournament(cur, oid, tournament_id):
+            raise HTTPException(status_code=404, detail="tournament not found")
         # Audit F11: reject dates outside the tournament play window so an
         # official can't self-mark "available 2099-12-31" — admin assignments
         # downstream were flagging this as out-of-window but only after the

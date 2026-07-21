@@ -112,6 +112,7 @@ from ._models_auth import (  # noqa: F401
     AccountCreate,
     AdminUserCreate,
     AdminUserOut,
+    AdminUserPatch,
     LoginIn,
     PasswordChange,
     PasswordReset,

@@ -181,21 +181,26 @@ def main() -> None:
             except Exception:  # leave the db alone on any unexpected schema diff
                 cur.execute("ROLLBACK TO SAVEPOINT cleanup_test_players")
 
-            # Admin login. Defaults to admin/admin for the POC; set ADMIN_PASSWORD
-            # to harden a real deployment (it overwrites any existing admin pw so a
-            # redeploy actually rotates it). See roadmap §Stack security note.
+            # Admin login. Defaults to admin/admin for the POC (must_change_password
+            # so ENV=prod forces rotation — audit D3). Set ADMIN_PASSWORD to harden
+            # a real deployment (overwrites hash + clears the force-change flag).
             admin_pw = os.environ.get("ADMIN_PASSWORD")
             if admin_pw:
                 cur.execute(
-                    "INSERT INTO user_account (username, password_hash, role) "
-                    "VALUES ('admin', %s, 'admin') "
-                    "ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash",
+                    "INSERT INTO user_account (username, password_hash, role, "
+                    "  must_change_password) "
+                    "VALUES ('admin', %s, 'admin', false) "
+                    "ON CONFLICT (username) DO UPDATE SET "
+                    "  password_hash = EXCLUDED.password_hash, "
+                    "  must_change_password = false",
                     (hash_pw(admin_pw),),
                 )
             else:
                 cur.execute(
-                    "INSERT INTO user_account (username, password_hash, role) "
-                    "VALUES ('admin', %s, 'admin') ON CONFLICT (username) DO NOTHING",
+                    "INSERT INTO user_account (username, password_hash, role, "
+                    "  must_change_password) "
+                    "VALUES ('admin', %s, 'admin', true) "
+                    "ON CONFLICT (username) DO NOTHING",
                     (hash_pw("admin"),),
                 )
         conn.commit()

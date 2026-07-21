@@ -19,6 +19,7 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..export_audit import log_export
 from ..models import PayrollMarkPaid, PaymentBatchCreate
 from ..security import require_admin
 from .assignments import _ASG_SELECT, _audit, _summaries, _summary
@@ -52,9 +53,14 @@ def _record_out(r: dict) -> dict:
     }
 
 
-def _finalize_one(cur, a: dict, username: str) -> dict:
-    """Freeze one assignment's computed summary. Caller checked no record exists."""
-    s = _summary(cur, a)
+def _finalize_one(cur, a: dict, username: str, s: dict | None = None) -> dict:
+    """Freeze one assignment's computed summary. Caller checked no record exists.
+
+    Pass a precomputed ``s`` (from ``_summaries``) to avoid a per-row N+1 when
+    finalizing many assignments at once (audit D10).
+    """
+    if s is None:
+        s = _summary(cur, a)
     days_worked = len(s["days"]) - s["no_show_days"]
     cur.execute(
         "INSERT INTO payroll_record (assignment_id, tournament_id, official_id, "
@@ -135,7 +141,7 @@ _CSV_HEADERS = ["Official", "Days worked", "No-show days", "Pay", "Mileage",
 
 
 @router.get("/api/tournaments/{tournament_id}/payroll/export.csv")
-def payroll_export_csv(tournament_id: int, conn=Depends(db_dep)):
+def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     """The finalized records as a CSV for the bookkeeper. Only FINALIZED rows
     (frozen amounts) — live/unfinalized numbers aren't payable yet. utf-8-sig so
     Excel reads the encoding; amounts as plain 2dp strings (not locale money)."""
@@ -151,6 +157,11 @@ def payroll_export_csv(tournament_id: int, conn=Depends(db_dep)):
                     "LEFT JOIN payment_batch b ON b.id = r.batch_id "
                     "WHERE r.tournament_id = %s ORDER BY r.official_name", (tournament_id,))
         recs = cur.fetchall()
+        log_export(
+            cur, username=user["username"], resource="payroll",
+            tournament_id=tournament_id, client_kind="api",
+            detail={"row_count": len(recs)},
+        )
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(_CSV_HEADERS)
@@ -201,7 +212,12 @@ def finalize_all(tournament_id: int, user=Depends(require_admin), conn=Depends(d
                     "                WHERE r.assignment_id = a.id) "
                     "ORDER BY o.last_name", (tournament_id,))
         todo = cur.fetchall()
-        done = [_finalize_one(cur, a, user["username"]) for a in todo]
+        # D10: one batched load for all summaries (5 queries total), not 5×N.
+        summaries = _summaries(cur, todo)
+        done = [
+            _finalize_one(cur, a, user["username"], s)
+            for a, s in zip(todo, summaries)
+        ]
         cur.execute("SELECT count(*) AS n FROM payroll_record WHERE tournament_id = %s",
                     (tournament_id,))
         return {"finalized": len(done), "records": done,

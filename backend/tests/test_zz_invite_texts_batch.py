@@ -71,3 +71,21 @@ def test_invite_all_empty_tournament():
 
 def test_invite_all_404_unknown_tournament():
     assert client.get("/api/tournaments/99999999/invite-texts").status_code == 404
+
+
+def test_invite_all_matches_single_invite_shape():
+    """D10: batched path must stay equivalent to per-assignment invite-text."""
+    t = _tournament()
+    o = _official(email="match@example.com")
+    a = _assign(t["id"], o["id"])
+    _ok(client.post(f"/api/assignments/{a['id']}/days", json={
+        "work_date": "2026-06-02", "working_as": "roving_official",
+    }))
+    single = _ok(client.get(f"/api/assignments/{a['id']}/invite-text"), 200)
+    batch = _batch(t["id"])
+    assert batch["count"] == 1
+    inv = batch["invites"][0]
+    assert inv["assignment_id"] == a["id"]
+    assert inv["subject"] == single["subject"]
+    assert inv["body"] == single["body"]
+    assert inv["official_email"] == single["official_email"]

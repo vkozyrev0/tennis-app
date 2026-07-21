@@ -39,7 +39,8 @@ def get_current_user(sid: str | None = Cookie(default=None), conn=Depends(db_dep
         raise HTTPException(status_code=401, detail="not authenticated")
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT u.id, u.username, u.role, u.official_id "
+            "SELECT u.id, u.username, u.role, u.official_id, u.can_export_pii, "
+            "       u.must_change_password "
             "FROM session s JOIN user_account u ON u.id = s.user_id "
             "WHERE s.token = %s AND s.expires_at > now()",
             (sid,),
@@ -47,10 +48,48 @@ def get_current_user(sid: str | None = Cookie(default=None), conn=Depends(db_dep
         user = cur.fetchone()
     if user is None:
         raise HTTPException(status_code=401, detail="not authenticated")
+    user["must_change_password"] = bool(user.get("must_change_password"))
+    user["can_export_pii"] = bool(user.get("can_export_pii", True))
     return user
 
 
-def require_admin(user=Depends(get_current_user)) -> dict:
+def password_change_required(user: dict) -> bool:
+    """True when the account must rotate its password before app use.
+
+    Enforcement (403) applies only in prod (or COURTOPS_FORCE_PASSWORD_CHANGE=1)
+    so local POC / demo / tests keep working with admin/admin. The flag is still
+    returned on login/me so the SPA can nudge even in dev.
+    """
+    if not user.get("must_change_password"):
+        return False
+    import os
+    from .config import settings
+    raw = os.getenv("COURTOPS_FORCE_PASSWORD_CHANGE", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    return settings.is_prod()
+
+
+def require_usable_session(user=Depends(get_current_user)) -> dict:
+    """Like get_current_user but 403 when a forced password change is pending."""
+    if password_change_required(user):
+        raise HTTPException(
+            status_code=403,
+            detail="password change required — POST /api/auth/change-password",
+        )
+    return user
+
+
+def require_admin(user=Depends(require_usable_session)) -> dict:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="admin only")
+    return user
+
+
+def require_export_pii(user=Depends(require_admin)) -> dict:
+    """H4.2: admin who may download full minors-PII CSVs (can_export_pii)."""
+    from .export_gate import require_can_export_pii
+    require_can_export_pii(user, redacted=False)
     return user

@@ -94,8 +94,48 @@ def _clear_attempts(key: tuple[str, str]) -> None:
 
 
 def _secure_cookie() -> bool:
-    """HTTPS-only cookies in prod; off for localhost dev so browsers accept them."""
-    return os.getenv("COURTOPS_SECURE_COOKIE", "").lower() in {"1", "true", "yes"}
+    """HTTPS-only cookies. Explicit COURTOPS_SECURE_COOKIE wins; otherwise on
+    when ENV is a shared/hosted value (audit B1 / D3) so a prod deploy cannot
+    silently ship session cookies over plain HTTP. Dev stays off so localhost works."""
+    raw = os.getenv("COURTOPS_SECURE_COOKIE", "").strip().lower()
+    if raw in {"1", "true", "yes"}:
+        return True
+    if raw in {"0", "false", "no"}:
+        return False
+    from ..config import settings
+    return settings.is_prod()
+
+
+def _session_days() -> int:
+    """Session lifetime in days. COURTOPS_SESSION_DAYS (1–90).
+
+    Default **30** in dev/test (POC convenience); default **7** when ENV is
+    prod (audit D3) unless the env var is set explicitly.
+    """
+    raw = os.getenv("COURTOPS_SESSION_DAYS")
+    if raw is None or str(raw).strip() == "":
+        from ..config import settings
+        return 7 if settings.is_prod() else 30
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 30
+    return max(1, min(days, 90))
+
+
+def _session_ttl_sql() -> str:
+    return f"{_session_days()} days"
+
+
+def _user_public(user: dict) -> dict:
+    return {
+        "username": user["username"],
+        "role": user["role"],
+        "official_id": user["official_id"],
+        "can_export_pii": bool(user.get("can_export_pii", True)),
+        "must_change_password": bool(user.get("must_change_password")),
+        "session_days": _session_days(),
+    }
 
 
 @router.post("/login")
@@ -105,7 +145,8 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
     _check_lock(key)
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, role, official_id "
+            "SELECT id, username, password_hash, role, official_id, can_export_pii, "
+            "       must_change_password "
             "FROM user_account WHERE username = %s",
             (body.username,),
         )
@@ -117,6 +158,14 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
                 verify_pw(body.password, _DUMMY_HASH)
             _record_fail(key)
             raise HTTPException(status_code=401, detail="invalid username or password")
+        # D3: still on the POC default admin/admin password → require rotation
+        # (enforced in prod via require_usable_session; SPA always sees the flag).
+        if user["username"] == "admin" and verify_pw("admin", user["password_hash"]):
+            cur.execute(
+                "UPDATE user_account SET must_change_password = true WHERE id = %s",
+                (user["id"],),
+            )
+            user["must_change_password"] = True
         # Successful auth — rotate any pre-existing token for this user (defends
         # against session fixation) and start fresh.
         cur.execute("DELETE FROM session WHERE expires_at <= now()")  # opportunistic cleanup
@@ -124,15 +173,15 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
         token = secrets.token_urlsafe(32)
         cur.execute(
             "INSERT INTO session (token, user_id, expires_at) "
-            "VALUES (%s, %s, now() + interval '30 days')",
-            (token, user["id"]),
+            "VALUES (%s, %s, now() + %s::interval)",
+            (token, user["id"], _session_ttl_sql()),
         )
     _clear_attempts(key)
     response.set_cookie(
         COOKIE_NAME, token, httponly=True, samesite="strict", path="/",
         secure=_secure_cookie(),
     )
-    return {"username": user["username"], "role": user["role"], "official_id": user["official_id"]}
+    return _user_public(user)
 
 
 @router.post("/logout")
@@ -161,7 +210,8 @@ def change_password(body: PasswordChange, sid: str | None = Cookie(default=None)
         if verify_pw(body.new_password, row["password_hash"]):
             raise HTTPException(status_code=400, detail="new password must differ from the current one")
         cur.execute(
-            "UPDATE user_account SET password_hash = %s WHERE id = %s",
+            "UPDATE user_account SET password_hash = %s, "
+            "  must_change_password = false WHERE id = %s",
             (hash_pw(body.new_password), user["id"]),
         )
         # Invalidate other sessions (defends a leaked/old cookie); keep this one.
@@ -169,9 +219,9 @@ def change_password(body: PasswordChange, sid: str | None = Cookie(default=None)
             "DELETE FROM session WHERE user_id = %s AND token <> %s",
             (user["id"], sid),
         )
-    return {"ok": True}
+    return {"ok": True, "must_change_password": False}
 
 
 @router.get("/me")
 def me(user=Depends(get_current_user)):
-    return {"username": user["username"], "role": user["role"], "official_id": user["official_id"]}
+    return _user_public(user)

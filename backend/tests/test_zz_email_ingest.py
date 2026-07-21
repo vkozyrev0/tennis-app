@@ -258,3 +258,30 @@ def test_query_token_auth():
         json={"message_id": mid, "subject": "hi", "body": "hello from query token"},
     )
     assert r.status_code == 201, r.text
+
+
+def test_query_token_rejected_in_prod(monkeypatch):
+    """D4: ?token= is a last resort; prod refuses unless INGEST_ALLOW_QUERY_TOKEN=1."""
+    monkeypatch.setenv("ENV", "prod")
+    monkeypatch.delenv("INGEST_ALLOW_QUERY_TOKEN", raising=False)
+    mid = f"qtok-prod-{uuid.uuid4().hex}@example.com"
+    r = client.post(
+        f"/api/ingest/email?token={TOKEN}",
+        json={"message_id": mid, "subject": "hi", "body": "should fail"},
+    )
+    assert r.status_code == 401, r.text
+    assert "query-string" in r.json()["detail"].lower() or "header" in r.json()["detail"].lower()
+    # Header still works in prod
+    r2 = client.post(
+        "/api/ingest/email",
+        headers=_headers(),
+        json={"message_id": mid + "-h", "subject": "hi", "body": "header ok"},
+    )
+    assert r2.status_code == 201, r2.text
+    # Explicit override re-enables query token
+    monkeypatch.setenv("INGEST_ALLOW_QUERY_TOKEN", "1")
+    r3 = client.post(
+        f"/api/ingest/email?token={TOKEN}",
+        json={"message_id": mid + "-q", "subject": "hi", "body": "override ok"},
+    )
+    assert r3.status_code == 201, r3.text

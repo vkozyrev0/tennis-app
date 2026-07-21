@@ -3,11 +3,14 @@ from datetime import datetime
 import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
+from ..access_audit import log_access
+from ..coppa import refuse_under13_birthdate
 from ..crypto import decrypt as _dec_pii
 from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
 from ..query_helpers import like_escape, paged_select
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
+from ..security import require_admin
 
 router = APIRouter(prefix="/api/players", tags=["players"])
 
@@ -127,11 +130,20 @@ def get_player(player_id: int, conn=Depends(db_dep)):
 
 
 @router.get("/{player_id}/overview")
-def player_overview(player_id: int, tournament_id: int | None = None, conn=Depends(db_dep)):
+def player_overview(
+    player_id: int,
+    tournament_id: int | None = None,
+    user=Depends(require_admin),
+    conn=Depends(db_dep),
+):
     """Player 360 — everything the TD needs about one player in one place: their
     core identity, every tournament they're entered in (status + division), and —
     scoped to `tournament_id` when given — their filed requests across all the
-    Part B lists. Siloed-by-tab data unified by USTA #."""
+    Part B lists. Siloed-by-tab data unified by USTA #.
+
+    D19: successful opens are recorded in ``access_audit`` (who / when /
+    player id — never names or contact fields).
+    """
     def _tclause():
         return (" AND tournament_id = %s", [player_id, tournament_id]) if tournament_id \
             else ("", [player_id])
@@ -184,6 +196,18 @@ def player_overview(player_id: int, tournament_id: int | None = None, conn=Depen
         )
         reqs["pairing"] = cur.fetchall()
 
+        # D19 — after a successful load so 404s do not pollute the trail.
+        log_access(
+            cur,
+            username=user["username"],
+            action="view_player_360",
+            resource_type="player",
+            resource_id=player_id,
+            tournament_id=tournament_id,
+            client_kind="api",
+            detail={"surface": "player_360"},
+        )
+
     return {"player": player, "tournament_id": tournament_id,
             "entries": entries, "requests": reqs}
 
@@ -207,6 +231,8 @@ def player_history(player_id: int, conn=Depends(db_dep)):
 
 @router.post("", response_model=PlayerOut, status_code=201)
 def create_player(body: PlayerCreate, conn=Depends(db_dep)):
+    # D16 / COPPA: refuse under-13 birthdates unless ALLOW_UNDER13_PII permits.
+    refuse_under13_birthdate(body.birthdate, precision=body.birthdate_precision)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -239,6 +265,7 @@ def update_player(
 
     The player_history trigger snapshots the prior values and bumps updated_at.
     """
+    refuse_under13_birthdate(body.birthdate, precision=body.birthdate_precision)
     try:
         with conn.cursor() as cur:
             if x_if_updated_at:
