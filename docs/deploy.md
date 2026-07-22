@@ -53,23 +53,30 @@ keep the container on plain HTTP (`:8000`). A browser-trusted cert needs a domai
 
 ## 3. Host it (config files in the repo root)
 
-### Fly.io — `fly.toml` (persistent DB, scale-to-zero)
+### Fly.io — `fly.toml` (persistent volume at `/data`)
 
-`fly.toml` is set to **build from the Dockerfile on Fly's remote builder**, so you
-don't need to push to ghcr first (skip Part 1). The first build takes a few minutes
-because it bakes the demo DB.
+`fly.toml` **builds from the Dockerfile on Fly's remote builder** (no ghcr push
+needed). It mounts a Fly volume at `/data` and sets `PGDATA=/data/pgdata` so the
+DB survives redeploys and restarts. The entrypoint runs as root only long enough
+to `chown` the mount, then `su-exec`s to `postgres` (Postgres refuses root).
 
 ```bash
 fly auth login
-fly launch --no-deploy --copy-config --name courtops-poc   # registers the app
-fly volume create courtops_data --size 1 --region iad      # persistent DB (1 GB)
+fly launch --no-deploy --copy-config --name courtops-poc   # once: registers the app
+fly volume create courtops_data --size 1 --region iad      # once: persistent DB (1 GB)
 fly secrets set ADMIN_PASSWORD='choose-a-strong-one'       # harden the login
 fly deploy                                                 # builds from Dockerfile + runs
 fly open                                                   # -> https://courtops-poc.fly.dev
 ```
-HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. The `ADMIN_PASSWORD`
-secret is applied when the fresh volume seeds on first boot, and re-applied on every
-boot thereafter.
+
+HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. First boot of an
+**empty** volume runs `initdb` + demo seed; later boots skip seed and keep your
+data. `ADMIN_PASSWORD` is re-applied on every boot (rotates admin even when seed
+is skipped).
+
+**Ephemeral demo (no persistence):** remove the `[[mounts]]` block and the
+`PGDATA` env override in `fly.toml` — the image-layer baked demo at
+`/opt/courtops/pgdata` is used, and restarts reset to that pristine state.
 
 To deploy a **prebuilt ghcr image** instead (Route A), do Part 1, swap the
 `[build]` block in `fly.toml` to `image = "ghcr.io/vkozyrev0/tennis-app:latest"`

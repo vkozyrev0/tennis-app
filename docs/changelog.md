@@ -9,6 +9,16 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-22 — Fly persistent deploy + assignment-card layout
+
+- **Fly.io persistence:** volume at `/data` with `PGDATA=/data/pgdata`;
+  entrypoint runs as root only to `chown` the mount then `su-exec`s to
+  `postgres` (`su-exec` in the image). `fly.toml` keeps `min_machines_running=1`
+  and attaches existing `courtops_data` volume. Docs: [deploy.md](deploy.md).
+- **Assignment cards:** clearer hierarchy — title row (name + response + Edit/
+  Invite/Reassign + ⋯ menu), labeled Site/Hotel/Diet meta, money vs flag rows
+  separated, days section label, response left-border accent.
+
 ## 2026-07-21 — Button utility classes + D11 complete + security hardening
 
 - **Button utilities (cosmetic):** unified `.btn` system in `styles.css`

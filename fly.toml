@@ -1,24 +1,20 @@
 # Fly.io deploy for the all-in-one CourtOps POC image (Postgres + API + frontend
 # in one container). Gives HTTPS on 443 automatically via *.fly.dev (valid cert).
 #
-#   fly apps create courtops-poc                               # or edit `app` below
-#   fly deploy                                                 # builds from Dockerfile
-#   # or, from a prebuilt image:
-#   fly deploy --image vkozyrev0/tennis-app:latest [--local-only]
+# Persistent data (recommended for a real working instance):
+#   fly volumes create courtops_data --size 1 --region iad   # once
+#   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'
+#   fly deploy
+#   fly open   # -> https://courtops-poc.fly.dev
 #
-# This builds the image from ./Dockerfile on Fly's remote builder (no registry
-# push needed); the first build takes a few minutes (it bakes the demo DB). To
-# deploy a prebuilt image instead, pass --image (use --local-only to push your
-# local copy if the Docker Hub repo is private).
+# The volume mounts at /data; PGDATA is /data/pgdata (a subdirectory so initdb
+# is not blocked by the volume's lost+found). First boot of an empty volume
+# runs initdb + demo seed; later boots keep your data across redeploys/restarts.
+# The entrypoint chowns the mount as root then drops to the postgres user.
 #
-# DATA IS EPHEMERAL (no volume): the image already bakes a seeded demo DB into
-# /opt/courtops/pgdata, so the app boots populated and resets to that pristine
-# demo on every restart/redeploy — which is what you want for a public demo.
-# A Fly volume can't be mounted here without extra work: a fresh volume mounts
-# root-owned with a lost+found over the baked path, and the image runs as the
-# unprivileged `postgres` user, so it can't initdb there. To add persistence,
-# the entrypoint would need to run as root, chown a *subdirectory* of the mount
-# to postgres, and gosu-drop for the DB ops.
+# Ephemeral demo (no volume): remove the [[mounts]] block and the PGDATA env
+# override — the image's baked demo at /opt/courtops/pgdata is used, and
+# restarts reset to that pristine demo.
 
 app = "courtops-poc"
 primary_region = "iad"
@@ -28,21 +24,25 @@ primary_region = "iad"
 
 [env]
   PORT = "8000"
+  # Persist the DB on the volume (not the image-layer baked path).
+  PGDATA = "/data/pgdata"
   # ENV=dev is the image default; the prod boot-guard requires TLS/non-default DB
-  # settings that don't fit the bundled-Postgres POC, so keep dev for the demo.
-  # Harden the admin login (don't ship admin/admin publicly) with a Fly secret:
+  # settings that don't fit the bundled-Postgres POC, so keep dev for this demo
+  # topology. Harden the admin login with:
   #   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'
-  # It's applied on first boot (fresh volume seeds) and re-applied every boot.
 
-# No [[mounts]] — see the header note. The baked demo DB lives in the image layer
-# at /opt/courtops/pgdata (writable on Fly's machine rootfs for the machine's life).
+[[mounts]]
+  source = "courtops_data"
+  destination = "/data"
 
 [http_service]
   internal_port = 8000
   force_https = true          # 443 -> redirects http; cert is auto-managed
-  auto_stop_machines = "stop" # scale to zero when idle (data is ephemeral anyway)
+  # Keep one machine warm so Postgres + volume stay up (scale-to-zero freezes
+  # the machine; data on the volume is fine, but cold start is slower).
+  auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   # The bundled Postgres needs a few seconds on a cold start, hence grace_period.
   [[http_service.checks]]
@@ -50,7 +50,7 @@ primary_region = "iad"
     path = "/api/health"
     interval = "15s"
     timeout = "5s"
-    grace_period = "30s"
+    grace_period = "45s"
 
 [[vm]]
   size = "shared-cpu-1x"

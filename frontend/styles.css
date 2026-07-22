@@ -1293,17 +1293,54 @@ td.toggle { white-space: nowrap; }
 
 .asg {
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
   border-radius: 6px;
-  padding: 0.6rem 0.75rem;
-  margin-bottom: 0.6rem;
+  padding: 0.65rem 0.8rem;
+  margin-bottom: 0.65rem;
   background: var(--elev);
 }
-.asg-head { font-size: 0.9rem; position: relative; }
-.asg-name { font-size: 0.95rem; padding-right: 5rem; }
-.asg-meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.1rem; }
+.asg[data-resp="accepted"] { border-left-color: var(--ok); }
+.asg[data-resp="pending"] { border-left-color: #d8a400; }
+.asg[data-resp="declined"] { border-left-color: var(--bad); }
+/* Title row: name + response chip | primary actions + ⋯ menu */
+.asg-head {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+}
+.asg-title { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; flex: 1 1 12rem; min-width: 0; }
+.asg-name { font-size: 1rem; }
+.asg-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem;
+  margin-left: auto;
+}
+.asg-actions .btn-link { margin-left: 0; }
+/* Labeled meta fields (Site / Hotel / Diet) */
+.asg-meta {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 1rem;
+  color: var(--ink); font-size: 0.82rem; margin-top: 0.4rem;
+}
+.asg-meta-item { display: inline-flex; align-items: baseline; gap: 0.3rem; }
+.asg-meta-k {
+  font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--muted);
+}
+.asg-money {
+  margin-top: 0.45rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
+}
 .asg-badges { margin-top: 0.4rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
-.asg-actions { position: absolute; top: 0; right: 0; }
-.days { margin: 0.5rem 0 0.3rem; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.asg-section { margin-top: 0.55rem; }
+.asg-section-label {
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--muted); margin-bottom: 0.25rem;
+}
+.asg-mileage-fix {
+  display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center;
+  margin-top: 0.45rem; padding: 0.4rem 0.5rem;
+  background: var(--warn-bg, #fff8e6); border: 1px solid var(--warn-border, #f0e0a8);
+  border-radius: 6px; font-size: 0.85rem;
+}
+.asg-mileage-fix input { padding: 0.3rem 0.4rem; }
+.days { margin: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .chip {
   background: var(--sel);
   border: 1px solid var(--border);
@@ -1683,7 +1720,8 @@ td.toggle { white-space: nowrap; }
 .cov-tag-warn { background: var(--warn-bg); color: #9a6700; }
 :root[data-theme="dark"] .cov-tag-ok { background: #16301f; color: #8ed3a5; }
 .asg-flags {
-  font-size: 0.85rem; margin: 0.3rem 0; padding: 0.3rem 0.5rem;
+  display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
+  font-size: 0.85rem; margin-top: 0.4rem; padding: 0.35rem 0.5rem;
   background: var(--warn-bg); border: 1px solid var(--warn-border);
   color: var(--warn-ink); border-radius: 5px;
 }

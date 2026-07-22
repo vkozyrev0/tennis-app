@@ -38,8 +38,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 FROM postgres:16-alpine
 
 # bash: the entrypoint is a bash script (Alpine ships only busybox sh).
+# su-exec: entrypoint starts as root (Fly volume chown) then drops to postgres.
 # No py3-pip here — the venv is copied in ready-to-run from the builder.
-RUN apk add --no-cache python3 bash
+RUN apk add --no-cache python3 bash su-exec
 ENV VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
 COPY --from=builder /opt/venv /opt/venv
 
@@ -57,6 +58,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/ent
 # ENV=dev keeps the production boot-guard a no-op. PGDATA is a NON-volume path so
 # the build-time-seeded cluster persists in the image layer (the postgres base
 # image declares /var/lib/postgresql/data as a VOLUME, which would discard it).
+# Fly persistent deploys override PGDATA to /data/pgdata (see fly.toml mounts).
 ENV ENV=dev \
     PGHOST=localhost PGPORT=5432 PGUSER=postgres PGPASSWORD=postgres \
     PGDATABASE=courtops PGSSLMODE=disable \
@@ -66,18 +68,21 @@ ENV ENV=dev \
 
 RUN mkdir -p "$PGDATA" && chown -R postgres:postgres /app /opt/courtops
 
-# Postgres refuses to run as root; the whole stack (build seed + runtime) is the
-# `postgres` user.
+# Bake a pre-seeded database into the image (must run as postgres — initdb
+# refuses root). Runtime starts as root so the entrypoint can chown a volume
+# mount, then su-exec drops back to postgres for pg_ctl + uvicorn.
 USER postgres
 
 # Bake a pre-seeded database into the image: init the cluster, start it, apply
 # migrations, load the realistic demo, stop it. The image now ships with data in
-# its embedded DB — no first-run seeding needed.
+# its embedded DB — no first-run seeding needed (until a volume shadows PGDATA).
 RUN set -eux; \
     initdb -D "$PGDATA" --username=postgres --auth-local=trust --auth-host=trust >/dev/null; \
     pg_ctl -D "$PGDATA" -o "-c listen_addresses=localhost -p 5432" -w -t 60 start; \
     (cd backend && python migrate.py && python "$SEED_SCRIPT"); \
     pg_ctl -D "$PGDATA" -m fast -w stop
+
+USER root
 
 EXPOSE 8000
 

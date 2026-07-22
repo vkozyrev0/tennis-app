@@ -346,8 +346,12 @@ export function createAssignmentsPanel(ctx) {
   function renderAssignment(a, availDates) {
     const card = document.createElement("div");
     card.className = "asg";
-    // Structured header: name + actions on top; venue/hotel meta line; then
-    // pay/mileage/total badges and any flags as colored chips (no run-on line).
+    card.dataset.resp = a.response_status || "pending";
+    // Structured card layout (2026-07-21 polish):
+    //   title row (name + response + primary actions / overflow)
+    //   meta fields (Site / Hotel / Diet)
+    //   money badges | flag badges (separated)
+    //   contact (pending only) → days section → add-day row
     // Mileage = $0 with a distance ON FILE is legitimate (the first 50 round-trip
     // miles are free), but reads like a broken/missing calc — distinguish it from
     // the genuine "no distance" state with a hint (E2E finding F1).
@@ -373,44 +377,28 @@ export function createAssignmentsPanel(ctx) {
       a.missing_distance ? '<span class="badge badge-muted">no distance</span>' : "",
       // Day-of truth (P4-1): pay already excludes these days; the badge says why.
       a.no_show_days ? `<span class="badge badge-bad" title="No-show day(s) are excluded from pay">✗ ${a.no_show_days} no-show</span>` : "",
-    ].filter(Boolean).join(" ");
+    ].filter(Boolean);
     // Money audit (§5.3): a tooltip on the total badge showing the FROZEN calc
     // inputs (miles + rule constants) so the TD can see how a figure was reached.
     const pa = a.pay_audit;
     // Plain (unescaped) string; the title attribute is escaped where it's built
-    // (hstr fragment in the head template below).
+    // (hstr fragment in the money template below).
     const auditTip = pa
       ? `Frozen audit — ${pa.rule_version || ""} · ` +
         `miles ${pa.one_way_miles ?? "—"} · rate $${pa.constants?.mileage_rate}/mi · ` +
         `first ${pa.constants?.free_miles}mi free · cap $${pa.constants?.mileage_cap} · ` +
         `pay $${pa.pay} + mileage $${pa.mileage ?? 0} = $${pa.total}`
       : "";
+
+    // —— Title row: name + response · primary actions + overflow ——
     const head = document.createElement("div"); head.className = "asg-head";
-    // Contact line — shown for pending responders so the TD can chase directly
-    // (mailto/tel). Hidden once accepted/declined to keep the card uncluttered.
-    let contact = "";
-    if (a.response_status === "pending" && (a.official_email || a.official_phone)) {
-      const parts = [];
-      if (a.official_email) parts.push(hstr`<a href="mailto:${a.official_email}?subject=${encodeURIComponent("Assignment confirmation — " + (getActive() ? getActive().name : ""))}">${a.official_email}</a>`);
-      if (a.official_phone) parts.push(hstr`<a href="tel:${a.official_phone}">${a.official_phone}</a>`);
-      contact = `<div class="asg-contact">awaiting response · ${parts.join(" · ")}</div>`;
-    }
-    // Built with the auto-escaping html`` helper (P2 #12): plain ${text} is
-    // HTML-escaped, raw(...) marks already-trusted markup (badges, the contact
-    // line, the pre-escaped audit-title attribute fragment, mileage's free-band
-    // span). site_label/hotel_name fall back with `|| "—"` BEFORE interpolation
-    // so the em-dash isn't escaped away.
-    head.innerHTML = html`
-      <div class="asg-name"><strong>${a.official_name}</strong></div>
-      <div class="asg-meta">site: ${a.site_label || "—"} · hotel: ${a.hotel_name || "—"}${a.dietary_restrictions ? html` · diet: ${a.dietary_restrictions}` : ""}</div>
-      ${raw(contact)}
-      <div class="asg-badges">
-        <span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>
-        <span class="badge badge-info">mileage ${raw(mileage)}</span>
-        <span class="badge badge-ok"${auditTip ? raw(hstr` title="${auditTip}"`) : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>
-        ${raw(respChip(a.response_status))}${flagChips ? raw(" " + flagChips) : ""}
-      </div>`;
-    const actions = document.createElement("span"); actions.className = "asg-actions";
+    const title = document.createElement("div"); title.className = "asg-title";
+    title.innerHTML = html`
+      <span class="asg-name"><strong>${a.official_name}</strong></span>
+      ${raw(respChip(a.response_status))}`;
+    head.appendChild(title);
+
+    const actions = document.createElement("div"); actions.className = "asg-actions";
     const ed = document.createElement("button"); ed.type = "button"; ed.className = "btn-link"; ed.textContent = "Edit";
     ed.addEventListener("click", () => {
       asgEditId = a.id; _reassignDays = null;   // editing is not a reassign
@@ -423,11 +411,6 @@ export function createAssignmentsPanel(ctx) {
       if (typeof syncCombos === "function") syncCombos();
       asgForm.scrollIntoView({ block: "nearest" });
       setMsg("asg-msg", `editing assignment #${a.id} — change site/hotel, then Update`, true);
-    });
-    const dl = document.createElement("button"); dl.type = "button"; dl.className = "btn-link danger"; dl.textContent = "Delete";
-    dl.addEventListener("click", async () => {
-      if (!(await confirmDialog("Delete assignment?"))) return;
-      try { await api(`/assignments/${a.id}`, { method: "DELETE" }); loadAssignments(); } catch (e) { setMsg("asg-msg", e.message, false); }
     });
     // Reassign: only offered when the official DECLINED. Pre-fills the add-form
     // with the same site/hotel (NOT the official — that's the point) and stashes
@@ -470,24 +453,83 @@ export function createAssignmentsPanel(ctx) {
       } : null;
       toast(`Invite for ${a.official_name} copied to clipboard${t.official_email ? "" : " (no email on file)"}`, true, action);
     });
-    // 📅 .ics: download this official's full schedule (all tournaments) as an
-    // iCalendar file the TD can forward — same feed the official sees in the portal.
-    const ics = document.createElement("a");
-    ics.className = "btn-link"; ics.textContent = "📅 .ics";
-    ics.href = `/api/officials/${a.official_id}/schedule.ics`;
-    ics.setAttribute("download", "");
-    ics.title = "Download this official's assignment days as an iCalendar (.ics) file";
-    // P4-5: who/when/what trail for this assignment (audit table).
-    const hist = document.createElement("button");
-    hist.type = "button"; hist.className = "btn-link"; hist.textContent = "History";
-    hist.title = "Change history: who did what, when";
-    hist.addEventListener("click", () => showAssignmentHistory(a));
-    actions.append(ed, inv, ...(ra ? [ra] : []), ics, hist, dl); head.appendChild(actions); card.appendChild(head);
+    // Secondary actions live in a ⋯ menu so the title row stays scannable.
+    const moreItems = [
+      {
+        label: "📅 Download .ics",
+        title: "Download this official's assignment days as an iCalendar (.ics) file",
+        onClick: () => {
+          const link = document.createElement("a");
+          link.href = `/api/officials/${a.official_id}/schedule.ics`;
+          link.setAttribute("download", "");
+          link.click();
+        },
+      },
+      {
+        label: "History",
+        title: "Change history: who did what, when",
+        onClick: () => showAssignmentHistory(a),
+      },
+      { separator: true },
+      {
+        label: "Delete",
+        danger: true,
+        onClick: async () => {
+          if (!(await confirmDialog("Delete assignment?"))) return;
+          try { await api(`/assignments/${a.id}`, { method: "DELETE" }); loadAssignments(); }
+          catch (e) { setMsg("asg-msg", e.message, false); }
+        },
+      },
+    ];
+    const more = makeMenuButton("⋯", moreItems, {
+      className: "btn-icon row-more",
+      title: "More actions",
+      anchor: true,
+      noCaret: true,
+    });
+    actions.append(ed, inv, ...(ra ? [ra] : []), more);
+    head.appendChild(actions);
+    card.appendChild(head);
+
+    // —— Meta: labeled fields, not a run-on "site: · hotel: · diet:" line ——
+    const meta = document.createElement("div"); meta.className = "asg-meta";
+    meta.innerHTML = html`
+      <span class="asg-meta-item"><span class="asg-meta-k">Site</span> ${a.site_label || "—"}</span>
+      <span class="asg-meta-item"><span class="asg-meta-k">Hotel</span> ${a.hotel_name || "—"}</span>
+      ${a.dietary_restrictions
+        ? html`<span class="asg-meta-item"><span class="asg-meta-k">Diet</span> ${a.dietary_restrictions}</span>`
+        : ""}`;
+    card.appendChild(meta);
+
+    // —— Money badges (pay / mileage / total) — separate from warning flags ——
+    const moneyRow = document.createElement("div"); moneyRow.className = "asg-money";
+    moneyRow.innerHTML = html`
+      <span class="badge badge-info">pay $${a.pay.toFixed(2)}</span>
+      <span class="badge badge-info">mileage ${raw(mileage)}</span>
+      <span class="badge badge-ok"${auditTip ? raw(hstr` title="${auditTip}"`) : ""}>total $${a.total.toFixed(2)}${pa ? " ⓘ" : ""}</span>`;
+    card.appendChild(moneyRow);
+
+    if (flagChips.length) {
+      const flags = document.createElement("div");
+      flags.className = "asg-flags";
+      flags.innerHTML = flagChips.join(" ");
+      card.appendChild(flags);
+    }
+
+    // Contact line — pending responders only so the TD can chase (mailto/tel).
+    if (a.response_status === "pending" && (a.official_email || a.official_phone)) {
+      const contact = document.createElement("div"); contact.className = "asg-contact";
+      const parts = [];
+      if (a.official_email) parts.push(hstr`<a href="mailto:${a.official_email}?subject=${encodeURIComponent("Assignment confirmation — " + (getActive() ? getActive().name : ""))}">${a.official_email}</a>`);
+      if (a.official_phone) parts.push(hstr`<a href="tel:${a.official_phone}">${a.official_phone}</a>`);
+      contact.innerHTML = `awaiting response · ${parts.join(" · ")}`;
+      card.appendChild(contact);
+    }
 
     // Inline mileage fix: if the venue site has no distance on file, add it right
     // here instead of switching to the Distances tab.
     if (a.missing_distance && a.site_id) {
-      const fix = document.createElement("div"); fix.className = "add-day";
+      const fix = document.createElement("div"); fix.className = "asg-mileage-fix";
       fix.innerHTML = hstr`<span class="muted">No mileage on file — </span>`;
       const mi = document.createElement("input");
       mi.type = "number"; mi.min = "0"; mi.step = "0.1"; mi.placeholder = "one-way miles";
@@ -507,8 +549,14 @@ export function createAssignmentsPanel(ctx) {
       card.appendChild(fix);
     }
 
+    // —— Days section ——
     // Confirmed days, grouped chips (cert + date with weekday). Days outside the
     // tournament's play window are flagged (a warning, not a block — audit §3.4).
+    const daysSec = document.createElement("div"); daysSec.className = "asg-section";
+    const daysLbl = document.createElement("div");
+    daysLbl.className = "asg-section-label";
+    daysLbl.textContent = a.days.length ? `Days (${a.days.length})` : "Days";
+    daysSec.appendChild(daysLbl);
     const days = document.createElement("div"); days.className = "days";
     for (const d of a.days) {
       const chip = document.createElement("span"); chip.className = "chip";
@@ -543,7 +591,8 @@ export function createAssignmentsPanel(ctx) {
       chip.appendChild(x); days.appendChild(chip);
     }
     if (!a.days.length) days.innerHTML = hstr`<span class="muted">No days assigned yet.</span>`;
-    card.appendChild(days);
+    daysSec.appendChild(days);
+    card.appendChild(daysSec);
 
     // Add days: a labelled certification dropdown + the official's available days
     // (select all / individual), falling back to a manual date if no availability

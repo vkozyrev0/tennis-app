@@ -544,8 +544,9 @@ html`` helper sweep. The improvement-plan item-by-item record is in
   `.export-btn`, `.btn-link`, `.btn-icon`, `.touch-btn`, `.cov-fill-btn`,
   `button[type=submit]`, …) map onto the same rules so existing markup
   keeps working.
-- **Lower-priority polish** — structured assignment-card layout. *(Inline
-  "add distance" on the assignments tab is done.)*
+- ~~**Structured assignment-card layout**~~ — ✅ **shipped** (2026-07-22):
+  title / meta / money / flags / days sections; ⋯ overflow for .ics/History/
+  Delete; response accent border. *(Inline "add distance" already done.)*
 
 ## Backlog (2026-05-28 questionnaire — decisions locked in)
 

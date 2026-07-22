@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 # All-in-one POC entrypoint: bring up the bundled Postgres, migrate + seed, then
 # run the API/frontend in the foreground (so the container's life == uvicorn's).
+#
+# Privilege drop: the image runs as root so a fresh Fly/Render volume mount
+# (root-owned, often with lost+found) can be prepared. We always chown PGDATA
+# then re-exec as the `postgres` user via su-exec — Postgres refuses to run as
+# root. Local `docker run` without a volume still works (baked demo at
+# /opt/courtops/pgdata).
 set -euo pipefail
 
-export PGDATA="${PGDATA:-/var/lib/postgresql/data}"
+export PGDATA="${PGDATA:-/opt/courtops/pgdata}"
 PORT="${PORT:-8000}"
+
+if [ "$(id -u)" = "0" ]; then
+  # Use a *subdirectory* of a volume mount (e.g. /data/pgdata) so initdb is not
+  # blocked by the mount's lost+found. mkdir -p is a no-op on the baked path.
+  mkdir -p "$PGDATA"
+  chown -R postgres:postgres "$PGDATA"
+  # If PGDATA is nested under a volume root (e.g. /data), ensure the parent is
+  # traversable by postgres.
+  parent="$(dirname "$PGDATA")"
+  if [ "$parent" != "/" ] && [ -d "$parent" ]; then
+    chown postgres:postgres "$parent" 2>/dev/null || true
+  fi
+  exec su-exec postgres:postgres "$0" "$@"
+fi
 
 first_init=0
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
@@ -65,7 +85,7 @@ finally:
 PY
 fi
 
-echo "[entrypoint] serving API + frontend on 0.0.0.0:$PORT  (sign in: admin / admin)"
+echo "[entrypoint] serving API + frontend on 0.0.0.0:$PORT  (sign in: admin / <ADMIN_PASSWORD or admin>)"
 # Run uvicorn as a child (not exec) and trap SIGTERM so a `docker stop` / Fly
 # scale-to-zero shuts the bundled Postgres down CLEANLY before the container dies.
 # Without this, only uvicorn (PID 1) gets the signal and Postgres is SIGKILLed,
