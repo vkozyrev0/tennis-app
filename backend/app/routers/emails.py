@@ -7,6 +7,7 @@ Back-compat re-exports preserve existing test/importer import paths.
 """
 import json
 
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..crypto import decrypt as _dec_body
@@ -37,7 +38,7 @@ from ..email_extract import (  # noqa: F401 — re-export for importer/tests
     usta_candidates,
 )
 from ..email_stamp import _apply_extracted_to_row, _stamp_extracted_fields
-from ..email_targets import public_targets
+from ..email_targets import POPULATE_TARGETS, public_targets
 from ..models import (
     EmailAmend,
     EmailCreate,
@@ -45,6 +46,7 @@ from ..models import (
     EmailOut,
     EmailUpdate,
 )
+from ..playerops import mark_email_filed
 from ..query_helpers import like_escape, paged_select
 from ..triage import classify
 
