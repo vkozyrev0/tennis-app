@@ -538,9 +538,14 @@ html`` helper sweep. The improvement-plan item-by-item record is in
   `GET /tournaments/{id}/payroll/export.csv` + an Export CSV button on the
   Payroll tab. P4-4 is now complete end to end.
 - **Multi-user TD access** (D8) — ✅ **shipped**: admin user management (create/list/reset-password/delete with self + last-admin guards) at `/api/admin/users` + a Setup → Users tab.
-- **Lower-priority polish** — utility-class system for buttons (cosmetic
-  refactor); structured assignment-card layout. *(Inline "add distance" on the
-  assignments tab is done.)*
+- ~~**Utility-class system for buttons**~~ — ✅ **shipped** (2026-07-21):
+  canonical `.btn` + `.btn--primary|secondary|outline|link|icon|danger|touch`
+  in `frontend/styles.css`; legacy aliases (`.new-btn`, `.btn-small`,
+  `.export-btn`, `.btn-link`, `.btn-icon`, `.touch-btn`, `.cov-fill-btn`,
+  `button[type=submit]`, …) map onto the same rules so existing markup
+  keeps working.
+- **Lower-priority polish** — structured assignment-card layout. *(Inline
+  "add distance" on the assignments tab is done.)*
 
 ## Backlog (2026-05-28 questionnaire — decisions locked in)
 

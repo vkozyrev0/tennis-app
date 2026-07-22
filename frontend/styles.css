@@ -422,17 +422,7 @@ input.filter[type="search"] {
   background-repeat: no-repeat; background-position: 0.45rem center; background-size: 1rem;
 }
 
-.new-btn {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border: 0;
-  border-radius: 5px;
-  padding: 0.3rem 0.65rem;
-  font-family: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
+/* .new-btn / .nav-btn styles → Button utilities (below forms). */
 
 .detail-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
 
@@ -444,18 +434,6 @@ input.filter[type="search"] {
   margin-bottom: 0.5rem; padding-bottom: 0.4rem; padding-right: 2rem;
   border-bottom: 1px solid var(--border);
 }
-.nav-btn {
-  appearance: none; border: 1px solid var(--border); background: var(--bg);
-  border-radius: 5px; padding: 0.2rem 0.55rem; font: inherit; font-size: 0.78rem;
-  cursor: pointer; color: var(--ink);
-}
-/* Icon-only chevron variant (replaces the old "‹ Prev" / "Next ›" text). */
-.nav-btn--icon {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.9rem; height: 1.7rem; padding: 0; font-size: 1.2rem; line-height: 1;
-}
-.nav-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); }
-.nav-btn:disabled { opacity: 0.4; cursor: default; }
 .nav-pos { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
 
 /* ---- forms (compact) ---- */
@@ -539,30 +517,259 @@ input:user-invalid, select:user-invalid, textarea:user-invalid,
 
 .actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
 
-button[type="submit"] {
+/* ==========================================================================
+ * Button utilities
+ *
+ * Canonical API (prefer for new markup):
+ *   .btn.btn--primary     filled accent          (Save, + New)
+ *   .btn.btn--secondary   raised surface         (bulk / dashboard actions)
+ *   .btn.btn--outline     bordered transparent   (CSV, Import, Cancel)
+ *   .btn.btn--link        text-link look         (Edit, Review, Restore)
+ *   .btn.btn--icon        compact glyph target   (✎ ✕)
+ *   .btn.btn--danger      danger color modifier  (combine with link/icon/outline)
+ *   .btn.btn--touch       ≥44px day-of controls
+ *
+ * Legacy class names below are aliases — existing HTML/JS keeps working
+ * without a mass rename. Chrome-only controls stay separate: .gbtn (nav
+ * groups), .seg-btn (segmented control), header theme/logout chips.
+ * ========================================================================== */
+
+/* Shared reset */
+.btn,
+.new-btn,
+.btn-small,
+.export-btn,
+.btn-link,
+.btn-icon,
+.nav-btn,
+.touch-btn,
+.cov-fill-btn,
+button[type="submit"],
+.delete,
+.cancel,
+#avail-save,
+#me-avail-save {
+  appearance: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  cursor: pointer;
+  border-radius: 5px;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+.btn:disabled,
+.new-btn:disabled,
+.btn-small:disabled,
+.export-btn:disabled,
+.btn-link:disabled,
+.btn-icon:disabled,
+.nav-btn:disabled,
+.touch-btn:disabled,
+.cov-fill-btn:disabled,
+button[type="submit"]:disabled,
+.delete:disabled,
+.cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Primary — filled accent */
+.btn--primary,
+.btn.btn--primary,
+.new-btn,
+button[type="submit"],
+.cov-fill-btn,
+#avail-save,
+#me-avail-save,
+.export-btn.primary,
+.bulk-bar .primary {
   padding: 0.32rem 0.75rem;
   background: var(--accent);
   color: var(--accent-ink);
   border: 0;
-  border-radius: 5px;
-  font-family: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
+  white-space: nowrap;
 }
-button[type="submit"]:hover { filter: brightness(1.05); }
+.btn--primary:hover:not(:disabled),
+.btn.btn--primary:hover:not(:disabled),
+.new-btn:hover:not(:disabled),
+button[type="submit"]:hover:not(:disabled),
+.cov-fill-btn:hover:not(:disabled),
+#avail-save:hover:not(:disabled),
+#me-avail-save:hover:not(:disabled),
+.export-btn.primary:hover:not(:disabled),
+.bulk-bar .primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+.cov-fill-btn { padding: 0.2rem 0.55rem; font-size: 0.78rem; border-radius: 6px; }
 
-.delete, .cancel {
+/* Secondary — raised surface (compact toolbar actions) */
+.btn--secondary,
+.btn.btn--secondary,
+.btn-small {
+  padding: 0.25rem 0.6rem;
+  background: var(--btn-bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+.btn--secondary:hover:not(:disabled),
+.btn.btn--secondary:hover:not(:disabled),
+.btn-small:hover:not(:disabled) {
+  background: var(--sel);
+}
+
+/* Outline — bordered, transparent fill (exports, nav chevrons, cancel) */
+.btn--outline,
+.btn.btn--outline,
+.export-btn,
+.nav-btn,
+.cancel {
+  padding: 0.2rem 0.6rem;
+  background: transparent;
+  color: var(--link);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+.export-btn {
+  display: inline-block;
+  margin: 0.5rem 0 0.25rem;
+}
+a.export-btn { text-decoration: none; }
+.btn--outline:hover:not(:disabled),
+.btn.btn--outline:hover:not(:disabled),
+.export-btn:hover:not(:disabled) {
+  background: var(--bg);
+}
+.nav-btn {
+  background: var(--bg);
+  color: var(--ink);
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  font-size: 0.78rem;
+}
+.nav-btn:hover:not(:disabled) { background: var(--card); border-color: var(--accent); }
+/* Icon-only chevron variant (replaces the old "‹ Prev" / "Next ›" text). */
+.nav-btn--icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.9rem; height: 1.7rem; padding: 0; font-size: 1.2rem; line-height: 1;
+}
+.cancel {
+  color: var(--muted);
+  padding: 0.3rem 0.65rem;
+  border-radius: 5px;
+}
+.cancel:hover:not(:disabled) { background: var(--bg); }
+
+/* Danger outline (form Delete / confirm-ok) */
+.btn--danger.btn--outline,
+.delete {
   padding: 0.3rem 0.65rem;
   background: transparent;
+  color: var(--bad);
+  border: 1px solid var(--bad);
   border-radius: 5px;
-  font-family: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
 }
-.delete { color: var(--bad); border: 1px solid var(--bad); }
-.delete:hover { background: #fdecec; }
-.cancel { color: var(--muted); border: 1px solid var(--border); }
-.cancel:hover { background: var(--bg); }
+.delete:hover:not(:disabled),
+.btn--danger.btn--outline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+/* Link — text-only inline actions */
+.btn--link,
+.btn.btn--link,
+.btn-link {
+  margin-left: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  background: transparent;
+  border: 0;
+  /* a11y: --link clears 4.5:1 on dark card; --accent does not. */
+  color: var(--link);
+  font-size: 0.82rem;
+}
+.btn--link:hover:not(:disabled),
+.btn.btn--link:hover:not(:disabled),
+.btn-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.btn--link:disabled,
+.btn-link:disabled {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.btn--danger.btn--link,
+.btn-link.danger,
+.btn-link.btn--danger {
+  color: var(--bad);
+}
+.btn-link.add { color: var(--muted); }
+
+/* Icon — compact glyph hit targets (grid Edit/Delete; WCAG 2.5.8 ≥24px, we use 32px) */
+.btn--icon,
+.btn.btn--icon,
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0.25rem;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--link);
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: background 0.12s;
+}
+.btn--icon:hover:not(:disabled),
+.btn.btn--icon:hover:not(:disabled),
+.btn-icon:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.btn--icon:focus-visible,
+.btn-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Compact labeled variant — inbox "＋ both" (add a whole doubles pair). */
+.btn-icon.addboth {
+  min-width: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.4rem;
+  white-space: nowrap;
+}
+.btn--danger.btn--icon,
+.btn-icon.danger,
+.btn-icon.btn--danger {
+  color: var(--bad);
+}
+.btn--danger.btn--icon:hover:not(:disabled),
+.btn-icon.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+
+/* Touch — day-of venue controls (≥44px) */
+.btn--touch,
+.btn.btn--touch,
+.touch-btn,
+button.touch-btn {
+  min-height: 44px;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.92rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--btn-bg);
+  color: var(--ink);
+}
+.btn--touch:hover:not(:disabled),
+.touch-btn:hover:not(:disabled),
+button.touch-btn:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
 
 .msg { margin-left: 0.4rem; font-size: 0.85rem; }
 .msg.ok { color: var(--ok); }
@@ -677,25 +884,6 @@ kbd {
   background: var(--bg); color: var(--ink); border: 1px solid var(--border);
   border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border);
 }
-/* Compact icon buttons in grid action columns (Edit ✎, Delete ✕).
-   WCAG 2.5.8 (AA, target size minimum) = 24×24 px. We use 32×32 — comfortably
-   over the minimum without inflating row height. (Earlier 44×44 = 2.5.5 AAA,
-   which made every list row 56 px tall; we'd over-shot the AA target.) */
-.btn-icon {
-  appearance: none; border: 0; background: transparent; cursor: pointer;
-  /* a11y 8th-pass #1: --link instead of --accent so the dark-mode edit
-     glyph clears 4.5:1 on the card (accent #198754 was 3.62:1). */
-  color: var(--link); font-size: 0.95rem; line-height: 1;
-  min-width: 2rem; min-height: 2rem; border-radius: 4px; padding: 0.25rem;
-  display: inline-flex; align-items: center; justify-content: center;
-  transition: background 0.12s;
-}
-.btn-icon:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
-/* Compact labeled variant — the inbox "＋ both" (add a whole doubles pair). */
-.btn-icon.addboth { min-width: auto; font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.4rem; white-space: nowrap; }
-.btn-icon.danger { color: var(--bad); }
-.btn-icon.danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
-.btn-icon:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Per-column header filter inputs (themed for light + dark). */
 .tabulator .tabulator-header-filter input,
 .tabulator .tabulator-header-filter select {
@@ -850,21 +1038,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .list-table tbody tr.selected { background: var(--sel); }
 .list-table td.empty { color: var(--muted); text-align: center; padding: 1rem; cursor: default; }
 .list-table td.actions { text-align: right; white-space: nowrap; }
-.btn-link {
-  margin-left: 0.3rem;
-  padding: 0.1rem 0.35rem;
-  background: transparent;
-  border: 0;
-  /* a11y 7th-pass: use --link (brighter than --accent in dark mode) so
-     "Work on →" etc. clear 4.5:1 on the dark card. */
-  color: var(--link);
-  font: inherit;
-  font-size: 0.82rem;
-  cursor: pointer;
-}
-.btn-link:hover:not(:disabled) { text-decoration: underline; }
-.btn-link:disabled { color: var(--muted); cursor: not-allowed; opacity: 0.6; }
-.btn-link.danger { color: var(--bad); }
+/* .btn-link → Button utilities */
 
 /* Right-align numeric columns for scannability */
 #report-table .num, #report-totals .num,
@@ -875,28 +1049,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 /* Center the weekday X columns on the staffing plan */
 #report-table .daycol { text-align: center; }
 
-/* Consistent styling for the few unclassed action buttons */
-/* Match the unclassed save buttons to the primary button look */
-#avail-save, #me-avail-save {
-  padding: 0.32rem 0.75rem; background: var(--accent); color: var(--accent-ink);
-  border: 0; border-radius: 5px; font-family: inherit; font-size: 0.8rem; cursor: pointer;
-}
-
-.export-btn {
-  display: inline-block;
-  margin: 0.5rem 0 0.25rem;
-  padding: 0.2rem 0.6rem;
-  background: transparent;
-  /* a11y 8th-pass #1: --link clears AA on dark card; --accent did not. */
-  color: var(--link);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font: inherit;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.export-btn:hover { background: var(--bg); }
-a.export-btn { text-decoration: none; }
+/* #avail-save / #me-avail-save / .export-btn → Button utilities */
 .import-result { margin-top: 0.4rem; }
 .import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
 /* ===== AG Grid theme overrides — tune quartz to match the app's look ===== */
@@ -1129,7 +1282,6 @@ a.export-btn { text-decoration: none; }
 }
 .t-content .filter { margin: 0.5rem 0; width: 100%; max-width: 320px; }
 .tshirt-summary { margin: 0.5rem 0 0.75rem; display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
-.btn-link.add { color: var(--muted); }
 td.toggle { white-space: nowrap; }
 
 .checks { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
@@ -1275,8 +1427,8 @@ td.toggle { white-space: nowrap; }
   border-radius: 6px;
 }
 .bulk-bar[hidden] { display: none; }
-.bulk-bar .primary { background: var(--accent); color: #fff; border: 0; font-weight: 600; }
-.bulk-bar .primary:hover { filter: brightness(1.08); }
+/* .bulk-bar .primary → Button utilities (.btn--primary alias); keep weight here */
+.bulk-bar .primary { font-weight: 600; }
 .bulk-count {
   font-weight: 700; color: var(--ink); white-space: nowrap;
 }
@@ -1410,10 +1562,7 @@ td.toggle { white-space: nowrap; }
 .bulk-body { padding: 0.6rem 0.7rem; }
 .bulk-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .bulk-toolbar input[type="search"] { margin: 0; flex: 1 1 180px; min-width: 140px; }
-.bulk-toolbar .btn-small { padding: 0.25rem 0.6rem; font-size: 0.78rem; }
-.btn-small { background: var(--btn-bg, #eef1f5); color: var(--ink); border: 1px solid var(--line);
-  border-radius: 6px; cursor: pointer; }
-.btn-small:hover { background: var(--sel); }
+/* .btn-small → Button utilities */
 .bulk-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--line);
   border-radius: 6px; padding: 0.25rem; }
 .bulk-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.4rem;
@@ -1527,10 +1676,7 @@ td.toggle { white-space: nowrap; }
 .cov-cand-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .cov-cand { display: flex; align-items: center; gap: 0.5rem; }
 .cov-cand-name { flex: 1; }
-.cov-fill-btn { padding: 0.2rem 0.55rem; font-size: 0.78rem; background: var(--accent);
-  color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
-.cov-fill-btn:hover { filter: brightness(1.07); }
-.cov-fill-btn:disabled { opacity: .5; cursor: default; }
+/* .cov-fill-btn → Button utilities (.btn--primary alias) */
 .cov-tag { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   padding: 1px 4px; border-radius: 5px; background: var(--sel); color: var(--muted); }
 .cov-tag-ok { background: #e7f5ec; color: #1f7a44; }
@@ -1697,7 +1843,7 @@ td.toggle { white-space: nowrap; }
 /* Player 360 drawer */
 .p360-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .p360-head-actions { display: flex; align-items: center; gap: 0.5rem; }
-.p360-head-actions .btn-small { padding: 0.25rem 0.6rem; font-size: 0.78rem; }
+/* .p360-head-actions .btn-small size comes from Button utilities */
 #player360-body { max-height: 70vh; overflow: auto; }
 .p360-id { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.6rem; }
 #player360-body h4 { margin: 0.9rem 0 0.3rem; }
@@ -1732,17 +1878,7 @@ td.toggle { white-space: nowrap; }
 /* ============================ Day-of mode ============================
    Venue view: big-touch controls for on-site tablet use. Generous hit areas
    (≥44px), a two-column desk (officials | incidents) that stacks on phones. */
-.touch-btn {
-  min-height: 44px;
-  padding: 0.5rem 0.9rem;
-  font-size: 0.92rem;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--btn-bg);
-  color: var(--ink);
-  cursor: pointer;
-}
-.touch-btn:hover { filter: brightness(0.97); }
+/* .touch-btn → Button utilities (.btn--touch alias) */
 
 .dayof-datebar {
   display: flex; align-items: center; gap: 0.75rem;

@@ -157,7 +157,7 @@ adult_lists) one endpoint at a time.
 | **Transaction-isolation review** (default READ COMMITTED everywhere; fine for single-TD, unexamined for concurrent imports to the same tournament) | second concurrent writer on one tournament |
 | ~~**Tabulator `renderVertical: "virtual"`**~~ — resolved: all grids migrated to AG Grid Community, which row-virtualizes natively (no resize-loop workaround needed). | — |
 | **Snapshot/audit abstraction** (proactive pay_audit vs lazy USTA backfill are two patterns) | the third audit target appears |
-| **CSS utility scale** (inline styles + magic values in JS-built DOM) | next visual-refresh round |
+| **CSS utility scale** (inline styles + magic values in JS-built DOM) | Button system shipped 2026-07-21 (`.btn` + variants); broader layout utilities still deferred to next visual-refresh round |
 
 ---
 

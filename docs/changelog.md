@@ -9,8 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
-## 2026-07-21 — Frontend D11 complete + security hardening
+## 2026-07-21 — Button utility classes + D11 complete + security hardening
 
+- **Button utilities (cosmetic):** unified `.btn` system in `styles.css`
+  (`.btn--primary|secondary|outline|link|icon|danger|touch`). Legacy classes
+  (`.new-btn`, `.btn-small`, `.export-btn`, `.btn-link`, `.btn-icon`,
+  `.touch-btn`, `.cov-fill-btn`, submit/delete/cancel) are aliases — no mass
+  HTML/JS rename. Shared disabled state + focus rules; day-of `.touch-btn`
+  wins over `type=submit` for size.
 - **D11 (app.js decomposition):** `frontend/app.js` is a thin composition root
   (~740 LOC). Behaviour is ~49 ESM factories under `frontend/app/` (roster,
   import, assignments, inbox, reports, day-of, payroll, setup CRUD, official
