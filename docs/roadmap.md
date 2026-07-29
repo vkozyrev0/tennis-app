@@ -5,23 +5,15 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 [vision-summary.md](vision-summary.md) · [audit.md](audit.md) ·
 [data-model.md](data-model.md).
 
-> **Status (2026-06-13):** Phases 0–4 are functionally shipped; Phase 5 is polish
-> and deploy-time hardening (see *On hold* for the two externally-blocked items).
-> The latest rounds — the **improvement plan** (P1 quick wins + P2 structural
-> refactors), **day-of operations** (official actual status, player check-in,
-> incident log, assignment change audit), and an **inbox detection wave**
-> (doubles partners, pairing-avoidance groups, USTA-number extraction, manual
-> player assignment) — are summarized in *Shipped 2026-06-10 → 06-12* below.
-> Earlier, the **TD-review build-out** closed the remaining workflow gaps — a
-> "Today" dashboard + cross-tournament digest, a pre-event **readiness
-> scorecard**, coverage-gap → one-click fill, conflict / declined /
-> missing-distance / no-login reports, bulk-invite + personalised invite text,
-> inbox **triage** (classify → detect → populate) with aging + unmatched
-> drilldowns, Player/Official 360 + exports, rooming list, day-by-day schedule,
-> pay statements, dietary + workload rollups, and self-service availability.
-> Full list in [changelog.md](changelog.md); end-to-end validation in
-> [e2e-findings.md](e2e-findings.md). Suite: **460** green and deterministic;
-> CI builds + publishes `ghcr.io/vkozyrev0/tennis-app:latest` on main pushes.
+> **Status (2026-07-29):** Phases 0–4 are functionally shipped; Phase 5 is polish
+> and deploy-time hardening (see *On hold* for externally blocked items: Maps
+> key, mail provider, LLM privacy, PII H2 at deploy). Later rounds — **D11**
+> frontend split, security/COPPA/export audit, email auto-ingest app side, Fly
+> persistent volume + inbox triage UX — are in [changelog.md](changelog.md).
+> Suite: **~591** green and deterministic; CI (`.github/workflows/docker.yml`)
+> gates the image build and publishes `ghcr.io/vkozyrev0/tennis-app:latest` on
+> green `main` pushes. Live POC: `https://courtops-poc.fly.dev` (see
+> [deploy.md](deploy.md)).
 
 ---
 

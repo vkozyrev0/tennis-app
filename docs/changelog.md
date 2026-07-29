@@ -9,6 +9,12 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Docs: Fly day-2 ops + status refresh
+
+- **deploy.md:** Fly redeploy / local-image push / `DEMO_RESEED` wipe / inbox
+  empty-vs-data notes; CI vs Fly image paths; live POC URL.
+- **roadmap / test-coverage:** suite **~591**, on-hold wording, Fly pointer.
+
 ## 2026-07-29 — Inbox triage UX hints + CI is_prod fixes
 
 - **Inbox progressive disclosure:** always-on triage legend (classify → detect →
@@ -16,6 +22,8 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
   richer AG Grid empty-state; prune selection on reload.
 - **CI:** `Settings.is_prod()` instance env for unit-test copies; stop polluting
   global `settings.env` in COPPA suite (query-token prod test).
+- **Fly:** redeployed with UX + `DEMO_RESEED` once (Macon live inbox); secret
+  cleared after boot.
 
 ## 2026-07-29 — CI: H1 config guard + is_prod pollution
 

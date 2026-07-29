@@ -1,11 +1,11 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-07-21):** **~591 tests** across **89** files (migrations through
+**Status (2026-07-29):** **~591 tests** across **89** files (migrations through
 **0055**) — deterministic (login-throttle state leak fixed). CI runs the suite
 against a Postgres 16 service on every push/PR and gates the Docker image build
-on it (`.github/workflows/docker.yml`). Count is from static `def test_` scan;
-re-run `pytest --collect-only -q` after large adds.
+on it (`.github/workflows/docker.yml`); green `main` publishes to ghcr. Count is
+from static `def test_` scan; re-run `pytest --collect-only -q` after large adds.
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
 are split out of the large routers; API paths and re-exports for tests are

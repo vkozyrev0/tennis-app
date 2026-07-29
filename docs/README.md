@@ -23,7 +23,7 @@ master data) and a per-tournament workspace (scoped operations).
 | 5 | [improvement-plan.md](improvement-plan.md) | Prioritized design + UI/UX review findings (P1 quick wins → P3 at-scale, plus P4 missing features), with shipped marks and sequencing. |
 | 6 | [changelog.md](changelog.md) | Chronological log of shipped work. |
 | 7 | [test-coverage.md](test-coverage.md) | Per-test inventory: what each test exercises, what type it is, what scenario it simulates. |
-| 8 | [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM) the all-in-one image; TLS and persistence semantics. |
+| 8 | [deploy.md](deploy.md) | Publish (ghcr) + host (Fly/Render/VM); Fly day-2 ops (reseed, redeploy); TLS and persistence. |
 | 9 | [pii-hardening-plan.md](pii-hardening-plan.md) | PII hardening plan for minors' data (COPPA): inventory, obligations, phased remediation. |
 | 10 | [pii-h2-key-management.md](pii-h2-key-management.md) | H2 PII key-management & rotation design (Fernet MultiFernet, re-encrypt backfill, deploy runbook). |
 | 10b | [coppa-policy.md](coppa-policy.md) | **D16** thin COPPA policy: residual plaintext decision, under-13 gate (`ALLOW_UNDER13_PII`). |

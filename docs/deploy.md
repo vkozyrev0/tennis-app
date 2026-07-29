@@ -74,6 +74,47 @@ HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. First boot of an
 data. `ADMIN_PASSWORD` is re-applied on every boot (rotates admin even when seed
 is skipped).
 
+**Current POC app (2026-07):** `https://courtops-poc.fly.dev` · volume
+`courtops_data` · `PGDATA=/data/pgdata` · keep `ENV=dev` for the bundled
+Postgres (prod boot-guard needs managed PG + TLS). This is a **demo host**, not
+a COPPA-ready production topology — see §6.
+
+#### Fly day-2 ops (redeploy / reseed / local image)
+
+```bash
+# Ship latest main (remote Docker build → registry.fly.io)
+fly deploy -a courtops-poc --ha=false
+
+# Or: build on your laptop and push to Fly's registry
+docker build -t registry.fly.io/courtops-poc:local .
+fly auth docker
+docker push registry.fly.io/courtops-poc:local
+fly deploy -a courtops-poc --image registry.fly.io/courtops-poc:local --ha=false
+
+# Wipe volume DB and reload rich demo (Macon + live inbox). DESTROYS data.
+fly secrets set DEMO_RESEED=1 -a courtops-poc
+# wait until health is green, then stop reseeding on every restart:
+fly secrets unset DEMO_RESEED -a courtops-poc
+
+# Admin password (applied every boot). Prefer a non-POC secret on a public URL.
+fly secrets set ADMIN_PASSWORD='choose-a-strong-one' -a courtops-poc
+
+fly status -a courtops-poc
+fly logs -a courtops-poc
+curl -sS https://courtops-poc.fly.dev/api/health
+```
+
+**Why the inbox can look “empty” after deploy:** the volume keeps old data; a
+new image does **not** re-seed unless the volume is new or `DEMO_RESEED=1`.
+Demo seed puts unfiled mail on **Macon Junior Open 2026** (not every tournament).
+Bulk triage buttons appear only after you **check row checkboxes**; keys
+`t` / `d` / `f` / `u` work on the Inbox panel (`?` for the full list).
+
+**CI vs Fly:** GitHub Actions builds and pushes `ghcr.io/vkozyrev0/tennis-app`
+when the suite is green. Fly **does not** auto-pull that image unless you
+point `[build]` at it or pass `--image`. Default `fly deploy` builds from the
+Dockerfile in this repo.
+
 **Ephemeral demo (no persistence):** remove the `[[mounts]]` block and the
 `PGDATA` env override in `fly.toml` — the image-layer baked demo at
 `/opt/courtops/pgdata` is used, and restarts reset to that pristine state.
@@ -105,8 +146,12 @@ that would discard build-time writes).
   so the entrypoint runs `initdb` + migrations + seeds the demo into it on first
   boot; after that, your edits persist across restarts/redeploys.
 
-Force a reseed at any time with `DEMO_RESEED=1`. Use `SEED_SCRIPT=seed.py` for the
-lean baseline instead of the rich demo.
+Force a reseed at any time with `DEMO_RESEED=1` (Fly: secret then unset — see
+§3 Fly day-2 ops). Use `SEED_SCRIPT=seed.py` for the lean baseline instead of
+the rich demo.
+
+**Fly note:** the volume mounts at `/data` with `PGDATA=/data/pgdata` (not
+`/opt/courtops/pgdata`). Same shadowing rules: volume wins over the image bake.
 
 ## 5. Before exposing it publicly
 
