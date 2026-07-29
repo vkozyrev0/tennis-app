@@ -54,6 +54,7 @@ def main() -> int:
         "/app/roster.js",
         "/app/assignments_ui.js",
         "/app/inbox.js",
+        "/app/inbox_ui.js",
         "/app/official_app.js",
         "/app/dayof.js",
         "/app/dashboard.js",
@@ -82,9 +83,13 @@ def main() -> int:
     asgjs = c.get("/app/assignments_ui.js").text
     check("assignments nologin nav", "activateGroup" in asgjs and "panel-officials" in asgjs)
     inboxjs = c.get("/app/inbox.js").text
+    check("inbox wires inbox_ui gates", "inboxShortcutGate" in inboxjs and "bulkBarHidden" in inboxjs)
     check("inbox triage shortcut", 'k === "t"' in inboxjs or "k === 't'" in inboxjs)
     check("inbox unmatched shortcut", 'k === "u"' in inboxjs or "k === 'u'" in inboxjs)
     check("inbox add-to-roster wiring", "rosterAddFromEmail" in inboxjs)
+    inbox_ui = c.get("/app/inbox_ui.js").text
+    check("inbox_ui shortcut map", "INBOX_SHORTCUTS" in inbox_ui and 'key: "t"' in inbox_ui)
+    check("inbox_ui select hint", "selectHintHidden" in inbox_ui)
     appjs = c.get("/app.js").text
     for name in (
         "installGlobalSearch",
