@@ -188,7 +188,9 @@ header h1 > #health { margin-left: auto; }
 .pill {
   display: inline-flex; align-items: center; gap: 0.35em;
   margin-left: 0.5rem;
-  padding: 0.15rem 0.6rem;
+  padding: 0 0.6rem;
+  height: var(--chrome-ctrl-h, 2rem);
+  box-sizing: border-box;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.25);   /* translucent-black tint so the chip
                                        reads as distinct on the green header */
@@ -208,35 +210,51 @@ header h1 > #health { margin-left: auto; }
 .pill.ok::before { background: #5bbf6a; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
 .pill.bad::before { background: #ff6b6b; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
 
-#theme-toggle, #shortcuts-btn {
-  /* a11y 6th-pass #3: switched the translucent-white overlay (which dropped
-     to ~1:1 on some header backgrounds) for a translucent-black tint that
-     stays consistently visible — white text on it clears 7:1 in both themes. */
-  background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; border-radius: 5px;
-  padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem; margin-left: 0.5rem;
-  /* a11y #7: 44×44 minimum hit area for touch users. */
-  min-height: 2.5rem; min-width: 2.5rem;
+/* Shared green-bar chrome control (toolbar P0).
+   One height/type/radius for theme, shortcuts, trash, change-pw, logout —
+   replaces prior per-id rules that mixed 40px chips with ~26px context fields. */
+.hdr-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  box-sizing: border-box;
+  height: var(--chrome-ctrl-h, 2rem);
+  min-height: var(--chrome-ctrl-h, 2rem);
+  min-width: var(--chrome-ctrl-h, 2rem);
+  margin-left: 0.35rem;
+  padding: 0 var(--chrome-pad-x, 0.65rem);
+  border: 0;
+  border-radius: var(--chrome-radius, 5px);
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  font: inherit;
+  font-size: var(--chrome-font, 0.75rem);
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
 }
-#theme-toggle:hover, #shortcuts-btn:hover { background: rgba(255, 255, 255, 0.32); }
-#shortcuts-btn { padding: 0.4rem 0.7rem; display: inline-flex; align-items: center; gap: 0.25rem; min-height: 2.5rem; min-width: 2.5rem; }
-/* The hotkey chip inside the header button needs to stay readable on the
-   accent-green background — override the default kbd styling. */
+.hdr-btn:hover { background: rgba(255, 255, 255, 0.32); }
+.hdr-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* The hotkey chip inside the shortcuts button — readable on accent green. */
+.hdr-btn kbd,
 #shortcuts-btn kbd {
   background: rgba(255, 255, 255, 0.95); color: var(--accent); border: 0;
   box-shadow: none; padding: 0 0.3rem; font-size: 0.7rem; font-weight: 700;
+  line-height: 1.3; border-radius: 3px;
 }
-#user-box { font-size: 0.72rem; font-weight: normal; margin-left: 0.5rem; display: inline-flex; align-items: center; gap: 0.3rem; }
-/* All three user-box buttons share the header-control style so they line up at
-   one height with the theme/shortcuts buttons (previously only #logout-btn was
-   styled, leaving Trash + Change password at browser-default height). */
-#trash-btn, #change-pw-btn, #logout-btn {
-  /* a11y 8th-pass #2: translucent-black overlay so white text clears AA on
-     the green header (the old white .2 overlay rendered ~2.9:1). */
-  background: rgba(0, 0, 0, 0.25); color: #fff; border: 0; border-radius: 5px;
-  padding: 0.4rem 0.7rem; cursor: pointer; font: inherit; font-size: 0.72rem;
-  min-height: 2.5rem;   /* a11y #7 */
+#user-box {
+  font-size: var(--chrome-font, 0.75rem); font-weight: normal;
+  margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;
 }
-#trash-btn:hover, #change-pw-btn:hover, #logout-btn:hover { background: rgba(255, 255, 255, 0.32); }
+#username-label {
+  display: inline-flex; align-items: center;
+  height: var(--chrome-ctrl-h, 2rem);
+  padding: 0 0.35rem;
+  opacity: 0.95;
+  white-space: nowrap;
+}
 .login-card {
   max-width: 360px; margin: 3rem auto; background: var(--card);
   border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem;
@@ -249,13 +267,15 @@ header h1 > #health { margin-left: auto; }
   margin-top: 0.28rem;
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  flex-wrap: wrap;
   /* a11y 8th-pass #2: black tint so white text inside the context bar clears
      AA against the green header. */
   background: rgba(0, 0, 0, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 5px;
-  padding: 0.18rem 0.45rem;
+  border-radius: var(--chrome-radius, 5px);
+  padding: 0.28rem 0.5rem;
+  min-height: calc(var(--chrome-ctrl-h, 2rem) + 0.56rem);
 }
 /* When a tournament is active, mark the context bar with a brand-ball accent
    stripe + stronger tint so the TD can always tell which event they're editing
@@ -264,12 +284,56 @@ header h1 > #health { margin-left: auto; }
   background: rgba(0, 0, 0, 0.3); border-color: #fff;
   box-shadow: inset 4px 0 0 #d6ec4a; padding-left: 0.65rem;
 }
-.ctx-label { font-weight: 600; }
-.ctx-label { font-size: 0.68rem; opacity: 0.9; }
-#active-tournament { padding: 0.16rem 0.35rem; border-radius: 4px; border: 0; font: inherit; min-width: 180px; font-size: 0.74rem; }
-#context-bar .combo { width: auto; }
-#context-bar .combo-input { min-width: 180px; padding: 0.16rem 1.2rem 0.16rem 0.35rem; font-size: 0.74rem; border-radius: 4px; margin-top: 0; }
-.ctx-info { font-size: 0.68rem; opacity: 0.95; }
+.ctx-label {
+  font-weight: 600; font-size: var(--chrome-font, 0.75rem);
+  opacity: 0.95; white-space: nowrap;
+  line-height: var(--chrome-ctrl-h, 2rem);
+}
+/* Shared field chrome: native select + search + combobox input — same height
+   as .hdr-btn so Band A and Band B align (toolbar P0). */
+#context-bar .chrome-field,
+#context-bar select.chrome-field,
+#context-bar #active-tournament,
+#context-bar #player-search,
+#context-bar .combo-input {
+  box-sizing: border-box;
+  height: var(--chrome-ctrl-h, 2rem);
+  min-height: var(--chrome-ctrl-h, 2rem);
+  margin: 0;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: var(--chrome-radius, 5px);
+  font: inherit;
+  font-size: var(--chrome-font, 0.75rem);
+  line-height: 1.2;
+  color: var(--ink);
+  background: var(--field-bg);
+}
+#context-bar #active-tournament,
+#context-bar .combo-input {
+  min-width: var(--chrome-field-min, 10rem);
+  max-width: var(--chrome-field-max, 18rem);
+  width: clamp(var(--chrome-field-min, 10rem), 28vw, var(--chrome-field-max, 18rem));
+}
+/* Long tournament names: ellipsis in the combobox display (enhanceSelect). */
+#context-bar .combo { width: auto; max-width: var(--chrome-field-max, 18rem); }
+#context-bar .combo-input {
+  padding-right: 1.35rem; /* room for ▾ caret */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 0;
+}
+#context-bar #player-search {
+  min-width: var(--chrome-field-min, 10rem);
+  max-width: 16rem;
+  width: clamp(10rem, 22vw, 16rem);
+}
+.ctx-info {
+  font-size: 0.7rem; opacity: 0.95; white-space: nowrap;
+  line-height: var(--chrome-ctrl-h, 2rem);
+  overflow: hidden; text-overflow: ellipsis; max-width: 14rem;
+}
 
 /* ---- grouped menu ---- */
 /* level 1 — section groups (only one group's tabs show at a time) */
@@ -1916,8 +1980,11 @@ td.toggle { white-space: nowrap; }
 .p360-link:hover, .p360-link:focus-visible { text-decoration-style: solid; outline: none; }
 
 /* Global player search (context bar) */
-#player-search-wrap { position: relative; display: inline-block; margin-left: auto; }
-#player-search { font: inherit; font-size: 0.74rem; padding: 0.16rem 0.4rem; border-radius: 4px; border: 1px solid var(--border); min-width: 170px; }
+#player-search-wrap {
+  position: relative; display: inline-flex; align-items: center;
+  margin-left: auto; flex: 0 1 auto;
+}
+/* Size comes from #context-bar .chrome-field (toolbar P0). */
 .ps-results {
   position: absolute; right: 0; top: calc(100% + 2px); z-index: 50; min-width: 260px; max-width: 360px;
   max-height: 60vh; overflow: auto; background: var(--card); border: 1px solid var(--border);

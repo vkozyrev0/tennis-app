@@ -8,8 +8,8 @@
   <!-- AG Grid Community — every grid in the app. -->
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
-  <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=93" />
+  <link rel="stylesheet" href="/tokens.css?v=6" />
+  <link rel="stylesheet" href="/styles.css?v=94" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -95,19 +95,19 @@
   <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-valuetext="Loading" aria-hidden="true"></div>
   <header>
     <h1><svg class="brand-icon" aria-hidden="true" focusable="false"><use href="#i-brand"/></svg>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
-      <button type="button" id="theme-toggle" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
-      <button type="button" id="shortcuts-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
+      <button type="button" id="theme-toggle" class="hdr-btn" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
+      <button type="button" id="shortcuts-btn" class="hdr-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
       <span id="user-box" hidden><span id="username-label"></span>
-        <button type="button" id="trash-btn" title="Restore trashed tournaments or incidents">🗑 Trash</button>
-        <button type="button" id="change-pw-btn">Change password</button>
-        <button type="button" id="logout-btn">Log out</button></span>
+        <button type="button" id="trash-btn" class="hdr-btn" title="Restore trashed tournaments or incidents">🗑 Trash</button>
+        <button type="button" id="change-pw-btn" class="hdr-btn">Change password</button>
+        <button type="button" id="logout-btn" class="hdr-btn">Log out</button></span>
     </h1>
     <div id="context-bar">
       <span class="ctx-label">Working on:</span>
-      <select id="active-tournament" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
+      <select id="active-tournament" class="chrome-field" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
       <span id="player-search-wrap">
-        <input type="search" id="player-search" placeholder="🔍 Find player or official…" autocomplete="off"
+        <input type="search" id="player-search" class="chrome-field" placeholder="🔍 Find player or official…" autocomplete="off"
                aria-label="Find a player or official by name" aria-expanded="false" aria-controls="player-search-results" />
         <div id="player-search-results" class="ps-results" hidden role="listbox"></div>
       </span>

@@ -34,6 +34,14 @@
   --line: #d9e0e6;       /* subtle separators / secondary-control borders */
   --btn-bg: #eef1f5;     /* secondary buttons (.btn--secondary / .btn-small) */
   --panel: #f7f9fb;      /* inset panels, e.g. the dashboard digest */
+  /* Sticky app chrome (header + context bar controls) — one height/type ramp
+     so Band A chips and Band B select/search share a visual system (toolbar P0). */
+  --chrome-ctrl-h: 2rem;           /* 32px — between prior 40px chips and ~26px fields */
+  --chrome-font: 0.75rem;
+  --chrome-radius: 5px;
+  --chrome-pad-x: 0.65rem;
+  --chrome-field-min: 10rem;       /* tournament select / search floor */
+  --chrome-field-max: 18rem;       /* ellipsis long tournament names */
   color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
 }
 

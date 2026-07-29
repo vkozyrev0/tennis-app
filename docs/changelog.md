@@ -9,6 +9,13 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Toolbar P0: chrome control consistency
+
+- Shared `.hdr-btn` for header chips (theme / ? / trash / password / logout).
+- Tokens: `--chrome-ctrl-h` (32px), `--chrome-font`, field min/max.
+- Context bar select + search match header control height; tournament name
+  `max-width` + ellipsis on combobox input.
+
 ## 2026-07-29 — Fly admin password hardened
 
 - `ADMIN_PASSWORD` on `courtops-poc` rotated to a non-POC secret; `admin`/`admin`
