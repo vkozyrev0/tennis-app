@@ -41,7 +41,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (~740 LOC, ES module) + **~49** ESM factories under `frontend/app/`; **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (~760 LOC, ES module) + **~50** ESM modules under `frontend/app/`; **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -84,7 +84,7 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0049_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0055_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
@@ -93,11 +93,12 @@ backend/
   tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (~591 tests / 89 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~740 LOC composition root (D11 complete 2026-07-21)
-  app/                 # ~49 ESM factories (createX / installX), including:
+  app.js               # ~760 LOC composition root (D11 complete 2026-07-21)
+  app/                 # ~50 ESM modules (createX / installX + helpers), including:
     util.js, shirts.js, roster_prefill.js, origin_col.js
     html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
     grids.js, auth.js, state.js, player_list.js, catalog.js, labels.js
+    help.js, shortcuts.js, inbox_ui.js
     roster.js, import_ui.js, assignments_ui.js, inbox.js, reports.js,
     dayof.js, payroll.js, availability.js, staff.js, dashboard.js,
     player360.js, setup_crud.js, official_app.js, …
@@ -181,7 +182,7 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0049`), each tracked in
+**Migrations are forward-only, filename-ordered** (`0001…0055`), each tracked in
 `schema_migrations`. `migrate.py` creates the DB if absent then applies pending
 files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
@@ -340,12 +341,13 @@ the erasure guarantee.
 ## 8. Frontend design
 
 **No build, one page, composition root.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~740 LOC,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~760 LOC,
 loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
 `setActive`, factory wiring, and `init()`. Behaviour lives in `frontend/app/*.js`
 ESM factories (`createXPanel(ctx)` / `installX(ctx)`). Shared primitives:
 `util.js`, `html.js` (`html``/`hstr`), `ui.js`, `shell.js` (`api`/toast/confirm),
-`grids.js`, `auth.js`, `state.js`. AG Grid Community is vendored.
+`grids.js`, `auth.js`, `state.js`, `help.js` (in-app Help center, press `?`).
+AG Grid Community is vendored.
 
 **Grid factories live in `app/grids.js`** (P2 #11a):
 `createGridFactories(ctx)` returns `{ wireEntity, makeListGrid, makeReadGrid,

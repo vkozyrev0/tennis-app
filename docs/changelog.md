@@ -9,6 +9,18 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Docs audit + in-app Help
+
+- **Docs consistency:** suite count comment `528` → `~591` in test-coverage;
+  design tree migrations `…0049` → `…0055`; ESM module count ~50; roadmap
+  Open work / On-hold D4 wording (webhook + Fly live; mail provider still
+  external); multi-user D8 struck as shipped.
+- **In-app Help** (`frontend/app/help.js`): sidebar topics — Overview,
+  Getting around, Setup, Tournament & Day-of, Staffing, Inbox triage,
+  Player lists, Keyboard, Tips. Open via header <kbd>?</kbd> or `?`.
+  Readable cards/tables/tips; arrow keys move topics. `shortcuts.js`
+  opens Help (shortcuts section still addressable).
+
 ## 2026-07-29 — Ingest provider recipes + smoke script
 
 - `scripts/smoke_ingest.py` — status / 401 / JSON / duplicate / form against

@@ -219,7 +219,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`) | **None at runtime** (except the `roster_prefill.test.mjs` + `html.test.mjs` node unit checks, above). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | **None at runtime** (except the node unit checks listed above: `roster_prefill`, `html`, `ui`, `inbox_ui`). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -231,7 +231,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (528)
+python -m pytest -q                                    # the whole suite (~591)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v

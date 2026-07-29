@@ -332,7 +332,7 @@ buildable without them is done; revisit when the prerequisite is available.
 | Item | Why it's blocked | To unblock |
 |------|------------------|------------|
 | **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), and the **driving-distance Distance Matrix call is now scaffolded** (migration 0047, `road_one_way_miles()` behind `GOOGLE_MAPS_API_KEY`, source=`maps`) — still **key-blocked**. | Provide an API key + confirm cost + egress; the driving-distance path is wired (the estimate stays the fallback). |
-| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side shipped** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md)). Still needs a public HTTPS host + mail domain / provider route. | Set `INGEST_TOKEN`, assign per-tournament ingest addresses, point Mailgun/SendGrid/CF Worker at the webhook. |
+| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side + Fly webhook live** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md); `courtops-poc` has `INGEST_TOKEN`). Still needs a **mail provider** (Mailgun / SendGrid Inbound / CF Email Worker) to forward real mail. Manual paste + `scripts/smoke_ingest.py` remain the day-to-day paths until then. | Point the chosen provider at the live webhook; keep `INGEST_TOKEN` secret. |
 | **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
 | **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS for the *encryption* piece. **Partly shipped** (see `docs/pii-hardening-plan.md`): **H1** ENV-gated boot guard refusing default creds / non-TLS in prod + `sslmode`; **H3** PII erased from `player_history` on delete + an email-body retention-purge endpoint. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption (H2), retention schedule + purge job (H3.1/H3.3). |
 | ~~**Non-official staff in the Staffing Plan**~~ — ✅ **SHIPPED** (migration 0032): a per-tournament `tournament_staff` roster (name + `staff_role` ∈ Site Director / Player Amenities / Trainer / Operations / Stringer / Other + contact), a **Staffing → Staff** tab (CRUD), and an **"Other staff"** section in the officials report (+ `staff_count`). Per-day staff scheduling now ships (staff_day, day-column report grid); flat daily-rate pay now ships (report totals staff pay); per-day-varying rates remain a possible refinement. |
@@ -477,9 +477,10 @@ dropdown lists **only `official` blocks**; the Reports tab has an
 ## What's been built since this plan was written
 The dated, per-change record lives in **[changelog.md](changelog.md)**. At a
 glance, themes delivered through 2026-05-27:
-- **Navigation / density** — two-level section menu; the workspace tabs split
-  into 5 groups (Setup, Tournament, Staffing, Player requests, Player
-  preferences); condensed toolbar; full-width layout; ARIA tab semantics.
+- **Navigation / density** — two-level section menu; workspace L1 groups are
+  now Home, Day-of, Setup, Tournament, Staffing, Inbox, Player lists
+  (requests + preferences merged); condensed toolbar; full-width layout;
+  ARIA tab semantics.
 - **Lists / inputs** — viewport-bounded scrollers + Prev/Next nav; type-in
   comboboxes; required-field affordance; segmented control on Roster
   (Pick existing | + New player); 9-type staged importer registry + a
@@ -510,14 +511,16 @@ driving-distance scaffold, the auth/state/player_list extractions, and the
 html`` helper sweep. The improvement-plan item-by-item record is in
 [improvement-plan.md](improvement-plan.md).
 
-## Open work (as of 2026-06-13)
+## Open work (as of 2026-07-29)
 - **Google Maps *driving* distance** (Phase 2) — ⚙️ **scaffolded** (2026-06-13):
   `road_one_way_miles()` calls the Distance Matrix API behind
   `GOOGLE_MAPS_API_KEY` (source `maps`) and `/distances/auto` stamps it; still
   **blocked on the key + egress + cost approval**, so the great-circle estimate
   (source `geocoded`) + manual entry + workbook backfill remain the live path.
-- **Dedicated forwarding-address auto-ingest** (D4) — needs mail infra;
-  manual paste into the review inbox is the working POC path.
+- **Mail provider → auto-ingest** (D4) — **app webhook + Fly POC live**; still
+  needs a provider (Mailgun / SendGrid / CF Email Worker) to deliver real
+  mail. Until then: paste into Inbox, or `scripts/smoke_ingest.py`. Recipes in
+  [email-ingest.md](email-ingest.md).
 - **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM
   that reads minors' email content requires the **cloud-vs-local privacy
   call first**.
@@ -529,7 +532,9 @@ html`` helper sweep. The improvement-plan item-by-item record is in
 - ~~**Payroll CSV batch export**~~ — ✅ **shipped** (2026-06-13):
   `GET /tournaments/{id}/payroll/export.csv` + an Export CSV button on the
   Payroll tab. P4-4 is now complete end to end.
-- **Multi-user TD access** (D8) — ✅ **shipped**: admin user management (create/list/reset-password/delete with self + last-admin guards) at `/api/admin/users` + a Setup → Users tab.
+- ~~**Multi-user TD access** (D8)~~ — ✅ **shipped**: admin user management
+  (create/list/reset-password/delete with self + last-admin guards) at
+  `/api/admin/users` + a Setup → Users tab.
 - ~~**Utility-class system for buttons**~~ — ✅ **shipped** (2026-07-21):
   canonical `.btn` + `.btn--primary|secondary|outline|link|icon|danger|touch`
   in `frontend/styles.css`; legacy aliases (`.new-btn`, `.btn-small`,
@@ -539,6 +544,8 @@ html`` helper sweep. The improvement-plan item-by-item record is in
 - ~~**Structured assignment-card layout**~~ — ✅ **shipped** (2026-07-22):
   title / meta / money / flags / days sections; ⋯ overflow for .ics/History/
   Delete; response accent border. *(Inline "add distance" already done.)*
+- ~~**In-app Help**~~ — ✅ **shipped** (2026-07-29): structured Help modal
+  (app map + inbox workflow + shortcuts); press <kbd>?</kbd> or header chip.
 
 ## Backlog (2026-05-28 questionnaire — decisions locked in)
 

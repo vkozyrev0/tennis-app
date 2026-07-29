@@ -34,7 +34,8 @@ master data) and a per-tournament workspace (scoped operations).
 
 Backend suite ~**591** tests / **89** files (migrations through **0055**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
-(`util`, `html`, `ui`, `combobox`, `print`, `grids`, `auth`, …).
+(`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`, …).
+In the SPA, press <kbd>?</kbd> (or the header chip) for the structured Help guide.
 
 ## Quickstart
 

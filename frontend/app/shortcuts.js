@@ -1,61 +1,43 @@
-// Global keyboard shortcuts help + handlers (D11 slice from app.js).
-// `/` filter focus, `n` new record, `1`–`9` tab jump, `?` help.
-import { INBOX_SHORTCUTS } from "./inbox_ui.js";
+// Global keyboard shortcuts + Help open (D11 slice from app.js).
+// `/` filter focus, `n` new record, `1`–`9` tab jump, `?` Help center.
 
-export function showShortcuts() {
-  let m = document.getElementById("shortcuts-modal");
-  if (!m) {
-    m = document.createElement("div"); m.id = "shortcuts-modal"; m.className = "modal";
-    const inboxRows = INBOX_SHORTCUTS.map(
-      (s) => `<tr><th><kbd>${s.key}</kbd></th><td>${s.help}</td></tr>`,
-    ).join("");
-    m.innerHTML = `
-      <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
-        <h3 id="shortcuts-title" style="margin-top:0">Keyboard shortcuts</h3>
-        <table class="shortcuts"><tbody>
-          <tr><th><kbd>/</kbd></th><td>Focus the page filter</td></tr>
-          <tr><th><kbd>n</kbd></th><td>Add a new record on the active panel</td></tr>
-          <tr><th><kbd>1</kbd>-<kbd>9</kbd></th><td>Jump to the Nth tab in the current menu</td></tr>
-          <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
-          <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
-          <tr><th colspan="2" style="padding-top:0.6rem;color:var(--muted);font-weight:600">Inbox</th></tr>
-          ${inboxRows}
-        </tbody></table>
-        <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
-      </div>`;
-    document.body.appendChild(m);
-    const close = () => {
-      m.hidden = true;
-      if (m._invoker && typeof m._invoker.focus === "function") m._invoker.focus();
-    };
-    m.querySelector("#shortcuts-close").addEventListener("click", close);
-    m.addEventListener("click", (e) => { if (e.target === m) close(); });
-    m.addEventListener("keydown", (e) => {
-      if (m.hidden) return;
-      if (e.key === "Tab") {
-        e.preventDefault();
-        m.querySelector("#shortcuts-close").focus();
-      }
-    });
-  }
-  m._invoker = document.activeElement;
-  m.hidden = false;
-  requestAnimationFrame(() => m.querySelector("#shortcuts-close").focus());
-}
+import { showHelp, showShortcuts } from "./help.js";
+
+export { showHelp, showShortcuts };
 
 export function installShortcuts() {
   const btn = document.getElementById("shortcuts-btn");
-  if (btn) btn.addEventListener("click", showShortcuts);
+  if (btn) {
+    btn.addEventListener("click", () => showHelp());
+    // Prefer "Help" wording; keep id for CSS/tests that target shortcuts-btn.
+    if (!btn.dataset.helpWired) {
+      btn.dataset.helpWired = "1";
+      btn.title = "Help — app guide & keyboard shortcuts (press ?)";
+      btn.setAttribute("aria-label", "Help");
+    }
+  }
   document.addEventListener("keydown", (e) => {
     if (e.defaultPrevented) return;
     const a = document.activeElement;
     const inField = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "button";
     if (inField) return;
+
+    const hm = document.getElementById("help-modal");
+    if (hm && !hm.hidden) {
+      if (e.key === "Escape") {
+        hm.hidden = true;
+        e.preventDefault();
+        if (hm._invoker && typeof hm._invoker.focus === "function") hm._invoker.focus();
+      }
+      return;
+    }
+    // Legacy shortcuts-only modal (if any leftover)
     const sm = document.getElementById("shortcuts-modal");
     if (sm && !sm.hidden) {
       if (e.key === "Escape") { sm.hidden = true; e.preventDefault(); }
       return;
     }
+
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "/") {
       const p = document.querySelector(".panel.active");
@@ -66,7 +48,8 @@ export function installShortcuts() {
       const t = p && (p.querySelector(".new-btn:not(.add-trigger)") || p.querySelector(".add-trigger"));
       if (t) { e.preventDefault(); t.click(); }
     } else if (e.key === "?") {
-      e.preventDefault(); showShortcuts();
+      e.preventDefault();
+      showHelp();
     } else if (/^[1-9]$/.test(e.key)) {
       // Audit P46: numeric keys jump to the Nth tab in the currently visible menu group.
       const tabs = [...document.querySelectorAll(".menu .tab")].filter((t) =>
