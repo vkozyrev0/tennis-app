@@ -248,12 +248,20 @@ header h1 > #health { margin-left: auto; }
   font-size: var(--chrome-font, 0.75rem); font-weight: normal;
   margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.15rem;
 }
+/* Account overflow (toolbar P1): username ▾ opens Trash / Change password / Log out. */
+.account-menu-wrap {
+  display: inline-flex; align-items: center; vertical-align: middle;
+}
+.account-menu-wrap .account-menu-btn {
+  max-width: min(16rem, 40vw);
+}
 #username-label {
-  display: inline-flex; align-items: center;
-  height: var(--chrome-ctrl-h, 2rem);
-  padding: 0 0.35rem;
-  opacity: 0.95;
+  display: inline-block;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: bottom;
 }
 .login-card {
   max-width: 360px; margin: 3rem auto; background: var(--card);

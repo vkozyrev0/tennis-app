@@ -1,15 +1,21 @@
 // Auth / session / role-view wiring (plan P2 #11b) — extracted from app.js.
 //
 // Owns: applyAuth (the login/admin/official view toggle), the login + logout +
-// change-password form wiring, and the one-shot "session expired" listener.
+// change-password form wiring, account overflow menu, and the one-shot
+// "session expired" listener.
 // What to LOAD when the role resolves (admin vs official init, nav-history,
 // breadcrumbs) is app-specific, so it stays in app.js and is injected as the
 // onRoleResolved / onLogout callbacks — the same dependency-injection seam
 // grids.js uses.
+import { makeMenuButton } from "./ui.js";
+
 export function createAuth(ctx) {
   const { api, setMsg, toast, onSubmit, onRoleResolved, onLogout } = ctx;
 
   const _cpwModal = document.getElementById("change-pw-modal");
+  const _trashBtn = document.getElementById("trash-btn");
+  const _cpwBtn = document.getElementById("change-pw-btn");
+  const _logoutBtn = document.getElementById("logout-btn");
 
   function _openChangePw() {
     document.getElementById("change-pw-form").reset();
@@ -24,6 +30,43 @@ export function createAuth(ctx) {
     _cpwModal.hidden = true;
   }
 
+  // Toolbar P1: collapse Trash / Change password / Log out into username ▾.
+  // Hidden buttons keep existing listeners (trash.js, logout below).
+  function _installAccountMenu() {
+    const host = document.getElementById("account-menu-host");
+    if (!host || host.dataset.ready === "1") return;
+    const menu = makeMenuButton(
+      `<span id="username-label"></span>`,
+      [
+        {
+          label: "🗑 Trash",
+          title: "Restore trashed tournaments or incidents",
+          onClick: () => _trashBtn?.click(),
+        },
+        {
+          label: "Change password",
+          onClick: () => _cpwBtn?.click(),
+        },
+        { separator: true },
+        {
+          label: "Log out",
+          danger: true,
+          onClick: () => _logoutBtn?.click(),
+        },
+      ],
+      {
+        className: "hdr-btn account-menu-btn",
+        title: "Account menu",
+        anchor: true,
+      },
+    );
+    menu.classList.add("account-menu-wrap");
+    host.replaceWith(menu);
+    // mark so we don't double-install if createAuth is ever re-entered
+    menu.dataset.ready = "1";
+  }
+  _installAccountMenu();
+
   // Role-based view switch. The pure DOM show/hide lives here; the app-specific
   // reactions (nav history, breadcrumbs, adminInit/officialInit) run via the
   // injected onRoleResolved so this module stays free of those dependencies.
@@ -36,9 +79,12 @@ export function createAuth(ctx) {
     const isOfficial = logged && who && who.role === "official" && !mustChange;
     document.getElementById("login-view").hidden = logged;
     document.getElementById("user-box").hidden = !logged;
-    document.getElementById("username-label").textContent = who
-      ? `${who.username} (${who.role})${mustChange ? " — change password" : ""}`
-      : "";
+    const label = document.getElementById("username-label");
+    if (label) {
+      label.textContent = who
+        ? `${who.username} (${who.role})${mustChange ? " — change password" : ""}`
+        : "";
+    }
     document.getElementById("menu").hidden = !isAdmin;
     document.getElementById("menu-groups").hidden = !isAdmin;
     document.querySelector("main:not(#official-app)").hidden = !isAdmin;
@@ -89,13 +135,13 @@ export function createAuth(ctx) {
       applyAuth(who);
     } catch (err) { setMsg("login-msg", err.message, false); }
   });
-  document.getElementById("logout-btn").addEventListener("click", async () => {
+  _logoutBtn.addEventListener("click", async () => {
     try { await api("/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
     onLogout();
     applyAuth(null);
   });
 
-  document.getElementById("change-pw-btn").addEventListener("click", _openChangePw);
+  _cpwBtn.addEventListener("click", _openChangePw);
   document.getElementById("cpw-cancel").addEventListener("click", _closeChangePw);
   _cpwModal.addEventListener("click", (e) => {
     if (e.target.id === "change-pw-modal") _closeChangePw();

@@ -9,6 +9,11 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Toolbar P1: account overflow menu
+
+- Header: username ▾ menu for Trash / Change password / Log out (declutter).
+- Hidden buttons keep existing trash.js / auth listeners.
+
 ## 2026-07-29 — Toolbar P0: chrome control consistency
 
 - Shared `.hdr-btn` for header chips (theme / ? / trash / password / logout).

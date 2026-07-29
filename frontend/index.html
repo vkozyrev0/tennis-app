@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=6" />
-  <link rel="stylesheet" href="/styles.css?v=94" />
+  <link rel="stylesheet" href="/styles.css?v=95" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -97,10 +97,15 @@
     <h1><svg class="brand-icon" aria-hidden="true" focusable="false"><use href="#i-brand"/></svg>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
       <button type="button" id="theme-toggle" class="hdr-btn" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
       <button type="button" id="shortcuts-btn" class="hdr-btn" title="Keyboard shortcuts (press ?)" aria-label="Keyboard shortcuts"><kbd aria-hidden="true">?</kbd></button>
-      <span id="user-box" hidden><span id="username-label"></span>
-        <button type="button" id="trash-btn" class="hdr-btn" title="Restore trashed tournaments or incidents">🗑 Trash</button>
-        <button type="button" id="change-pw-btn" class="hdr-btn">Change password</button>
-        <button type="button" id="logout-btn" class="hdr-btn">Log out</button></span>
+      <span id="user-box" hidden>
+        <!-- Overflow menu host (wired in auth.js) — Trash / Change password / Log out. -->
+        <span id="account-menu-host"></span>
+        <!-- Hidden action targets: keep ids for trash.js / auth listeners; menu clicks them. -->
+        <button type="button" id="trash-btn" class="sr-only" tabindex="-1" hidden
+                title="Restore trashed tournaments or incidents">Trash</button>
+        <button type="button" id="change-pw-btn" class="sr-only" tabindex="-1" hidden>Change password</button>
+        <button type="button" id="logout-btn" class="sr-only" tabindex="-1" hidden>Log out</button>
+      </span>
     </h1>
     <div id="context-bar">
       <span class="ctx-label">Working on:</span>
@@ -1474,6 +1479,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=247"></script>
+  <script type="module" src="/app.js?v=248"></script>
 </body>
 </html>
