@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=5" />
-  <link rel="stylesheet" href="/styles.css?v=92" />
+  <link rel="stylesheet" href="/styles.css?v=93" />
 </head>
 <body>
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -924,9 +924,16 @@
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
-        <p class="muted">Human-reviewed email — classify, detect the player, then file into a list.
+        <p class="muted">Human-reviewed email — <strong>classify → detect player → file</strong> into a list.
           <details class="inline-help"><summary>How forwarding works</summary>
           <strong>Forwarding address:</strong> not live in this POC — a dedicated inbox + auto-ingest is on the roadmap (deferred, needs mail infrastructure). For now, <strong>paste each forwarded email below</strong> (From / Subject / Body), or use <strong>⬆ Import ▾ → PDF email thread</strong>.</details>
+        </p>
+        <p class="inbox-triage-hint muted" id="inbox-triage-hint">
+          <strong>Triage:</strong> add or import email(s), then tick row checkboxes for bulk actions
+          (<span class="inbox-triage-hint-em">⚡ Triage all</span>).
+          Keys (Inbox panel, not in a field):
+          <kbd>t</kbd> triage · <kbd>d</kbd> detect · <kbd>f</kbd> mark filed · <kbd>u</kbd> unmatched only ·
+          <kbd>?</kbd> all shortcuts.
         </p>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
@@ -947,6 +954,14 @@
         <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
         <label class="inbox-unmatched-toggle" title="Show only emails with no matched player"><input type="checkbox" id="inbox-unmatched-only" /> Unmatched only</label>
         <span class="msg" id="inbox-import-pdf-msg"></span>
+        <!-- Shown when the grid has rows but none are checked — explains why
+             the bulk bar is missing (progressive disclosure). Hidden when empty
+             (use the grid empty-state) or when a selection is active. -->
+        <div id="inbox-select-hint" class="inbox-select-hint" hidden role="status">
+          Select one or more row checkboxes to open bulk actions
+          (Auto-classify · Detect · Populate · <strong>⚡ Triage all</strong>).
+          Keys: <kbd>t</kbd> · <kbd>d</kbd> · <kbd>f</kbd> · <kbd>u</kbd>
+        </div>
         <!-- Bulk-action toolbar: appears once a row is selected via the
              checkbox column. Detect populates detected_player_id per email,
              Reassign moves selection to a different tournament, Populate
@@ -1459,6 +1474,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=245"></script>
+  <script type="module" src="/app.js?v=246"></script>
 </body>
 </html>

@@ -610,7 +610,11 @@ export function createInboxPanel(ctx) {
         const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
         wrap.append(rvBtn, menu); return wrap;
       } },
-  ], "inbox", "Inbox empty — add a forwarded email above.", { index: "id", editable: "click", persist: false, responsive: false });
+  ], "inbox",
+  "Inbox empty — paste a forwarded email above, or use Import ▾ → PDF. "
+  + "Once you have rows: tick checkboxes for bulk triage (⚡ Triage all), "
+  + "or press t (triage) · d (detect) · f (filed) · u (unmatched). Press ? for all shortcuts.",
+  { index: "id", editable: "click", persist: false, responsive: false });
   // Persist inline edits (single click a cell): classification, manual player /
   // partner picks (the list editor's value is a player id), and typed USTA #s
   // (resolved against the roster cache; unknown numbers revert with a toast).
@@ -882,10 +886,18 @@ export function createInboxPanel(ctx) {
   }
   function _inboxBulkRefreshUi() {
     const bar = document.getElementById("inbox-bulk-toolbar");
-    bar.hidden = _inboxSelected.size === 0;
+    const hint = document.getElementById("inbox-select-hint");
     const n = _inboxSelected.size;
+    bar.hidden = n === 0;
     document.getElementById("inbox-bulk-count").textContent =
       n === 0 ? "" : `${n} selected`;
+    // When the grid has rows but nothing is checked, surface why bulk actions
+    // are missing (the bar is progressive — empty inbox uses the AG empty-state).
+    let hasRows = false;
+    try {
+      hasRows = !!(inboxGrid && inboxGrid.grid && inboxGrid.grid.getDisplayedRowCount() > 0);
+    } catch (_) { /* grid not ready */ }
+    if (hint) hint.hidden = n > 0 || !hasRows;
   }
   // I-3: build a per-target-list breakdown of what Populate would create, so the
   // TD sees "5 Withdrawals, 3 Doubles, 2 unfileable" before committing. Reads the
@@ -1235,6 +1247,13 @@ export function createInboxPanel(ctx) {
       _progress(-1);
     }
     inboxGrid.setData(rows);
+    // Drop selection ids that are no longer on the page (tournament switch /
+    // filter), then refresh bulk bar vs select-hint.
+    const ids = new Set(rows.map((r) => r.id));
+    for (const id of [..._inboxSelected]) {
+      if (!ids.has(id)) _inboxSelected.delete(id);
+    }
+    _inboxBulkRefreshUi();
     const note = document.getElementById("inbox-search-note");
     if (note) {
       const n = rows.length;

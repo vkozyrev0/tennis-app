@@ -1773,6 +1773,29 @@ td.toggle { white-space: nowrap; }
 .inbox-summary .inbox-sum-todo { font-weight: 700; }
 .inbox-summary .resp-ok { color: var(--ok); }
 .inbox-unmatched-toggle { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+/* Always-on triage legend (empty + full inbox). kbd chips match shortcuts modal. */
+.inbox-triage-hint {
+  margin: 0.15rem 0 0.55rem; padding: 0.4rem 0.55rem;
+  font-size: 0.82rem; line-height: 1.45;
+  border: 1px dashed var(--border); border-radius: 6px;
+  background: var(--panel, var(--bg));
+}
+.inbox-triage-hint kbd {
+  font-size: 0.75rem; padding: 0.05rem 0.3rem; margin: 0 0.05rem;
+}
+.inbox-triage-hint-em { color: var(--accent); font-weight: 600; }
+/* Rows present, nothing checked — points at progressive bulk bar. */
+.inbox-select-hint {
+  margin: 0 0 0.45rem; padding: 0.4rem 0.65rem;
+  font-size: 0.84rem; line-height: 1.4; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--sel, transparent);
+}
+.inbox-select-hint kbd { font-size: 0.75rem; padding: 0.05rem 0.3rem; }
+.ag-empty {
+  white-space: normal; max-width: 36rem; line-height: 1.45;
+  display: inline-block; text-align: center; padding: 0.5rem 1rem;
+}
 .origin-email { color: var(--accent); cursor: help; }
 
 /* Home dashboard tiles + overview */

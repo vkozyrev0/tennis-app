@@ -9,6 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Inbox triage UX hints + CI is_prod fixes
+
+- **Inbox progressive disclosure:** always-on triage legend (classify → detect →
+  file; keys `t`/`d`/`f`/`u`); select-hint when rows exist but none checked;
+  richer AG Grid empty-state; prune selection on reload.
+- **CI:** `Settings.is_prod()` instance env for unit-test copies; stop polluting
+  global `settings.env` in COPPA suite (query-token prod test).
+
 ## 2026-07-29 — CI: H1 config guard + is_prod pollution
 
 - **`Settings.is_prod()` / validate:** instance `env` (unit tests via setattr on a
