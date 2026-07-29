@@ -1,4 +1,11 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
+import {
+  bulkBarHidden,
+  selectHintHidden,
+  selectionCountLabel,
+  pruneSelection,
+  inboxShortcutGate,
+} from "./inbox_ui.js";
 
 export function createInboxPanel(ctx) {
   const {
@@ -888,16 +895,15 @@ export function createInboxPanel(ctx) {
     const bar = document.getElementById("inbox-bulk-toolbar");
     const hint = document.getElementById("inbox-select-hint");
     const n = _inboxSelected.size;
-    bar.hidden = n === 0;
-    document.getElementById("inbox-bulk-count").textContent =
-      n === 0 ? "" : `${n} selected`;
+    bar.hidden = bulkBarHidden(n);
+    document.getElementById("inbox-bulk-count").textContent = selectionCountLabel(n);
     // When the grid has rows but nothing is checked, surface why bulk actions
     // are missing (the bar is progressive — empty inbox uses the AG empty-state).
-    let hasRows = false;
+    let displayed = 0;
     try {
-      hasRows = !!(inboxGrid && inboxGrid.grid && inboxGrid.grid.getDisplayedRowCount() > 0);
+      displayed = (inboxGrid && inboxGrid.grid && inboxGrid.grid.getDisplayedRowCount()) || 0;
     } catch (_) { /* grid not ready */ }
-    if (hint) hint.hidden = n > 0 || !hasRows;
+    if (hint) hint.hidden = selectHintHidden(n, displayed);
   }
   // I-3: build a per-target-list breakdown of what Populate would create, so the
   // TD sees "5 Withdrawals, 3 Doubles, 2 unfileable" before committing. Reads the
@@ -1174,6 +1180,7 @@ export function createInboxPanel(ctx) {
   // Inbox-panel shortcuts (when not typing in a field):
   //   t = triage selection · d = detect selection (or detect-all if none)
   //   f = mark filed · u = toggle unmatched-only · / = search (global)
+  // Gate rules live in inbox_ui.js (unit-tested).
   document.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     const panel = document.getElementById("panel-t-inbox");
@@ -1184,11 +1191,12 @@ export function createInboxPanel(ctx) {
     const detail = document.getElementById("inbox-detail");
     if (detail && !detail.hidden) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const gate = inboxShortcutGate(k, _inboxSelected.size);
+    if (!gate.ok) {
+      if (gate.reason) toast(gate.reason, false);
+      return;
+    }
     if (k === "t") {
-      if (!_inboxSelected.size) {
-        toast("Select one or more emails first (checkboxes), then press T to triage", false);
-        return;
-      }
       e.preventDefault();
       _inboxRunTriage(null);
     } else if (k === "d") {
@@ -1199,7 +1207,6 @@ export function createInboxPanel(ctx) {
         document.getElementById("inbox-detect-all")?.click();
       }
     } else if (k === "f") {
-      if (!_inboxSelected.size) return;
       e.preventDefault();
       document.getElementById("inbox-bulk-filed")?.click();
     } else if (k === "u") {
@@ -1249,9 +1256,9 @@ export function createInboxPanel(ctx) {
     inboxGrid.setData(rows);
     // Drop selection ids that are no longer on the page (tournament switch /
     // filter), then refresh bulk bar vs select-hint.
-    const ids = new Set(rows.map((r) => r.id));
+    const keep = new Set(pruneSelection([..._inboxSelected], rows.map((r) => r.id)));
     for (const id of [..._inboxSelected]) {
-      if (!ids.has(id)) _inboxSelected.delete(id);
+      if (!keep.has(id)) _inboxSelected.delete(id);
     }
     _inboxBulkRefreshUi();
     const note = document.getElementById("inbox-search-note");

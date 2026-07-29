@@ -9,6 +9,12 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Frontend inbox_ui unit tests
+
+- **`inbox_ui.js`:** pure progressive-disclosure helpers + shortcut map/gates;
+  wired from `inbox.js` / `shortcuts.js`. Tests: `inbox_ui.test.mjs` (bulk bar,
+  select-hint, prune, `t`/`d`/`f`/`u` gates).
+
 ## 2026-07-29 — Docs: Fly day-2 ops + status refresh
 
 - **deploy.md:** Fly redeploy / local-image push / `DEMO_RESEED` wipe / inbox

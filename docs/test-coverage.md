@@ -47,6 +47,8 @@ DOM-free node test files (independent of AG Grid):
 - `frontend/app/roster_prefill.test.mjs` — roster add-form prefill from inbox email.
 - `frontend/app/html.test.mjs` — `html`` / `hstr` / `raw()` escaping (incl. quotes).
 - `frontend/app/ui.test.mjs` — `money` / `chip` helpers (D11 slice).
+- `frontend/app/inbox_ui.test.mjs` — bulk bar / select-hint visibility, prune selection,
+  inbox shortcut gates (`t`/`d`/`f`/`u`).
 
 Run: `node frontend/app/<name>.test.mjs`.
 

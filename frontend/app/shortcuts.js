@@ -1,10 +1,14 @@
 // Global keyboard shortcuts help + handlers (D11 slice from app.js).
 // `/` filter focus, `n` new record, `1`–`9` tab jump, `?` help.
+import { INBOX_SHORTCUTS } from "./inbox_ui.js";
 
 export function showShortcuts() {
   let m = document.getElementById("shortcuts-modal");
   if (!m) {
     m = document.createElement("div"); m.id = "shortcuts-modal"; m.className = "modal";
+    const inboxRows = INBOX_SHORTCUTS.map(
+      (s) => `<tr><th><kbd>${s.key}</kbd></th><td>${s.help}</td></tr>`,
+    ).join("");
     m.innerHTML = `
       <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
         <h3 id="shortcuts-title" style="margin-top:0">Keyboard shortcuts</h3>
@@ -15,10 +19,7 @@ export function showShortcuts() {
           <tr><th><kbd>Esc</kbd></th><td>Close the open dialog</td></tr>
           <tr><th><kbd>?</kbd></th><td>Show this help</td></tr>
           <tr><th colspan="2" style="padding-top:0.6rem;color:var(--muted);font-weight:600">Inbox</th></tr>
-          <tr><th><kbd>t</kbd></th><td>Triage selected emails (classify → detect → file)</td></tr>
-          <tr><th><kbd>d</kbd></th><td>Detect players (selection, or all unmatched if none)</td></tr>
-          <tr><th><kbd>f</kbd></th><td>Mark selected emails filed</td></tr>
-          <tr><th><kbd>u</kbd></th><td>Toggle “Unmatched only”</td></tr>
+          ${inboxRows}
         </tbody></table>
         <div class="actions-row" style="margin-top:0.75rem"><button type="button" id="shortcuts-close">Close</button></div>
       </div>`;
