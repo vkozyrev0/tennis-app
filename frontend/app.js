@@ -241,6 +241,8 @@ _groups.forEach((g) => {
   b.addEventListener("click", () => activateGroup(g.dataset.group));
   _groupsEl.appendChild(b);
 });
+// Initial L2 solo state (Home is the default single-tab group).
+_syncL2Bar(_groups.find((g) => g.classList.contains("group-active")) || _groups[0]);
 _menuEl.addEventListener("keydown", (e) => {
   if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
   const tabs = [...document.querySelectorAll(".tab")];
