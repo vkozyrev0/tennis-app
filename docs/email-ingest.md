@@ -216,9 +216,117 @@ on Macon to triage.
 
 | Provider | Configure |
 |----------|-----------|
-| **Mailgun** | Receiving route → store-and-notify `https://courtops-poc.fly.dev/api/ingest/email/form` + custom header `X-Ingest-Token` if available |
-| **SendGrid Inbound Parse** | Destination URL with header if possible; otherwise `…/form?token=…` only as last resort (`INGEST_ALLOW_QUERY_TOKEN` is **off** unless you set it) |
-| **Cloudflare Email Routing + Worker** | Worker `fetch`es JSON endpoint with `Authorization: Bearer <token>` |
+| **Mailgun** | Receiving route → store-and-notify form URL + custom header if available (recipe below) |
+| **SendGrid Inbound Parse** | Destination = form URL; prefer header auth (recipe below) |
+| **Cloudflare Email Routing + Worker** | Worker POSTs JSON with `Authorization: Bearer` (recipe below) |
 
 **Verified on the live app (2026-07-29):** ingest **enabled**, sample late-entry
 JSON → **201**, wrong token → **401**, `To:` match → Macon `tournament_id=2`.
+
+### Automated smoke script
+
+```powershell
+# Token from your password manager (same as Fly INGEST_TOKEN secret)
+$env:INGEST_TOKEN = "…"
+$env:INGEST_TO = "macon2026@inbox.courtops-poc.fly.dev"
+$env:INGEST_DEFAULT_EXPECT = "2"   # optional assert
+
+backend\.venv\Scripts\python.exe scripts\smoke_ingest.py https://courtops-poc.fly.dev
+# or local:  … smoke_ingest.py http://127.0.0.1:8000
+```
+
+Covers: status enabled, wrong token 401, JSON create, duplicate, form endpoint.
+
+---
+
+## Provider recipes (copy-paste)
+
+Replace `YOUR_INGEST_TOKEN` with the Fly secret value. Prefer **header** auth.
+Only enable query tokens if a provider cannot send headers:
+
+```powershell
+fly secrets set INGEST_ALLOW_QUERY_TOKEN=1 -a courtops-poc   # last resort
+```
+
+### A. Mailgun (Receiving → Routes)
+
+1. Mailgun → **Sending** domain (or receiving domain) verified for inbound.
+2. **Receiving → Routes → Create route**
+   - **Expression:** `match_recipient("macon2026@YOUR_DOMAIN")`  
+     (use the same local-part / full address as the tournament **Ingest address**)
+   - **Actions:**
+     - `store()` (optional archive), and  
+     - `forward("https://courtops-poc.fly.dev/api/ingest/email/form")`  
+       **or** “store and notify” URL = that form endpoint.
+3. **Auth:** Mailgun’s HTTP webhook can send a custom header on some plans; if not:
+   - Set route to notify URL  
+     `https://courtops-poc.fly.dev/api/ingest/email/form?token=YOUR_INGEST_TOKEN`  
+     **and** `fly secrets set INGEST_ALLOW_QUERY_TOKEN=1` (document the risk).
+4. Send a test message **To:** `macon2026@YOUR_DOMAIN`.
+5. Run `scripts/smoke_ingest.py` then open **Inbox → Macon**.
+
+**Form fields Mailgun typically posts:** `sender` / `from`, `recipient` / `To`,
+`subject`, `body-plain`, `body-html`, `Message-Id` — all mapped in
+`email_ingest.py`.
+
+### B. SendGrid Inbound Parse
+
+1. SendGrid → **Settings → Inbound Parse → Add Host & URL**
+2. **Destination URL:**  
+   `https://courtops-poc.fly.dev/api/ingest/email/form`  
+   If headers cannot be added, append `?token=YOUR_INGEST_TOKEN` and set
+   `INGEST_ALLOW_QUERY_TOKEN=1` on Fly.
+3. **Hostname / MX:** point a subdomain (e.g. `inbox.yourdomain.com`) MX to
+   SendGrid per their docs.
+4. Tournament **Ingest address** should match the address parents send to, e.g.  
+   `macon2026@inbox.yourdomain.com`.
+5. Check **POST the raw, full MIME message** off unless you need it; plain
+   `text` / `html` fields are enough.
+6. Smoke with a real email, then triage in CourtOps.
+
+SendGrid field names (`from`, `to`, `subject`, `text`, `html`, `headers`) are
+accepted by the form endpoint aliases.
+
+### C. Cloudflare Email Routing + Worker
+
+1. CF zone → **Email → Routing** → enable; create address  
+   `macon2026@yourdomain.com` → action **Send to a Worker**.
+2. Worker (sketch) — post JSON with header auth:
+
+```js
+export default {
+  async email(message, env) {
+    const raw = await new Response(message.raw).text();
+    // Prefer extracting text/plain; fall back to raw MIME for the body field.
+    const body = raw.slice(0, 200_000);
+    const res = await fetch("https://courtops-poc.fly.dev/api/ingest/email", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.INGEST_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message_id: message.headers.get("Message-ID") || crypto.randomUUID(),
+        from_address: message.from,
+        to_address: message.to,
+        subject: message.headers.get("Subject") || "",
+        body,
+      }),
+    });
+    if (!res.ok) throw new Error(`ingest ${res.status}`);
+  },
+};
+```
+
+3. Bind Worker secret `INGEST_TOKEN` in the CF dashboard (same value as Fly).
+4. Tournament **Ingest address** = `macon2026@yourdomain.com` (or local-part
+   `macon2026` — both match).
+
+### Checklist after provider is live
+
+- [ ] Real mail arrives in CourtOps Inbox (status **new**)
+- [ ] `tournament_id` is Macon (or the intended event), not null
+- [ ] Classification chip is plausible (keyword suggester; human can override)
+- [ ] Body is readable in Review (encrypted at rest, decrypted for admin)
+- [ ] Bad/forged requests without token get **401**
+- [ ] TD triages with **t** / **d** / **f** as usual

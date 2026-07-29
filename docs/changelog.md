@@ -9,6 +9,13 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Ingest provider recipes + smoke script
+
+- `scripts/smoke_ingest.py` — status / 401 / JSON / duplicate / form against
+  local or Fly (`INGEST_TOKEN` env).
+- [email-ingest.md](email-ingest.md): Mailgun, SendGrid Inbound Parse, and
+  Cloudflare Email Worker copy-paste recipes for `courtops-poc.fly.dev`.
+
 ## 2026-07-29 — Toolbar P2: L1/L2 nav polish
 
 - Min-heights for `.gbtn` / `.tab`; tighter gaps.

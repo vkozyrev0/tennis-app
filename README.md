@@ -87,10 +87,12 @@ Prefer **one at a time** (parallel logins trip the process-local throttle):
 backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py
 backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py
 backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py
+# Email webhook (set INGEST_TOKEN; optional URL arg for Fly):
+#   $env:INGEST_TOKEN="…"; backend/.venv/Scripts/python.exe scripts/smoke_ingest.py https://courtops-poc.fly.dev
 ```
 
 See [docs/deploy.md](docs/deploy.md) §6 (readiness checklist) and
-[docs/email-ingest.md](docs/email-ingest.md) (provider wiring checklist).
+[docs/email-ingest.md](docs/email-ingest.md) (provider recipes + checklist).
 
 ## Tests
 
