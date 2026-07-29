@@ -9,6 +9,11 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Fly admin password hardened
+
+- `ADMIN_PASSWORD` on `courtops-poc` rotated to a non-POC secret; `admin`/`admin`
+  returns 401 on the public host. Local POC still uses `admin`/`admin`.
+
 ## 2026-07-29 — Email ingest live on Fly
 
 - Fly secrets: `INGEST_TOKEN`, `INGEST_DEFAULT_TOURNAMENT_ID=2` (Macon).

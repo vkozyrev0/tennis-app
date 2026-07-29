@@ -97,12 +97,16 @@ fly secrets set DEMO_RESEED=1 -a courtops-poc
 fly secrets unset DEMO_RESEED -a courtops-poc
 
 # Admin password (applied every boot). Prefer a non-POC secret on a public URL.
+# Live courtops-poc uses a strong ADMIN_PASSWORD (not admin/admin) — rotate with:
 fly secrets set ADMIN_PASSWORD='choose-a-strong-one' -a courtops-poc
 
 fly status -a courtops-poc
 fly logs -a courtops-poc
 curl -sS https://courtops-poc.fly.dev/api/health
 ```
+
+**Login:** local POC remains `admin`/`admin`. The public Fly app uses the
+`ADMIN_PASSWORD` secret only — default `admin`/`admin` is rejected there.
 
 **Why the inbox can look “empty” after deploy:** the volume keeps old data; a
 new image does **not** re-seed unless the volume is new or `DEMO_RESEED=1`.
