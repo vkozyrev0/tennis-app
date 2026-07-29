@@ -115,6 +115,11 @@ when the suite is green. Fly **does not** auto-pull that image unless you
 point `[build]` at it or pass `--image`. Default `fly deploy` builds from the
 Dockerfile in this repo.
 
+**Email ingest (D4):** set Fly secrets `INGEST_TOKEN` + optional
+`INGEST_DEFAULT_TOURNAMENT_ID`, then point Mailgun/SendGrid/CF Worker at
+`https://courtops-poc.fly.dev/api/ingest/email` (or `/form`). Full steps and
+smoke curl: [email-ingest.md](email-ingest.md) § *Live Fly POC*.
+
 **Ephemeral demo (no persistence):** remove the `[[mounts]]` block and the
 `PGDATA` env override in `fly.toml` — the image-layer baked demo at
 `/opt/courtops/pgdata` is used, and restarts reset to that pristine state.

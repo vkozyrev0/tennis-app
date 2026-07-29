@@ -9,6 +9,13 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Email ingest live on Fly
+
+- Fly secrets: `INGEST_TOKEN`, `INGEST_DEFAULT_TOURNAMENT_ID=2` (Macon).
+- Macon **Ingest address** set for `To:` routing; smoke POST → 201 / 401.
+- Docs: [email-ingest.md](email-ingest.md) *Live Fly POC* + deploy.md pointer.
+  Provider (Mailgun/SendGrid/CF) still configured outside the app.
+
 ## 2026-07-29 — Frontend inbox_ui unit tests
 
 - **`inbox_ui.js`:** pure progressive-disclosure helpers + shortcut map/gates;

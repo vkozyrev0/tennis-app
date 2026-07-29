@@ -167,3 +167,58 @@ query-token ban). What is still **outside** the repo:
 
 **Out of scope until approved:** LLM auto-triage, full mailbox IMAP poll, sending
 outbound invite email from CourtOps (mailto / copy-text remain the path).
+
+---
+
+## Live Fly POC (`courtops-poc`)
+
+Hosted origin (public HTTPS already):
+
+| Item | Value |
+|------|--------|
+| Status | `GET https://courtops-poc.fly.dev/api/ingest/status` |
+| JSON webhook | `POST https://courtops-poc.fly.dev/api/ingest/email` |
+| Form webhook | `POST https://courtops-poc.fly.dev/api/ingest/email/form` |
+| Default tournament | `INGEST_DEFAULT_TOURNAMENT_ID=2` (Macon Junior Open after demo seed) |
+
+### App secrets (once)
+
+```powershell
+# Generate + set (do not commit the token)
+$token = python -c "import secrets; print(secrets.token_urlsafe(32))"
+fly secrets set INGEST_TOKEN="$token" INGEST_DEFAULT_TOURNAMENT_ID=2 -a courtops-poc
+# Save $token in your password manager — Fly cannot show it again.
+```
+
+### Tournament routing
+
+In the app: **Setup → Tournaments → Macon Junior Open → Ingest address**, e.g.
+
+`macon2026@inbox.courtops-poc.fly.dev`
+
+(That value is only a **routing key** matched against inbound `To:`; it does not
+by itself create a mailbox. Your mail provider must deliver to the webhook.)
+
+### Smoke (JSON)
+
+```powershell
+$token = "…from your password manager…"
+curl.exe -sS -X POST "https://courtops-poc.fly.dev/api/ingest/email" `
+  -H "X-Ingest-Token: $token" `
+  -H "Content-Type: application/json" `
+  -d "{\"message_id\":\"<smoke@test>\",\"from_address\":\"parent@example.com\",\"to_address\":\"macon2026@inbox.courtops-poc.fly.dev\",\"subject\":\"Late entry\",\"body\":\"Can we still register late?\"}"
+```
+
+Expect **201** with `"tournament_id": 2` and a classification chip; open **Inbox**
+on Macon to triage.
+
+### Provider → Fly (what you still do outside the app)
+
+| Provider | Configure |
+|----------|-----------|
+| **Mailgun** | Receiving route → store-and-notify `https://courtops-poc.fly.dev/api/ingest/email/form` + custom header `X-Ingest-Token` if available |
+| **SendGrid Inbound Parse** | Destination URL with header if possible; otherwise `…/form?token=…` only as last resort (`INGEST_ALLOW_QUERY_TOKEN` is **off** unless you set it) |
+| **Cloudflare Email Routing + Worker** | Worker `fetch`es JSON endpoint with `Authorization: Bearer <token>` |
+
+**Verified on the live app (2026-07-29):** ingest **enabled**, sample late-entry
+JSON → **201**, wrong token → **401**, `To:` match → Macon `tournament_id=2`.
