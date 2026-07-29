@@ -49,7 +49,8 @@ class Settings:
         """Effective deployment name for is_prod / validate.
 
         Precedence:
-          1. Instance attribute (setattr on a Settings() copy in unit tests)
+          1. Instance attribute (setattr on a *dedicated* Settings() copy in unit
+             tests — never setattr the global `settings.env`; monkeypatch ENV)
           2. Live ENV (monkeypatch / process env for the global `settings` object)
           3. Class default
 

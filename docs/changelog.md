@@ -9,13 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
-## 2026-07-29 — CI: H1 config guard vs ENV=dev
+## 2026-07-29 — CI: H1 config guard + is_prod pollution
 
-- **`Settings.is_prod()` / validate:** instance `env` (unit tests via setattr)
-  wins over process `ENV`. CI sets `ENV=dev` for the suite, which made
-  `_settings(env="prod").validate()` a no-op and failed four H1 tests
-  (`test_config_guard`). Process ENV still wins for the global `settings`
-  object (monkeypatch + real deploy).
+- **`Settings.is_prod()` / validate:** instance `env` (unit tests via setattr on a
+  *copy*) wins over process `ENV`. CI sets `ENV=dev`, which had made
+  `_settings(env="prod").validate()` a no-op (4× H1 failures).
+- **`test_zz_coppa`:** stop `setattr(settings, "env", "dev")` on the global
+  singleton — monkeypatch undo left an instance attr that shadowed later
+  `ENV=prod` monkeypatches (ingest D4 query-token test got 201 instead of 401).
 
 ## 2026-07-22 — Fly persistent deploy + assignment-card layout
 

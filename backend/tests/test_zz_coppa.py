@@ -100,8 +100,9 @@ def test_api_policy_and_under13_create_blocked(monkeypatch):
     assert "encrypted_at_rest" in body["decision"]
 
     # Force deny regardless of ENV so this is stable in CI/dev.
+    # Do NOT setattr(settings, "env", ...) — that leaves an instance attr which
+    # shadows process ENV after monkeypatch undo (breaks later is_prod() tests).
     monkeypatch.setenv("ALLOW_UNDER13_PII", "0")
-    monkeypatch.setattr(settings, "env", "dev")
     usta = str(uuid.uuid4().int % 10**10).zfill(10)
     bad = client.post("/api/players", json={
         "usta_number": usta, "first_name": "Kid", "last_name": "Under",
