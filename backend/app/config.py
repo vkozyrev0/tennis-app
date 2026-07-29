@@ -45,10 +45,24 @@ class Settings:
     _DEV_ENVS = {"dev", "development", "local", "test", "ci"}
     _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}
 
+    def _resolved_env(self) -> str:
+        """Effective deployment name for is_prod / validate.
+
+        Precedence:
+          1. Instance attribute (setattr on a Settings() copy in unit tests)
+          2. Live ENV (monkeypatch / process env for the global `settings` object)
+          3. Class default
+
+        CI sets ENV=dev for the suite; tests that build `_settings(env="prod")`
+        must not be overridden by that process ENV, or the H1 boot guard looks
+        like a no-op (4× DID NOT RAISE RuntimeError on main).
+        """
+        if "env" in self.__dict__:
+            return str(self.__dict__["env"]).strip().lower()
+        return os.getenv("ENV", self.env).strip().lower()
+
     def is_prod(self) -> bool:
-        # Read ENV live so tests can monkeypatch without reconstructing Settings
-        # (same pattern as ingest_token / COURTOPS_* flags).
-        return os.getenv("ENV", self.env).strip().lower() not in self._DEV_ENVS
+        return self._resolved_env() not in self._DEV_ENVS
 
     @property
     def dsn(self) -> str:
@@ -90,7 +104,7 @@ class Settings:
             )
         if problems:
             raise RuntimeError(
-                f"Refusing to start with ENV={self.env!r}: "
+                f"Refusing to start with ENV={self._resolved_env()!r}: "
                 + "; ".join(problems)
                 + ". See docs/pii-hardening-plan.md §H1. (Set ENV=dev for local POC.)"
             )

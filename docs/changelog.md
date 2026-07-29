@@ -9,6 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — CI: H1 config guard vs ENV=dev
+
+- **`Settings.is_prod()` / validate:** instance `env` (unit tests via setattr)
+  wins over process `ENV`. CI sets `ENV=dev` for the suite, which made
+  `_settings(env="prod").validate()` a no-op and failed four H1 tests
+  (`test_config_guard`). Process ENV still wins for the global `settings`
+  object (monkeypatch + real deploy).
+
 ## 2026-07-22 — Fly persistent deploy + assignment-card layout
 
 - **Fly.io persistence:** volume at `/data` with `PGDATA=/data/pgdata`;
