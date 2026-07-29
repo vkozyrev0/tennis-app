@@ -129,12 +129,11 @@ header {
      above Tabulator grids and modals' backdrop. */
   position: sticky; top: 0; z-index: 50;
 }
-/* Stack of sticky bars. The pixel offsets are conservative — header is the
-   tallest, then nav L1, then nav L2; if any bar grows taller (multi-line on
-   narrow viewports) the bar below it will tuck under it for a frame until
-   the user scrolls past — acceptable trade-off vs measuring at runtime. */
-.menu-l1 { position: sticky; top: 86px; z-index: 49; }
-.menu    { position: sticky; top: 120px; z-index: 48; }
+/* Stack of sticky bars — offsets from tokens (toolbar P2). When L2 is hidden
+   for a single-tab group (Home / Day-of / Inbox), body.nav-l2-solo adjusts crumbs. */
+.menu-l1 { position: sticky; top: var(--nav-sticky-l1, 5.5rem); z-index: 49; }
+.menu    { position: sticky; top: var(--nav-sticky-l2, 7.75rem); z-index: 48; }
+body.nav-l2-solo .crumbs { top: var(--nav-sticky-l2, 7.75rem); }
 header h1 {
   margin: 0; font-size: 0.92rem;
   /* Title + brand icon left; health pill + theme/shortcuts/user-box right.
@@ -347,10 +346,11 @@ header h1 > #health { margin-left: auto; }
 /* level 1 — section groups (only one group's tabs show at a time) */
 .menu-l1 {
   display: flex;
-  gap: 0.3rem;
-  padding: 0.25rem 1rem 0;
+  gap: 0.2rem;
+  padding: 0.2rem 1rem 0;
   background: var(--accent);
   flex-wrap: wrap;
+  align-items: flex-end;
 }
 .gbtn {
   appearance: none;
@@ -361,15 +361,21 @@ header h1 > #health { margin-left: auto; }
   background: rgba(0, 0, 0, 0.18);
   color: #ffffff;
   font: inherit;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  padding: 0.3rem 0.85rem;
+  padding: 0 0.75rem;
+  box-sizing: border-box;
+  height: var(--nav-l1-h, 2.125rem);
+  min-height: var(--nav-l1-h, 2.125rem);
   cursor: pointer;
   border-radius: 6px 6px 0 0;
-  display: inline-flex; align-items: center; gap: 0.4rem;
+  display: inline-flex; align-items: center; gap: 0.35rem;
 }
 .gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .gbtn.active { background: #245733; color: #fff; }
+/* Solo L1 (no L2 row): full pill radius so the chip doesn't look half-cut. */
+body.nav-l2-solo .gbtn { border-radius: 6px; }
+body.nav-l2-solo .gbtn.active { border-radius: 6px; }
 /* Level-1 nav group icon. 16 px stroke icons; each group gets a distinct
    warm/cool hue (set as `color` so currentColor stroke follows). On hover and
    when the group is active we bump saturation/brightness slightly.
@@ -401,12 +407,19 @@ header h1 > #health { margin-left: auto; }
 /* level 2 — the active group's tabs */
 .menu {
   display: flex;
-  gap: 0.8rem;
-  padding: 0 1rem;
+  gap: 0.2rem;
+  padding: 0 0.85rem;
   background: #245733;
   flex-wrap: wrap;
+  align-items: flex-end;
+  min-height: var(--nav-l2-h, 2rem);
 }
-.menu-group { display: none; align-items: flex-end; gap: 0.15rem; }
+/* Hide L2 when the active group has only one tab (Home → Dashboard, Day-of,
+   Inbox). activateGroup toggles body.nav-l2-solo + .menu--solo. */
+.menu.menu--solo {
+  display: none;
+}
+.menu-group { display: none; align-items: flex-end; gap: 0.1rem; }
 .menu-group.group-active { display: flex; }
 .menu-label { display: none; }  /* group name now lives in the level-1 bar */
 .tab {
@@ -416,7 +429,11 @@ header h1 > #health { margin-left: auto; }
   color: rgba(255, 255, 255, 0.85);
   font: inherit;
   font-size: 0.78rem;
-  padding: 0.28rem 0.6rem;
+  padding: 0 0.65rem;
+  box-sizing: border-box;
+  height: var(--nav-l2-h, 2rem);
+  min-height: var(--nav-l2-h, 2rem);
+  display: inline-flex; align-items: center;
   cursor: pointer;
   border-radius: 5px 5px 0 0;
 }
@@ -1463,7 +1480,7 @@ td.toggle { white-space: nowrap; }
   color: #fff;
   font-size: 0.7rem;
   line-height: 1.2;
-  position: sticky; top: 148px; z-index: 47;
+  position: sticky; top: var(--nav-sticky-crumbs, 9.75rem); z-index: 47;
 }
 .crumbs[hidden] { display: none; }
 .crumb-back, .crumb-clear {

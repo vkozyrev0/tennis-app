@@ -42,6 +42,12 @@
   --chrome-pad-x: 0.65rem;
   --chrome-field-min: 10rem;       /* tournament select / search floor */
   --chrome-field-max: 18rem;       /* ellipsis long tournament names */
+  /* L1/L2 nav (toolbar P2) — min hit height + sticky offsets */
+  --nav-l1-h: 2.125rem;            /* ~34px group chips */
+  --nav-l2-h: 2rem;                /* 32px subsection tabs */
+  --nav-sticky-l1: 5.5rem;         /* under header (~88px) */
+  --nav-sticky-l2: 7.75rem;        /* under L1 */
+  --nav-sticky-crumbs: 9.75rem;    /* under L2; overridden when L2 solo-hidden */
   color-scheme: light;   /* native controls (date picker icon, scrollbars) render light */
 }
 

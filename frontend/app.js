@@ -162,9 +162,19 @@ function _markGroup(key) {
   _groups.forEach((g) => g.classList.toggle("group-active", g.dataset.group === key));
   [..._groupsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.group === key));
 }
+function _syncL2Bar(grp) {
+  // Toolbar P2: hide L2 when the group has only one tab (Home/Day-of/Inbox)
+  // so L1 is a one-click jump without a redundant second bar.
+  const n = grp ? grp.querySelectorAll(".tab").length : 0;
+  const solo = n <= 1;
+  _menuEl.classList.toggle("menu--solo", solo);
+  document.body.classList.toggle("nav-l2-solo", solo);
+}
+
 function activateGroup(key) {
   _markGroup(key);
   const grp = _groups.find((g) => g.dataset.group === key);
+  _syncL2Bar(grp);
   if (grp) {
     // Always activate a tab in the group so the main panel matches the L1
     // choice. Prefer an already-active, enabled tab; else the first enabled
@@ -282,7 +292,10 @@ _menuEl.addEventListener("click", (e) => {
     t.setAttribute("aria-selected", on ? "true" : "false");
   });
   const grpEl = tab.closest(".menu-group");
-  if (grpEl) _markGroup(grpEl.dataset.group);  // keep level-1 in sync (e.g. file-from-email jumps)
+  if (grpEl) {
+    _markGroup(grpEl.dataset.group);  // keep level-1 in sync (e.g. file-from-email jumps)
+    _syncL2Bar(grpEl);
+  }
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.target));
   // Refresh tournament-scoped panels on open so they always reflect current
   // data. Built once and shared with updateActiveUI (audit M14).

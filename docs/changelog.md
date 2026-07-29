@@ -9,6 +9,12 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-07-29 — Toolbar P2: L1/L2 nav polish
+
+- Min-heights for `.gbtn` / `.tab`; tighter gaps.
+- Hide L2 bar for single-tab groups (Home, Day-of, Inbox) — one-click L1.
+- Sticky offsets via tokens; crumbs shift when L2 is solo-hidden.
+
 ## 2026-07-29 — Toolbar P1: account overflow menu
 
 - Header: username ▾ menu for Trash / Change password / Log out (declutter).
