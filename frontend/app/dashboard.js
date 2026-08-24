@@ -1,4 +1,5 @@
 // Home / Today dashboard — D11.
+import { typeLabel } from "./labels.js";
 
 export function createDashboardPanel(ctx) {
   const {
@@ -51,7 +52,7 @@ export function createDashboardPanel(ctx) {
       : (n === 0 ? html`<span class="resp-bad">today</span>`
         : html`<span class="${n <= 7 ? "warn" : "muted"}">in ${n}d</span>`);
     el.hidden = false;
-    el.innerHTML = html`<div class="dash-dl-head">⏰ ${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div><ul class="dash-dl-list">${items.map((x) =>
+    el.innerHTML = html`<div class="dash-dl-head">${items.length} deadline${items.length === 1 ? "" : "s"} in the next ${data.within_days} days</div><ul class="dash-dl-list">${items.map((x) =>
       html`<li class="dash-dl-item" data-tid="${x.tournament_id}" tabindex="0" role="button"><strong>${x.tournament_name}</strong> — ${_DEADLINE_LABEL[x.kind] || x.kind} ${fmtMDY(x.date)} · ${urgency(x.days_until)}</li>`)}</ul>`;
     el.querySelectorAll(".dash-dl-item").forEach((li) => {
       const go = () => setActive(Number(li.dataset.tid));
@@ -85,7 +86,7 @@ export function createDashboardPanel(ctx) {
     };
     const t = dg.totals;
     el.hidden = false;
-    el.innerHTML = html`<div class="dash-dg-head">📋 ${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div><ul class="dash-dg-list">${rows.map((r) => {
+    el.innerHTML = html`<div class="dash-dg-head">${t.open_tasks} open task${t.open_tasks === 1 ? "" : "s"} across ${t.active_tournaments} active tournament${t.active_tournaments === 1 ? "" : "s"}</div><ul class="dash-dg-list">${rows.map((r) => {
         const chips = _DIGEST_TASKS.filter(([k]) => r.tasks[k] > 0).map(([k, label, go]) =>
           html`<button type="button" class="dash-dg-chip" data-go-group="${go[0]}" data-go-tab="${go[1]}" data-tid="${r.tournament_id}">${r.tasks[k]} ${label}</button>`);
         const clean = r.open_tasks === 0 ? html`<span class="dash-dg-clean">✓ all clear</span>` : "";
@@ -117,7 +118,7 @@ export function createDashboardPanel(ctx) {
       const cls = o.assignments === 0 ? "wl-zero" : "";
       const bar = `<span class="wl-bar" style="width:${Math.round((o.days / maxDays) * 100)}%"></span>`;
       const mix = o.assignments
-        ? `<span class="muted">${o.accepted}✓ ${o.pending}⏳ ${o.declined}✗</span>` : "";
+        ? `<span class="muted">${o.accepted} accepted · ${o.pending} pending · ${o.declined} declined</span>` : "";
       return html`<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${o.official_name}</span></td><td class="num">${o.days}</td><td class="num">${o.assignments}</td><td class="num">${o.tournaments}</td><td class="wl-barcell">${raw(bar)}</td><td>${raw(mix)}</td></tr>`;
     });
     box.innerHTML = html`<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)${t.unused ? html` · <span class="warn">${t.unused} unused</span>` : ""}.</p><table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th><th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -125,7 +126,30 @@ export function createDashboardPanel(ctx) {
       el.addEventListener("click", () => openOfficial360(Number(el.dataset.oid))));
   }
 
+  function _renderGreeting() {
+    const h2 = document.getElementById("dash-greeting");
+    const subEl = document.getElementById("dash-sub");
+    if (!h2) return;
+    const t = getActive();
+    if (!t) {
+      h2.textContent = "Choose a tournament";
+      if (subEl) subEl.textContent = "The status board fills in once an event is active.";
+      return;
+    }
+    h2.textContent = t.name;
+    const n = _daysUntil(t.play_start_date);
+    const end = _daysUntil(t.play_end_date);
+    let line = "Status board";
+    if (n != null && n > 1) line = `Play starts in ${n} days`;
+    else if (n === 1) line = "Play starts tomorrow";
+    else if (n === 0) line = "Play starts today";
+    else if (n != null && end != null && end >= 0) line = "Live now — Day-of is the venue desk";
+    else if (end != null && end < 0) line = "Event complete";
+    if (subEl) subEl.textContent = line;
+  }
+
   async function loadDashboard() {
+    _renderGreeting();
     _renderDeadlines();  // cross-tournament approaching-deadline banner
     _renderDigest();     // cross-tournament open-task digest
     _renderWorkload();   // cross-tournament official workload balance
@@ -140,7 +164,7 @@ export function createDashboardPanel(ctx) {
             const startsIn = su === null ? "" : (su < 0 ? html`<span class="muted">started / past</span>`
               : (su === 0 ? html`<span class="warn">today</span>` : html`in ${su}d`));
             const isActive = getActive() && getActive().id === t.id;
-            return html`<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button"><td>${t.name}${isActive ? raw(' <span class="badge badge-ok">active</span>') : ""}</td><td>${t.type}</td><td>${fmtMDY(t.play_start_date)} – ${fmtMDY(t.play_end_date)}</td><td>${startsIn}</td><td>${raw(_deadlineCell(t.registration_deadline))}</td><td>${raw(_deadlineCell(t.late_entry_deadline))}</td></tr>`;
+            return html`<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button"><td>${t.name}${isActive ? raw(' <span class="badge badge-ok">active</span>') : ""}</td><td>${typeLabel(t.type)}</td><td>${fmtMDY(t.play_start_date)} – ${fmtMDY(t.play_end_date)}</td><td>${startsIn}</td><td>${raw(_deadlineCell(t.registration_deadline))}</td><td>${raw(_deadlineCell(t.late_entry_deadline))}</td></tr>`;
           })}`
       : `<tr><td class="empty" colspan="6">No tournaments yet — add one in Setup → Tournaments.</td></tr>`;
     body.querySelectorAll(".dash-trow").forEach((tr) => {
@@ -151,13 +175,10 @@ export function createDashboardPanel(ctx) {
 
     // Active-tournament status board (tiles).
     const tiles = document.getElementById("dash-tiles");
-    const sub = document.getElementById("dash-sub");
     if (!getActive()) {
       tiles.hidden = true; tiles.innerHTML = "";
-      sub.textContent = "Pick a tournament below (or in the bar above) to see its status board.";
       return;
     }
-    sub.textContent = `Status board — ${getActive().name}`;
     let d;
     try { d = await api(`/tournaments/${getActive().id}/dashboard`); }
     catch (_) { tiles.hidden = true; return; }
@@ -201,8 +222,8 @@ export function createDashboardPanel(ctx) {
     const item = (iso) => html`<li class="dash-pend-item"><span class="dash-pend-name">${fmtDOW(iso)}</span></li>`;
     box.hidden = false;
     const live = _daysUntil(getActive()?.play_start_date) != null && _daysUntil(getActive().play_start_date) <= 0;
-    const covBtn = live ? "Open Day-of venue →" : "View coverage on Reports →";
-    box.innerHTML = html`<div class="dash-pend-head">📅 ${String(days.length)} play day${days.length === 1 ? raw("") : raw("s")} with no official</div><ul class="dash-pend-list">${days.map(item)}</ul><button type="button" id="dash-cov-go" class="btn-small">${covBtn}</button>`;
+    const covBtn = live ? "Open Day-of venue" : "View coverage on Reports";
+    box.innerHTML = html`<div class="dash-pend-head">${String(days.length)} play day${days.length === 1 ? raw("") : raw("s")} with no official</div><ul class="dash-pend-list">${days.map(item)}</ul><button type="button" id="dash-cov-go" class="btn-small">${covBtn}</button>`;
     document.getElementById("dash-cov-go")?.addEventListener("click", _coverageGo);
   }
 
@@ -261,7 +282,7 @@ export function createDashboardPanel(ctx) {
       return html`<li class="dash-dec-item"><span class="dash-dec-name">${r.official_name}</span>${slot ? html` <span class="dash-dec-slot">${slot}</span>` : ""}</li>`;
     };
     box.hidden = false;
-    box.innerHTML = html`<div class="dash-dec-head">✗ ${d.count} declined — needs re-staffing</div><ul class="dash-dec-list">${d.declined.map(item)}</ul><button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments →</button>`;
+    box.innerHTML = html`<div class="dash-dec-head">${d.count} declined — needs re-staffing</div><ul class="dash-dec-list">${d.declined.map(item)}</ul><button type="button" id="dash-dec-go" class="btn-small">Re-staff on Assignments</button>`;
     document.getElementById("dash-dec-go")?.addEventListener("click", () => {
       _dashGo("staffing", "panel-t-assignments");
       // pre-filter the assignments list to declined so the TD lands on the work.
@@ -298,7 +319,7 @@ export function createDashboardPanel(ctx) {
         const body = encodeURIComponent(
           `Hi ${r.first_name || ""},\n\nPlease confirm (accept or decline) your officiating ` +
           `assignment for ${tName}${slot ? ` (${slot})` : ""}.\n\nThanks!`);
-        nudge = html` <a class="dash-pend-nudge" data-aid="${String(r.assignment_id)}" href="mailto:${r.official_email}?subject=${raw(subj)}&body=${raw(body)}">✉ Nudge</a>`;
+        nudge = html` <a class="dash-pend-nudge" data-aid="${String(r.assignment_id)}" href="mailto:${r.official_email}?subject=${raw(subj)}&body=${raw(body)}">Nudge</a>`;
       }
       const lastNudged = r.last_nudged_at ? html` <span class="dash-pend-ago" title="last contacted">· ${ago(r.last_nudged_at)}</span>` : "";
       return html`<li class="dash-pend-item"><span class="dash-pend-name">${r.official_name}</span>${
@@ -308,9 +329,9 @@ export function createDashboardPanel(ctx) {
     const emails = d.pending.map((p) => p.official_email).filter(Boolean);
     // "Nudge all" only when ≥2 have an email — for one, the per-row ✉ is enough.
     const bulk = emails.length >= 2
-      ? html`<button type="button" id="dash-pend-all" class="btn-small">✉ Nudge all (${String(emails.length)})</button>`
+      ? html`<button type="button" id="dash-pend-all" class="btn-small">Nudge all (${String(emails.length)})</button>`
       : "";
-    box.innerHTML = html`<div class="dash-pend-head">⏳ ${d.count} awaiting accept/decline</div><ul class="dash-pend-list">${d.pending.map(item)}</ul><button type="button" id="dash-pend-go" class="btn-small">Chase on Assignments →</button>${bulk}`;
+    box.innerHTML = html`<div class="dash-pend-head">${d.count} awaiting accept/decline</div><ul class="dash-pend-list">${d.pending.map(item)}</ul><button type="button" id="dash-pend-go" class="btn-small">Chase on Assignments</button>${bulk}`;
     document.getElementById("dash-pend-go")?.addEventListener("click", () => {
       _dashGo("staffing", "panel-t-assignments");
       setTimeout(() => { try { filterAssignments?.("pending"); } catch (_) {} }, 300);
@@ -355,7 +376,7 @@ export function createDashboardPanel(ctx) {
     const item = (e) => html`<li class="dash-pend-item"><span class="dash-pend-name">${e.player_name}</span> <span class="dash-pend-slot">missing: ${
       e.issues.map((i) => _ROSTER_ISSUE_LABEL[i] || i).join(", ")}</span></li>`;
     box.hidden = false;
-    box.innerHTML = html`<div class="dash-pend-head">📋 ${String(n)} incomplete roster entr${n === 1 ? raw("y") : raw("ies")}</div><ul class="dash-pend-list">${c.entries.map(item)}</ul><button type="button" id="dash-ri-go" class="btn-small">Fix on Roster →</button>`;
+    box.innerHTML = html`<div class="dash-pend-head">${String(n)} incomplete roster entr${n === 1 ? raw("y") : raw("ies")}</div><ul class="dash-pend-list">${c.entries.map(item)}</ul><button type="button" id="dash-ri-go" class="btn-small">Fix on Roster</button>`;
     document.getElementById("dash-ri-go")?.addEventListener("click", () => _dashGo("tournament", "panel-t-roster"));
   }
 

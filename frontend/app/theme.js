@@ -6,7 +6,17 @@ export function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
   try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) { /* ignore */ }
   const btn = document.getElementById("theme-toggle");
-  if (btn) btn.textContent = dark ? "☀ Light" : "🌙 Dark";
+  if (!btn) return;
+  const label = dark ? "Light" : "Dark";
+  const hint = dark ? "Switch to light mode" : "Switch to dark mode";
+  btn.setAttribute("aria-pressed", dark ? "true" : "false");
+  btn.title = hint;
+  btn.setAttribute("aria-label", hint);
+  const icon = btn.querySelector("use");
+  if (icon) icon.setAttribute("href", dark ? "#i-sun" : "#i-moon");
+  const text = btn.querySelector(".hdr-btn-label");
+  if (text) text.textContent = label;
+  else if (!btn.querySelector("svg")) btn.textContent = label;
 }
 
 export function installTheme() {

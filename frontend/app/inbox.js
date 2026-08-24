@@ -618,8 +618,8 @@ export function createInboxPanel(ctx) {
         wrap.append(rvBtn, menu); return wrap;
       } },
   ], "inbox",
-  "Inbox empty — paste a forwarded email above, or use Import ▾ → PDF. "
-  + "Once you have rows: tick checkboxes for bulk triage (⚡ Triage all), "
+  "Inbox empty — paste a forwarded email above, or use Import → PDF. "
+  + "Once you have rows: tick checkboxes for bulk triage (Triage all), "
   + "or press t (triage) · d (detect) · f (filed) · u (unmatched). Press ? for all shortcuts.",
   { index: "id", editable: "click", persist: false, responsive: false });
   // Persist inline edits (single click a cell): classification, manual player /
@@ -1336,7 +1336,7 @@ export function createInboxPanel(ctx) {
     if (!d.count || d.oldest_age_days < 2) { box.hidden = true; box.innerHTML = ""; return; }
     const age = (n) => html`<span class="ia-age${n >= 7 ? " ia-old" : ""}">${n}d</span>`;
     box.hidden = false;
-    box.innerHTML = html`<div class="ia-head">⏳ Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div><ul class="ia-list">${d.items.map((i) =>
+    box.innerHTML = html`<div class="ia-head">Oldest unfiled — ${d.oldest_age_days} day(s) waiting</div><ul class="ia-list">${d.items.map((i) =>
       html`<li class="ia-item" data-subj="${i.subject || ""}">${age(i.age_days)} <span class="ia-subj">${i.subject || "(no subject)"}</span> <span class="muted">${i.from_address || ""}</span></li>`)}</ul>`;
     box.querySelectorAll(".ia-item").forEach((li) => li.addEventListener("click", () => {
       const search = document.getElementById("inbox-search");
@@ -1370,9 +1370,9 @@ export function createInboxPanel(ctx) {
     const r = c.getData();
     if (r.source_email_id) {
       const subj = r.source_subject || `email #${r.source_email_id}`;
-      return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">✉ email</span>`;
+      return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">Email</span>`;
     }
-    return '<span class="muted">manual</span>';
+    return '<span class="muted">Manual</span>';
   }
   const _ORIGIN_COL = { title: "Origin", field: "source_email_id", headerSort: false,
     width: 100, formatter: _originCell };

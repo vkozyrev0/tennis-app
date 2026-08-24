@@ -276,7 +276,7 @@ export function createAssignmentsPanel(ctx) {
           const subj = encodeURIComponent(`Officiating assignment — ${getActive().name}`);
           const bodyTxt = encodeURIComponent(`You've been assigned to ${getActive().name}. Please confirm (accept or decline) via your CourtOps self-service "My assignments" page. Thank you.`);
           const href = `mailto:?bcc=${encodeURIComponent(r.invite_emails.join(","))}&subject=${subj}&body=${bodyTxt}`;
-          toast(msg, true, { label: `✉ Email ${r.invite_emails.length} invited`, onClick: () => window.open(href, "_blank") });
+          toast(msg, true, { label: `Email ${r.invite_emails.length} invited`, onClick: () => window.open(href, "_blank") });
         } else {
           toast(msg, true);
         }
@@ -314,7 +314,7 @@ export function createAssignmentsPanel(ctx) {
       const subj = encodeURIComponent(`Assignment confirmation needed — ${getActive().name}`);
       const bodyTxt = encodeURIComponent(`Please confirm (accept or decline) your assignment for ${getActive().name} via your CourtOps self-service "My assignments" page. Thank you.`);
       const href = `mailto:?bcc=${encodeURIComponent(pendingEmails.join(","))}&subject=${subj}&body=${bodyTxt}`;
-      chase = ` · <a href="${href}" class="chase-link">✉ Email ${pendingEmails.length} pending</a>`;
+      chase = ` · <a href="${href}" class="chase-link">Email ${pendingEmails.length} pending</a>`;
     }
     const sum = document.getElementById("asg-resp-summary");
     sum.innerHTML = html`${String(counts.all)} assigned · <span class="resp-ok">${String(counts.accepted)} accepted</span> · ${String(counts.pending)} pending · <span class="${counts.declined ? "resp-bad" : ""}">${String(counts.declined)} declined</span>${counts.declined ? " — needs re-staffing" : ""}${raw(chase)}`;
@@ -338,7 +338,7 @@ export function createAssignmentsPanel(ctx) {
     for (const a of shown) box.appendChild(renderAssignment(a, (availByOfficial[a.official_id] || []).sort()));
   }
   // Official accept/decline status → a colored chip (TD card + self-service).
-  const _RESP_META = { pending: ["muted", "⏳ pending"], accepted: ["ok", "✓ accepted"], declined: ["bad", "✗ declined"] };
+  const _RESP_META = { pending: ["muted", "Pending"], accepted: ["ok", "Accepted"], declined: ["bad", "Declined"] };
   function respChip(status) {
     const [cls, label] = _RESP_META[status] || ["muted", status || ""];
     return hstr`<span class="badge badge-${cls}" title="official's accept/decline">${label}</span>`;
@@ -437,7 +437,7 @@ export function createAssignmentsPanel(ctx) {
     // role, site, pay) — copy it to the clipboard and, if an email is on file,
     // offer to open a pre-filled message.
     const inv = document.createElement("button");
-    inv.type = "button"; inv.className = "btn-link"; inv.textContent = "✉ Invite";
+    inv.type = "button"; inv.className = "btn-link"; inv.textContent = "Invite";
     inv.title = "Copy a ready-to-paste assignment email for this official";
     inv.addEventListener("click", async () => {
       let t;

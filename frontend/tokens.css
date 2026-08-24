@@ -13,27 +13,39 @@
  * ========================================================================== */
 
 :root {
-  --bg: #f4f6f8;
+  /* Grass-court operations desk — cool chalk surfaces, not gray SaaS or cream. */
+  --bg: #eef3f0;
   --card: #ffffff;
-  --ink: #1f2933;
-  --muted: #556070;      /* ~6:1 on white — small helper/label text clears AA */
+  --ink: #17241d;
+  --muted: #4e5c55;      /* ~5.7:1 on white — small helper/label text clears AA */
+  --court: #1b4d32;      /* chrome: header + L1 — late-afternoon grass */
+  --court-deep: #163f29; /* L2 nav strip under L1 */
   --accent: #2e6f40;
   --accent-ink: #ffffff;
   --link: #2e6f40;            /* link/anchor text on cards. Same as accent in
                                  light mode (passes 6.2:1 on white). */
-  --border: #d9e0e6;
+  --ball: #d6ec4a;       /* tennis-ball yellow — the one signature accent */
+  --border: #cfd9d3;
   --ok: #2e7d32;
   --bad: #c62828;
   --sel: #e7f1ea;
   --field-bg: #ffffff;   /* input/select/textarea background */
-  --zebra: #f7f9fa;      /* even table rows */
+  --zebra: #f4f8f6;      /* even table rows */
   --elev: #ffffff;       /* elevated surfaces: cards, dropdowns, add-boxes */
   /* These were previously only literal fallbacks inside styles.css (var(--btn-bg,
      #eef1f5) etc.), so dark mode inherited LIGHT values — small buttons and the
      digest panel rendered near-invisible. Defined per-theme now. */
-  --line: #d9e0e6;       /* subtle separators / secondary-control borders */
-  --btn-bg: #eef1f5;     /* secondary buttons (.btn--secondary / .btn-small) */
-  --panel: #f7f9fb;      /* inset panels, e.g. the dashboard digest */
+  --line: #cfd9d3;       /* subtle separators / secondary-control borders */
+  --btn-bg: #e8eeea;     /* secondary buttons (.btn--secondary / .btn-small) */
+  --panel: #f4f8f6;      /* inset panels, e.g. the dashboard digest */
+  --shadow-card: 0 1px 2px rgba(23, 36, 29, 0.06);
+  --radius: 8px;
+  /* Type: scoreboard display on Windows (Bahnschrift) / condensed on Mac;
+     body stays the platform UI face so dense tables stay native-sharp. */
+  --font-display: "Bahnschrift", "Segoe UI Variable Display", "Avenir Next Condensed",
+                  "Arial Narrow", sans-serif;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --font-data: "Cascadia Mono", "ui-monospace", "SF Mono", Consolas, monospace;
   /* Sticky app chrome (header + context bar controls) — one height/type ramp
      so Band A chips and Band B select/search share a visual system (toolbar P0). */
   --chrome-ctrl-h: 2rem;           /* 32px — between prior 40px chips and ~26px fields */
@@ -53,10 +65,12 @@
 
 /* Dark theme — toggled via data-theme on <html> (persisted in localStorage). */
 :root[data-theme="dark"] {
-  --bg: #11161b;
-  --card: #1a2027;
-  --ink: #e6edf3;
-  --muted: #aab6c4;        /* +contrast on dark card (≈5.4:1) */
+  --bg: #0f1612;
+  --card: #17201b;
+  --ink: #e4eee8;
+  --muted: #a8b8b0;        /* +contrast on dark card (≈5.4:1) */
+  --court: #10281c;
+  --court-deep: #0c1f16;
   /* a11y 6th-pass #1+#2: previous dark accent #3aa05c carried white text at
      only 3.3:1 (AA fail). #198754 (Bootstrap success green) clears 4.55:1
      vs white *and* 4.08:1 vs the dark card background — passes 1.4.3 for
@@ -67,16 +81,18 @@
      dark card carries only 3.62:1 — fails AA for normal text. #2bb673 hits
      6.47:1 against the dark card while still feeling on-brand green. */
   --link: #2bb673;
-  --border: #2d363f;
+  --ball: #d6ec4a;
+  --border: #2a3831;
   --ok: #198754;            /* same — pill.ok white text was failing at 2.31:1 against the old #5bbf6a */
   --bad: #e26d6d;
-  --sel: #2c3f3a;          /* tinted toward accent so selection reads above zebra */
-  --field-bg: #11161b;
-  --zebra: #1f262e;
-  --elev: #1e252d;
-  --line: #2d363f;       /* = --border; was inheriting the light #d9e0e6 fallback */
-  --btn-bg: #2a323b;     /* dark raised surface so secondary btn text (--ink) is legible */
-  --panel: #1a2027;      /* = --card; the digest panel was rendering near-white */
+  --sel: #24362e;          /* tinted toward accent so selection reads above zebra */
+  --field-bg: #0f1612;
+  --zebra: #1b2621;
+  --elev: #1c2822;
+  --line: #2a3831;       /* = --border; was inheriting the light #d9e0e6 fallback */
+  --btn-bg: #24302a;     /* dark raised surface so secondary btn text (--ink) is legible */
+  --panel: #17201b;      /* = --card; the digest panel was rendering near-white */
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
   color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
 }
 

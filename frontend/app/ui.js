@@ -11,9 +11,18 @@ const BADGE = {
   same_club: "info", siblings: "info",
 };
 
+const BADGE_LABEL = {
+  selected: "Selected", alternate: "Alternate", withdrawn: "Withdrawn",
+  new: "New", filed: "Filed", needs_followup: "Follow-up",
+  pending: "Pending", paired: "Paired",
+  mutual: "Mutual", random: "Random",
+  same_club: "Same club", siblings: "Siblings",
+};
+
 export function chip(v) {
   if (v == null || v === "") return "";
-  return hstr`<span class="badge badge-${BADGE[v] || "muted"}">${v}</span>`;
+  const label = BADGE_LABEL[v] || String(v).replace(/_/g, " ");
+  return hstr`<span class="badge badge-${BADGE[v] || "muted"}">${label}</span>`;
 }
 
 export function money(n) {

@@ -39,7 +39,7 @@ export function createAuth(ctx) {
       `<span id="username-label"></span>`,
       [
         {
-          label: "🗑 Trash",
+          label: "Trash",
           title: "Restore trashed tournaments or incidents",
           onClick: () => _trashBtn?.click(),
         },
@@ -73,36 +73,47 @@ export function createAuth(ctx) {
   function applyAuth(who) {
     const logged = !!who;
     const mustChange = !!(who && who.must_change_password);
-    // D3: until password is rotated, keep chrome minimal and force the modal.
-    // Full admin/official init still runs only when not forced; prod API 403s.
-    const isAdmin = logged && who && who.role === "admin" && !mustChange;
-    const isOfficial = logged && who && who.role === "official" && !mustChange;
+    // Hard lock only when the API will 403 (prod / COURTOPS_FORCE_PASSWORD_CHANGE).
+    // Local docker still gets a nudge on the account menu so admin/admin can run the desk.
+    const forced = !!(who && who.password_change_required);
+    const isAdmin = logged && who && who.role === "admin" && !forced;
+    const isOfficial = logged && who && who.role === "official" && !forced;
+    document.body.classList.toggle("is-signed-out", !logged);
+    document.body.classList.toggle("is-admin", isAdmin);
+    document.body.classList.toggle("is-official", isOfficial);
     document.getElementById("login-view").hidden = logged;
     document.getElementById("user-box").hidden = !logged;
     const label = document.getElementById("username-label");
     if (label) {
-      label.textContent = who
-        ? `${who.username} (${who.role})${mustChange ? " — change password" : ""}`
-        : "";
+      const roleLabel = who?.role === "admin" ? "TD" : who?.role === "official" ? "Official" : (who?.role || "");
+      label.textContent = who ? `${who.username} · ${roleLabel}` : "";
+      if (label.parentElement) {
+        label.parentElement.title = mustChange
+          ? "Change password recommended (demo default)"
+          : "Account menu";
+      }
     }
     document.getElementById("menu").hidden = !isAdmin;
     document.getElementById("menu-groups").hidden = !isAdmin;
     document.querySelector("main:not(#official-app)").hidden = !isAdmin;
     document.getElementById("context-bar").hidden = !isAdmin;
     document.getElementById("official-app").hidden = !isOfficial;
+    const officialBar = document.getElementById("official-bar");
+    if (officialBar) officialBar.hidden = !isOfficial;
 
     const cancel = document.getElementById("cpw-cancel");
     if (_cpwModal) {
-      if (mustChange) {
+      if (forced) {
         _cpwModal.dataset.forced = "1";
         if (cancel) cancel.hidden = true;
         queueMicrotask(() => {
           _openChangePw();
-          setMsg(
-            "cpw-msg",
-            "You must set a new password before using CourtOps (the POC default is not allowed on shared hosts).",
-            false,
-          );
+          const el = document.getElementById("cpw-msg");
+          if (el) {
+            el.textContent = "Set a new password before using CourtOps. The demo default is not allowed on shared hosts.";
+            el.className = "msg bad";
+            el.setAttribute("role", "alert");
+          }
         });
       } else {
         _cpwModal.dataset.forced = "";
@@ -110,7 +121,7 @@ export function createAuth(ctx) {
       }
     }
 
-    onRoleResolved({ who, logged, isAdmin, isOfficial, mustChange });
+    onRoleResolved({ who, logged, isAdmin, isOfficial, mustChange, forced });
   }
 
   // Audit F3: one-shot listener so a stray flood of expired-session 401s
@@ -119,7 +130,8 @@ export function createAuth(ctx) {
   document.addEventListener("auth-expired", () => {
     if (_authExpiredFired) return;
     _authExpiredFired = true;
-    toast("Session expired — please sign in again", false);
+    const alreadyOut = document.body.classList.contains("is-signed-out");
+    if (!alreadyOut) toast("Session expired — please sign in again", false);
     applyAuth(null);
     setTimeout(() => { _authExpiredFired = false; }, 1000);
   });

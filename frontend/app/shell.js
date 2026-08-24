@@ -40,7 +40,8 @@ export function createShell() {
       }
       if (!res.ok) {
         const detail = body && body.detail !== undefined ? body.detail : res.statusText;
-        if (res.status === 401 && !path.startsWith("/auth/")) {
+        if (res.status === 401 && !path.startsWith("/auth/")
+            && !document.body.classList.contains("is-signed-out")) {
           document.dispatchEvent(new CustomEvent("auth-expired"));
         }
         throw new Error(humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));

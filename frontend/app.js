@@ -29,7 +29,7 @@ import { createShell } from "./app/shell.js";
 import { createCsvExport } from "./app/export_csv.js";
 import { createLayout } from "./app/layout.js";
 import {
-  officialLabel, siteLabel, playerLabel, createCertCatalog, DEFAULT_CERTS,
+  officialLabel, siteLabel, playerLabel, typeLabel, createCertCatalog, DEFAULT_CERTS,
 } from "./app/labels.js";
 import { createSelectRefresh } from "./app/selects.js";
 import { labelHeaderFilters as _labelHeaderFilters, reflectAriaSort as _reflectAriaSort } from "./app/grid_a11y.js";
@@ -191,7 +191,12 @@ function activateGroup(key) {
       tabs.find((t) => !t.classList.contains("disabled")) ||
       tabs.find((t) => t.classList.contains("active")) ||
       tabs[0];
-    if (tab) tab.click();
+    if (tab) {
+      tab.click();
+      // L1 clicks activate the tab programmatically, so the tab handler's
+      // isTrusted crumb skip would leave the trail stuck on the previous group.
+      _pushCrumb(key, tab.dataset.target);
+    }
   }
   // Entering Inbox or the merged Player-lists group is a natural moment to
   // re-pull the badge counts so they reflect any changes made elsewhere.
@@ -303,7 +308,7 @@ _menuEl.addEventListener("click", (e) => {
   // data. Built once and shared with updateActiveUI (audit M14).
   if (!Object.keys(_tournamentLoaders).length) _populateTournamentLoaders();
   if (active && _tournamentLoaders[tab.dataset.target]) _tournamentLoaders[tab.dataset.target]();
-  if (tab.dataset.target === "panel-home") loadDashboard();   // Home (no active needed)
+  if (tab.dataset.target === "panel-home" && !document.body.classList.contains("is-signed-out")) loadDashboard();
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-import") buildImportPage();
@@ -428,7 +433,7 @@ function updateActiveUI() {
   });
   refreshDivisionLists();  // datalists track the active tournament's type
   if (active) {
-    info.textContent = `${active.type} · ${active.play_start_date} → ${active.play_end_date}`;
+    info.textContent = `${typeLabel(active.type)} · ${_fmtMDY(active.play_start_date)} – ${_fmtMDY(active.play_end_date)}`;
     // Audit M14: only refresh the currently-visible tournament tab; the rest
     // load lazily on tab activation (tab click handler has the loader map).
     // Audit N11: ensure the loader map is populated before we look anything
@@ -442,7 +447,8 @@ function updateActiveUI() {
   }
   // Keep the Home dashboard in sync when the active tournament changes.
   if (document.getElementById("panel-home")?.classList.contains("active")
-      && typeof loadDashboard === "function") loadDashboard();
+      && typeof loadDashboard === "function"
+      && !document.body.classList.contains("is-signed-out")) loadDashboard();
 }
 // Loader map shared between the tab-switch click handler and updateActiveUI.
 // Populated lazily because schedList/divflexList/photelList are `const`s

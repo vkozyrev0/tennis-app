@@ -25,7 +25,7 @@ test("chip empty is empty string", () => {
 test("chip known status uses badge class", () => {
   const out = String(chip("selected"));
   assert.ok(out.includes("badge-ok"));
-  assert.ok(out.includes("selected"));
+  assert.ok(out.includes("Selected"));
 });
 
 test("chip unknown status is muted", () => {

@@ -8,10 +8,10 @@
   <!-- AG Grid Community — every grid in the app. -->
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
-  <link rel="stylesheet" href="/tokens.css?v=7" />
-  <link rel="stylesheet" href="/styles.css?v=97" />
+  <link rel="stylesheet" href="/tokens.css?v=8" />
+  <link rel="stylesheet" href="/styles.css?v=101" />
 </head>
-<body>
+<body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
        outlines so they inherit `color:` from their button via `currentColor`
        and look crisp at the 14px render size. Sourced inline (no fetch). -->
@@ -83,6 +83,15 @@
         <path d="M3.2 8.5 A 12 12 0 0 1 14.5 21.4" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
         <path d="M9.5 2.6 A 12 12 0 0 1 20.8 15.5" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
       </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 14.5A8.5 8.5 0 0 1 9.5 3 7 7 0 1 0 21 14.5z"/>
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -94,39 +103,53 @@
   <p id="multi-hint" class="sr-only">Hold Control or Command and click to select multiple options.</p>
   <div id="progress" class="progress" role="progressbar" aria-label="Loading" aria-valuetext="Loading" aria-hidden="true"></div>
   <header>
-    <h1><svg class="brand-icon" aria-hidden="true" focusable="false"><use href="#i-brand"/></svg>CourtOps Tennis <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
-      <button type="button" id="theme-toggle" class="hdr-btn" title="Toggle dark mode"><span aria-hidden="true">🌙</span> Dark</button>
-      <button type="button" id="shortcuts-btn" class="hdr-btn" title="Help — app guide &amp; keyboard shortcuts (press ?)" aria-label="Help"><kbd aria-hidden="true">?</kbd></button>
-      <span id="user-box" hidden>
-        <!-- Overflow menu host (wired in auth.js) — Trash / Change password / Log out. -->
-        <span id="account-menu-host"></span>
-        <!-- Hidden action targets: keep ids for trash.js / auth listeners; menu clicks them. -->
-        <button type="button" id="trash-btn" class="sr-only" tabindex="-1" hidden
-                title="Restore trashed tournaments or incidents">Trash</button>
-        <button type="button" id="change-pw-btn" class="sr-only" tabindex="-1" hidden>Change password</button>
-        <button type="button" id="logout-btn" class="sr-only" tabindex="-1" hidden>Log out</button>
-      </span>
-    </h1>
+    <div class="hdr-bar">
+      <h1>
+        <svg class="brand-icon" aria-hidden="true" focusable="false"><use href="#i-brand"/></svg>
+        <span class="brand-name">CourtOps</span><span class="brand-mark">Tennis</span>
+      </h1>
+      <div class="hdr-actions">
+        <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
+        <button type="button" id="theme-toggle" class="hdr-btn" aria-pressed="false"
+                title="Switch to dark mode" aria-label="Switch to dark mode">
+          <svg class="hdr-ico" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg>
+          <span class="hdr-btn-label sr-only">Dark</span>
+        </button>
+        <button type="button" id="shortcuts-btn" class="hdr-btn" title="Help — app guide &amp; keyboard shortcuts (press ?)" aria-label="Help"><kbd aria-hidden="true">?</kbd></button>
+        <span id="user-box" hidden>
+          <!-- Overflow menu host (wired in auth.js) — Trash / Change password / Log out. -->
+          <span id="account-menu-host"></span>
+          <!-- Hidden action targets: keep ids for trash.js / auth listeners; menu clicks them. -->
+          <button type="button" id="trash-btn" class="sr-only" tabindex="-1" hidden
+                  title="Restore trashed tournaments or incidents">Trash</button>
+          <button type="button" id="change-pw-btn" class="sr-only" tabindex="-1" hidden>Change password</button>
+          <button type="button" id="logout-btn" class="sr-only" tabindex="-1" hidden>Log out</button>
+        </span>
+      </div>
+    </div>
     <div id="context-bar">
       <span class="ctx-label">Working on:</span>
       <select id="active-tournament" class="chrome-field" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
       <span id="player-search-wrap">
-        <input type="search" id="player-search" class="chrome-field" placeholder="🔍 Find player or official…" autocomplete="off"
+        <input type="search" id="player-search" class="chrome-field" placeholder="Find player or official…" autocomplete="off"
                aria-label="Find a player or official by name" aria-expanded="false" aria-controls="player-search-results" />
         <div id="player-search-results" class="ps-results" hidden role="listbox"></div>
       </span>
     </div>
+    <div id="official-bar" class="official-bar" hidden>Official portal</div>
   </header>
 
   <section id="login-view" hidden class="login-card">
+    <p class="login-kicker">Tournament director desk</p>
     <h2>Sign in</h2>
-    <form id="login-form" autocomplete="off">
-      <div class="row"><label>Username <input name="username" required /></label></div>
-      <div class="row"><label>Password <input name="password" type="password" required /></label></div>
+    <p class="muted login-lede">Staff the event, file the inbox, keep the day on the rails.</p>
+    <form id="login-form" autocomplete="on">
+      <div class="row"><label>Username <input name="username" autocomplete="username" required /></label></div>
+      <div class="row"><label>Password <input name="password" type="password" autocomplete="current-password" required /></label></div>
       <div class="actions-row"><button type="submit">Sign in</button><span class="msg" id="login-msg"></span></div>
     </form>
-    <p class="muted">POC login: <code>admin</code> / <code>admin</code></p>
+    <p class="muted login-hint">Demo: <code>admin</code> / <code>admin</code></p>
   </section>
 
   <nav class="menu-l1" id="menu-groups" aria-label="Sections"></nav>
@@ -213,12 +236,14 @@
     <button type="button" id="crumb-clear" class="crumb-clear" title="Clear history" aria-label="Clear breadcrumbs">Clear</button>
   </nav>
 
-  <main id="main-app" tabindex="-1" aria-label="Tournament director workspace">
+  <main id="main-app" hidden tabindex="-1" aria-label="Tournament director workspace">
     <!-- ============ HOME / DASHBOARD ============ -->
     <section class="panel active" id="panel-home" aria-label="Dashboard">
       <div class="card">
-        <h2 id="dash-greeting">Today</h2>
-        <p class="muted" id="dash-sub">Pick a tournament in the bar above to see its status board.</p>
+        <div class="dash-hero">
+          <h2 id="dash-greeting">Choose a tournament</h2>
+          <p class="muted" id="dash-sub">The status board fills in once an event is active.</p>
+        </div>
         <div id="dash-deadlines" class="dash-deadlines" hidden></div>
         <div id="dash-digest" class="dash-digest" hidden></div>
         <div id="dash-readiness" class="dash-readiness" hidden></div>
@@ -264,7 +289,7 @@
           <form id="tournament-form" autocomplete="off">
             <div class="row">
               <label>Name <input name="name" required /></label>
-              <label>Type <select name="type"><option value="junior">junior</option><option value="adult">adult</option></select></label>
+              <label>Type <select name="type"><option value="junior">Junior</option><option value="adult">Adult</option></select></label>
             </div>
             <div class="row">
               <label>Play start <input type="date" name="play_start_date" required /></label>
@@ -281,8 +306,7 @@
               </label>
             </div>
             <p class="muted" style="margin:0.25rem 0 0.5rem;font-size:0.85rem">
-              Optional. When email auto-ingest is enabled, messages To: this address land in this tournament’s inbox.
-              See <code>docs/email-ingest.md</code>.
+              Optional. When email ingest is on, mail to this address lands in this tournament’s inbox.
             </p>
             <div class="actions-row">
               <button type="submit">Save</button>
@@ -434,7 +458,7 @@
           <h3 class="detail-title"></h3>
           <form id="distance-form" autocomplete="off">
             <div class="row"><label>Official <select name="official_id" id="dist-official" required></select></label><label>Site <select name="site_id" id="dist-site" required></select></label></div>
-            <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" max="1000" step="0.1" required /></label><label>Source <select name="source"><option value="manual">manual</option><option value="geocoded">geocoded</option></select></label></div>
+            <div class="row"><label>One-way miles <input type="number" name="one_way_miles" min="0" max="1000" step="0.1" required /></label><label>Source <select name="source"><option value="manual">Manual</option><option value="geocoded">Geocoded</option></select></label></div>
             <div class="row"><button type="button" id="dist-estimate" class="btn-link" title="Estimate one-way miles from the official's + site's coordinates (great-circle × road factor — review before saving)">⤓ Estimate from coordinates</button></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="distance-msg"></span></div>
           </form>
@@ -459,15 +483,15 @@
             <div class="row">
               <label>Tournament type <span aria-hidden="true">*</span>
                 <select name="tournament_type" required>
-                  <option value="junior">junior</option>
-                  <option value="adult">adult</option>
+                  <option value="junior">Junior</option>
+                  <option value="adult">Adult</option>
                 </select>
               </label>
               <label>Gender (blank = any)
                 <select name="gender">
                   <option value="">— any —</option>
-                  <option value="male">male</option>
-                  <option value="female">female</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
                 </select>
               </label>
               <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
@@ -492,8 +516,8 @@
               <label>Name <span aria-hidden="true">*</span> <input name="name" required placeholder="e.g. Singles or Men's Doubles" /></label>
               <label>Tournament type <span aria-hidden="true">*</span>
                 <select name="tournament_type" required>
-                  <option value="junior">junior</option>
-                  <option value="adult">adult</option>
+                  <option value="junior">Junior</option>
+                  <option value="adult">Adult</option>
                 </select>
               </label>
             </div>
@@ -501,8 +525,8 @@
               <label>Gender (blank = any)
                 <select name="gender">
                   <option value="">— any —</option>
-                  <option value="male">male</option>
-                  <option value="female">female</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
                 </select>
               </label>
               <label>Sort order <input type="number" name="sort_order" min="0" step="10" value="0" /></label>
@@ -638,7 +662,7 @@
                 </label>
               </div>
               <div class="row">
-                <label>Status <select name="selection_status"><option value="selected">selected</option><option value="alternate">alternate</option><option value="withdrawn">withdrawn</option></select></label>
+                <label>Status <select name="selection_status"><option value="selected">Selected</option><option value="alternate">Alternate</option><option value="withdrawn">Withdrawn</option></select></label>
                 <label>Events <select name="events" data-catalog="event" multiple size="3" aria-describedby="multi-hint"></select></label>
               </div>
               <div class="row">
@@ -696,7 +720,7 @@
           <summary>＋ Invite several officials at once</summary>
           <div class="bulk-body">
             <div class="bulk-toolbar">
-              <input type="search" id="asg-bulk-filter" placeholder="🔍 filter officials…" autocomplete="off" aria-label="Filter the official list" />
+              <input type="search" id="asg-bulk-filter" placeholder="Filter officials…" autocomplete="off" aria-label="Filter the official list" />
               <button type="button" id="asg-bulk-all" class="btn-small">Select all shown</button>
               <button type="button" id="asg-bulk-none" class="btn-small">Clear</button>
               <span class="muted" id="asg-bulk-count">0 selected</span>
@@ -714,11 +738,11 @@
           <span class="respbar-summary" id="asg-resp-summary"></span>
           <span class="respbar-filters" role="group" aria-label="Filter by response">
             <button type="button" class="chip-toggle is-on" data-resp="all">All</button>
-            <button type="button" class="chip-toggle" data-resp="pending">⏳ Pending</button>
-            <button type="button" class="chip-toggle" data-resp="accepted">✓ Accepted</button>
-            <button type="button" class="chip-toggle" data-resp="declined">✗ Declined</button>
+            <button type="button" class="chip-toggle" data-resp="pending">Pending</button>
+            <button type="button" class="chip-toggle" data-resp="accepted">Accepted</button>
+            <button type="button" class="chip-toggle" data-resp="declined">Declined</button>
           </span>
-          <button type="button" id="asg-invite-all" class="btn-small" title="Generate a personalised invite for every assigned official (copy all, or BCC those with an email)">✉ Invite all</button>
+          <button type="button" id="asg-invite-all" class="btn-small" title="Generate a personalised invite for every assigned official (copy all, or BCC those with an email)">Invite all</button>
         </div>
         <div id="asg-list"></div>
       </div>
@@ -930,13 +954,14 @@
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
         <p class="muted">Human-reviewed email — <strong>classify → detect player → file</strong> into a list.
-          <details class="inline-help"><summary>How forwarding works</summary>
-          <strong>Forwarding address:</strong> not live in this POC — a dedicated inbox + auto-ingest is on the roadmap (deferred, needs mail infrastructure). For now, <strong>paste each forwarded email below</strong> (From / Subject / Body), or use <strong>⬆ Import ▾ → PDF email thread</strong>.</details>
+          <details class="inline-help"><summary>How to add email</summary>
+          Paste a forwarded message below (From / Subject / Body), or use <strong>Import → PDF email thread</strong>.
+          Auto-ingest to a dedicated address is optional server config.</details>
         </p>
         <p class="inbox-triage-hint muted" id="inbox-triage-hint">
-          <strong>Triage:</strong> add or import email(s), then tick row checkboxes for bulk actions
-          (<span class="inbox-triage-hint-em">⚡ Triage all</span>).
-          Keys (Inbox panel, not in a field):
+          Add or import email, then tick rows for bulk actions
+          (<span class="inbox-triage-hint-em">Triage all</span>).
+          Keys (when not in a field):
           <kbd>t</kbd> triage · <kbd>d</kbd> detect · <kbd>f</kbd> mark filed · <kbd>u</kbd> unmatched only ·
           <kbd>?</kbd> all shortcuts.
         </p>
@@ -964,7 +989,7 @@
              (use the grid empty-state) or when a selection is active. -->
         <div id="inbox-select-hint" class="inbox-select-hint" hidden role="status">
           Select one or more row checkboxes to open bulk actions
-          (Auto-classify · Detect · Populate · <strong>⚡ Triage all</strong>).
+          (Auto-classify · Detect · Populate · <strong>Triage all</strong>).
           Keys: <kbd>t</kbd> · <kbd>d</kbd> · <kbd>f</kbd> · <kbd>u</kbd>
         </div>
         <!-- Bulk-action toolbar: appears once a row is selected via the
@@ -985,12 +1010,12 @@
             <button type="button" id="inbox-bulk-reassign">Reassign</button>
           </span>
           <button type="button" id="inbox-bulk-populate" title="Create rows in the matching lists (withdrawals / late entries / scheduling / div-flex / hotel) using each email's classification + detected player">Populate lists →</button>
-          <button type="button" id="inbox-bulk-triage" class="primary" title="One click: classify → detect players → populate lists for all selected emails">⚡ Triage all →</button>
+          <button type="button" id="inbox-bulk-triage" class="primary" title="One click: classify → detect players → populate lists for all selected emails">Triage all</button>
           <!-- Status group: for info-only emails (hotel notes, acks) that don't
                populate a list but should still clear out of the unfiled queue. -->
           <span class="bulk-group">
-            <button type="button" id="inbox-bulk-filed" title="Mark the selected emails handled — clears them out of the 'unfiled' count without creating a list row">✓ Mark filed</button>
-            <button type="button" id="inbox-bulk-followup" title="Flag the selected emails as needing follow-up">⏳ Need follow-up</button>
+            <button type="button" id="inbox-bulk-filed" title="Mark the selected emails handled — clears them out of the 'unfiled' count without creating a list row">Mark filed</button>
+            <button type="button" id="inbox-bulk-followup" title="Flag the selected emails as needing follow-up">Need follow-up</button>
           </span>
           <span class="msg" id="inbox-bulk-msg"></span>
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
@@ -1373,6 +1398,7 @@
   <main id="official-app" hidden aria-label="My profile and availability">
     <section class="card">
       <h2>My profile</h2>
+      <p class="muted">Your contact details as the tournament director sees them.</p>
       <form id="me-form" autocomplete="off">
         <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
         <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
@@ -1403,7 +1429,7 @@
       <h2>My assignments</h2>
       <p class="muted">Accept or decline the assignments the tournament director made for you.
         <a class="btn-link" href="/api/me/schedule.ics" download
-           title="Download your assignment days as an iCalendar (.ics) file for your phone or desktop calendar">📅 Add to my calendar (.ics)</a></p>
+           title="Download your assignment days as an iCalendar (.ics) file for your phone or desktop calendar">Add to calendar</a></p>
       <div id="me-assignments"></div>
     </section>
     <section class="card section-spacer">
@@ -1440,9 +1466,9 @@
     <div class="modal-box">
       <h3 id="change-pw-title">Change password</h3>
       <form id="change-pw-form" autocomplete="off">
-        <label>Current password<br /><input type="password" id="cpw-current" autocomplete="current-password" required /></label>
-        <label>New password (min 8 chars)<br /><input type="password" id="cpw-new" autocomplete="new-password" minlength="8" required /></label>
-        <label>Confirm new password<br /><input type="password" id="cpw-confirm" autocomplete="new-password" minlength="8" required /></label>
+        <div class="row"><label>Current password <input type="password" id="cpw-current" autocomplete="current-password" required /></label></div>
+        <div class="row"><label>New password (min 8 characters) <input type="password" id="cpw-new" autocomplete="new-password" minlength="8" required /></label></div>
+        <div class="row"><label>Confirm new password <input type="password" id="cpw-confirm" autocomplete="new-password" minlength="8" required /></label></div>
         <p class="msg" id="cpw-msg"></p>
         <div class="modal-actions">
           <button type="button" id="cpw-cancel" class="cancel">Cancel</button>
@@ -1479,6 +1505,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=250"></script>
+  <script type="module" src="/app.js?v=256"></script>
 </body>
 </html>

@@ -12,6 +12,12 @@ export function playerLabel(p) {
   return `${[p.last_name, p.first_name].filter(Boolean).join(", ") || "?"} (${p.usta_number})`;
 }
 
+export function typeLabel(t) {
+  if (t === "junior") return "Junior";
+  if (t === "adult") return "Adult";
+  return t || "";
+}
+
 /** Default cert list — overwritten from GET /api/enums at adminInit (Audit F23). */
 export const DEFAULT_CERTS = [
   ["roving_official", "Roving official"],

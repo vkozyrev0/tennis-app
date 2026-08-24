@@ -49,7 +49,7 @@
 .progress { position: fixed; top: 0; left: 0; width: 100%; height: 3px; z-index: 2000; pointer-events: none; overflow: hidden; }
 .progress.active::before {
   content: ""; position: absolute; top: 0; height: 100%; width: 40%;
-  background: #1f6feb; animation: prog 0.9s linear infinite;
+  background: var(--ball, #d6ec4a); animation: prog 0.9s linear infinite;
 }
 @keyframes prog { from { left: -40%; } to { left: 100%; } }
 
@@ -85,8 +85,12 @@
    is open — at a lower z it would render hidden behind the combo/overlay. */
 #confirm-modal { z-index: 1900; }
 .modal[hidden] { display: none; }
-.modal-box { background: var(--card); border-radius: 10px; padding: 1.25rem 1.5rem; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+.modal-box { background: var(--card); border-radius: var(--radius, 10px); padding: 1.25rem 1.5rem; max-width: 360px; width: min(360px, calc(100vw - 2rem)); box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
 .modal-box p { margin: 0 0 0.5rem; }
+.modal-box h3 { margin: 0 0 0.75rem; }
+.modal-box .row { margin-bottom: 0.55rem; }
+.modal-box .row label { flex: 1 1 100%; }
+.modal-box label input { width: 100%; }
 .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 
 /* Status badges */
@@ -114,16 +118,24 @@
 
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body, system-ui, sans-serif);
   color: var(--ink);
   background: var(--bg);
   line-height: 1.45;
 }
 
+h1, h2, h3, h4 {
+  font-family: var(--font-display, inherit);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 header {
-  background: var(--accent);
+  background: var(--court, var(--accent));
   color: var(--accent-ink);
   padding: 0.3rem 1rem 0.28rem;
+  /* Signature: tennis-ball baseline under the chrome (court line). */
+  border-bottom: 3px solid var(--ball, #d6ec4a);
   /* Sticky top region so the title + menus stay in view while users scroll
      long panels (e.g. the Import page after a deep-link). z-index keeps it
      above Tabulator grids and modals' backdrop. */
@@ -134,14 +146,30 @@ header {
 .menu-l1 { position: sticky; top: var(--nav-sticky-l1, 5.5rem); z-index: 49; }
 .menu    { position: sticky; top: var(--nav-sticky-l2, 7.75rem); z-index: 48; }
 body.nav-l2-solo .crumbs { top: var(--nav-sticky-l2, 7.75rem); }
-header h1 {
-  margin: 0; font-size: 0.92rem;
-  /* Title + brand icon left; health pill + theme/shortcuts/user-box right.
-     A flex container with `margin-left: auto` on the first chip pushes the
-     trailing cluster against the right edge of the header. */
-  display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+.hdr-bar {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
 }
-header h1 > #health { margin-left: auto; }
+header h1 {
+  margin: 0; font-size: 1.02rem;
+  display: flex; align-items: center; gap: 0.15rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+.brand-name { font-weight: 650; }
+.brand-mark {
+  color: var(--ball, #d6ec4a);
+  font-weight: 600;
+  margin-left: 0.28em;
+  letter-spacing: 0.04em;
+}
+.hdr-actions {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 0.1rem; flex-wrap: wrap;
+}
+.hdr-ico {
+  width: 0.95rem; height: 0.95rem;
+  display: block; flex-shrink: 0;
+}
 /* Tennis-ball brand icon in front of the app title. Sized to match the
    visual weight of the surrounding text — feels paired, not stamped on. */
 /* Wide modal variant for the inbox-detail dialog. Lets the email body
@@ -186,6 +214,7 @@ header h1 > #health { margin-left: auto; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 0.35em;
+  flex-shrink: 0;
   margin-left: 0.5rem;
   padding: 0 0.6rem;
   height: var(--chrome-ctrl-h, 2rem);
@@ -219,6 +248,7 @@ header h1 > #health { margin-left: auto; }
   justify-content: center;
   gap: 0.25rem;
   box-sizing: border-box;
+  flex-shrink: 0;
   height: var(--chrome-ctrl-h, 2rem);
   min-height: var(--chrome-ctrl-h, 2rem);
   min-width: var(--chrome-ctrl-h, 2rem);
@@ -263,11 +293,52 @@ header h1 > #health { margin-left: auto; }
   vertical-align: bottom;
 }
 .login-card {
-  max-width: 360px; margin: 3rem auto; background: var(--card);
-  border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem 1.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  max-width: 380px; margin: 3.5rem auto; background: var(--card);
+  border: 1px solid var(--border); border-radius: var(--radius, 10px);
+  padding: 1.6rem 1.8rem 1.5rem;
+  /* Ball-yellow court line along the top of the card. */
+  box-shadow: inset 0 3px 0 var(--ball, #d6ec4a), var(--shadow-card, 0 2px 8px rgba(0, 0, 0, 0.06));
 }
-.login-card h2 { margin-top: 0; }
+.login-card h2 { margin: 0.15rem 0 0.35rem; font-size: 1.45rem; }
+.login-kicker {
+  margin: 0;
+  font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.login-lede { margin: 0 0 1rem; }
+.login-hint { margin: 1rem 0 0; font-size: 0.8rem; }
+
+/* Signed-out: the page is the court. Header stays brand-only; help is unused. */
+body.is-signed-out {
+  background-color: var(--court, #1b4d32);
+  background-image:
+    linear-gradient(90deg, transparent 11.5%, rgba(255,255,255,0.12) 11.5%, rgba(255,255,255,0.12) 11.85%, transparent 11.85%),
+    linear-gradient(90deg, transparent 88.15%, rgba(255,255,255,0.12) 88.15%, rgba(255,255,255,0.12) 88.5%, transparent 88.5%);
+  background-size: 100% 100%, 100% 100%;
+  background-repeat: no-repeat;
+  min-height: 100vh;
+}
+body.is-signed-out header {
+  background: transparent;
+  border-bottom: none;
+}
+body.is-signed-out #shortcuts-btn,
+body.is-signed-out .menu-l1,
+body.is-signed-out .menu,
+body.is-signed-out .crumbs,
+body.is-signed-out #context-bar { display: none !important; }
+body.is-official #context-bar { display: none; }
+
+.official-bar {
+  margin-top: 0.28rem;
+  font-size: var(--chrome-font, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  color: var(--ball, #d6ec4a);
+}
 
 /* ---- active tournament context bar ---- */
 #context-bar {
@@ -289,7 +360,7 @@ header h1 > #health { margin-left: auto; }
    (the old has-active state was nearly indistinguishable from inactive). */
 #context-bar.has-active {
   background: rgba(0, 0, 0, 0.3); border-color: #fff;
-  box-shadow: inset 4px 0 0 #d6ec4a; padding-left: 0.65rem;
+  box-shadow: inset 4px 0 0 var(--ball, #d6ec4a); padding-left: 0.65rem;
 }
 .ctx-label {
   font-weight: 600; font-size: var(--chrome-font, 0.75rem);
@@ -348,7 +419,7 @@ header h1 > #health { margin-left: auto; }
   display: flex;
   gap: 0.2rem;
   padding: 0.2rem 1rem 0;
-  background: var(--accent);
+  background: var(--court, var(--accent));
   flex-wrap: wrap;
   align-items: flex-end;
 }
@@ -372,7 +443,7 @@ header h1 > #health { margin-left: auto; }
   display: inline-flex; align-items: center; gap: 0.35rem;
 }
 .gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
-.gbtn.active { background: #245733; color: #fff; }
+.gbtn.active { background: var(--court-deep, #163f29); color: #fff; }
 /* Solo L1 (no L2 row): full pill radius so the chip doesn't look half-cut. */
 body.nav-l2-solo .gbtn { border-radius: 6px; }
 body.nav-l2-solo .gbtn.active { border-radius: 6px; }
@@ -409,7 +480,7 @@ body.nav-l2-solo .gbtn.active { border-radius: 6px; }
   display: flex;
   gap: 0.2rem;
   padding: 0 0.85rem;
-  background: #245733;
+  background: var(--court-deep, #163f29);
   flex-wrap: wrap;
   align-items: flex-end;
   min-height: var(--nav-l2-h, 2rem);
@@ -476,9 +547,9 @@ main { padding: 1.25rem 1.75rem; max-width: 1440px; margin: 0 auto; }
 .list-pane, .detail-pane {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 10px);
   padding: 1rem 1.1rem 1.1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(0, 0, 0, 0.04));
 }
 
 /* Detail form as a centered modal (shown only when .detail-open). */
@@ -1481,9 +1552,9 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 10px);
   padding: 1.1rem 1.25rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-card, 0 1px 2px rgba(0, 0, 0, 0.04));
 }
 .card h3 { margin-top: 0; }
 .needs-active-note {
@@ -1821,6 +1892,8 @@ td.toggle { white-space: nowrap; }
   .gbtn, .tab { white-space: nowrap; }
   #context-bar { flex-wrap: wrap; }
   #active-tournament, #context-bar .combo, #context-bar .combo-input { min-width: 140px; }
+  .hdr-btn-label { display: none; }
+  .login-card { margin: 2rem 1rem; }
 }
 
 /* ---- print: show only the active report ---- */
@@ -2079,15 +2152,24 @@ td.toggle { white-space: nowrap; }
 .origin-email { color: var(--accent); cursor: help; }
 
 /* Home dashboard tiles + overview */
+.dash-hero { margin-bottom: 0.85rem; }
+.dash-hero h2 {
+  margin: 0 0 0.15rem; font-size: 1.45rem; font-weight: 650; letter-spacing: 0.01em;
+}
+.dash-hero .muted { margin: 0; }
 .dash-tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.6rem 0 1.2rem; }
 .dash-tile {
   flex: 1 1 130px; min-width: 120px; display: flex; flex-direction: column; gap: 0.15rem;
-  padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius, 8px);
   background: var(--card); color: inherit; cursor: pointer; text-align: left;
 }
 .dash-tile:hover { border-color: var(--accent); }
 .dash-tile.alert { border-color: var(--warn-border); background: var(--warn-bg); }
-.dash-tile .dash-num { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+.dash-tile .dash-num {
+  font-family: var(--font-display, inherit);
+  font-size: 1.65rem; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
 .dash-tile.alert .dash-num { color: var(--bad); }
 .dash-tile .dash-label { font-size: 0.8rem; color: var(--muted); }
 .dash-trow { cursor: pointer; }
@@ -2242,7 +2324,11 @@ td.toggle { white-space: nowrap; }
   padding: 0.6rem 0.5rem; border: 1px solid var(--line); border-radius: 10px;
   background: var(--panel);
 }
-.dayof-stat-n { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.dayof-stat-n {
+  font-family: var(--font-display, inherit);
+  font-size: 1.5rem; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
 .dayof-stat-l { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
 .dayof-stat.ok   .dayof-stat-n { color: var(--accent); }
 .dayof-stat.warn .dayof-stat-n { color: #c47f1a; }

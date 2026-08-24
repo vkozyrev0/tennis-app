@@ -77,19 +77,22 @@ export function createBreadcrumbs(ctx) {
       const idx = startIdx + i;
       const isCurrent = idx === _navHistory.length - 1;
       const { groupLabel, tabLabel } = _crumbLabelFor(entry.group, entry.panel);
+      const crumbText = groupLabel.toLowerCase() === tabLabel.toLowerCase()
+        ? groupLabel
+        : `${groupLabel} › ${tabLabel}`;
       const li = document.createElement("li");
       if (isCurrent) {
         const span = document.createElement("span");
         span.className = "crumb-current";
-        span.textContent = `${groupLabel} › ${tabLabel}`;
+        span.textContent = crumbText;
         span.setAttribute("aria-current", "page");
         li.appendChild(span);
       } else {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "crumb-link";
-        btn.textContent = `${groupLabel} › ${tabLabel}`;
-        btn.title = `Jump back to ${groupLabel} › ${tabLabel}`;
+        btn.textContent = crumbText;
+        btn.title = `Jump back to ${crumbText}`;
         btn.addEventListener("click", () => _jumpToCrumb(idx));
         li.appendChild(btn);
       }

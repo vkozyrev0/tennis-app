@@ -9,9 +9,9 @@ export function makeOriginCol({ hstr }) {
     const r = c.getData();
     if (r.source_email_id) {
       const subj = r.source_subject || `email #${r.source_email_id}`;
-      return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">✉ email</span>`;
+      return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">Email</span>`;
     }
-    return '<span class="muted">manual</span>';
+    return '<span class="muted">Manual</span>';
   }
   return {
     title: "Origin", field: "source_email_id", headerSort: false,

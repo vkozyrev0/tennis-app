@@ -154,7 +154,7 @@ export function createDayOfPanel(ctx) {
           ? hstr`<p class="muted">No official matches the search.</p>`
           : hstr`<p class="muted">No officials are scheduled to work this day. Use Quick-assign above or open Assignments.</p>`);
     box.innerHTML = hstr`<h3>Officials working <span class="muted">(${d.officials_count})</span></h3>
-      <input type="search" class="dayof-search" placeholder="🔍 filter by name…" value="${_DAYOF.search}" aria-label="Filter officials by name" />
+      <input type="search" class="dayof-search" placeholder="Filter by name…" value="${_DAYOF.search}" aria-label="Filter officials by name" />
       <div class="dayof-off-list">${raw(list)}</div>`;
   }
 

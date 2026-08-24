@@ -9,7 +9,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 
 from ..db import db_dep
 from ..models import LoginIn, PasswordChange
-from ..security import COOKIE_NAME, get_current_user, hash_pw, verify_pw
+from ..security import COOKIE_NAME, get_current_user, hash_pw, password_change_required, verify_pw
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -134,6 +134,7 @@ def _user_public(user: dict) -> dict:
         "official_id": user["official_id"],
         "can_export_pii": bool(user.get("can_export_pii", True)),
         "must_change_password": bool(user.get("must_change_password")),
+        "password_change_required": password_change_required(user),
         "session_days": _session_days(),
     }
 

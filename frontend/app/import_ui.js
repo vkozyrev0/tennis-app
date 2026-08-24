@@ -52,23 +52,23 @@ export function createImportPage(ctx) {
     return "";
   }
 
-  // Per-import-type tab metadata: an icon + a short label (the backend labels are
-  // verbose) so the per-import tabs scan fast. Plus the preferred display order
+  // Per-import-type tab metadata: a short label (the backend labels are verbose)
+  // so the per-import tabs scan fast. Plus the preferred display order
   // (roster variants grouped together).
   const _IMPORT_TAB_META = {
-    roster: { icon: "📋", short: "Roster (simple)" },
-    roster_initial: { icon: "📥", short: "Roster: Initial" },
-    roster_correction: { icon: "✏️", short: "Roster: Correction" },
-    late_entries: { icon: "⏰", short: "Late entries" },
-    withdrawals: { icon: "🚫", short: "Withdrawals" },
-    scheduling_avoidances: { icon: "📅", short: "Scheduling" },
-    division_flexibility: { icon: "🔀", short: "Division flex" },
-    pairing_avoidances: { icon: "⛔", short: "Pairing avoid" },
-    doubles_requests: { icon: "👥", short: "Doubles" },
-    player_hotels: { icon: "🏨", short: "Player hotels" },
-    tshirt_hotel_dietary: { icon: "👕", short: "Shirt + Hotel + Diet" },
-    emails_pdf: { icon: "✉️", short: "Emails (PDF)" },
-    distances: { icon: "📏", short: "Distances" },
+    roster: { short: "Roster (simple)" },
+    roster_initial: { short: "Roster: Initial" },
+    roster_correction: { short: "Roster: Correction" },
+    late_entries: { short: "Late entries" },
+    withdrawals: { short: "Withdrawals" },
+    scheduling_avoidances: { short: "Scheduling" },
+    division_flexibility: { short: "Division flex" },
+    pairing_avoidances: { short: "Pairing avoid" },
+    doubles_requests: { short: "Doubles" },
+    player_hotels: { short: "Player hotels" },
+    tshirt_hotel_dietary: { short: "Shirt + Hotel + Diet" },
+    emails_pdf: { short: "Emails (PDF)" },
+    distances: { short: "Distances" },
   };
   const _IMPORT_TAB_ORDER = ["roster", "roster_initial", "roster_correction", "late_entries",
     "withdrawals", "scheduling_avoidances", "division_flexibility", "pairing_avoidances",
@@ -354,7 +354,7 @@ export function createImportPage(ctx) {
         const btn = document.createElement("button");
         btn.type = "button"; btn.className = "import-tab"; btn.dataset.key = t.key;
         btn.setAttribute("role", "tab"); btn.tabIndex = -1; btn.title = t.label;   // full label on hover
-        btn.innerHTML = `<span class="import-tab-ico" aria-hidden="true">${tm.icon || "•"}</span><span class="import-tab-lbl">${esc(tm.short || t.label)}</span>`;
+        btn.innerHTML = `<span class="import-tab-lbl">${esc(tm.short || t.label)}</span>`;
         btn.addEventListener("click", () => activate(t.key));
         tabsRoot.appendChild(btn); tabBtns[t.key] = btn;
         sections[t.key] = _buildImportSection(t, panelRoot);
