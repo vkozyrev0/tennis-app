@@ -3,6 +3,10 @@ models/*.gguf
 models/*.part
 *.gguf
 
+# Local server / tool logs
+*.log
+*.err.log
+
 # Python
 __pycache__/
 *.py[cod]
