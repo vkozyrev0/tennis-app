@@ -4,7 +4,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LIST_MIN_HEIGHT, listMountHeight } from "./layout.js";
+import {
+  LIST_MIN_HEIGHT, LIST_HEADER_ROW_HEIGHT, listMountHeight, listBodyMinFromMount, listMinBodyHeight,
+} from "./layout.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -14,6 +16,10 @@ function test(name, fn) { fn(); passed++; console.log("  ok -", name); }
 test("list min height is enough for AG header + scrollbar + body rows", () => {
   assert.ok(LIST_MIN_HEIGHT >= 140, LIST_MIN_HEIGHT);
   assert.ok(LIST_MIN_HEIGHT >= 220, LIST_MIN_HEIGHT);
+  assert.ok(LIST_MIN_HEIGHT >= 380, LIST_MIN_HEIGHT);
+  assert.ok(listBodyMinFromMount(LIST_MIN_HEIGHT) >= listMinBodyHeight(),
+    listBodyMinFromMount(LIST_MIN_HEIGHT));
+  assert.ok(listBodyMinFromMount(LIST_MIN_HEIGHT) >= 64, "need ~2 data rows of body");
 });
 
 test("mount height never collapses to 0 even when top is past the fold", () => {
@@ -43,6 +49,15 @@ test("inbox grid is a sized grid-mount; action cells keep pointer-events", () =>
   assert.match(css, /ag-cell\.grid-actions-cell/);
   assert.match(css, /pointer-events:\s*auto/);
   assert.doesNotMatch(css, /grid-actions-cell[^}]*pointer-events:\s*none/);
+  assert.match(css, /\.grid-mount\s*\{[^}]*min-height:\s*380px/);
+  assert.match(css, /ag-body-viewport\s*\{\s*min-height:\s*96px/);
+});
+
+test("grid headers are compact 8pt / 22px", () => {
+  const css = readFileSync(join(here, "../styles.css"), "utf8");
+  assert.match(css, /--ag-header-height:\s*22px/);
+  assert.match(css, /\.ag-header-cell-text[\s\S]{0,200}font-size:\s*8pt/);
+  assert.equal(LIST_HEADER_ROW_HEIGHT, 22);
 });
 
 console.log(`\n${passed} layout checks passed`);

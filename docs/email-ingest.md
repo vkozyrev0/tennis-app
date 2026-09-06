@@ -20,7 +20,9 @@ Restart the API. Check:
 
 Optional **local** tiny-LLM for leftover `other` emails (heuristic first): set
 `EMAIL_LLM=1` and run llama.cpp `llama-server` on loopback. Junior PII stays
-on-box (D5). Off by default. See `.env.example`.
+on-box (D5). Off by default. See `.env.example`. The leftover prompt (one
+shared template, not per-email) is documented in
+[email-llm-prompt.md](email-llm-prompt.md).
 
 ```bash
 curl -s http://localhost:8000/api/ingest/status

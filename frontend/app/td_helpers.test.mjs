@@ -1,10 +1,15 @@
 // Node tests for TD walkthrough helpers (blank email, menu clamp, locale dates, hash).
 // Run: node frontend/app/td_helpers.test.mjs
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   emailCreateGuard,
+  EMAIL_MSG_ID,
   fitMenuBox,
   parseLocaleDate,
+  dateCellParser,
   formatLocaleDate,
   hashForPanel,
   panelFromHash,
@@ -12,17 +17,33 @@ import {
   isVenueRole,
   toastLifetime,
   looksLikeAgeDivision,
-  healthPillText,
+  healthIndicators,
+  applyHealthPills,
+  intelStatusLine,
+  INTEL_LABEL,
 } from "./td_helpers.js";
 
 let passed = 0;
 function test(name, fn) { fn(); passed++; console.log("  ok -", name); }
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 test("blank email rejected when from, subject, and body are empty", () => {
   const g = emailCreateGuard({ from_address: "", subject: "  ", body: null });
   assert.equal(g.ok, false);
   assert.ok(g.reason && /from|subject|body/i.test(g.reason));
   assert.ok(g.fields.includes("from_address"));
+});
+
+test("blank-email reason is the message written to #email-msg", () => {
+  assert.equal(EMAIL_MSG_ID, "email-msg");
+  const g = emailCreateGuard({ from_address: "", subject: "", body: "" });
+  assert.equal(g.ok, false);
+  const inbox = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(inbox, /setMsg\(EMAIL_MSG_ID, guard\.reason/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /id="email-msg"/);
+  assert.equal(g.reason, "Enter a from address, subject, or body — blank emails are not saved");
 });
 
 test("email with only a subject is allowed", () => {
@@ -66,6 +87,19 @@ test("parse rejects malformed dates", () => {
   assert.equal(parseLocaleDate(""), null);
 });
 
+test("dateCellParser locale and ISO become ISO; malformed keeps prior ISO", () => {
+  assert.equal(dateCellParser("09/15/2026", "2026-01-01"), "2026-09-15");
+  assert.equal(dateCellParser("2026-09-15", null), "2026-09-15");
+  assert.equal(dateCellParser("not-a-date", "2026-09-15"), "2026-09-15");
+  assert.equal(dateCellParser("13/40/2026", "2026-09-15"), "2026-09-15");
+  assert.equal(dateCellParser("garbage", null), null);
+  assert.equal(dateCellParser("", "2026-09-15"), null);
+  const grids = readFileSync(join(here, "grids.js"), "utf8");
+  assert.match(grids, /dateCellParser\(p\.newValue, p\.oldValue\)/);
+  assert.match(grids, /cellEditor = "agTextCellEditor"/);
+  assert.doesNotMatch(grids, /agDateStringCellEditor/);
+});
+
 test("format ISO as MM/DD/YYYY", () => {
   assert.equal(formatLocaleDate("2026-09-15"), "09/15/2026");
   assert.equal(formatLocaleDate("2026-01-05"), "01/05/2026");
@@ -94,12 +128,106 @@ test("most toasts time out; sticky and action toasts persist", () => {
   assert.equal(toastLifetime({ ok: true, hasAction: true }), null);
 });
 
-test("health pill shows LLM when the sidecar is up", () => {
-  assert.equal(healthPillText({ db: "ok", llm: "off" }).text, "API + DB ok");
-  assert.equal(healthPillText({ db: "ok", llm: "ok" }).text, "API + DB + LLM ok");
-  assert.equal(healthPillText({ db: "ok", llm: "down" }).kind, "warn");
-  assert.match(healthPillText({ db: "ok", llm: "down" }).text, /LLM down/);
-  assert.equal(healthPillText({ db: "down" }).kind, "bad");
+test("health is three independent indicators named API, DB, Intelligence", () => {
+  const allOk = healthIndicators({ db: "ok", llm: "ok" });
+  assert.deepEqual(allOk.map((x) => x.id), ["api", "db", "intel"]);
+  assert.equal(allOk[0].kind, "ok");
+  assert.equal(allOk[1].kind, "ok");
+  assert.equal(allOk[2].kind, "ok");
+  assert.equal(allOk[2].label, INTEL_LABEL);
+  assert.equal(INTEL_LABEL, "Intelligence");
+
+  const intelOff = healthIndicators({ db: "ok", llm: "off" });
+  assert.equal(intelOff[0].kind, "ok");
+  assert.equal(intelOff[1].kind, "ok");
+  assert.equal(intelOff[2].kind, "off");
+
+  const intelDown = healthIndicators({ db: "ok", llm: "down" });
+  assert.equal(intelDown[2].kind, "warn");
+  assert.match(intelDown[2].title, /Intelligence/);
+  assert.doesNotMatch(intelDown[2].title, /LLM/i);
+
+  const dbDown = healthIndicators({ db: "down", llm: "ok" });
+  assert.equal(dbDown[0].kind, "ok");
+  assert.equal(dbDown[1].kind, "bad");
+  assert.equal(dbDown[2].kind, "ok");
+
+  const apiDown = healthIndicators({ reachable: false });
+  assert.equal(apiDown[0].kind, "bad");
+  assert.equal(apiDown[1].kind, "warn");
+  assert.equal(apiDown[2].kind, "warn");
+});
+
+test("intel status line never says LLM", () => {
+  assert.match(intelStatusLine("ok"), /Intelligence is on/);
+  assert.match(intelStatusLine("down"), /not answering/);
+  assert.match(intelStatusLine("off"), /is off/);
+  for (const s of ["ok", "down", "off"]) {
+    assert.doesNotMatch(intelStatusLine(s), /LLM|sidecar|llama/i);
+  }
+});
+
+test("applyHealthPills paints each chip from indicators", () => {
+  const cluster = {
+    nodes: {
+      api: { className: "", textContent: "", title: "", attrs: {} },
+      db: { className: "", textContent: "", title: "", attrs: {} },
+      intel: { className: "", textContent: "", title: "", attrs: {} },
+    },
+    querySelector(sel) {
+      const m = /data-svc="(\w+)"/.exec(sel);
+      const n = m && this.nodes[m[1]];
+      if (!n) return null;
+      return {
+        get className() { return n.className; },
+        set className(v) { n.className = v; },
+        get textContent() { return n.textContent; },
+        set textContent(v) { n.textContent = v; },
+        get title() { return n.title; },
+        set title(v) { n.title = v; },
+        setAttribute(k, v) { n.attrs[k] = v; },
+      };
+    },
+  };
+  applyHealthPills(cluster, healthIndicators({ db: "ok", llm: "down" }));
+  assert.equal(cluster.nodes.api.className, "pill health-pill ok");
+  assert.equal(cluster.nodes.db.className, "pill health-pill ok");
+  assert.equal(cluster.nodes.intel.className, "pill health-pill warn");
+  assert.equal(cluster.nodes.intel.textContent, "Intelligence");
+  assert.match(cluster.nodes.intel.attrs["aria-label"], /Intelligence/);
+});
+
+test("login card is visible without waiting for JS health", () => {
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /id="login-view"/);
+  assert.doesNotMatch(html, /id="login-view" hidden/);
+});
+
+test("healthy health-chip pips are green, not tennis-ball yellow", () => {
+  const css = readFileSync(join(here, "../styles.css"), "utf8");
+  const cluster = css.match(/\.health-cluster[\s\S]*?\.health-cluster \.pill\.off[^}]+}/);
+  assert.ok(cluster, "health-cluster rules missing");
+  assert.match(cluster[0], /\.pill\.ok::before \{ background: #5bbf6a; \}/);
+  assert.doesNotMatch(cluster[0], /--ball/);
+  assert.doesNotMatch(cluster[0], /#d6ec4a/);
+});
+
+test("header markup has three health chips and Chat lives under Home", () => {
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /id="health-cluster"/);
+  assert.match(html, /data-svc="api"/);
+  assert.match(html, /data-svc="db"/);
+  assert.match(html, /data-svc="intel"/);
+  assert.doesNotMatch(html, /id="health"/);
+  assert.doesNotMatch(html, /API \+ DB/);
+  assert.doesNotMatch(html, /data-group="chat"/);
+  const homeAt = html.indexOf('class="menu-group group-active" data-group="home"');
+  assert.ok(homeAt >= 0);
+  const homeBlock = html.slice(homeAt, html.indexOf("</div>", homeAt + 1) + 6);
+  assert.match(homeBlock, /panel-home/);
+  assert.match(homeBlock, /panel-td-chat/);
+  assert.match(html, />Division flex</);
+  assert.match(html, />Pairing avoidances</);
 });
 
 test("age division accepts NTRP 3.5 Men and junior codes, rejects blank", () => {

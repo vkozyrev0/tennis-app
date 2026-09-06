@@ -399,7 +399,9 @@ def test_file_withdrawal_without_player_does_not_insert():
         "status": "filed", "detected_player_id": None,
     })
     assert blocked.status_code == 400, blocked.text
-    assert "player" in blocked.json()["detail"].lower()
+    detail = blocked.json()["detail"].lower()
+    assert "player" in detail
+    assert "will not change" in detail
     wd = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
     assert not any(r.get("source_email_id") == e["id"] for r in wd)
     dbl = client.put(f"/api/emails/{e['id']}", json={
@@ -407,9 +409,61 @@ def test_file_withdrawal_without_player_does_not_insert():
         "status": "filed", "detected_player_id": None,
     })
     assert dbl.status_code == 400, dbl.text
+    assert "will not change" in dbl.json()["detail"].lower()
     doubles = client.get(f"/api/tournaments/{t['id']}/doubles").json()
     rows = list(doubles.get("requests") or []) + list(doubles.get("pairs") or [])
     assert not any(isinstance(r, dict) and r.get("source_email_id") == e["id"] for r in rows)
+
+
+def test_bulk_populate_skips_unmatched_withdrawal_and_does_not_insert():
+    from app.email_targets import FILE_NEEDS_PLAYER_REASON
+    t = _tournament()
+    e = _email(t["id"], subject="Please withdraw Jordan Avery",
+               body="Please withdraw Jordan Avery from the tournament.")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": None,
+    })
+    res = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e["id"]]}), 200)
+    assert res["filed"] == 0, res
+    assert res["skipped"], res
+    assert res["skipped"][0]["reason"] == FILE_NEEDS_PLAYER_REASON
+    wd = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+    assert not any(r.get("source_email_id") == e["id"] for r in wd)
+    dbl = _email(t["id"], subject="Boys 14s Doubles Confirmation",
+                 body="Scarlett Milner doubles pairing change")
+    client.put(f"/api/emails/{dbl['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles",
+        "status": "new", "detected_player_id": None,
+    })
+    res2 = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [dbl["id"]]}), 200)
+    assert res2["filed"] == 0, res2
+    assert res2["skipped"][0]["reason"] == FILE_NEEDS_PLAYER_REASON
+    doubles = client.get(f"/api/tournaments/{t['id']}/doubles").json()
+    rows = list(doubles.get("requests") or []) + list(doubles.get("pairs") or [])
+    assert not any(isinstance(r, dict) and r.get("source_email_id") == dbl["id"] for r in rows)
+
+
+def test_suggest_and_bulk_classify_stamp_classified_ms():
+    t = _tournament()
+    e = _email(t["id"], subject="Withdrawal request for my daughter",
+               body="Please withdraw Anna Brown from the tournament due to injury.")
+    out = _ok(client.post(f"/api/emails/{e['id']}/suggest", json={}), 200)
+    assert out["classification"] == "withdrawal"
+    assert isinstance(out["classified_ms"], int)
+    assert out["classified_ms"] >= 0
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["classified_ms"] == out["classified_ms"]
+    e2 = _email(t["id"], subject="I missed the deadline", body="can I still enter?")
+    bulk = _ok(client.post("/api/emails/bulk/classify",
+                           json={"email_ids": [e2["id"]]}), 200)
+    assert bulk["classified"] == 1
+    assert isinstance(bulk["changed"][0]["classified_ms"], int)
+    assert bulk["changed"][0]["classified_ms"] >= 0
+    row2 = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+                if m["id"] == e2["id"])
+    assert row2["classified_ms"] == bulk["changed"][0]["classified_ms"]
 
 
 def test_target_registry_is_internally_consistent():

@@ -62,7 +62,8 @@ backend/
     db.py              # get_conn() + db_dep() per-request connection
     security.py        # hash_pw/verify_pw, get_current_user, require_admin
     crypto.py          # Fernet encrypt/decrypt for PII-at-rest (H2)
-    triage.py          # local keyword email classifier (no LLM)
+    triage.py          # local keyword email classifier (heuristic first)
+    email_llm.py       # optional leftover tiny-LLM when heuristic is other (EMAIL_LLM=1)
     email_extract.py   # pure regex extraction from email text: USTA #s, (name, USTA#) pairs,
                        # withdrawal reason, division, events, avoid day/time
     assignment_calc.py # pure pay/mileage/flag math (rates, free band, cap, RULE_VERSION)
@@ -290,10 +291,14 @@ the app's mailto-only email model (no send infrastructure).
 (12/14/16/18, rounded up) from birth year. The catalog (`division`,
 `tournament_event`) is editable Setup data, seeded by migration 0027.
 
-**Email triage (`triage.py` + `email_extract.py`).** Purely **local keyword
-rules** (no LLM — minors' PII constraint): ordered patterns map an email's
-subject+body to a classification (withdrawal, late_entry, doubles,
-pairing_avoidance, scheduling_avoidance, division_flex, hotel, else `other`).
+**Email triage (`triage.py` + `email_extract.py` + optional `email_llm.py`).**
+**Local keyword rules** first: ordered patterns map an email's subject+body to
+a classification (withdrawal, late_entry, doubles, pairing_avoidance,
+scheduling_avoidance, division_flex, hotel, else `other`). When
+`EMAIL_LLM=1` and the heuristic is `other`, a local llama.cpp sidecar
+(Qwen2.5-1.5B, loopback / Fly-private only — D5) runs one shared leftover
+prompt; see [email-llm-prompt.md](email-llm-prompt.md). Cloud LLMs are not
+used. Filing stays human.
 The text-extraction regexes live in `email_extract.py`: **layered USTA-number
 patterns** — labeled (`USTA # 1234…`), bare 9–11 digit, number-before-name, and
 name-before-number — behind `extract_usta` / `extract_ustas` /

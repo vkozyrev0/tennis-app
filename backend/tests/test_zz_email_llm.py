@@ -1,17 +1,21 @@
 """Local tiny-LLM leftover parser (D5). Pure + monkeypatched HTTP — no GGUF."""
+import json
 import os
+from pathlib import Path
 
 import pytest
 
 from app.email_llm import (
     clip_email_text,
     extract_email,
+    leftover_prompt,
     llm_enabled,
     llm_health_url,
     llm_url_allowed,
     maybe_intent,
     parse_llm_json,
     probe_llm,
+    _SYSTEM,
     _assert_local_url,
 )
 from app.triage import classify
@@ -41,6 +45,30 @@ def test_parse_llm_json_accepts_fenced_and_bare():
     assert p["confidence"] == 0.8
     assert parse_llm_json("not json") is None
     assert parse_llm_json('{"intent":"bananas"}')["intent"] == "other"
+
+
+def test_clip_drops_outlook_and_iphone_signatures():
+    _, body = clip_email_text("Re: Partner", "We will pair them.\nGet Outlook for iOS")
+    assert body.strip() == "We will pair them."
+    _, body2 = clip_email_text("Re: Hi", "Thank you!\nSent from my iPhone")
+    assert body2.strip() == "Thank you!"
+    _, body3 = clip_email_text(
+        "Re: Partners",
+        "Alex and Sam Doubles partners Thank you\n"
+        "On Wed, May 27, 2026 at 9:58 PM, Pat\n<pat@example.com> wrote:\nquoted",
+    )
+    assert "quoted" not in body3
+    assert "Doubles partners" in body3
+
+
+def test_clip_drops_pdf_date_to_wrapper():
+    subj, body = clip_email_text(
+        "Re: August Baklini withdrawal",
+        "[Date: Thursday, May 28, 2026 at 15:15:53 Eastern Daylight Time]\n"
+        "[To: Devyn Baklini]\n\nThanks.",
+    )
+    assert body.strip() == "Thanks."
+    assert "Date:" not in body
 
 
 def test_clip_strips_quoted_thread():
@@ -107,6 +135,52 @@ def test_compose_hosts_allowed_in_dev(monkeypatch):
     assert llm_url_allowed("http://host.docker.internal:8080/v1") is True
     monkeypatch.setenv("ENV", "prod")
     assert llm_url_allowed("http://llm:8080/v1") is False
+
+
+def test_leftover_prompt_is_one_shared_template():
+    """Same leftover few-shots for every email — not a per-message prompt."""
+    assert "doubles confirmation" in _SYSTEM.lower()
+    a = leftover_prompt("Alpha subject", "Alpha body")
+    b = leftover_prompt("Beta subject", "Beta body")
+    assert a.replace("Alpha subject", "X").replace("Alpha body", "Y") == \
+        b.replace("Beta subject", "X").replace("Beta body", "Y")
+    assert a.count("Now extract") == 1
+    assert '{"intent":"withdrawal"' in a
+    assert '{"intent":"doubles"' in a
+    assert '{"intent":"other"' in a
+    assert a.count("{subject}") == 0
+
+
+def test_docs_quote_shipped_leftover_prompt():
+    """docs/email-llm-prompt.md must quote the live _SYSTEM and _SHOTS."""
+    from app.email_llm import _SHOTS
+    doc = (Path(__file__).resolve().parents[2] / "docs" / "email-llm-prompt.md")
+    text = doc.read_text(encoding="utf-8")
+    assert _SYSTEM in text
+    assert "Jane Roe has requested to be withdrawn" in text
+    assert "Alex Kim and Sam Lee would like to be doubles partners" in text
+    assert "Now extract" in text
+    assert "Subject: {subject}" in text
+    assert "Body: {body}" in text
+    for line in _SHOTS.strip().splitlines():
+        if line.startswith("Subject: {") or line.startswith("Body: {"):
+            continue
+        if line.strip():
+            assert line in text, line
+
+
+def test_leftover_shots_are_not_corpus_emails():
+    """Generic invented examples only — must not paste the PDF subjects."""
+    gold_path = Path(__file__).parent / "fixtures" / "tournament_emails_gold.json"
+    gold = json.loads(gold_path.read_text(encoding="utf-8"))
+    blob = _SYSTEM + "\n" + leftover_prompt("QUERY_SUBJECT", "QUERY_BODY")
+    blob = blob.replace("QUERY_SUBJECT", "").replace("QUERY_BODY", "")
+    shot_subjects = [
+        line[len("Subject: "):] for line in blob.splitlines()
+        if line.startswith("Subject: ")
+    ]
+    for g in gold:
+        assert g["subject"] not in shot_subjects, g["subject"]
 
 
 def test_extract_formats_prompt_without_eating_json_braces(monkeypatch):

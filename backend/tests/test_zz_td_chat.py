@@ -8,10 +8,13 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.td_chat import (
     ALLOWED_TOOLS,
+    DEFAULT_CHAT_TIMEOUT_SEC,
+    PLANNER_SYSTEM,
     TD_CHAT_VERDICT,
     TD_CHAT_VERDICT_DETAIL,
     build_catalog,
     parse_plan,
+    planner_prompt,
     resolve_tool,
     run_resolved,
 )
@@ -134,6 +137,45 @@ def test_chat_turn_twice_returns_structured_body():
     assert v["detail"] == TD_CHAT_VERDICT_DETAIL
 
 
+def test_turn_screenshot_cases_ignore_invented_tools_and_format_english(monkeypatch):
+    t = _tournament()
+    tid = t["id"]
+    monkeypatch.setattr("app.routers.td_chat.llm_enabled", lambda: True)
+    monkeypatch.setattr("app.routers.td_chat.probe_llm", lambda: "ok")
+
+    def _llm(prompt):
+        user = prompt.split("## User input", 1)[-1]
+        if "\ntest\n" in user:
+            return json.dumps({
+                "calls": [{"tool": "tournament_status", "args": {"tournament_id": tid}},
+                          {"tool": "say", "args": {}}],
+                "say": "short confirmation",
+            })
+        return json.dumps({
+            "calls": [{"tool": "tournament_status", "args": {"tournament_id": tid}},
+                      {"tool": "me", "args": {}}],
+            "say": "The current tournament is named 'Active Tournament'.",
+        })
+
+    monkeypatch.setattr("app.td_chat.chat_complete", _llm)
+    help_r = client.post("/api/td-chat/turn", json={"message": "test", "tournament_id": tid})
+    assert help_r.status_code == 200, help_r.text
+    help_b = help_r.json()
+    assert "short confirmation" not in (help_b["reply"] or "")
+    assert help_b["unknown_tools"] == []
+    assert "unfiled" not in (help_b["reply"] or "").lower() or "list the roster" in (help_b["reply"] or "").lower()
+    assert not help_b["executed"]
+
+    name_r = client.post("/api/td-chat/turn", json={
+        "message": "what is the name of the current tournament", "tournament_id": tid,
+    })
+    assert name_r.status_code == 200, name_r.text
+    name_b = name_r.json()
+    assert t["name"] in (name_b["reply"] or "")
+    assert "Active Tournament" not in (name_b["reply"] or "")
+    assert name_b["unknown_tools"] == []
+
+
 def test_turn_executes_status_get_on_shipped_route(monkeypatch):
     t = _tournament()
     monkeypatch.setattr("app.routers.td_chat.llm_enabled", lambda: True)
@@ -198,3 +240,16 @@ def test_execute_http_re_resolves_and_ignores_client_mutating_flag():
     })
     assert bad.status_code == 400
     assert "unknown tool" in bad.json()["detail"]
+
+
+def test_chat_timeout_covers_markdown_catalog_prefill():
+    assert DEFAULT_CHAT_TIMEOUT_SEC >= 180
+
+
+def test_planner_prompt_is_short_and_isolates_user_input():
+    p = planner_prompt("Add Jane to the roster", [], tournament_id=9)
+    assert p.startswith("# CourtOps TD chat planner")
+    assert "## User input" in p
+    assert "Add Jane to the roster" in p[p.index("## User input"):]
+    assert PLANNER_SYSTEM.startswith("You convert")
+    assert "## Available APIs" not in p

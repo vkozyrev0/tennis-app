@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from ..db import get_conn
 from ..shirtops import SHIRT_LABELS
 
 router = APIRouter(tags=["health"])
@@ -29,9 +28,18 @@ def enums():
 @router.get("/api/health")
 def health():
     from ..email_llm import probe_llm
-    info = {"status": "ok", "db": "down", "llm": probe_llm()}
+    from ..config import settings
+    import psycopg
+    from psycopg.rows import dict_row
+    info = {"status": "ok", "db": "down", "llm": "off"}
     try:
-        conn = get_conn()
+        info["llm"] = probe_llm(timeout=1.0)
+    except Exception:
+        info["llm"] = "down"
+    try:
+        conn = psycopg.connect(
+            settings.dsn, row_factory=dict_row, connect_timeout=2,
+        )
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")

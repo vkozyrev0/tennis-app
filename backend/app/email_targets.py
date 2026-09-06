@@ -122,6 +122,14 @@ POPULATE_TARGETS = {
 # action an *informative* skip reason instead of a generic "no target".
 SINGLE_FILE_ONLY_KEYS = [t["key"] for t in EMAIL_TARGETS if t["bulk_sql"] is None]
 
+# Withdrawal / doubles filing needs a matched player; otherwise roster and
+# doubles lists will not change. Shared by PUT-as-filed and bulk populate.
+FILE_NEEDS_PLAYER = frozenset({"withdrawal", "doubles"})
+FILE_NEEDS_PLAYER_REASON = (
+    "Pick a player first — filing a withdrawal or doubles email without one "
+    "will not change those lists."
+)
+
 
 def public_targets() -> list[dict]:
     """The registry as the frontend consumes it: key, label, and a `bulk` flag."""

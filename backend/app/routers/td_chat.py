@@ -66,33 +66,66 @@ def chat_turn(body: ChatTurnIn, user=Depends(require_admin), conn=Depends(db_dep
     plan = td_chat.parse_plan(raw) if raw else {"calls": [], "say": ""}
     if not raw and llm != "ok":
         plan["say"] = (
-            "Local LLM sidecar is off or down — start it (scripts/run_llm_local.ps1) "
-            "or use the roster form."
+            "Local Intelligence is off or down — start it with "
+            "scripts/run_local.ps1, or use the roster form."
         )
-    proposed = []
-    unknown = []
-    for c in plan["calls"]:
+    calls = td_chat.plan_calls(message, plan.get("calls"))
+    if any(c["tool"] == "remove_player" for c in calls) and not any(
+        c["tool"] == "list_roster" for c in calls
+    ):
+        rm = next(c for c in calls if c["tool"] == "remove_player")
+        if not (rm.get("args") or {}).get("entry_id"):
+            calls = [{"tool": "list_roster", "args": {}}] + calls
+    resolved = []
+    soft_removes = []
+    for c in calls:
+        if c["tool"] == "remove_player" and not (c.get("args") or {}).get("entry_id"):
+            soft_removes.append({
+                "tool": "remove_player", "args": dict(c.get("args") or {}),
+                "mutating": True,
+            })
+            continue
         try:
-            proposed.append(td_chat.resolve_tool(
+            resolved.append(td_chat.resolve_tool(
                 c["tool"], c.get("args") or {}, tournament_id=body.tournament_id,
             ))
         except HTTPException:
-            unknown.append(c.get("tool"))
-    reads = [p for p in proposed if not p.get("mutating")]
-    writes = [p for p in proposed if p.get("mutating")]
+            continue
+    reads = [p for p in resolved if not p.get("mutating")]
+    writes = [p for p in resolved if p.get("mutating")]
     executed = _run_handlers(conn, reads, confirm=False) if reads else []
-    reply = plan.get("say") or ""
+    roster_rows = []
     for row in executed:
-        if row.get("status") == 200 and row.get("result") is not None:
-            reply = (reply + "\n" + _summarize_result(row)).strip()
+        if row.get("tool") == "list_roster" and isinstance(row.get("result"), list):
+            roster_rows = row["result"]
+    for s in td_chat.attach_remove_matches(soft_removes, roster_rows):
+        args = s.get("args") or {}
+        if args.get("entry_id"):
+            try:
+                writes.append(td_chat.resolve_tool(
+                    "remove_player", args, tournament_id=body.tournament_id,
+                ))
+                continue
+            except HTTPException:
+                pass
+        writes.append(s)
+    reply = td_chat.format_td_reply(
+        message, executed=executed, proposed=writes, say=plan.get("say") or "",
+    )
+    if not raw and llm != "ok" and not executed and not writes:
+        reply = plan["say"]
     return {
         "reply": reply,
         "raw": raw[:2000],
         "proposed": writes,
-        "unknown_tools": unknown,
+        "unknown_tools": [],
         "executed": executed,
         "llm": llm,
-        "needs_confirm": bool(writes),
+        "needs_confirm": any(
+            w.get("tool") == "add_player"
+            or (w.get("tool") == "remove_player" and (w.get("args") or {}).get("entry_id"))
+            for w in writes
+        ),
         "verdict": td_chat.TD_CHAT_VERDICT,
     }
 

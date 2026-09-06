@@ -34,6 +34,8 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
 | 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 | 13 | [email-ingest.md](email-ingest.md) | Auto-ingest webhook (D4): token auth, routing, provider sketches. |
+| 13b | [email-llm-prompt.md](email-llm-prompt.md) | Final leftover-email tiny-LLM prompt (one shared template + few-shots). |
+| 13c | [mobile-plan.md](mobile-plan.md) | Mobile-friendly phases + menu IA (drawer, Setup split, courtside P1). |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
 
 Backend suite ~**591** tests / **89** files (migrations through **0055**); see
@@ -43,8 +45,16 @@ In the SPA, press <kbd>?</kbd> (or the header chip) for the structured Help guid
 
 ## Quickstart
 
+Windows — Docker Compose (Postgres is inside the `web` container):
+
+```powershell
+.\scripts\run_local.ps1                 # web (API+DB+UI) + Intelligence sidecar
+.\scripts\run_local.ps1 -NoIntelligence # skip the sidecar
+.\scripts\run_local.ps1 -Stop
+```
+
 ```bash
-# Backend
+# Backend (manual)
 cd backend
 python -m venv .venv && source .venv/Scripts/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt

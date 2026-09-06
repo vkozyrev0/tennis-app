@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=8" />
-  <link rel="stylesheet" href="/styles.css?v=104" />
+  <link rel="stylesheet" href="/styles.css?v=109" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -113,7 +113,11 @@
         <span class="brand-name">CourtOps</span><span class="brand-mark">Tennis</span>
       </h1>
       <div class="hdr-actions">
-        <span id="health" class="pill" role="status" aria-live="polite" aria-label="Backend health">checking…</span>
+        <div id="health-cluster" class="health-cluster" role="group" aria-label="System status">
+          <span class="pill health-pill" data-svc="api" role="status">API</span>
+          <span class="pill health-pill" data-svc="db" role="status">DB</span>
+          <span class="pill health-pill" data-svc="intel" role="status">Intelligence</span>
+        </div>
         <button type="button" id="theme-toggle" class="hdr-btn" aria-pressed="false"
                 title="Switch to dark mode" aria-label="Switch to dark mode">
           <svg class="hdr-ico" aria-hidden="true" focusable="false"><use href="#i-moon"/></svg>
@@ -145,7 +149,7 @@
     <div id="official-bar" class="official-bar" hidden>Official portal</div>
   </header>
 
-  <section id="login-view" hidden class="login-card">
+  <section id="login-view" class="login-card">
     <p class="login-kicker">Tournament director desk</p>
     <h2>Sign in</h2>
     <p class="muted login-lede">Staff the event, file the inbox, keep the day on the rails.</p>
@@ -162,10 +166,7 @@
     <div class="menu-group group-active" data-group="home">
       <span class="menu-label">Home</span>
       <button class="tab active" data-target="panel-home">Dashboard</button>
-    </div>
-    <div class="menu-group" data-group="chat">
-      <span class="menu-label">Chat</span>
-      <button class="tab" data-target="panel-td-chat">TD chat</button>
+      <button class="tab" data-target="panel-td-chat">Chat</button>
     </div>
     <!-- Day-of mode (P0 #2): the on-site front door during play. Promoted near
          the top because it's where the TD lives once the event starts. -->
@@ -229,8 +230,8 @@
       <button class="tab needs-active" data-target="panel-t-late">Late entries</button>
       <button class="tab needs-active" data-target="panel-t-withdrawals">Withdrawals</button>
       <button class="tab needs-active" data-target="panel-t-sched">Scheduling</button>
-      <button class="tab needs-active" data-target="panel-t-divflex">Div. flex</button>
-      <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoid.</button>
+      <button class="tab needs-active" data-target="panel-t-divflex">Division flex</button>
+      <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoidances</button>
       <button class="tab needs-active" data-target="panel-t-doubles">Doubles</button>
       <button class="tab needs-active" data-target="panel-t-photels">Player hotels</button>
     </div>
@@ -253,7 +254,7 @@
         <div class="dash-hero">
           <h2 id="dash-greeting">Choose a tournament</h2>
           <p class="muted" id="dash-sub">The status board fills in once an event is active.</p>
-          <p id="dash-llm" class="muted dash-llm" hidden></p>
+          <p id="dash-intel" class="muted dash-intel" hidden></p>
         </div>
         <div id="dash-deadlines" class="dash-deadlines" hidden></div>
         <div id="dash-digest" class="dash-digest" hidden></div>
@@ -284,12 +285,17 @@
       </div>
     </section>
 
-    <section class="panel" id="panel-td-chat" aria-label="TD chat">
+    <section class="panel" id="panel-td-chat" aria-label="Chat">
       <div class="card td-chat-card">
-        <h3>TD chat</h3>
-        <p class="muted">Ask about tournament status, or to add/remove a roster player. Writes wait for Confirm. Uses the local llama.cpp sidecar (not the cloud).</p>
+        <h3>Chat</h3>
+        <p class="muted">Ask about tournament status, or to add or remove a roster player. Writes wait for Confirm. Uses on-box Intelligence, not the cloud.</p>
         <p id="td-chat-verdict" class="td-chat-verdict muted" hidden></p>
-        <div id="td-chat-log" class="td-chat-log" role="log" aria-live="polite"></div>
+        <div id="td-chat-log" class="td-chat-log" role="log" aria-live="polite">
+          <div id="td-chat-pending" class="td-chat-pending" hidden>
+            <span class="td-chat-spinner" aria-hidden="true"></span>
+            <span>Waiting on Intelligence…</span>
+          </div>
+        </div>
         <div id="td-chat-confirm-bar" class="td-chat-confirm" hidden>
           <button type="button" id="td-chat-confirm" class="btn btn--primary">Confirm writes</button>
           <span class="muted">Mutating calls (add/remove player) do not apply until you confirm.</span>
@@ -1557,6 +1563,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=256"></script>
+  <script type="module" src="/app.js?v=258"></script>
 </body>
 </html>

@@ -9,6 +9,60 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-06 — TD chat answers typical director requests
+
+- Planner prompt is a short tool list + few-shots (no 231-route dump). `say` is a string field, never a tool.
+- 47 typical TD requests in `backend/tests/fixtures/td_chat_requests.json` drive `infer_td_tools` / `plan_calls`. Help/nonsense (`test`) does not run an API.
+- Replies are English from dashboard/roster payloads (tournament name, player names). Chat no longer shows `short confirmation`, `list_roster: 200`, or `Rejected unknown tools`.
+
+## 2026-09-06 — Docker Compose local stack, chat wait, green health
+
+- `scripts/run_local.ps1` starts the site with **Docker Compose** (`web` = bundled Postgres+API+UI, `llm` = Intelligence). It does **not** start host `pg_ctl` / portable Postgres / native uvicorn. `-NoIntelligence` starts `web` only; `-Stop` stops the compose stack. Login stays `admin` / `admin`.
+- Chat planner timeout default is **180s** (`EMAIL_LLM_CHAT_TIMEOUT`) so the Markdown catalog can prefill on 1.5B CPU. The Chat tab shows a spinner (“Waiting on Intelligence…”) until the sidecar answers.
+- Header API / DB / Intelligence pips are **green** when healthy (not tennis-ball yellow).
+
+## 2026-09-06 — Local run script
+
+- `scripts/run_local.ps1` originally drove host Postgres + uvicorn; superseded the same day by the Docker Compose path above.
+
+## 2026-09-06 — TD chat Markdown planner + 16k ctx
+
+- Chat planner prompt is Markdown: full API catalog with parameters, isolated User input fence, explicit convert-to-API-requests instruction. Executable tools stay the allowlist (`tournament_status`, `list_roster`, `add_player`, `remove_player`).
+- llama.cpp sidecar `--ctx-size 16384` (`LLAMA_CTX_SIZE`) so that catalog fits on Qwen2.5-1.5B (default llama.cpp ctx is often 4k). Recreate the local compose sidecar to pick it up; Fly `courtops-llm` needs a sidecar restart when you next change that app.
+
+## 2026-09-06 — Compact grid headers
+
+- AG Grid header (and grouped/filter) rows are 22px with 8pt labels; floating filters match. Legacy `.list-table` headers use the same type size.
+
+## 2026-09-06 — Inbox recheck (dates, review, doubles, confidence)
+
+- Sign-in card paints without waiting on `/api/health` (hung sidecar/DB no longer leaves a blank court). Health probe uses a 4s abort and DB `connect_timeout=2`.
+- Date fields accept typed MM/DD/YYYY (or ISO); forms show an MM/DD/YYYY hint. Grid date editor is a text field with that placeholder, not AG’s ISO-only picker.
+- Review modal resyncs Classification / Status / Player combobox labels when switching emails; amendment picker is generation-guarded.
+- Heuristic doubles keeps one-name “add for doubles / find a partner / doubles partner” asks (not Other).
+- Confidence column nested `hstr` no longer double-escapes the badge.
+
+## 2026-09-06 — Header status, menu, Intelligence
+
+- Header health is three chips — **API**, **DB**, **Intelligence** — not one combined pill. Healthy pips are green (supersedes an earlier ball-yellow pip). Intelligence off is a gray pip (keyword triage), down is amber.
+- UI copy says Intelligence (never LLM / sidecar). Wire field on `GET /api/health` is still `llm`.
+- Chat is a Home tab (Dashboard | Chat), not its own L1 group. Player-list tabs use full names (Division flex, Pairing avoidances).
+- L1/L2 hit height is 44px under 720px. Plan for the rest of mobile + menu IA: [mobile-plan.md](mobile-plan.md).
+
+## 2026-09-06 — PDF leftover-LLM gold tests (30 emails)
+
+- `tournament_emails.pdf` is split with the shipped parser; one leftover-extract test per email. Gold intents are the leftover prompt labels (not heuristic `classify()`).
+- One shared leftover prompt (generic few-shots, not a per-email template). Cancel/withdraw singles or doubles → `withdrawal`; still-enter singles → `late_entry`; named partners / confirmation / add-for-doubles → `doubles`; latest-line acks → `other`. Extract is unguarded model JSON. Final prompt (system, few-shots, clip, JSON, gold counts) is in [email-llm-prompt.md](email-llm-prompt.md).
+
+## 2026-09-06 — Inbox file-gate, dates, grid height, classifier stamp
+
+- Filing Withdrawal/Doubles with no matched player is blocked on PUT-as-filed, row File (confirm), review Save-as-filed, and bulk populate; skip reason says roster/doubles lists will not change.
+- Date cells accept MM/DD/YYYY or ISO and persist ISO (no AG “Malformed value”).
+- Inbox grid mount min-height 380px so grouped header + filters leave ~2 body rows; Review/⋯ stay clickable.
+- Blank Add email writes a persistent `#email-msg` validation (not only a toast).
+- Doubles confirmation / pairing-change subjects classify as doubles. Confidence is Medium (not Low) when a withdrawal/doubles is labeled and a player is suggested. Classified rows stamp `classified_ms`.
+- Tiny-LLM leftover prompt: doubles confirmation / pairing-change even with one name; EXTERNAL Re: named pairing vs acknowledgement-only; withdraw-from-doubles stays withdrawal. Heuristic still runs first.
+
 ## 2026-09-06 — TD chat (local 1.5B sidecar)
 
 - Chat L1 tab: natural-language status / add-player / remove-player. Planner uses the existing llama.cpp sidecar (not cloud). Writes wait for Confirm.

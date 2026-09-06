@@ -26,6 +26,14 @@ python -m venv .venv
 ```
 
 ## Database + run
+From the repo root, start the site with Docker Compose (Postgres lives in the
+`web` container — not a host-installed Postgres):
+
+```powershell
+.\scripts\run_local.ps1                 # web (API+DB+UI) + Intelligence sidecar
+.\scripts\run_local.ps1 -NoIntelligence # skip the sidecar
+```
+
 ```powershell
 .\.venv\Scripts\python.exe migrate.py     # create courtops DB + apply migrations/*.sql
 .\.venv\Scripts\python.exe demo_seed.py   # rich demo data (or seed.py for the lean baseline)

@@ -7,10 +7,18 @@ $dest = Join-Path $destDir "model.gguf"
 $url = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
 New-Item -ItemType Directory -Force -Path $destDir | Out-Null
 
+function Get-FileMagic([string]$path) {
+  # PS 5.1: -Encoding Byte; PS 7+: -AsByteStream. .NET works on both.
+  $fs = [System.IO.File]::OpenRead($path)
+  try {
+    $buf = New-Object byte[] 4
+    [void]$fs.Read($buf, 0, 4)
+    return [System.Text.Encoding]::ASCII.GetString($buf)
+  } finally { $fs.Dispose() }
+}
+
 if ((Test-Path $dest) -and ((Get-Item $dest).Length -gt 800MB)) {
-  $head = Get-Content -Path $dest -Encoding Byte -TotalCount 4
-  $magic = [System.Text.Encoding]::ASCII.GetString($head)
-  if ($magic -eq "GGUF") {
+  if ((Get-FileMagic $dest) -eq "GGUF") {
     Write-Host "Already have $dest ($([math]::Round((Get-Item $dest).Length/1GB, 2)) GB)"
     exit 0
   }
@@ -23,8 +31,7 @@ $tmp = "$dest.part"
 if (-not (Test-Path $tmp) -or ((Get-Item $tmp).Length -lt 800MB)) {
   throw "Download too small or missing: $tmp"
 }
-$head = Get-Content -Path $tmp -Encoding Byte -TotalCount 4
-if ([System.Text.Encoding]::ASCII.GetString($head) -ne "GGUF") {
+if ((Get-FileMagic $tmp) -ne "GGUF") {
   throw "Downloaded file is not a GGUF"
 }
 Move-Item -Force $tmp $dest

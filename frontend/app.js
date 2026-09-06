@@ -64,7 +64,7 @@ import { installFormA11y } from "./app/form_a11y.js";
 import { createAdminBoot } from "./app/admin_boot.js";
 import { createNoticesPanel } from "./app/notices.js";
 import { datesInRange as _datesInRange } from "./app/util.js";
-import { hashForPanel, panelFromHash, healthPillText } from "./app/td_helpers.js";
+import { hashForPanel, panelFromHash, healthIndicators, applyHealthPills, intelStatusLine } from "./app/td_helpers.js";
 import { createTdChatPanel } from "./app/td_chat_ui.js";
 
 // ============================================================================
@@ -166,7 +166,7 @@ function _markGroup(key) {
   [..._groupsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.group === key));
 }
 function _syncL2Bar(grp) {
-  // Toolbar P2: hide L2 when the group has only one tab (Home/Day-of/Inbox)
+  // Toolbar P2: hide L2 when the group has only one tab (Day-of/Inbox)
   // so L1 is a one-click jump without a redundant second bar.
   const n = grp ? grp.querySelectorAll(".tab").length : 0;
   const solo = n <= 1;
@@ -576,35 +576,31 @@ const { wireEntity, makeListGrid, makeReadGrid, makeGrid, _autoHeaderFilters } =
 });
 
 async function refreshHealth() {
-  const pill = document.getElementById("health");
-  const dash = document.getElementById("dash-llm");
-  try {
-    const h = await api("/health");
-    const pillState = healthPillText(h);
-    pill.textContent = pillState.text;
-    pill.className = "pill " + pillState.kind;
-    pill.title = h.llm === "ok"
-      ? "Inbox leftover parser: llama.cpp sidecar reachable"
-      : (h.llm === "down"
-        ? "EMAIL_LLM is on but the sidecar did not answer /health"
-        : "Inbox leftover parser off (keyword triage only)");
+  const cluster = document.getElementById("health-cluster");
+  const dash = document.getElementById("dash-intel");
+  const fail = () => {
+    applyHealthPills(cluster, healthIndicators({ reachable: false }));
     if (dash) {
       dash.hidden = false;
-      if (h.llm === "ok") {
-        dash.textContent = "Inbox leftover parser: local LLM reachable.";
-        dash.className = "muted dash-llm";
-      } else if (h.llm === "down") {
-        dash.textContent = "Inbox leftover parser: LLM sidecar unreachable — keyword triage only.";
-        dash.className = "warn dash-llm";
-      } else {
-        dash.textContent = "Inbox leftover parser: off (set EMAIL_LLM=1 and run the sidecar to enable).";
-        dash.className = "muted dash-llm";
-      }
+      dash.textContent = "API is unreachable. Database and Intelligence status unknown.";
+      dash.className = "warn dash-intel";
+    }
+  };
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 4000);
+    const res = await fetch("/api/health", { signal: ac.signal });
+    clearTimeout(t);
+    if (!res.ok) { fail(); return; }
+    const h = await res.json();
+    applyHealthPills(cluster, healthIndicators({ reachable: true, db: h.db, llm: h.llm }));
+    if (dash) {
+      dash.hidden = false;
+      dash.textContent = intelStatusLine(h.llm);
+      dash.className = h.llm === "down" ? "warn dash-intel" : "muted dash-intel";
     }
   } catch (e) {
-    pill.textContent = "API down";
-    pill.className = "pill bad";
-    if (dash) { dash.hidden = false; dash.textContent = "API unreachable."; dash.className = "warn dash-llm"; }
+    fail();
   }
 }
 
@@ -864,7 +860,7 @@ installTrash({
 });
 
 // D11: form required markers + toolbar consolidation
-const { markRequiredFields, consolidateInboxToolbar, consolidateRosterToolbar } = installFormA11y({
+const { markRequiredFields, enhanceDateFields, consolidateInboxToolbar, consolidateRosterToolbar } = installFormA11y({
   makeMenuButton, gotoImport,
 });
 
@@ -876,10 +872,12 @@ installAdminUsers({
 (async function init() {
   enhanceAllSelects();
   markRequiredFields();
+  enhanceDateFields();
   consolidateInboxToolbar();
   consolidateRosterToolbar();
-  await refreshHealth();
   bindTdChat();
+  // Do not await health: a hung sidecar/DB must not hide Sign in.
+  refreshHealth();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
   applyAuth(who);

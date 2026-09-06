@@ -2,9 +2,37 @@
 // Pins active-panel grids so their bottom stays at the viewport edge — the
 // page itself does not grow a vertical scrollbar for Setup master-detail lists.
 
-// Enough for AG header + horizontal scrollbar + ~2 body rows so the body
-// cannot collapse to 0px (Inbox header/scrollbar would otherwise steal clicks).
-export const LIST_MIN_HEIGHT = 220;
+// Inbox uses grouped headers (2 rows) + floating filters + h-scroll. A 220px
+// mount left ~58px of body after that chrome. Floor is chrome + ~2 data rows.
+export const LIST_HEADER_ROW_HEIGHT = 22;
+export const LIST_GROUPED_HEADER_ROWS = 3; // group + column + floating filter
+export const LIST_ROW_HEIGHT = 32;
+export const LIST_MIN_DATA_ROWS = 2;
+export const LIST_HSCROLL = 16;
+export const LIST_CHROME_SLACK = 24;
+
+export function listChromeHeight({
+  headerRows = LIST_GROUPED_HEADER_ROWS,
+  headerRowHeight = LIST_HEADER_ROW_HEIGHT,
+  hScroll = LIST_HSCROLL,
+} = {}) {
+  return headerRows * headerRowHeight + hScroll;
+}
+
+export function listMinBodyHeight({
+  minRows = LIST_MIN_DATA_ROWS,
+  rowHeight = LIST_ROW_HEIGHT,
+} = {}) {
+  return minRows * rowHeight;
+}
+
+/** Body pixels remaining inside a mount after grouped header + filters + h-scroll. */
+export function listBodyMinFromMount(mountHeight) {
+  return Math.max(0, (Number(mountHeight) || 0) - listChromeHeight());
+}
+
+// 380px leaves ~2 data rows after grouped header + floating filters (~118px chrome).
+export const LIST_MIN_HEIGHT = 380;
 export const LIST_BOTTOM_PAD = 16;
 
 /** Viewport-fill height for one .grid-mount. Never returns 0. */

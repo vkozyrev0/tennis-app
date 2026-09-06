@@ -42,7 +42,10 @@ if [[ "$need_fetch" -eq 1 ]]; then
   mv "$tmp" "$MODEL"
 fi
 
-args=(-m "$MODEL" --host "$HOST" --port "$PORT")
+# Qwen2.5-1.5B-Instruct trains at 32k. Default llama.cpp ctx is often 4k, which
+# cannot hold the TD-chat Markdown catalog. 16k KV fits a 2gb Machine with Q4_K_M.
+CTX="${LLAMA_CTX_SIZE:-16384}"
+args=(-m "$MODEL" --host "$HOST" --port "$PORT" --ctx-size "$CTX")
 KEY="${LLAMA_API_KEY:-${EMAIL_LLM_TOKEN:-}}"
 if [[ -n "$KEY" ]]; then
   args+=(--api-key "$KEY")

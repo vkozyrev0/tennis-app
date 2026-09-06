@@ -50,6 +50,8 @@ class EmailOut(BaseModel):
     body: Optional[str] = None
     classification: str
     status: EmailStatus
+    # Last local classify() runtime in milliseconds (inbox "classified in X ms").
+    classified_ms: Optional[int] = None
     # How the row entered the inbox (manual | webhook | form | pdf_import | …).
     ingest_source: Optional[str] = "manual"
     detected_player_id: Optional[int] = None

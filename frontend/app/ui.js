@@ -1,7 +1,7 @@
 // Shared UI primitives (D11 / audit A47 slice) — pulled out of monolithic app.js.
 // Dependency-free except html`` for status chips.
 import { hstr } from "./html.js";
-import { fitMenuBox } from "./td_helpers.js";
+import { fitMenuBox, parseLocaleDate } from "./td_helpers.js";
 
 export { fitMenuBox };
 
@@ -147,7 +147,11 @@ export function formObj(form) {
       const vals = [...el.selectedOptions].map((opt) => opt.value).filter(Boolean);
       o[el.name] = vals.length ? vals.join(", ") : null;
     } else {
-      o[el.name] = el.value === "" ? null : el.value;
+      let v = el.value === "" ? null : el.value;
+      if (v && (el.classList.contains("date-locale") || el.type === "date")) {
+        v = parseLocaleDate(v) || v;
+      }
+      o[el.name] = v;
     }
   }
   return o;

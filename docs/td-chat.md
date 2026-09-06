@@ -1,9 +1,14 @@
 # TD chat (local sidecar)
 
-A Chat L1 tab lets the tournament director ask in natural language. The backend
-sends a **short allowlist** plus a compact OpenAPI catalog to the **same**
-llama.cpp sidecar used for leftover-email parsing (Qwen2.5-1.5B-Instruct Q4_K_M).
-Writes (add/remove roster player) **do not apply** until Confirm.
+A Chat tab lets the tournament director ask in natural language. The backend
+sends a **short Markdown planner prompt**: executable-tool allowlist, few-shot
+TD requests, then a fenced **User input** block. The full OpenAPI catalog stays
+on `GET /api/td-chat/catalog` — stuffing every route into the 1.5B prompt made
+it copy stubs (`short confirmation`) and invent tools (`say`, `me`). A
+deterministic map (`infer_td_tools`) covers typical TD asks; replies are
+formatted from executed dashboard/roster data, not from the model’s `say`
+stub. Writes (add/remove roster player) **do not apply** until Confirm. Same
+llama.cpp sidecar as leftover-email parsing (Qwen2.5-1.5B-Instruct Q4_K_M).
 
 Do **not** redeploy Fly `courtops-llm` unless the GGUF itself changes.
 
@@ -27,3 +32,7 @@ allowlist (`tournament_status`, `list_roster`, `add_player`, `remove_player`).
 
 Sidecar already running: `http://127.0.0.1:8080/health`. Then Chat in the SPA.
 `scripts/td_chat_verdict.py` re-runs the three tasks without applying writes.
+
+Planner timeout is **180s** (`EMAIL_LLM_CHAT_TIMEOUT`, default) because the
+Markdown catalog is ~11k tokens of prefill on 1.5B Q4 CPU. The Chat tab shows
+a spinner until the sidecar answers (client abort 200s).

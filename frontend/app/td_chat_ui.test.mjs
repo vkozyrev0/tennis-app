@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatProposedCalls, chatNeedsConfirm, applyTurnResult } from "./td_chat_ui.js";
+import {
+  formatProposedCalls, chatNeedsConfirm, applyTurnResult,
+  CHAT_CLIENT_TIMEOUT_MS, CHAT_PENDING_LABEL, setChatPending,
+} from "./td_chat_ui.js";
 
 const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../index.html"), "utf8");
 
@@ -43,6 +46,31 @@ test("applyTurnResult keeps Confirm visible after stripping mutating for execute
     args: { tournament_id: 3, usta_number: "123", first_name: "Jane", last_name: "Roe", gender: "female" },
   }]);
   assert.equal(applyTurnResult({ proposed: [], needs_confirm: false }).showConfirm, false);
+});
+
+test("chat copy says Intelligence, not llama.cpp", () => {
+  assert.match(html, /on-box Intelligence/);
+  assert.doesNotMatch(html, /llama\.cpp sidecar/);
+});
+
+test("chat waits with a spinner longer than the 45s catalog prefill", () => {
+  assert.ok(CHAT_CLIENT_TIMEOUT_MS >= 180000);
+  assert.match(CHAT_PENDING_LABEL, /Waiting on Intelligence/);
+  assert.match(html, /id="td-chat-pending"/);
+  assert.match(html, /td-chat-spinner/);
+  assert.equal(typeof setChatPending, "function");
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../styles.css"), "utf8");
+  assert.match(css, /@keyframes td-chat-spin/);
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "td_chat_ui.js"), "utf8");
+  assert.match(src, /setChatPending\(true\)/);
+  assert.match(src, /CHAT_CLIENT_TIMEOUT_MS/);
+  assert.match(src, /signal:\s*ac\.signal/);
+});
+
+test("chat UI does not dump unknown-tool or read-count developer lines", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "td_chat_ui.js"), "utf8");
+  assert.doesNotMatch(src, /Rejected unknown tools/);
+  assert.doesNotMatch(src, /Ran .+ read/);
 });
 
 test("chat panel is its own section, not tpanel nested in home", () => {

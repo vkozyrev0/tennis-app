@@ -50,8 +50,9 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       <ol class="help-steps">
         <li><strong>L1 section bar</strong> (under the header) — Home, Day-of, Setup,
           Tournament, Staffing, Inbox, Player lists.</li>
-        <li><strong>L2 tabs</strong> — pages inside that section. Single-tab sections
-          (Home, Day-of, Inbox) skip the second bar so one click opens the page.</li>
+        <li><strong>L2 tabs</strong> — pages inside that section. Home is Dashboard
+          and Chat. Single-tab sections (Day-of, Inbox) skip the second bar so
+          one click opens the page.</li>
         <li><strong>Working on</strong> — active tournament in the context bar.
           Scopes every tournament-dependent page.</li>
         <li><strong>Find player or official</strong> — global search in the context bar;
@@ -62,7 +63,9 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
 
       <h3>Header chips</h3>
       <ul class="help-list">
-        <li><strong>Health pill</strong> — API/DB status (green when healthy).</li>
+        <li><strong>API / DB / Intelligence</strong> — three independent status
+          chips. Yellow pip = healthy. Amber = on but not answering. Red = down.
+          Gray = Intelligence off (keyword triage only).</li>
         <li><strong>Dark / Light</strong> — theme toggle.</li>
         <li><kbd>?</kbd> — this Help center.</li>
       </ul>
@@ -127,10 +130,13 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       working, player check-in style status, and day-of operational focus.
       Promote it when the event starts — it sits near the top of L1 on purpose.</p>
 
-      <h3>Home → Dashboard</h3>
-      <p>Cross-cutting readiness: coverage gaps, pending accept/decline, declined
-      slots to re-staff, incomplete roster, deadline nudges. Start each planning
-      session here after picking the tournament.</p>
+      <h3>Home</h3>
+      <p><strong>Dashboard</strong> — cross-cutting readiness: coverage gaps,
+      pending accept/decline, declined slots to re-staff, incomplete roster,
+      deadline nudges. Start each planning session here after picking the
+      tournament.</p>
+      <p><strong>Chat</strong> — ask about tournament status, or to add or remove
+      a roster player. Writes wait for Confirm. Uses on-box Intelligence.</p>
     `,
   },
   {

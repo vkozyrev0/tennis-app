@@ -7,8 +7,10 @@ import {
   inboxShortcutGate,
   inboxAxesLegend,
   emailCreateGuard,
+  EMAIL_MSG_ID,
   reviewFormState,
   fileWithoutPlayerGate,
+  inboxConfidence,
 } from "./inbox_ui.js";
 
 export function createInboxPanel(ctx) {
@@ -37,7 +39,7 @@ export function createInboxPanel(ctx) {
     : (m, p0) => _rosterAddFromEmail(m, p0);
   void money; void officialLabel; void makeListGrid; void makeMenuButton;
   void openForm; void getTournamentsById; void gotoImport; void SHIRT_LABELS;
-  void confirmDialog; void markInvalid; void formObj; void onSubmit; void fillSelect;
+  void markInvalid; void formObj; void onSubmit; void fillSelect;
   void resolveFilePlayerId;
 
   // --- Part B: review inbox + late entries ---
@@ -82,28 +84,13 @@ export function createInboxPanel(ctx) {
     usta_offroster:    { dot: "◑", cls: "warn", label: "Matched by USTA # — but this player is NOT on this tournament's roster; add them" },
     manual:            { dot: "✎", cls: "info", label: "Set manually" },
   };
-  // Per-email detection CONFIDENCE for the inbox grid, derived from how the
-  // player was identified. High = a USTA # / full name in the subject (or a manual
-  // pick); Medium = full name in the body / a fuzzy or off-roster match; Low = a
-  // surname/first-name-only guess, or a name parsed from the text but not yet
-  // matched to the roster. Returns null when nothing was identified.
-  const _CONF_TIER = {
-    usta: 3, withdraw_template: 3, usta_subject: 3, fullname_subject: 3, manual: 3,
-    fullname_body: 2, fuzzy_name: 2, usta_offroster: 2,
-    lastname_subject: 1, lastname: 1, firstname: 1,
-  };
-  const _CONF_LABEL = { 3: ["High", "ok"], 2: ["Medium", "warn"], 1: ["Low", "bad"] };
   function _inboxConfidence(m) {
-    if (m.detected_player_id != null) {
-      const [label, cls] = _CONF_LABEL[_CONF_TIER[m.detected_match_kind] || 2];
-      return { label, cls, title: (MATCH_KIND_META[m.detected_match_kind] || {}).label || "Matched to a roster player" };
+    const k = inboxConfidence(m);
+    if (!k) return null;
+    if (m.detected_player_id != null && MATCH_KIND_META[m.detected_match_kind]) {
+      return { ...k, title: MATCH_KIND_META[m.detected_match_kind].label };
     }
-    // not matched, but the email named someone / carried a USTA # → low (a lead to confirm)
-    if ((m.detected_name_pairs || []).length || m.detected_usta_text) {
-      return { label: "Low", cls: "bad",
-               title: "Parsed from the email but not matched to the roster — confirm or add the player" };
-    }
-    return null;
+    return k;
   }
   function matchHint(kind) {
     const m = MATCH_KIND_META[kind];
@@ -405,12 +392,19 @@ export function createInboxPanel(ctx) {
       formatter: (c) => classChip(c.getValue()),
       editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
       headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
-    // How confident the auto-detection of the player is (see _inboxConfidence).
-    { title: "Confidence", field: "_conf", width: 110, headerSort: false, hozAlign: "center",
+    // How confident the auto-detection of the player is (see inboxConfidence).
+    { title: "Confidence", field: "_conf", width: 168, headerSort: false, hozAlign: "center",
       formatter: (c) => {
-        const k = _inboxConfidence(c.getData());
-        return k ? hstr`<span class="badge badge-${k.cls}" title="${k.title}">${k.label}</span>`
-                 : '<span class="muted" title="No player identified yet">—</span>';
+        const m = c.getData();
+        const k = _inboxConfidence(m);
+        const badge = k
+          ? hstr`<span class="badge badge-${k.cls}" title="${k.title}">${k.label}</span>`
+          : '<span class="muted" title="No player identified yet">—</span>';
+        const ms = m.classified_ms;
+        const stamp = (ms != null && ms !== "")
+          ? hstr`<span class="classified-ms muted" title="Local classifier runtime">classified in ${ms} ms</span>`
+          : "";
+        return hstr`${raw(badge)}${raw(stamp)}`;
       } },
     { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
       headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
@@ -457,10 +451,13 @@ export function createInboxPanel(ctx) {
             toast(`Suggested: ${clsLabel}${who}`, true);
           } catch (e) { toast(e.message, false); }
         };
-        const doFile = () => {
+        const doFile = async () => {
           const t = FILE_TARGETS[m.classification]; if (!t) return;
           const gate = fileWithoutPlayerGate(m.classification, m.detected_player_id);
-          if (!gate.ok) { toast(gate.reason, false); return; }
+          if (!gate.ok) {
+            await confirmDialog(gate.reason, "OK", "primary");
+            return;
+          }
           // File into the email's OWN tournament, not whatever is active. The inbox
           // is cross-tournament and every filing form POSTs to
           // /tournaments/<active>/… , so re-scope the workspace to the email's
@@ -748,6 +745,12 @@ export function createInboxPanel(ctx) {
     document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
     document.getElementById("inbox-detail-classification").value = form.classification;
     document.getElementById("inbox-detail-status").value = form.status;
+    // Combo overlay does not watch .value — resync so the visible labels match
+    // this email, not the previous one.
+    for (const id of ["inbox-detail-classification", "inbox-detail-status"]) {
+      const sel = document.getElementById(id);
+      if (sel && typeof sel._comboSync === "function") sel._comboSync();
+    }
     // Always reset reason from this email (empty when not a withdrawal) so the
     // previous email's Withdrawal/filed values cannot leak into the next open.
     _syncInboxReasonRow(form.classification, form.reason);
@@ -755,10 +758,12 @@ export function createInboxPanel(ctx) {
     _populateInboxPlayerSelect(m.tournament_id || (getActive() && getActive().id))
       .then(() => {
         if (gen !== _inboxDetailOpenGen) return;
-        document.getElementById("inbox-detail-player").value = form.playerId;
+        const psel = document.getElementById("inbox-detail-player");
+        psel.value = form.playerId;
+        if (typeof psel._comboSync === "function") psel._comboSync();
       });
     // Amendment picker: the earlier email this one corrects + the superseded flag.
-    _populateInboxAmendsSelect(m);
+    _populateInboxAmendsSelect(m, gen);
     setMsg("inbox-detail-msg", "", true);
     box.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
@@ -778,7 +783,7 @@ export function createInboxPanel(ctx) {
     ?.addEventListener("change", (e) => _syncInboxReasonRow(e.target.value));
   // Fill the "corrects earlier email" picker with the other emails in this
   // email's tournament, select the current link, and show the superseded flag.
-  async function _populateInboxAmendsSelect(m) {
+  async function _populateInboxAmendsSelect(m, gen) {
     const sel = document.getElementById("inbox-detail-amends");
     if (!sel) return;
     sel.innerHTML = '<option value="">— not a correction —</option>';
@@ -793,7 +798,9 @@ export function createInboxPanel(ctx) {
         sel.appendChild(o);
       }
     }
+    if (gen != null && gen !== _inboxDetailOpenGen) return;
     sel.value = m.amends_email_id || "";
+    if (typeof sel._comboSync === "function") sel._comboSync();
     document.getElementById("inbox-detail-superseded").hidden = !m.superseded;
   }
   document.getElementById("inbox-detail-amends")?.addEventListener("change", async (e) => {
@@ -860,7 +867,11 @@ export function createInboxPanel(ctx) {
     const detected_player_id = pickerVal ? Number(pickerVal) : null;
     if (status === "filed") {
       const gate = fileWithoutPlayerGate(cls, detected_player_id);
-      if (!gate.ok) { setMsg("inbox-detail-msg", gate.reason, false); return; }
+      if (!gate.ok) {
+        setMsg("inbox-detail-msg", gate.reason, false);
+        await confirmDialog(gate.reason, "OK", "primary");
+        return;
+      }
     }
     try {
       await api(`/emails/${_inboxDetailId}`, {
@@ -924,10 +935,13 @@ export function createInboxPanel(ctx) {
     const byLabel = new Map();
     const tabByLabel = new Map();
     let unfileable = 0;
+    let needsPlayer = 0;
     const rows = inboxGrid.grid.getData();
     const sel = new Set(_inboxSelected);
     for (const m of rows) {
       if (!sel.has(m.id)) continue;
+      const gate = fileWithoutPlayerGate(m.classification, m.detected_player_id);
+      if (!gate.ok) { needsPlayer += 1; continue; }
       const t = FILE_TARGETS[m.classification];
       if (!t) { unfileable += 1; continue; }
       byLabel.set(t.label, (byLabel.get(t.label) || 0) + 1);
@@ -938,7 +952,7 @@ export function createInboxPanel(ctx) {
     const parts = ranked.map(([label, c]) => `${c} ${label}`);
     const top = ranked[0];
     return {
-      parts, unfileable, fileable: parts.length > 0,
+      parts, unfileable, needsPlayer, fileable: parts.length > 0,
       topLabel: top ? top[0] : null,
       topTab: top ? tabByLabel.get(top[0]) : null,
     };
@@ -1133,8 +1147,8 @@ export function createInboxPanel(ctx) {
     const btn = ev.currentTarget;
     // I-3: show exactly what will be created, broken down by destination list,
     // plus a count of selections that can't be filed (no fileable classification).
-    const { parts, unfileable, fileable, topLabel, topTab } = _inboxPopulatePreview();
-    if (!fileable) {
+    const { parts, unfileable, needsPlayer, fileable, topLabel, topTab } = _inboxPopulatePreview();
+    if (!fileable && !needsPlayer) {
       setMsg("inbox-bulk-msg", "None of the selected emails have a fileable classification yet.", false);
       return;
     }
@@ -1144,6 +1158,15 @@ export function createInboxPanel(ctx) {
       ...parts.map((p) => `  • ${p}`),
     ];
     if (unfileable) lines.push("", `${unfileable} selected email(s) have no fileable classification and will be skipped.`);
+    if (needsPlayer) {
+      const gate = fileWithoutPlayerGate("withdrawal", null);
+      lines.push("", `${needsPlayer} withdrawal/doubles email(s) have no matched player and will be skipped.`, gate.reason);
+    }
+    if (!fileable && needsPlayer) {
+      setMsg("inbox-bulk-msg", fileWithoutPlayerGate("withdrawal", null).reason, false);
+      await confirmDialog(lines.join("\n"), "OK", "primary");
+      return;
+    }
     if (!(await confirmDialog(lines.join("\n"), "Populate lists"))) return;
     // Guard against accidental double-insert: disable until the request resolves.
     btn.disabled = true;
@@ -1394,19 +1417,18 @@ export function createInboxPanel(ctx) {
     const b = formObj(e.target); b.tournament_id = getActive().id;
     const guard = emailCreateGuard(b);
     if (!guard.ok) {
-      setMsg("email-msg", guard.reason, false);
-      toast(guard.reason, false);
+      setMsg(EMAIL_MSG_ID, guard.reason, false);
       markInvalid(e.target, guard.reason);
       return;
     }
     try {
       await api("/emails", { method: "POST", body: JSON.stringify(b) });
-      setMsg("email-msg", "added", true);
+      setMsg(EMAIL_MSG_ID, "added", true);
       toast("Email added to the inbox", true);
       e.target.reset();
       loadInbox();
     }
-    catch (err) { setMsg("email-msg", err.message, false); toast(err.message, false); markInvalid(e.target, err.message); }
+    catch (err) { setMsg(EMAIL_MSG_ID, err.message, false); toast(err.message, false); markInvalid(e.target, err.message); }
   });
 
   // Generic simple list grid (no master-detail): replaces a static table with a

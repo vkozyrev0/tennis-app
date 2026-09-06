@@ -57,6 +57,19 @@ The baked DB lives at `/opt/courtops/pgdata`; mount a volume there to persist
 changes across runs. This bundles the DB + data into the app image for demo
 convenience — not a production topology (see [docs/design.md](docs/design.md) §11).
 
+## Local (Docker Compose)
+
+Windows — stop leftovers and start the site in Docker (Postgres is inside
+the `web` container; do not use a host-installed Postgres for this path):
+
+```powershell
+.\scripts\run_local.ps1                 # web (API+DB+UI) + Intelligence sidecar
+.\scripts\run_local.ps1 -NoIntelligence # skip the sidecar
+.\scripts\run_local.ps1 -Stop
+```
+
+Open http://127.0.0.1:8000 — sign in as `admin` / `admin`.
+
 ## Local dev (without Docker)
 
 ```bash

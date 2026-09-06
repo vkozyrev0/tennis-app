@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 os.environ.setdefault("EMAIL_LLM", "1")
 os.environ.setdefault("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
 os.environ.setdefault("EMAIL_LLM_TOKEN", "dev-local-llm")
-os.environ.setdefault("EMAIL_LLM_CHAT_TIMEOUT", "60")
+os.environ.setdefault("EMAIL_LLM_CHAT_TIMEOUT", "180")
 
 from app.email_llm import probe_llm  # noqa: E402
 from app.main import app  # noqa: E402

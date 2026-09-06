@@ -1,6 +1,9 @@
 // DOM-free unit tests for inbox progressive disclosure + shortcut gates.
 // Run: node frontend/app/inbox_ui.test.mjs
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   INBOX_SHORTCUTS,
   INBOX_AXES,
@@ -11,8 +14,11 @@ import {
   pruneSelection,
   inboxShortcutGate,
   emailCreateGuard,
+  EMAIL_MSG_ID,
   reviewFormState,
   fileWithoutPlayerGate,
+  FILE_NEEDS_PLAYER_REASON,
+  inboxConfidence,
 } from "./inbox_ui.js";
 
 let passed = 0;
@@ -113,12 +119,69 @@ test("review modal state comes only from the current email", () => {
   assert.equal(empty.reason, "");
 });
 
+test("review open resyncs combo overlays so classification/status are this email", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(src, /inbox-detail-classification[\s\S]*_comboSync/);
+  assert.match(src, /inbox-detail-status/);
+  assert.match(src, /_populateInboxAmendsSelect\(m, gen\)/);
+});
+
+test("confidence formatter does not nest hstr strings (escaped markup)", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(src, /hstr`\$\{raw\(badge\)\}\$\{raw\(stamp\)\}`/);
+});
+
+test("inbox File, review Save-as-filed, and bulk populate use the hard gate", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(src, /fileWithoutPlayerGate\(m\.classification, m\.detected_player_id\)/);
+  assert.match(src, /confirmDialog\(gate\.reason/);
+  assert.match(src, /needsPlayer/);
+  assert.match(src, /setMsg\(EMAIL_MSG_ID, guard\.reason/);
+});
+
 test("file without player is blocked for withdrawal and doubles", () => {
   assert.equal(fileWithoutPlayerGate("withdrawal", null).ok, false);
   assert.equal(fileWithoutPlayerGate("doubles", "").ok, false);
   assert.equal(fileWithoutPlayerGate("withdrawal", 9).ok, true);
   assert.equal(fileWithoutPlayerGate("late_entry", null).ok, true);
-  assert.match(fileWithoutPlayerGate("doubles", null).reason, /will not change those lists/i);
+  assert.equal(fileWithoutPlayerGate("doubles", null).reason, FILE_NEEDS_PLAYER_REASON);
+  assert.match(FILE_NEEDS_PLAYER_REASON, /will not change those lists/i);
+});
+
+test("classified withdrawal with a player suggestion is not Low", () => {
+  const unmatched = inboxConfidence({
+    classification: "withdrawal",
+    detected_player_id: null,
+    detected_name_pairs: [{ name: "Stella Johansson" }],
+  });
+  assert.equal(unmatched.label, "Medium");
+  const lastname = inboxConfidence({
+    classification: "withdrawal",
+    detected_player_id: 4,
+    detected_match_kind: "lastname",
+  });
+  assert.equal(lastname.label, "Medium");
+  const usta = inboxConfidence({
+    classification: "withdrawal",
+    detected_player_id: 4,
+    detected_match_kind: "usta",
+  });
+  assert.equal(usta.label, "High");
+  const otherUnmatched = inboxConfidence({
+    classification: "other",
+    detected_player_id: null,
+    detected_usta_text: "1234567890",
+  });
+  assert.equal(otherUnmatched.label, "Low");
+});
+
+test("blank email reason is written to #email-msg", () => {
+  assert.equal(EMAIL_MSG_ID, "email-msg");
+  const g = emailCreateGuard({ subject: "", body: "", from_address: "" });
+  assert.equal(g.reason, "Enter a from address, subject, or body — blank emails are not saved");
 });
 
 console.log(`\n${passed} inbox_ui checks passed`);

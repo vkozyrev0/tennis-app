@@ -861,7 +861,7 @@ def _merge_email_pdf(cur, tid, d):
     per parsed PDF email, then immediately run the local heuristic triage
     so the TD opens the inbox to pre-classified rows (withdrawal / doubles /
     etc.)."""
-    from .triage import classify  # local — avoids circular import at module load
+    from .triage import classify_timed  # local — avoids circular import at module load
     subj = _s(d.get("subject")) or ""
     from_addr = _s(d.get("from_address")) or ""
     body = _s(d.get("body")) or ""
@@ -874,7 +874,7 @@ def _merge_email_pdf(cur, tid, d):
     )
     if cur.fetchone() is not None:
         return "already in inbox — skipped"
-    cls = classify(subj, body)  # classify on plaintext, before encrypting at rest
+    cls, ms = classify_timed(subj, body)  # plaintext, before encrypting at rest
     from .crypto import encrypt as _enc_body  # PII H2
     # Stamp extracted text fields (D9) so inbox list never re-parses the body.
     from .email_extract import compute_extracted_fields
@@ -899,6 +899,10 @@ def _merge_email_pdf(cur, tid, d):
          pairs_json, fields["detected_avoid_day"], fields["detected_avoid_time"]),
     )
     new_id = cur.fetchone()["id"]
+    cur.execute(
+        "UPDATE email_message SET classified_ms = %s WHERE id = %s",
+        (ms, new_id),
+    )
     # Auto-detect the player this email is about (USTA # / name against the
     # roster), so the inbox opens with players + USTA #s already populated — no
     # per-row "Detect" click. Best-effort: a no-match just leaves the row blank,

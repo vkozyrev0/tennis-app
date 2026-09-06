@@ -109,14 +109,18 @@ Dispatch is Fly 6PN only: `EMAIL_LLM_BASE_URL=http://courtops-llm.internal:8080/
 instead of 6PN). The sidecar is **not** on `*.fly.dev` — test it here:
 
 ```powershell
-# Sidecar only (native uvicorn still on :8000)
+# Docker Compose: web (bundled Postgres+API+UI) + Intelligence sidecar.
+# Does not start host pg_ctl / portable Postgres.
+.\scripts\run_local.ps1                 # web + Intelligence sidecar
+.\scripts\run_local.ps1 -NoIntelligence # skip the sidecar
+# Sidecar only (if you still run a native API on :8000)
 .\scripts\run_llm_local.ps1
 # backend/.env already can hold:
 #   EMAIL_LLM=1
 #   EMAIL_LLM_BASE_URL=http://127.0.0.1:8080/v1
 #   EMAIL_LLM_TOKEN=dev-local-llm
 backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
-# Site header pill: "API + DB + LLM ok" when GET /api/health has llm=ok
+# Site header: three chips — API, DB, Intelligence — when GET /api/health is ok
 # Dedicated probe: GET /api/health/llm  → {"status":"ok"|"off"|"down"}
 
 # Or both containers: docker compose up --build

@@ -22,7 +22,7 @@ import psycopg
 
 from .crypto import encrypt as _enc_body
 from .email_extract import compute_extracted_fields
-from .triage import classify
+from .triage import classify_timed
 import json
 
 _MSG_ID_RE = re.compile(r"<([^>]+)>")
@@ -306,8 +306,10 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
         raise
 
     classification = "unclassified"
+    classified_ms = None
     if auto_classify:
-        classification = classify(payload.subject, payload.body) or "unclassified"
+        classification, classified_ms = classify_timed(payload.subject, payload.body)
+        classification = classification or "unclassified"
 
     enc_body = _enc_body(payload.body)
     fields = compute_extracted_fields(
@@ -411,6 +413,11 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
         raise
 
     row = cur.fetchone()
+    if classified_ms is not None:
+        cur.execute(
+            "UPDATE email_message SET classified_ms = %s WHERE id = %s",
+            (classified_ms, row["id"]),
+        )
     return {
         "id": row["id"],
         "duplicate": False,
@@ -418,4 +425,5 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
         "classification": row["classification"],
         "status": row["status"],
         "message_id": row["message_id"],
+        "classified_ms": classified_ms,
     }

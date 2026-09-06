@@ -1,21 +1,29 @@
-# Local dual-stack: site (Postgres+API+UI) + LLM sidecar.
-#   docker compose up --build
-# Site: http://localhost:8000  (admin / admin)
-# LLM:  http://127.0.0.1:8080/health  (not required from the browser)
+# Local dual-stack via Docker Compose (no host Postgres / uvicorn).
+# Postgres lives inside the `web` image. Intelligence is the `llm` sidecar
+# (compose profile `intel` — `docker compose --profile intel up --build`).
+# Site: http://127.0.0.1:8000  (admin / admin)
+# LLM:  http://127.0.0.1:8080/health
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      EMAIL_LLM: "1"
+      ENV: dev
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      EMAIL_LLM: ${EMAIL_LLM:-1}
       EMAIL_LLM_BASE_URL: http://llm:8080/v1
       EMAIL_LLM_TOKEN: ${EMAIL_LLM_TOKEN:-dev-local-llm}
-    depends_on:
-      - llm
+      EMAIL_LLM_TIMEOUT: "30"
+      EMAIL_LLM_CHAT_TIMEOUT: ${EMAIL_LLM_CHAT_TIMEOUT:-180}
+    volumes:
+      - ./frontend:/app/frontend
+      - ./backend:/app/backend
+    restart: unless-stopped
   llm:
+    profiles: ["intel"]
     build:
       context: .
       dockerfile: Dockerfile.llm
@@ -27,6 +35,7 @@ services:
       GGUF_PATH: /models/model.gguf
       GGUF_URL: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
       LLAMA_API_KEY: ${EMAIL_LLM_TOKEN:-dev-local-llm}
+      LLAMA_CTX_SIZE: "16384"
     volumes:
       - ./models:/models
     healthcheck:
@@ -35,3 +44,4 @@ services:
       timeout: 5s
       retries: 20
       start_period: 180s
+    restart: unless-stopped

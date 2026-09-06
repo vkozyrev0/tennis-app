@@ -27,33 +27,165 @@ INTENTS = frozenset({
     "scheduling_avoidance", "division_flex", "hotel", "other",
 })
 
+# One shared leftover prompt for every email (not a per-message template).
+# Few-shots use invented names so the model learns the rule, not the corpus.
 _SYSTEM = (
-    "You extract structured facts from USTA junior/adult tournament emails. "
+    "You classify leftover USTA junior/adult tournament emails. "
     "Reply with JSON only, no markdown. "
     "intent must be one of: withdrawal, doubles, late_entry, pairing_avoidance, "
     "scheduling_avoidance, division_flex, hotel, other. "
-    "players is a list of {name, usta}. confidence is 0..1."
+    "players is a list of {name, usta}. confidence is 0..1. "
+    "Classify the LATEST body only (ignore Re:/FW:/**EXTERNAL** and quotes). "
+    "Cancel / cancellation of singles or doubles is withdrawal (same as "
+    "withdraw / WITHDRAWAL REQUEST). "
+    "A request to still enter or add a player in singles is late_entry. "
+    "A request to add/enter doubles or name a doubles partner is doubles. "
+    "pairing_avoidance only if they ask two players not to play each other. "
+    "Rules, in order: "
+    "(1) Latest body is a short ack (Thanks / Thank you / Thank you for "
+    "confirming / Will do / Sure / Yes I did / We will pair them / No worries) "
+    "OR asks someone to email / confirm they are good → other, even if the "
+    "subject says withdraw, cancel, doubles, singles, confirmation, or pairing. "
+    "(2) Else two people named as partners / would like to be partners / "
+    "will partner → doubles (a trailing Thank you does not cancel that). "
+    "(3) Else withdraw / cancel / WITHDRAWAL REQUEST / requested to be "
+    "withdrawn from singles and/or doubles → withdrawal. "
+    "(4) Else missed the deadline / still enter / add NAME in singles → "
+    "late_entry. "
+    "(5) Else subject contains Doubles Confirmation and the latest body "
+    "confirms a pair (not only a C: address or Thank you) → doubles. "
+    "(6) Else add NAME for doubles / find a partner → doubles. "
+    "(7) Else other. "
+    "Set intent to match the rule. Do not set intent from the subject alone "
+    "when the body is an ack. "
+    "If reason is acknowledgement or waiting on email, intent is other "
+    "unless the body lists two people as doubles partners."
 )
 
 _SHOTS = """\
 Example 1
-Subject: Withdrawal Request: Maya Quintero
-Body: Maya Quintero has requested to be withdrawn from singles.
-{"intent":"withdrawal","players":[{"name":"Maya Quintero","usta":null}],"reason":"withdrawal request","confidence":0.9}
+Subject: WITHDRAWAL REQUEST: Jane Roe, Girls' 16 & under singles
+Body: Jane Roe has requested to be withdrawn from singles.
+{"intent":"withdrawal","reason":"cancel/withdraw singles","players":[{"name":"Jane Roe","usta":null}],"confidence":0.9}
 
 Example 2
-Subject: Re: L3 Doubles
-Body: Please pair Kai Hosch and Gabriel Zingman for doubles.
-{"intent":"doubles","players":[{"name":"Kai Hosch","usta":null},{"name":"Gabriel Zingman","usta":null}],"reason":"named pairing","confidence":0.85}
+Subject: Please cancel doubles
+Body: Please cancel Jane Roe from doubles.
+{"intent":"withdrawal","reason":"cancel/withdraw doubles","players":[{"name":"Jane Roe","usta":null}],"confidence":0.9}
 
 Example 3
-Subject: Thanks
-Body: See you Saturday.
-{"intent":"other","players":[],"reason":"acknowledgement","confidence":0.7}
+Subject: Doubles partners
+Body: Alex Kim and Sam Lee Doubles partners Thank you
+{"intent":"doubles","reason":"named pairing","players":[{"name":"Alex Kim","usta":null},{"name":"Sam Lee","usta":null}],"confidence":0.9}
 
-Now extract:
-Subject: {subject}
+Example 3b
+Subject: Partner request
+Body: Alex Kim and Sam Lee would like to be doubles partners. Please put them together.
+{"intent":"doubles","reason":"named pairing","players":[{"name":"Alex Kim","usta":null},{"name":"Sam Lee","usta":null}],"confidence":0.9}
+
+Example 3c
+Subject: Re: Event Doubles
+Body: Good morning,
+Alex Kim and Sam Lee
+Doubles partners
+Thank you
+Pat
+{"intent":"doubles","reason":"named pairing","players":[{"name":"Alex Kim","usta":null},{"name":"Sam Lee","usta":null}],"confidence":0.9}
+
+Example 4
+Subject: Re: Boys 16s Doubles Confirmation-Level 4 Open
+Body: Please confirm Alex Kim for doubles.
+{"intent":"doubles","reason":"doubles confirmation","players":[{"name":"Alex Kim","usta":null}],"confidence":0.8}
+
+Example 5
+Subject: Missed deadline
+Body: Can we still enter Jordan Blake in singles?
+{"intent":"late_entry","reason":"singles entry request","players":[{"name":"Jordan Blake","usta":null}],"confidence":0.8}
+
+Example 6
+Subject: Jordan Blake
+Body: Can you add Jordan for doubles if it is not too late. We will try to find a partner.
+{"intent":"doubles","reason":"add for doubles","players":[{"name":"Jordan Blake","usta":null}],"confidence":0.8}
+
+Example 7
+Subject: Re: Withdrawal Request
+Body: Thank you
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 8
+Subject: Re: Jordan Blake doubles pairing change
+Body: Will do
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 9
+Subject: Re: Casey Ng - Doubles partner
+Body: We will pair them.
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 10
+Subject: Re: Pairing
+Body: Please ask the partner to email to confirm.
+{"intent":"other","reason":"waiting on partner email","players":[],"confidence":0.85}
+
+Example 10b
+Subject: Re: Question
+Body: Please ask his parent to email me. Thanks!!
+{"intent":"other","reason":"waiting on parent email","players":[],"confidence":0.85}
+
+Example 10c
+Subject: Re: Event pairing
+Body: Please ask her partner to email also to confirm, if not sent already.
+{"intent":"other","reason":"waiting on partner email","players":[],"confidence":0.85}
+
+Example 10d
+Subject: Re: Doubles pairing request
+Body: Please ask the partner to also email if they have not already.
+{"intent":"other","reason":"waiting on partner email","players":[],"confidence":0.85}
+
+Example 11
+Subject: Re: Withdrawal
+Body: Thanks.
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 12
+Subject: Re: Event
+Body: Yes, I did.
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 13
+Subject: Re: Partnership
+Body: Sure.
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 14
+Subject: Re: Partners
+Body: please confirm they are good to go. Thanks!
+{"intent":"other","reason":"waiting on confirm","players":[],"confidence":0.85}
+
+Example 15
+Subject: Re: Boys doubles - Roe / Kim
+Body: C: Jane Roe
+Thank you!
+{"intent":"other","reason":"acknowledgement","players":[],"confidence":0.9}
+
+Example 16
+Subject: Re: Doubles Confirmation thread
+Body: C: dad@gmail.com
+{"intent":"other","reason":"cc only","players":[],"confidence":0.9}
+
+Example 17
+Subject: Re: girls doubles partner
+Body: Please ask Alex to email us to verify.
+{"intent":"other","reason":"waiting on partner email","players":[],"confidence":0.85}
+
+If the body is only an ack or asking someone to email, intent is other.
+The body "We will pair them." is other (it is an ack, not a new pairing).
+A body that is only a C: address is other.
+Will do as the whole Body is other, not named pairing, even when Subject says doubles pairing change.
+will partner with two named players is doubles, not an ack.
+Now extract. Read Body first; if it is an ack, intent is other even when Subject says withdraw or doubles.
 Body: {body}
+Subject: {subject}
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
@@ -64,12 +196,21 @@ _QUOTE_MARKERS = (
     "\nFrom:",
     "This email has been scanned for spam",
     "You are receiving this message as a registered tennis player",
+    "\nGet Outlook for iOS",
+    "\nSent from my iPhone",
 )
-_ON_WROTE = re.compile(r"\nOn .{5,120}? wrote:", re.I)
+_ON_WROTE = (
+    re.compile(r"\nOn .{5,120}? wrote:", re.I),
+    re.compile(r"\nOn .{10,200}? wrote:", re.I | re.S),
+)
 
 
 def llm_enabled() -> bool:
     return os.getenv("EMAIL_LLM", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+_PDF_DATE = re.compile(r"^\[Date:[^\]]*\]\s*", re.M)
+_PDF_TO = re.compile(r"^\[To:[^\]]*\]\s*", re.M)
 
 
 def clip_email_text(subject: str | None, body: str | None, limit: int = 1200) -> tuple[str, str]:
@@ -81,10 +222,15 @@ def clip_email_text(subject: str | None, body: str | None, limit: int = 1200) ->
         i = text.find(mk)
         if i > 0:
             cut = min(cut, i)
-    m = _ON_WROTE.search(text)
-    if m and m.start() > 0:
-        cut = min(cut, m.start())
+    for _on in _ON_WROTE:
+        m = _on.search(text)
+        if m and m.start() > 0:
+            cut = min(cut, m.start())
     text = text[:cut].strip()
+    # Inbox PDF rows prepend [Date]/[To] wrappers; they are not the ask.
+    text = _PDF_DATE.sub("", text, count=1)
+    text = _PDF_TO.sub("", text, count=1)
+    text = text.strip()
     if len(text) > limit:
         text = text[:limit].rsplit(" ", 1)[0]
     return subj, text
@@ -243,18 +389,31 @@ def _complete(prompt: str) -> str:
     return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
 
 
-def extract_email(subject: str | None, body: str | None) -> dict | None:
-    """Ask the local model. Returns None on disable / timeout / bad JSON."""
+def leftover_prompt(subject: str | None, body: str | None) -> str:
+    """Few-shot user prompt for leftover classify. str.replace so JSON braces survive."""
+    return (
+        _SHOTS
+        .replace("{subject}", subject or "(none)")
+        .replace("{body}", body or "(empty)")
+    )
+
+
+def leftover_model_intent(subject: str | None, body: str | None) -> dict | None:
+    """Clip + shared leftover_prompt + sidecar + parse_llm_json. No intent rewrite."""
     if not llm_enabled():
         return None
     subj, clipped = clip_email_text(subject, body)
-    # str.replace — the few-shot JSON uses {braces} that str.format would eat.
-    prompt = _SHOTS.replace("{subject}", subj or "(none)").replace("{body}", clipped or "(empty)")
+    prompt = leftover_prompt(subj, clipped)
     try:
         raw = _complete(prompt)
     except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError):
         return None
     return parse_llm_json(raw)
+
+
+def extract_email(subject: str | None, body: str | None) -> dict | None:
+    """Ask the local model. Returns None on disable / timeout / bad JSON."""
+    return leftover_model_intent(subject, body)
 
 
 def maybe_intent(subject: str | None, body: str | None, heuristic: str) -> str:

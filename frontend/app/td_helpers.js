@@ -2,6 +2,9 @@
 // pin blank-email, viewport-fit menus, locale dates, and hash routing
 // without a browser.
 
+/** Persistent validation target on the Add-email form (not a vanishing toast). */
+export const EMAIL_MSG_ID = "email-msg";
+
 /** Reject Add-email when from, subject, and body are all blank. */
 export function emailCreateGuard(payload) {
   const from = String(payload?.from_address ?? payload?.from ?? "").trim();
@@ -79,6 +82,17 @@ export function parseLocaleDate(value) {
   return null;
 }
 
+/**
+ * AG Grid date valueParser: locale MM/DD/YYYY or ISO → ISO only.
+ * Malformed input keeps the previous ISO (never passes garbage to AG).
+ */
+export function dateCellParser(newValue, oldValue) {
+  const parsed = parseLocaleDate(newValue);
+  if (parsed != null) return parsed;
+  if (newValue == null || String(newValue).trim() === "") return null;
+  return parseLocaleDate(oldValue);
+}
+
 /** Display ISO YYYY-MM-DD as MM/DD/YYYY (empty string when missing). */
 export function formatLocaleDate(iso) {
   const parsed = parseLocaleDate(iso);
@@ -120,14 +134,65 @@ export function toastLifetime({ ok = true, sticky = false, hasAction = false } =
   return ok ? 2500 : 6000;
 }
 
-/** Header health pill from GET /api/health { db, llm }. */
-export function healthPillText({ db, llm } = {}) {
-  if (db !== "ok") {
-    return { text: "DB " + (db || "down"), kind: "bad" };
+/** User-facing name for the local leftover/chat model. Not "LLM". */
+export const INTEL_LABEL = "Intelligence";
+
+/**
+ * Three independent header indicators from GET /api/health.
+ * `reachable` is false when the health request itself failed.
+ * `llm` is the wire field (ok|off|down); the UI label is Intelligence.
+ */
+export function healthIndicators({ reachable = true, db, llm } = {}) {
+  if (!reachable) {
+    return [
+      { id: "api", label: "API", kind: "bad",
+        title: "API unreachable" },
+      { id: "db", label: "DB", kind: "warn",
+        title: "Database status unknown — API did not answer" },
+      { id: "intel", label: INTEL_LABEL, kind: "warn",
+        title: INTEL_LABEL + " status unknown — API did not answer" },
+    ];
   }
-  if (llm === "ok") return { text: "API + DB + LLM ok", kind: "ok" };
-  if (llm === "down") return { text: "API + DB ok · LLM down", kind: "warn" };
-  return { text: "API + DB ok", kind: "ok" };
+  const dbOk = db === "ok";
+  let intelKind = "off";
+  let intelTitle = INTEL_LABEL + " is off — leftover inbox mail uses keyword triage only";
+  if (llm === "ok") {
+    intelKind = "ok";
+    intelTitle = INTEL_LABEL + " is on";
+  } else if (llm === "down") {
+    intelKind = "warn";
+    intelTitle = INTEL_LABEL + " is on but not answering";
+  }
+  return [
+    { id: "api", label: "API", kind: "ok", title: "API reachable" },
+    { id: "db", label: "DB", kind: dbOk ? "ok" : "bad",
+      title: dbOk ? "Database reachable" : "Database " + (db || "down") },
+    { id: "intel", label: INTEL_LABEL, kind: intelKind, title: intelTitle },
+  ];
+}
+
+/** One-line dashboard copy for Intelligence (never says LLM / sidecar). */
+export function intelStatusLine(llm) {
+  if (llm === "ok") {
+    return INTEL_LABEL + " is on — leftover inbox mail can be classified on this machine.";
+  }
+  if (llm === "down") {
+    return INTEL_LABEL + " is on but not answering — leftover mail uses keyword triage only.";
+  }
+  return INTEL_LABEL + " is off — leftover mail uses keyword triage only.";
+}
+
+/** Paint the three header chips. */
+export function applyHealthPills(cluster, indicators) {
+  if (!cluster || !indicators) return;
+  for (const ind of indicators) {
+    const el = cluster.querySelector(`[data-svc="${ind.id}"]`);
+    if (!el) continue;
+    el.className = "pill health-pill " + ind.kind;
+    el.textContent = ind.label;
+    el.title = ind.title;
+    el.setAttribute("aria-label", ind.label + ": " + ind.title);
+  }
 }
 
 /** Roster/import age-division: junior B14/G16 or adult NTRP/Combo labels. */

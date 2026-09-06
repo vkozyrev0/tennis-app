@@ -63,7 +63,7 @@ export function pruneSelection(selectedIds, presentIds) {
  * Whether an inbox key should run (caller still checks active panel / field focus).
  * Returns { ok, reason } where reason is a toast message when not ok.
  */
-export { emailCreateGuard } from "./td_helpers.js";
+export { emailCreateGuard, EMAIL_MSG_ID } from "./td_helpers.js";
 
 /** Classification / Status / Player / Reason for the review modal — always from this email. */
 export function reviewFormState(m) {
@@ -80,17 +80,62 @@ export function reviewFormState(m) {
 
 export const FILE_NEEDS_PLAYER = Object.freeze(["withdrawal", "doubles"]);
 
+export const FILE_NEEDS_PLAYER_REASON =
+  "Pick a player first — filing a withdrawal or doubles email without one will not change those lists.";
+
 /** Block File / status=filed on withdrawal/doubles when no player is matched. */
 export function fileWithoutPlayerGate(classification, playerId) {
   const cls = String(classification || "");
   const hasPlayer = playerId != null && String(playerId).trim() !== "";
   if (FILE_NEEDS_PLAYER.includes(cls) && !hasPlayer) {
-    return {
-      ok: false,
-      reason: "Pick a player first — filing a withdrawal or doubles email without one will not change those lists.",
-    };
+    return { ok: false, reason: FILE_NEEDS_PLAYER_REASON };
   }
   return { ok: true, reason: null };
+}
+
+const _CONF_TIER = {
+  usta: 3, withdraw_template: 3, usta_subject: 3, fullname_subject: 3, manual: 3,
+  fullname_body: 2, fuzzy_name: 2, usta_offroster: 2,
+  lastname_subject: 1, lastname: 1, firstname: 1,
+};
+const _CONF_LABEL = { 3: ["High", "ok"], 2: ["Medium", "warn"], 1: ["Low", "bad"] };
+
+/**
+ * Inbox confidence from match_kind + classification.
+ * A correctly labeled withdrawal/doubles with a player match or name suggestion
+ * is not forced to Low.
+ */
+export function inboxConfidence(m) {
+  if (!m) return null;
+  const cls = String(m.classification || "");
+  const fileIntent = FILE_NEEDS_PLAYER.includes(cls);
+  const hasMatch = m.detected_player_id != null && String(m.detected_player_id).trim() !== "";
+  const pairs = m.detected_name_pairs;
+  const hasSuggestion = hasMatch
+    || (Array.isArray(pairs) && pairs.length > 0)
+    || !!(m.detected_usta_text)
+    || !!(m.detected_player_name);
+  if (hasMatch) {
+    let tier = _CONF_TIER[m.detected_match_kind] || 2;
+    if (fileIntent && tier < 2) tier = 2;
+    const [label, badge] = _CONF_LABEL[tier];
+    return { label, cls: badge, title: "Matched to a roster player" };
+  }
+  if (fileIntent && hasSuggestion) {
+    return {
+      label: "Medium",
+      cls: "warn",
+      title: "Classified with a player suggestion — confirm the match; not auto-filed",
+    };
+  }
+  if (hasSuggestion) {
+    return {
+      label: "Low",
+      cls: "bad",
+      title: "Parsed from the email but not matched to the roster — confirm or add the player",
+    };
+  }
+  return null;
 }
 
 export function inboxShortcutGate(key, selectedCount) {

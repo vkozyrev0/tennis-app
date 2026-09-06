@@ -9,6 +9,7 @@ the classification + extracted fields. That sends email content to a model, so i
 needs an explicit cloud-vs-local decision first.
 """
 import re
+import time
 
 from .email_extract import (
     extract_doubles_pair,
@@ -48,8 +49,10 @@ _STRONG = [
                  r"\bpair\s+(?:up|me|us|them)\b", r"\bpair\b[^.?!\n]{0,40}\bfor\s+(?:\w+\s+)?doubles?\b",
                  r"\brandom\s+pair", r"\bpair\b[^.?!\n]{0,30}\b(?:and|with|&)\b[^.?!\n]{0,30}\bdoubles?\b",
                  r"\bconfirm(?:ed|ing)?\s+(?:partnership|doubles|partner|pairing)\b",
+                 r"\bdoubles?\s+confirmation\b",
                  r"\b(?:new|change(?:d)?|switch(?:ed)?)\s+partners?\b",
-                 r"\bpairing\s+change\b", r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b"]),
+                 r"\b(?:doubles?\s+)?pairing[- ]change\b",
+                 r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b"]),
     ("late_entry", [r"\blate\s+(?:entry|entrant|add)\b", r"\bmissed\s+the\s+deadline\b",
                     r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b"]),
 ]
@@ -57,9 +60,13 @@ _STRONG_RE = [(label, [re.compile(p, re.I) for p in pats]) for label, pats in _S
 _DOUBLES_KEEP_ONE = [
     re.compile(p, re.I) for p in (
         r"\bconfirm(?:ed|ing)?\s+(?:partnership|doubles|partner|pairing)\b",
+        r"\bdoubles?\s+confirmation\b",
         r"\b(?:new|change(?:d)?|switch(?:ed)?)\s+partners?\b",
-        r"\bpairing\s+change\b",
+        r"\b(?:doubles?\s+)?pairing[- ]change\b",
         r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b",
+        r"\badd\b.{0,40}\bfor\s+doubles\b",
+        r"\benter\b.{0,40}\bdoubles\b",
+        r"\bfind\s+a\s+partner\b",
     )
 ]
 
@@ -112,6 +119,14 @@ def classify(subject: str | None, body: str | None) -> str:
     # Optional local tiny-LLM second pass for leftovers only (EMAIL_LLM=1).
     from .email_llm import maybe_intent
     return maybe_intent(subject, body, label)
+
+
+def classify_timed(subject: str | None, body: str | None) -> tuple[str, int]:
+    """Run ``classify`` and return ``(label, elapsed_ms)`` for the inbox stamp."""
+    t0 = time.perf_counter()
+    label = classify(subject, body)
+    ms = int((time.perf_counter() - t0) * 1000)
+    return label, ms
 
 
 def _classify_raw(subject: str | None, body: str | None) -> str:

@@ -38,7 +38,12 @@ from ..email_extract import (  # noqa: F401 — re-export for importer/tests
     usta_candidates,
 )
 from ..email_stamp import _apply_extracted_to_row, _stamp_extracted_fields
-from ..email_targets import POPULATE_TARGETS, public_targets
+from ..email_targets import (
+    FILE_NEEDS_PLAYER,
+    FILE_NEEDS_PLAYER_REASON,
+    POPULATE_TARGETS,
+    public_targets,
+)
 from ..models import (
     EmailAmend,
     EmailCreate,
@@ -48,7 +53,7 @@ from ..models import (
 )
 from ..playerops import mark_email_filed
 from ..query_helpers import like_escape, paged_select
-from ..triage import classify
+from ..triage import classify_timed
 
 # C2: re-export bulk extractors for registry-consistency tests.
 from .emails_bulk import _EXTRACTORS  # noqa: E402, F401
@@ -60,7 +65,8 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 _COLS = (
     "e.id, e.tournament_id, e.message_id, e.received_at, e.from_address, "
     "e.to_address, e.ingest_source, "
-    "e.subject, e.body, e.classification, e.status, e.detected_player_id, "
+    "e.subject, e.body, e.classification, e.status, e.classified_ms, "
+    "e.detected_player_id, "
     "e.detected_match_kind, e.detected_usta_text, "
     "e.detected_reason, e.detected_division, e.detected_events, "
     "e.detected_name_pairs, e.detected_avoid_day, e.detected_avoid_time, "
@@ -254,18 +260,12 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
         raise HTTPException(status_code=409, detail="an email with this message_id already exists")
 
 
-_FILE_NEEDS_PLAYER = frozenset({"withdrawal", "doubles"})
-
-
 @router.put("/{email_id}", response_model=EmailOut)
 def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
-    if (body.classification in _FILE_NEEDS_PLAYER
+    if (body.classification in FILE_NEEDS_PLAYER
             and body.status == "filed"
             and not body.detected_player_id):
-        raise HTTPException(
-            status_code=400,
-            detail="pick a player before filing a withdrawal or doubles email — those lists will not change",
-        )
+        raise HTTPException(status_code=400, detail=FILE_NEEDS_PLAYER_REASON)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -390,7 +390,13 @@ def suggest_classification(email_id: int, conn=Depends(db_dep)):
             row["body"] = _dec_body(row.get("body"))
     if row is None:
         raise HTTPException(status_code=404, detail="email not found")
-    return {"classification": classify(row["subject"], row["body"])}
+    label, ms = classify_timed(row["subject"], row["body"])
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE email_message SET classified_ms = %s WHERE id = %s",
+            (ms, email_id),
+        )
+    return {"classification": label, "classified_ms": ms}
 
 
 @router.delete("/{email_id}", status_code=204)

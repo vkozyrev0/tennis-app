@@ -22,6 +22,8 @@ from ..email_extract import (
 from ..playerops import upsert_player
 from ..email_stamp import _stamp_extracted_fields
 from ..email_targets import (
+    FILE_NEEDS_PLAYER,
+    FILE_NEEDS_PLAYER_REASON,
     POPULATE_TARGETS,
     SINGLE_FILE_ONLY_KEYS,
 )
@@ -34,7 +36,7 @@ from ..models import (
     EmailDetectResult,
 )
 from ..playerops import mark_email_filed
-from ..triage import classify
+from ..triage import classify_timed
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])
 
@@ -191,12 +193,13 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
             if body.only_unclassified and em["classification"] != "unclassified":
                 continue
             body_txt = _dec_body(em.get("body"))
-            cls = classify(em["subject"], body_txt)
+            cls, ms = classify_timed(em["subject"], body_txt)
             if cls == em["classification"]:
                 continue
             cur.execute(
-                "UPDATE email_message SET classification = %s WHERE id = %s",
-                (cls, em["id"]),
+                "UPDATE email_message SET classification = %s, classified_ms = %s "
+                "WHERE id = %s",
+                (cls, ms, em["id"]),
             )
             # Classification drives which extractors apply — re-stamp now so the
             # next list GET does not recompute (and withdrawal reason appears).
@@ -206,7 +209,7 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
             )
             pid = cur.fetchone()["detected_player_id"]
             _stamp_extracted_fields(cur, em["id"], em["subject"], body_txt, cls, pid)
-            changed.append({"id": em["id"], "classification": cls})
+            changed.append({"id": em["id"], "classification": cls, "classified_ms": ms})
             counts[cls] = counts.get(cls, 0) + 1
     return {"classified": len(changed), "changed": changed, "counts": counts}
 
@@ -233,6 +236,9 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
         for em in rows:
             em["body"] = _dec_body(em.get("body"))  # PII H2: for the extractors
             tid, cls, pid = em["tournament_id"], em["classification"], em["detected_player_id"]
+            if cls in FILE_NEEDS_PLAYER and pid is None:
+                skipped.append({"id": em["id"], "reason": FILE_NEEDS_PLAYER_REASON})
+                continue
             target = POPULATE_TARGETS.get(cls)
             if target is None:
                 # Distinguish "fileable but only one-at-a-time" (doubles/pairing)

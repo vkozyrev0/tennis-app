@@ -74,6 +74,22 @@ def test_doubles_pairing_request_mentioning_withdraw_classifies_as_doubles():
         "from singles and doubles.") == "withdrawal"
 
 
+def test_named_doubles_confirmation_and_pairing_change():
+    # Retest misses: confirmation / pairing-change subjects used to fall to Other
+    # because keep-one required "confirm … doubles" not "doubles confirmation".
+    assert classify("Boys 14s Doubles Confirmation",
+                    "Please confirm the Boys 14s doubles for Scarlett Milner.") == "doubles"
+    assert classify("Scarlett Milner doubles pairing change",
+                    "Scarlett Milner needs a doubles pairing change.") == "doubles"
+    assert classify("**EXTERNAL** Re: L3 Macon - Doubles",
+                    "Kai Hosch and Gabriel Zingman would like to pair together for doubles.") == "doubles"
+    assert classify(
+        "Vera Pantovic",
+        "Can you add Vera for doubles maybe for southerns, if it's not too late. "
+        "We will see if we can find a partner.",
+    ) == "doubles"
+
+
 def test_topic_only_doubles_thread_is_unknown_not_doubles():
     # A doubles-topic thread with no concrete pairing (just an acknowledgement /
     # pending status) reads as `other`, not a confident doubles.

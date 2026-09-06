@@ -3,8 +3,26 @@
 export function installFormA11y(ctx) {
   const { makeMenuButton, gotoImport } = ctx;
 
-  // Mark required fields with a red asterisk inline with the label text (the label
-  // is a flex column, so the text + star must share one inline element).
+  /** Native date inputs reject typed MM/DD/YYYY. Use a text field + hint. */
+  function enhanceDateFields() {
+    document.querySelectorAll('input[type="date"]').forEach((el) => {
+      if (el.dataset.dateLocale) return;
+      el.dataset.dateLocale = "1";
+      el.type = "text";
+      el.classList.add("date-locale");
+      el.placeholder = el.placeholder || "MM/DD/YYYY";
+      el.setAttribute("inputmode", "numeric");
+      el.setAttribute("autocomplete", "off");
+      el.title = "MM/DD/YYYY or YYYY-MM-DD";
+      if (!el.parentElement) return;
+      if (el.parentElement.querySelector(".date-hint")) return;
+      const hint = document.createElement("span");
+      hint.className = "date-hint";
+      hint.textContent = "MM/DD/YYYY";
+      el.insertAdjacentElement("afterend", hint);
+    });
+  }
+
   function markRequiredFields() {
     document.querySelectorAll("form .row label").forEach((label) => {
       if (!label.querySelector("[required]") || label.querySelector(".req")) return;
@@ -72,5 +90,10 @@ export function installFormA11y(ctx) {
     [csv, signin, template].forEach((b) => { b.hidden = true; });
   }
 
-  return { markRequiredFields, consolidateInboxToolbar: _consolidateInboxToolbar, consolidateRosterToolbar: _consolidateRosterToolbar };
+  return {
+    markRequiredFields,
+    enhanceDateFields,
+    consolidateInboxToolbar: _consolidateInboxToolbar,
+    consolidateRosterToolbar: _consolidateRosterToolbar,
+  };
 }
