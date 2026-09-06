@@ -15,8 +15,11 @@ from ..email_extract import (
     extract_avoid_day,
     extract_avoid_time,
     extract_events,
+    extract_name_usta_pairs,
     extract_withdrawal_reason,
+    infer_gender_from_email,
 )
+from ..playerops import upsert_player
 from ..email_stamp import _stamp_extracted_fields
 from ..email_targets import (
     POPULATE_TARGETS,
@@ -110,6 +113,61 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
             out.append({"email_id": em["id"], **d, **partner,
                         "detected_member_ids": member_ids})
     return out
+
+
+@router.post("/bulk/confirm-suggestions")
+def bulk_confirm_suggestions(body: EmailBulkDetect, conn=Depends(db_dep)):
+    """Confirm parsed player suggestions: re-detect, then create catalog
+    players from (name, USTA #) pairs when gender can be inferred from the
+    email, and link them. Does not add anyone to the tournament roster."""
+    if not body.email_ids:
+        return {"confirmed": 0, "created": 0, "still_unmatched": 0}
+    confirmed = created = still = 0
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, tournament_id, subject, body, from_address, classification "
+            "FROM email_message WHERE id = ANY(%s)",
+            (body.email_ids,),
+        )
+        for em in cur.fetchall():
+            if em["tournament_id"] is None:
+                still += 1
+                continue
+            body_txt = _dec_body(em["body"])
+            gender = infer_gender_from_email(em["subject"], body_txt)
+            for pair in extract_name_usta_pairs(em["subject"], body_txt):
+                usta = (pair.get("usta") or "").strip()
+                name = (pair.get("name") or "").strip()
+                if not usta or not name or not gender:
+                    continue
+                parts = name.split(None, 1)
+                first = parts[0]
+                last = parts[1] if len(parts) > 1 else None
+                try:
+                    with savepoint(cur):
+                        upsert_player(cur, usta, first, last, gender)
+                    created += 1
+                except Exception:
+                    continue
+            d, partner, member_ids = _detect_pair_for(
+                cur, em["tournament_id"], em["subject"], body_txt,
+                em["from_address"], em["classification"],
+            )
+            cur.execute(
+                "UPDATE email_message SET detected_player_id = %s, detected_match_kind = %s, "
+                "detected_partner_id = %s, detected_member_ids = %s WHERE id = %s",
+                (d["detected_player_id"], d["match_kind"] or "manual",
+                 partner["detected_partner_id"], member_ids, em["id"]),
+            )
+            _stamp_extracted_fields(
+                cur, em["id"], em["subject"], body_txt, em["classification"],
+                d.get("detected_player_id"),
+            )
+            if d.get("detected_player_id"):
+                confirmed += 1
+            else:
+                still += 1
+    return {"confirmed": confirmed, "created": created, "still_unmatched": still}
 
 
 @router.post("/bulk/classify")

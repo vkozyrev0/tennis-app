@@ -20,6 +20,10 @@ Single-page admin tool with a **Setup catalog** (durable master data) and a
 **per-tournament workspace** (scoped operations), plus a small **self-service**
 surface for officials.
 
+**Live demo:** [https://courtops-poc.fly.dev](https://courtops-poc.fly.dev)
+(Fly.io POC — see [docs/deploy.md](docs/deploy.md)). Local sign-in is
+`admin / admin`; the public host uses a non-default `ADMIN_PASSWORD`.
+
 ## Stack
 
 **Postgres 16** (Docker) · **FastAPI + psycopg 3** (Pydantic) · **vanilla

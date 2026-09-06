@@ -323,7 +323,11 @@ def extract_withdraw_name(subject: str | None, body: str | None) -> str | None:
     return None
 
 
-_WD_REQUEST_FIRST_RE = re.compile(r"(?i:withdrawal\s+request)\s*[:\-]\s*([A-Z][a-z][\w'’-]*)")
+# Prefer a full name after the portal lead; fall back to first name only.
+_WD_REQUEST_FIRST_RE = re.compile(
+    r"(?i:withdrawal\s+request)\s*[:\-]\s*"
+    r"([A-Z][a-z][\w'’-]*(?:\s+[A-Z][a-z][\w'’-]*)?)"
+)
 
 
 def extract_ustas(subject: str | None, body: str | None, limit: int = 3) -> list[str]:
@@ -381,6 +385,23 @@ def extract_withdrawal_reason(subject: str, body: str):
 _JUNIOR_AGES = {"10", "12", "14", "16", "18"}
 _DIV_WORD_RE = re.compile(r"\b(boys|girls)['‘’ʼ]?\s*(10|12|14|16|18)\b", re.I)
 _DIV_CODE_RE = re.compile(r"\b([BG])\s?-?\s?(10|12|14|16|18)\b")
+
+
+def infer_gender_from_email(subject: str | None, body: str | None) -> str | None:
+    """Boys/Men → male, Girls/Women → female, only when the text is one-sided."""
+    t = f"{subject or ''} {body or ''}".lower()
+    male = bool(re.search(r"\b(boys?'?|men'?s?|male)\b", t))
+    female = bool(re.search(r"\b(girls?'?|women'?s?|female)\b", t))
+    if male and not female:
+        return "male"
+    if female and not male:
+        return "female"
+    div = extract_age_division(subject or "", body or "")
+    if div and div[:1] == "B":
+        return "male"
+    if div and div[:1] == "G":
+        return "female"
+    return None
 
 
 def extract_age_division(subject: str, body: str):

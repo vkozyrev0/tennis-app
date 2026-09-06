@@ -92,9 +92,8 @@ def _parse_pdf_emails(raw: bytes) -> list[dict]:
         date_text = m.group(2).strip()
         from_text = m.group(3).strip()
         to_text = m.group(4).strip()
-        addr_match = re.search(r"<([^>]+@[^>]+)>", from_text)
-        from_addr = addr_match.group(1) if addr_match else from_text
         body = page_text[m.end():].strip()
+        from_addr = _parse_from_address(from_text, body)
         # Cut the body at the first footer marker. USTA portal exports stack
         # several separate emails on one page, so without the portal footer cut
         # one email's body runs into the NEXT email's "Subject:" header — e.g. a
@@ -134,12 +133,42 @@ _FOOTER_MARKERS = (
 )
 
 
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
+_ON_WROTE_RE = re.compile(r"\nOn .{5,120}? wrote:", re.I)
+_QUOTE_MARKERS = (
+    "\n-----Original Message-----",
+    "\n________________________________",
+)
+
+
+def _parse_from_address(from_text: str, body: str = "") -> str:
+    """Prefer a real email over a display name ('Jane Doe' / 'Jane Doe <jane@x>')."""
+    t = from_text or ""
+    m = re.search(r"<([^>]+@[^>]+)>", t)
+    if m:
+        return m.group(1).strip()
+    m = _EMAIL_RE.search(t)
+    if m:
+        return m.group(0)
+    m = _EMAIL_RE.search(body or "")
+    if m:
+        return m.group(0)
+    return t
+
+
 def _cut_at_footer(body: str) -> str:
     cut = len(body)
     for mk in _FOOTER_MARKERS:
         i = body.find(mk)
         if i != -1:
             cut = min(cut, i)
+    for mk in _QUOTE_MARKERS:
+        i = body.find(mk)
+        if i > 0:
+            cut = min(cut, i)
+    m = _ON_WROTE_RE.search(body)
+    if m and m.start() > 0:
+        cut = min(cut, m.start())
     return body[:cut]
 
 
@@ -172,7 +201,38 @@ def parse_file(filename: str, raw: bytes, cols) -> list[dict]:
     return out
 
 
-def validate(data: dict, cols, cur) -> str | None:
+_ROSTER_KINDS = frozenset({"roster", "roster_initial", "roster_correction"})
+_DIV_JUNIOR_RE = re.compile(r"^[BG]\s?-?\s?(10|12|14|16|18)$", re.I)
+# Catalog display labels: "Boys 14", "Boys 14 & Under", "Girls 16 and Under".
+_DIV_JUNIOR_LABEL_RE = re.compile(
+    r"^(boys|girls)\s+(10|12|14|16|18)(?:\s*(?:&|and)\s*under)?$",
+    re.I,
+)
+_DIV_ADULT_RE = re.compile(
+    r"^(?:NTRP\s+)?(?:Combo\s+)?(?:\d(?:\.\d)?|Open)(?:\s+(?:Men|Women|Mens|Womens))?$",
+    re.I,
+)
+
+
+def looks_like_division(val: str | None, cur=None) -> bool:
+    """Junior code/label (B14, Boys 14 & Under) or adult NTRP/Combo; blank is invalid."""
+    s = _s(val)
+    if not s:
+        return False
+    if _DIV_JUNIOR_RE.match(s) or _DIV_JUNIOR_LABEL_RE.match(s) or _DIV_ADULT_RE.match(s):
+        return True
+    if cur is not None:
+        cur.execute(
+            "SELECT 1 FROM division WHERE lower(code) = lower(%s) OR lower(label) = lower(%s) "
+            "LIMIT 1",
+            (s, s),
+        )
+        if cur.fetchone() is not None:
+            return True
+    return False
+
+
+def validate(data: dict, cols, cur, kind: str | None = None) -> str | None:
     """Audit F18 + fifth-pass #3: `cur` is required and every USTA-bearing
     field is pre-checked against `player` so missing-gender errors surface at
     *staging* time across wide formats (pairing_avoidances usta_1..usta_6;
@@ -180,6 +240,13 @@ def validate(data: dict, cols, cur) -> str | None:
     missing = [c.canon for c in cols if c.required and not _s(data.get(c.canon))]
     if missing:
         return "missing " + ", ".join(missing)
+    if kind in _ROSTER_KINDS:
+        parsed_div, _ = _parse_events_and_division(data.get("events"))
+        division = _s(data.get("age_division")) or parsed_div
+        if not division:
+            return "age division is required"
+        if not looks_like_division(division, cur):
+            return f"unknown age division {division!r}"
     # Collect every USTA #-shaped field the row carries.
     usta_keys = ["usta_number", "partner_usta"] + [f"usta_{n}" for n in range(1, 7)]
     ustas = [_s(data.get(k)) for k in usta_keys]
@@ -962,6 +1029,59 @@ def _merge_roster_initial(cur, tid, d):
     return conflict
 
 
+def _merge_players(cur, tid, d):
+    """Setup-catalog player upsert (not a tournament roster row). ``tid`` unused."""
+    usta = _s(d.get("usta_number"))
+    if not usta:
+        raise ValueError("usta_number is required")
+    gender = _norm_gender(d.get("gender"))
+    cur.execute("SELECT id FROM player WHERE usta_number = %s", (usta,))
+    existed = cur.fetchone() is not None
+    pid = upsert_player(cur, usta, _s(d.get("first_name")), _s(d.get("last_name")), gender)
+    _ext_player_initial(cur, pid, d)
+    bd = _s(d.get("birthdate"))
+    if bd:
+        refuse_under13_birthdate(bd)
+        cur.execute(
+            "UPDATE player SET birthdate = COALESCE(%s, birthdate) WHERE id = %s",
+            (_enc_pii(bd), pid),
+        )
+    return "player already on file — overwritten" if existed else None
+
+
+def _merge_officials(cur, tid, d):
+    """Setup-catalog official upsert by first+last name. ``tid`` unused."""
+    first, last = _s(d.get("first_name")), _s(d.get("last_name"))
+    if not first or not last:
+        raise ValueError("first_name and last_name are required")
+    cur.execute(
+        "SELECT id FROM official WHERE lower(first_name) = lower(%s) AND lower(last_name) = lower(%s) "
+        "LIMIT 1",
+        (first, last),
+    )
+    row = cur.fetchone()
+    fields = (
+        first, last, _s(d.get("street")), _s(d.get("city")), _s(d.get("state")),
+        _s(d.get("zip")), _s(d.get("phone")), _s(d.get("email")),
+        _s(d.get("dietary_restrictions")),
+    )
+    if row:
+        cur.execute(
+            "UPDATE official SET first_name=%s, last_name=%s, street=COALESCE(%s, street), "
+            "city=COALESCE(%s, city), state=COALESCE(%s, state), zip=COALESCE(%s, zip), "
+            "phone=COALESCE(%s, phone), email=COALESCE(%s, email), "
+            "dietary_restrictions=COALESCE(%s, dietary_restrictions) WHERE id=%s",
+            (*fields, row["id"]),
+        )
+        return "official already on file — overwritten"
+    cur.execute(
+        "INSERT INTO official (first_name, last_name, street, city, state, zip, phone, email, "
+        "dietary_restrictions) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        fields,
+    )
+    return None
+
+
 # Audit F2: optional column accepted by every Part-B importer so a staged CSV
 # can preserve the originating email's id when it's known. Blank = no source.
 _SRC_EMAIL = Col("source_email_id", {"sourceemailid", "emailid", "source"})
@@ -1177,6 +1297,44 @@ TYPES = {
                                          Col("lodging_plan", {"lodging", "lodgingplan", "plan"}),
                                          _SRC_EMAIL],
                       "merge": _merge_photel},
+    # Setup-catalog: Players (not the per-tournament roster).
+    "players": {
+        "label": "Players (Setup catalog)",
+        "desc": ("Global player catalog (Setup → Players). Match by USTA #; "
+                 "inserts new players or updates name/gender/city/contact. "
+                 "Does not add anyone to a tournament roster."),
+        "cols": [
+            Col("usta_number", {"ustanumber", "usta", "ustano", "ustaid", "id"}, required=True),
+            Col("first_name", {"firstname", "first", "givenname"}),
+            Col("last_name", {"lastname", "last", "surname"}),
+            Col("gender", {"sex"}),
+            Col("birthdate", {"dob", "dateofbirth"}),
+            Col("city"),
+            Col("state"),
+            Col("district"),
+            Col("section"),
+            Col("emails", {"email"}),
+            Col("phones", {"phonenumbers", "phone"}),
+        ],
+        "merge": _merge_players,
+    },
+    "officials": {
+        "label": "Officials (Setup catalog)",
+        "desc": ("Global officials catalog (Setup → Officials). Match by "
+                 "first + last name (case-insensitive); inserts or updates."),
+        "cols": [
+            Col("first_name", {"firstname", "first"}, required=True),
+            Col("last_name", {"lastname", "last", "surname"}, required=True),
+            Col("street"),
+            Col("city"),
+            Col("state"),
+            Col("zip", {"zipcode", "postal"}),
+            Col("phone"),
+            Col("email"),
+            Col("dietary_restrictions", {"dietary", "diet"}),
+        ],
+        "merge": _merge_officials,
+    },
 }
 
 

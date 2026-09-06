@@ -230,13 +230,15 @@ header h1 {
 /* Status indicator: a colored dot rather than a coloured background, so the
    chip stays visually distinct from the same-color header (the old approach
    made .pill.ok the same green as --accent and the pill effectively vanished). */
-.pill.ok::before, .pill.bad::before {
+.pill.ok::before, .pill.bad::before, .pill.warn::before {
   content: ""; display: inline-block;
   width: 0.5rem; height: 0.5rem; border-radius: 50%;
   flex: 0 0 auto;
 }
 .pill.ok::before { background: #5bbf6a; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
 .pill.bad::before { background: #ff6b6b; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.pill.warn::before { background: #e6b800; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.dash-llm { margin: 0.35rem 0 0; font-size: 0.85rem; }
 
 /* Shared green-bar chrome control (toolbar P0).
    One height/type/radius for theme, shortcuts, trash, change-pw, logout —
@@ -942,7 +944,7 @@ button.touch-btn:hover:not(:disabled) {
 .grid-mount {
   margin-top: 0.1rem;
   box-sizing: border-box;
-  min-height: 140px;
+  min-height: 220px;
   /* Internal scroll lives on the AG body; overflow hidden keeps chrome tight. */
   overflow: hidden;
 }
@@ -1442,7 +1444,17 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .ag-theme-quartz .ag-header-cell-text { font-weight: 600; }
 /* the app's grids sit flush in the card; trim AG's default outer chrome */
 .grid-mount.ag-theme-quartz { width: 100%; }
-.ag-theme-quartz .grid-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.ag-theme-quartz .ag-body-viewport { min-height: 120px; pointer-events: auto; }
+.ag-theme-quartz .ag-header { z-index: 1; }
+.ag-theme-quartz .ag-body-horizontal-scroll { z-index: 1; pointer-events: auto; }
+.ag-theme-quartz .ag-cell.grid-actions-cell {
+  overflow: visible;
+  pointer-events: auto;
+  position: relative;
+  z-index: 3;
+}
+.ag-theme-quartz .grid-actions { display: flex; gap: 2px; justify-content: flex-end; pointer-events: auto; }
+.ag-theme-quartz .grid-actions button { pointer-events: auto; position: relative; z-index: 3; }
 /* Active/selected row (wireEntity master-detail nav): match the Tabulator look —
    selection tint + a left-edge accent bar so it's visible during keyboard/prev-next
    nav, not just hover. The class is set via rowClassRules and re-applied on
@@ -2126,6 +2138,18 @@ td.toggle { white-space: nowrap; }
 .inbox-summary .inbox-sum-todo { font-weight: 700; }
 .inbox-summary .resp-ok { color: var(--ok); }
 .inbox-unmatched-toggle { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
+.inbox-axes {
+  font-size: 0.8rem; color: var(--muted); margin: 0 0 0.6rem; line-height: 1.45;
+}
+.dash-coming-soon {
+  margin: 0.75rem 0 0; padding: 0.55rem 0.75rem;
+  font-size: 0.88rem; color: var(--muted);
+  border: 1px dashed var(--border); border-radius: 6px;
+  background: var(--panel, var(--bg));
+}
+.asg-site-hint { display: block; font-size: 0.8rem; margin: 0.15rem 0 0.4rem; }
+#notices-table td { vertical-align: top; }
+#notices-table tr.notice-bad td:nth-child(2) { color: var(--bad, #b42318); font-weight: 600; }
 /* Always-on triage legend (empty + full inbox). kbd chips match shortcuts modal. */
 .inbox-triage-hint {
   margin: 0.15rem 0 0.55rem; padding: 0.4rem 0.55rem;

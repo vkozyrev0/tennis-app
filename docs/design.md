@@ -111,7 +111,7 @@ scripts/
 docs/                  # this file + the others
 Dockerfile             # all-in-one POC image (Postgres + API + frontend, demo baked at build)
 docker/entrypoint.sh   # boots bundled Postgres, migrates, seeds-if-fresh, ADMIN_PASSWORD, uvicorn
-fly.toml / render.yaml / Caddyfile   # hosting configs (see docs/deploy.md)
+fly.toml / render.yaml / Caddyfile   # hosting; live POC https://courtops-poc.fly.dev (docs/deploy.md)
 .github/workflows/docker.yml         # CI: pytest (Postgres service) gates image build;
                                      # pushes ghcr.io/<owner>/tennis-app:latest on main
 ```

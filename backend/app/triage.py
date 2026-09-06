@@ -46,11 +46,22 @@ _STRONG = [
                     r"\bwithdraw(?:ing|n|al)?\s+(?:him|her|them|my\s+\w+|\w+)?\s*from\s+the\s+(?:tournament|event|draw)\b"]),
     ("doubles", [r"\bdoubles?\s+partners?\b", r"\bwould\s+like\s+to\s+(?:pair|partner|be\s+(?:doubles\s+)?partners?)\b",
                  r"\bpair\s+(?:up|me|us|them)\b", r"\bpair\b[^.?!\n]{0,40}\bfor\s+(?:\w+\s+)?doubles?\b",
-                 r"\brandom\s+pair", r"\bpair\b[^.?!\n]{0,30}\b(?:and|with|&)\b[^.?!\n]{0,30}\bdoubles?\b"]),
+                 r"\brandom\s+pair", r"\bpair\b[^.?!\n]{0,30}\b(?:and|with|&)\b[^.?!\n]{0,30}\bdoubles?\b",
+                 r"\bconfirm(?:ed|ing)?\s+(?:partnership|doubles|partner|pairing)\b",
+                 r"\b(?:new|change(?:d)?|switch(?:ed)?)\s+partners?\b",
+                 r"\bpairing\s+change\b", r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b"]),
     ("late_entry", [r"\blate\s+(?:entry|entrant|add)\b", r"\bmissed\s+the\s+deadline\b",
                     r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b"]),
 ]
-_STRONG_RE = [(label, [re.compile(p) for p in pats]) for label, pats in _STRONG]
+_STRONG_RE = [(label, [re.compile(p, re.I) for p in pats]) for label, pats in _STRONG]
+_DOUBLES_KEEP_ONE = [
+    re.compile(p, re.I) for p in (
+        r"\bconfirm(?:ed|ing)?\s+(?:partnership|doubles|partner|pairing)\b",
+        r"\b(?:new|change(?:d)?|switch(?:ed)?)\s+partners?\b",
+        r"\bpairing\s+change\b",
+        r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b",
+    )
+]
 
 
 # A classification is only trustworthy when the right number of PLAYERS can
@@ -77,15 +88,30 @@ _RANDOM_PAIR_RE = re.compile(r"\brandom\s+pair", re.I)
 
 def classify(subject: str | None, body: str | None) -> str:
     label = _classify_raw(subject, body)
+    text = f"{subject or ''} {body or ''}"
     # Require the right number of identifiable PLAYERS, else fall back to UNKNOWN
     # (other): a doubles label needs two named players, a withdrawal needs one.
     # Exception: an explicit RANDOM-pairing request names no partner by design.
+    # Strong pairing-change / confirmation phrases keep `doubles` even with one
+    # named player — those are the emails that used to land as Other.
     if label == "doubles":
-        if _doubles_name_count(subject, body) < 2 and not _RANDOM_PAIR_RE.search(f"{subject or ''} {body or ''}"):
-            return "other"
+        # Pairing-change / confirmation phrases keep doubles even with one name.
+        # Other STRONG doubles hits (e.g. "pair them") still need two players.
+        keep_one = any(p.search(text) for p in _DOUBLES_KEEP_ONE)
+        if (_doubles_name_count(subject, body) < 2
+                and not _RANDOM_PAIR_RE.search(text)
+                and not keep_one):
+            label = "other"
     if label == "withdrawal" and not extract_withdraw_name(subject, body):
-        return "other"
-    return label
+        # Portal subject "Withdrawal Request" is enough to keep the label even
+        # when the quoted original (with the name) was stripped.
+        if not re.search(r"withdrawal\s+request", subject or "", re.I):
+            label = "other"
+    if label != "other":
+        return label
+    # Optional local tiny-LLM second pass for leftovers only (EMAIL_LLM=1).
+    from .email_llm import maybe_intent
+    return maybe_intent(subject, body, label)
 
 
 def _classify_raw(subject: str | None, body: str | None) -> str:

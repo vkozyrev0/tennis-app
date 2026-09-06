@@ -386,6 +386,32 @@ def test_bulk_populate_reports_single_file_only_classifications():
     assert res["skipped"] and "individually" in res["skipped"][0]["reason"], res
 
 
+def test_file_withdrawal_without_player_does_not_insert():
+    t = _tournament()
+    e = _email(t["id"], subject="Please withdraw", body="injury, cannot play")
+    ok = client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": None,
+    })
+    assert ok.status_code == 200, ok.text
+    blocked = client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "filed", "detected_player_id": None,
+    })
+    assert blocked.status_code == 400, blocked.text
+    assert "player" in blocked.json()["detail"].lower()
+    wd = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+    assert not any(r.get("source_email_id") == e["id"] for r in wd)
+    dbl = client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles",
+        "status": "filed", "detected_player_id": None,
+    })
+    assert dbl.status_code == 400, dbl.text
+    doubles = client.get(f"/api/tournaments/{t['id']}/doubles").json()
+    rows = list(doubles.get("requests") or []) + list(doubles.get("pairs") or [])
+    assert not any(isinstance(r, dict) and r.get("source_email_id") == e["id"] for r in rows)
+
+
 def test_target_registry_is_internally_consistent():
     """Guard against key-drift across layers: every classification triage can
     emit (except 'other') must be a known fileable target, every bulk key must

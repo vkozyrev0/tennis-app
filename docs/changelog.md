@@ -9,6 +9,35 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-06 — LLM health on the site + local sidecar
+
+- `GET /api/health` probes the llama.cpp sidecar (`llm`: `ok` / `off` / `down`); `GET /api/health/llm` is the dedicated probe. Site stays up if the sidecar is down.
+- Header health pill and Home dashboard show LLM status. Local compose uses the same `Dockerfile.llm` / GGUF / Bearer contract as Fly `courtops-llm` (`scripts/run_llm_local.ps1`, `scripts/smoke_email_llm.py`).
+- GGUF lives at `models/model.gguf` (gitignored). `scripts/download_llm.ps1` fetches it once; compose bind-mounts `./models`.
+
+## 2026-09-06 — Import/inbox QA + two Fly apps
+
+- Division matcher (client + server) accepts catalog **code and label** (`B14`, `Boys 14`, `Boys 14 & Under`, `NTRP 3.5 Men`) and rejects blank on roster-required fields.
+- Inbox review modal always loads the current email’s Classification / Status / Player / Reason. Filing withdrawal/doubles without a player is blocked (lists unchanged).
+- Inbox grid keeps a real body height; row Review/⋯ stay the click target.
+- Import merge shows duplicate conflicts **before** apply. Setup **Players** and **Officials** catalog import tabs round-trip their CSV templates.
+- Fly: `courtops-llm` sidecar (`fly.llm.toml`) alongside `courtops-poc`. Local dual-stack: `docker compose up --build` or `docker-compose.llm.yml` + native API.
+
+## 2026-09-06 — TD walkthrough + optional local email LLM
+
+- Inbox: reject blank Add email; disambiguate Unfiled / Unmatched / Unclassified / New.
+- Day-of incidents stamp the viewed play date and toast; venue officials need a site.
+- Payroll lists the same assignments; More-actions menus clamp to the viewport; date cells accept MM/DD/YYYY.
+- URL hash tracks the current screen; Home readiness adds staffing / site coverage / incidents / schedule; match/draw/scoring labeled coming soon.
+- Roster import accepts `NTRP 3.5 Men` and flags a blank age division. Inbox **Confirm suggestions**. Emails (PDF) tab no longer offers CSV/XLSX templates.
+- Optional **local** tiny-LLM leftover parser (`EMAIL_LLM=1`, llama.cpp sidecar). Heuristic first; LLM only for `other`. Loopback-only (COPPA/D5). Off by default.
+
+## 2026-09-06 — Live POC URL in entry-point docs
+
+- Documented the Fly host **https://courtops-poc.fly.dev** in the root README,
+  `docs/README.md`, `docs/design.md`, `docs/deploy.md` (including live-script
+  examples), `backend/README.md`, and `docs/email-ingest.md` provider sketches.
+
 ## 2026-07-29 — Docs audit + in-app Help
 
 - **Docs consistency:** suite count comment `528` → `~591` in test-coverage;

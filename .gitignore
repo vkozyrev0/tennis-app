@@ -1,3 +1,8 @@
+# Local GGUF weights (downloaded by the LLM sidecar / scripts/download_llm.ps1)
+models/*.gguf
+models/*.part
+*.gguf
+
 # Python
 __pycache__/
 *.py[cod]

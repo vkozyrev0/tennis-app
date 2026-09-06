@@ -22,6 +22,8 @@ import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import get_conn
+from app.importer import looks_like_division
 from app.main import app
 
 client = TestClient(app)
@@ -89,6 +91,7 @@ EXPECTED_TYPES = {
     "roster", "roster_initial", "roster_correction", "late_entries", "withdrawals",
     "scheduling_avoidances", "division_flexibility", "pairing_avoidances",
     "doubles_requests", "distances", "player_hotels", "tshirt_hotel_dietary",
+    "players", "officials",
 }
 
 
@@ -228,6 +231,91 @@ def test_doubles_requests_csv_mutual_pair():
     assert m["merged"] == 2 and m["failed"] == 0, m
     doubles = client.get(f"/api/tournaments/{t['id']}/doubles").json()
     assert doubles  # a verified/pending pair exists
+
+
+def test_looks_like_division_code_and_label():
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            assert looks_like_division("B14", cur) is True
+            assert looks_like_division("NTRP 3.5 Men", cur) is True
+            assert looks_like_division("Boys 14", cur) is True
+            assert looks_like_division("Boys 14 & Under", cur) is True
+            assert looks_like_division("", cur) is False
+            assert looks_like_division("   ", cur) is False
+            assert looks_like_division("bananas", cur) is False
+    finally:
+        conn.close()
+
+
+def test_roster_staging_accepts_labels_rejects_blank():
+    t = _tournament()
+    u = _u()
+    good = ("usta_number,first_name,last_name,gender,age_division,selection_status\n"
+            f"{u},Ann,Label,female,Boys 14 & Under,selected\n")
+    up = _stage(t["id"], "roster", "div-ok.csv", good)
+    assert up["valid"] == 1, up
+    blank = ("usta_number,first_name,last_name,gender,age_division,selection_status\n"
+             f"{_u()},No,Div,female,,selected\n")
+    upb = _stage(t["id"], "roster", "div-blank.csv", blank)
+    assert upb["valid"] == 0, upb
+    assert any("age division" in (e.get("error") or "").lower() for e in upb["errors"])
+    junk = ("usta_number,first_name,last_name,gender,age_division,selection_status\n"
+            f"{_u()},Bad,Div,female,bananas,selected\n")
+    upj = _stage(t["id"], "roster", "div-junk.csv", junk)
+    assert upj["valid"] == 0, upj
+    ntrp = ("usta_number,first_name,last_name,gender,age_division,selection_status\n"
+            f"{_u()},Nate,Trp,male,NTRP 3.5 Men,selected\n")
+    upn = _stage(t["id"], "roster", "div-ntrp.csv", ntrp)
+    assert upn["valid"] == 1, upn
+    boys = ("usta_number,first_name,last_name,gender,age_division,selection_status\n"
+            f"{_u()},Bo,Ys,male,Boys 14,selected\n")
+    upy = _stage(t["id"], "roster", "div-boys.csv", boys)
+    assert upy["valid"] == 1, upy
+
+
+def test_conflicts_preview_does_not_write_live_tables():
+    t = _tournament()
+    u = _u()
+    _player(u, first="Dup")
+    csv = ("usta_number,first_name,last_name,gender,reason\n"
+           f"{u},Dup,One,female,injury\n")
+    up1 = _stage(t["id"], "withdrawals", "wd1.csv", csv)
+    _merge(up1["batch_id"])
+    before = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+    n_before = sum(1 for r in before if r["usta_number"] == u)
+    assert n_before >= 1
+    up2 = _stage(t["id"], "withdrawals", "wd2.csv", csv)
+    prev = _ok(client.post(f"/api/import/batches/{up2['batch_id']}/conflicts"), 200)
+    assert prev["checked"] == 1, prev
+    assert prev["conflicts"], prev
+    after = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+    assert sum(1 for r in after if r["usta_number"] == u) == n_before
+    m = _merge(up2["batch_id"])
+    assert m["merged"] == 1, m
+    assert m["conflicts"], m
+
+
+def test_players_and_officials_catalog_round_trip():
+    t = _tournament()
+    u = _u()
+    last = "Cat" + uuid.uuid4().hex[:5]
+    pcsv = ("usta_number,first_name,last_name,gender,city\n"
+            f"{u},Pat,{last},female,Macon\n")
+    up = _stage(t["id"], "players", "players.csv", pcsv)
+    assert up["valid"] == 1, up
+    m = _merge(up["batch_id"])
+    assert m["merged"] == 1 and m["failed"] == 0, m
+    found = [p for p in client.get("/api/players").json() if p["usta_number"] == u]
+    assert found and found[0]["last_name"] == last
+    ocsv = ("first_name,last_name,city\n"
+            f"Off,{last},Atlanta\n")
+    uo = _stage(t["id"], "officials", "officials.csv", ocsv)
+    assert uo["valid"] == 1, uo
+    mo = _merge(uo["batch_id"])
+    assert mo["merged"] == 1 and mo["failed"] == 0, mo
+    offs = client.get("/api/officials").json()
+    assert any(o["last_name"] == last and o["first_name"] == "Off" for o in offs)
 
 
 # ============================================================ XLSX + PDF paths
@@ -372,7 +460,7 @@ def test_edit_staged_row_fixes_invalid_then_merges():
 
 def test_edit_can_invalidate_a_row_too():
     t = _tournament()
-    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{_u()},female\n")
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender,age_division\n{_u()},female,G16\n")
     row = _batch(up["batch_id"])["rows"][0]
     # blank out the required usta_number -> becomes invalid
     patched = _ok(client.patch(
@@ -384,7 +472,7 @@ def test_edit_can_invalidate_a_row_too():
 
 def test_delete_staged_row_updates_counts():
     t = _tournament()
-    csv = f"usta_number,gender\n{_u()},female\n{_u()},female\n"
+    csv = f"usta_number,gender,age_division\n{_u()},female,G16\n{_u()},female,G16\n"
     up = _stage(t["id"], "roster", "r.csv", csv)
     rows = _batch(up["batch_id"])["rows"]
     out = _ok(client.delete(f"/api/import/batches/{up['batch_id']}/rows/{rows[0]['id']}"), 200)
@@ -394,7 +482,7 @@ def test_delete_staged_row_updates_counts():
 
 def test_edit_row_after_merge_is_409():
     t = _tournament()
-    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{_u()},female\n")
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender,age_division\n{_u()},female,G16\n")
     row = _batch(up["batch_id"])["rows"][0]
     _merge(up["batch_id"])
     r = client.patch(f"/api/import/batches/{up['batch_id']}/rows/{row['id']}",
@@ -410,7 +498,7 @@ def test_merge_only_selected_row_ids():
     without deleting them — merge by id leaves the rest staged."""
     t = _tournament()
     a, b = _u(), _u()
-    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender\n{a},female\n{b},female\n")
+    up = _stage(t["id"], "roster", "r.csv", f"usta_number,gender,age_division\n{a},female,G16\n{b},female,G16\n")
     rows = _batch(up["batch_id"])["rows"]
     first = rows[0]["id"]
     m = _ok(client.post(f"/api/import/batches/{up['batch_id']}/merge",

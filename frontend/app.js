@@ -62,7 +62,9 @@ import { installTrash } from "./app/trash.js";
 import { installAdminUsers } from "./app/admin_users.js";
 import { installFormA11y } from "./app/form_a11y.js";
 import { createAdminBoot } from "./app/admin_boot.js";
+import { createNoticesPanel } from "./app/notices.js";
 import { datesInRange as _datesInRange } from "./app/util.js";
+import { hashForPanel, panelFromHash, healthPillText } from "./app/td_helpers.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend composition root (vanilla JS, no build step).
@@ -79,7 +81,7 @@ import { datesInRange as _datesInRange } from "./app/util.js";
 // ============================================================================
 
 // D11: API + toast + confirm live in ./app/shell.js
-const { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress } = createShell();
+const { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress, notices } = createShell();
 let _resetDayOfDate = () => {};  // filled by createDayOfPanel (D11)
 
 // Session user (login /me) — H4.2 reads can_export_pii for bulk CSV gate.
@@ -312,6 +314,7 @@ _menuEl.addEventListener("click", (e) => {
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-import") buildImportPage();
+  if (tab.dataset.target === "panel-notices") loadNotices();
   // Opening any counted list (or the Inbox) re-pulls badge counts so a chip
   // can't read stale after the user adds/removes rows on a sibling tab.
   if (active && NAV_COUNT_TABS[tab.dataset.target]) refreshNavCounts();
@@ -338,7 +341,29 @@ _menuEl.addEventListener("click", (e) => {
     const grpEl2 = tab.closest(".menu-group");
     _pushCrumb(grpEl2 ? grpEl2.dataset.group : null, tab.dataset.target);
   }
+  _syncPanelUrl(tab.dataset.target);
 });
+
+function _syncPanelUrl(panelId) {
+  const next = hashForPanel(panelId);
+  if (location.hash !== next) history.replaceState(null, "", next);
+}
+
+function restorePanelFromUrl() {
+  const panelId = panelFromHash(location.hash);
+  if (!panelId) return false;
+  const tab = document.querySelector(`.tab[data-target="${panelId}"]`);
+  if (!tab) return false;
+  // Do not use activateGroup — it picks the first tab in the group, not the hashed one.
+  const grp = tab.closest(".menu-group");
+  if (grp) {
+    _markGroup(grp.dataset.group);
+    _syncL2Bar(grp);
+  }
+  tab.click();
+  return true;
+}
+window.addEventListener("hashchange", () => { restorePanelFromUrl(); });
 
 // =================== Active tournament state ===================
 let active = null;
@@ -551,12 +576,35 @@ const { wireEntity, makeListGrid, makeReadGrid, makeGrid, _autoHeaderFilters } =
 
 async function refreshHealth() {
   const pill = document.getElementById("health");
+  const dash = document.getElementById("dash-llm");
   try {
     const h = await api("/health");
-    const ok = h.db === "ok";
-    pill.textContent = ok ? "API + DB ok" : "DB " + h.db;
-    pill.className = "pill " + (ok ? "ok" : "bad");
-  } catch (e) { pill.textContent = "API down"; pill.className = "pill bad"; }
+    const pillState = healthPillText(h);
+    pill.textContent = pillState.text;
+    pill.className = "pill " + pillState.kind;
+    pill.title = h.llm === "ok"
+      ? "Inbox leftover parser: llama.cpp sidecar reachable"
+      : (h.llm === "down"
+        ? "EMAIL_LLM is on but the sidecar did not answer /health"
+        : "Inbox leftover parser off (keyword triage only)");
+    if (dash) {
+      dash.hidden = false;
+      if (h.llm === "ok") {
+        dash.textContent = "Inbox leftover parser: local LLM reachable.";
+        dash.className = "muted dash-llm";
+      } else if (h.llm === "down") {
+        dash.textContent = "Inbox leftover parser: LLM sidecar unreachable — keyword triage only.";
+        dash.className = "warn dash-llm";
+      } else {
+        dash.textContent = "Inbox leftover parser: off (set EMAIL_LLM=1 and run the sidecar to enable).";
+        dash.className = "muted dash-llm";
+      }
+    }
+  } catch (e) {
+    pill.textContent = "API down";
+    pill.className = "pill bad";
+    if (dash) { dash.hidden = false; dash.textContent = "API unreachable."; dash.className = "warn dash-llm"; }
+  }
 }
 
 // =================== Tournament workspace ===================
@@ -766,6 +814,8 @@ installExportWiring({
 installFormModals({ scheduleComboSync, detailBackdrop: _detailBackdrop, setCloseOpenDetail });
 enhanceDetailDialogs();
 
+const { loadNotices } = createNoticesPanel({ notices, html, activateGroup });
+
 // D11: admin boot (enums + Setup CRUD refresh)
 const { adminInit, resetAdminLoaded } = createAdminBoot({
   api, certs: _certs, tournamentsById, setActive, updateActiveUI,
@@ -795,7 +845,9 @@ const { applyAuth } = createAuth({
       if (activeTab && grp) seedNavIfEmpty(grp.dataset.group, activeTab.dataset.target);
     }
     renderNavCrumbs();
-    if (isAdmin) adminInit();
+    if (isAdmin) {
+      Promise.resolve(adminInit()).then(() => restorePanelFromUrl());
+    }
     if (isOfficial) officialInit();
   },
   onLogout: () => { resetAdminLoaded(); authUser = null; },

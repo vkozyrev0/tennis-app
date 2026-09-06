@@ -145,6 +145,8 @@ class CoverageFillCreate(BaseModel):
     official_id: int
     work_date: date
     working_as: CertType
+    # Venue roles (chair / referee) need a site; roving may omit one.
+    site_id: Optional[int] = None
 
 
 class AssignmentResponse(BaseModel):

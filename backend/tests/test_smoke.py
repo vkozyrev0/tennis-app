@@ -59,7 +59,12 @@ def _hotel(**kw):
 
 
 def test_health_ok():
-    assert client.get("/api/health").json()["db"] == "ok"
+    h = client.get("/api/health").json()
+    assert h["db"] == "ok"
+    assert h["llm"] in {"off", "ok", "down"}
+    llm = client.get("/api/health/llm").json()
+    assert llm["status"] in {"off", "ok", "down"}
+    assert llm["status"] == h["llm"]
 
 
 def test_site_crud():
@@ -315,9 +320,9 @@ def test_roster_import_requires_gender_for_new_players():
     # Existing player already has a gender — no need to send one for the update.
     existing = _player(first_name="Old", last_name="Hat")
     csv_data = (
-        "USTA #,First,Last\n"
-        f"{u_new},New,Player\n"           # missing gender → rejected
-        f"{existing['usta_number']},Old,Hat\n"  # existing → OK
+        "USTA #,First,Last,Division\n"
+        f"{u_new},New,Player,G16\n"           # missing gender → rejected
+        f"{existing['usta_number']},Old,Hat,G16\n"  # existing → OK
     )
     r = _ok(client.post(f"/api/tournaments/{t['id']}/players/import",
                         files={"file": ("roster.csv", csv_data, "text/csv")}), 200)
@@ -331,8 +336,8 @@ def test_roster_import_requires_gender_for_new_players():
 def test_roster_import_normalizes_tshirt_sizes():
     t = _tournament()
     ids = ["TS" + uuid.uuid4().hex[:6] for _ in range(5)]
-    csv_data = "USTA #,First,Gender,T-Shirt\n" + "".join(
-        f"{i},N,F,{sz}\n" for i, sz in zip(ids, ["YM", "Adult Large", "xl", "youth small", "AS"])
+    csv_data = "USTA #,First,Gender,Division,T-Shirt\n" + "".join(
+        f"{i},N,F,G16,{sz}\n" for i, sz in zip(ids, ["YM", "Adult Large", "xl", "youth small", "AS"])
     )
     r = client.post(f"/api/tournaments/{t['id']}/players/import",
                     files={"file": ("roster.csv", csv_data, "text/csv")})

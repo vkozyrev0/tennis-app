@@ -1,6 +1,9 @@
 // Shared UI primitives (D11 / audit A47 slice) — pulled out of monolithic app.js.
 // Dependency-free except html`` for status chips.
 import { hstr } from "./html.js";
+import { fitMenuBox } from "./td_helpers.js";
+
+export { fitMenuBox };
 
 // Colored status chip for known tokens (selection status, email status, etc.).
 const BADGE = {
@@ -69,17 +72,29 @@ export function makeMenuButton(triggerHtml, items, opts = {}) {
   function position() {
     const r = btn.getBoundingClientRect();
     pop.style.position = "fixed";
-    pop.style.top = `${Math.round(r.bottom + 4)}px`;
-    // right-align the popup to the trigger so it never runs off-screen on the
-    // right edge where action cells live.
-    pop.style.left = "auto";
-    pop.style.right = `${Math.round(window.innerWidth - r.right)}px`;
+    pop.style.right = "auto";
+    // Measure after it is in the document so offsetHeight is real; fall back
+    // to an estimate that still keeps Delete on-screen for a typical 4-item menu.
+    const mw = Math.max(pop.offsetWidth || 0, 200);
+    const mh = Math.max(pop.offsetHeight || 0, 44 * Math.max(1, menuItems().length || 4));
+    const box = fitMenuBox({
+      triggerTop: r.top, triggerBottom: r.bottom, triggerLeft: r.left, triggerRight: r.right,
+      menuWidth: mw, menuHeight: mh,
+      viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, gap: 4,
+    });
+    pop.style.top = `${Math.round(box.top)}px`;
+    pop.style.left = `${Math.round(box.left)}px`;
   }
   const menuItems = () => [...pop.querySelectorAll(".menu-btn-item:not([disabled])")];
   function focusItem(i) { const it = menuItems(); if (it.length) it[(i + it.length) % it.length].focus(); }
   // focusIdx: 0 = first item, -1 = last, null = leave focus on the trigger (mouse open).
   function open(focusIdx = null) {
-    if (anchored) { document.body.appendChild(pop); position(); }
+    if (anchored) {
+      document.body.appendChild(pop);
+      pop.hidden = false;
+      position();
+      requestAnimationFrame(position);
+    }
     pop.hidden = false; btn.setAttribute("aria-expanded", "true");
     document.addEventListener("click", onDoc, true);
     document.addEventListener("keydown", onKey);

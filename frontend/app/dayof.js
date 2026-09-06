@@ -111,11 +111,19 @@ export function createDayOfPanel(ctx) {
     // Quick-assign: pick a role, find certified officials free that day, one tap
     // to fill. Reuses /coverage-candidates + /coverage-fill.
     const roleOpts = getCertPairs().map(([v, l]) => hstr`<option value="${v}">${l}</option>`).join("");
-    box.innerHTML = gaps + hstr`
+    const defaultSite = (d.uncovered_sites[0] || d.sites[0] || {}).site_id || "";
+    const siteOpts = (d.sites || []).map((s) =>
+      hstr`<option value="${s.site_id}" ${s.site_id === defaultSite ? "selected" : ""}>${s.site_label}${s.official_count ? "" : " (uncovered)"}</option>`).join("");
+    const staffed = d.sites.length - d.uncovered_sites.length;
+    const coverageLine = d.sites.length
+      ? hstr`<p class="muted dayof-cov-count">Sites staffed ${staffed} / ${d.sites.length} needed</p>`
+      : "";
+    box.innerHTML = gaps + coverageLine + hstr`
       <details class="dayof-qa">
         <summary>＋ Quick-assign an official for ${raw(fmtMDY(d.date))}</summary>
         <div class="dayof-qa-body">
           <label>Role <select class="dayof-qa-role">${raw(roleOpts)}</select></label>
+          ${d.sites.length ? raw(`<label>Site <select class="dayof-qa-site">${siteOpts}</select></label>`) : ""}
           <button type="button" class="dayof-qa-go btn-small">Find available officials</button>
           <div class="dayof-qa-results" aria-live="polite"></div>
         </div>
@@ -234,8 +242,10 @@ export function createDayOfPanel(ctx) {
         try {
           const cands = await api(`/tournaments/${getActive().id}/coverage-candidates?role=${encodeURIComponent(role)}&date=${_DAYOF.date}`);
           if (!cands.length) { results.innerHTML = hstr`<p class="muted">No certified official is free that day.</p>`; return; }
+          const siteSel = details.querySelector(".dayof-qa-site");
+          const siteId = siteSel && siteSel.value ? siteSel.value : "";
           results.innerHTML = hstr`${cands.slice(0, 12).map((c) => html`
-            <button type="button" class="touch-btn dayof-qa-cand" data-oid="${c.official_id}" data-role="${role}">
+            <button type="button" class="touch-btn dayof-qa-cand" data-oid="${c.official_id}" data-role="${role}" data-site="${siteId}">
               ${c.official_name}${c.available ? raw(' <span class="badge badge-ok">available</span>') : ""}${
               c.busy_elsewhere ? raw(' <span class="badge badge-warn">busy elsewhere</span>') : ""}${
               c.assigned_here ? raw(' <span class="badge badge-info">on roster</span>') : ""}
@@ -247,8 +257,13 @@ export function createDayOfPanel(ctx) {
       const cand = e.target.closest(".dayof-qa-cand");
       if (cand) {
         try {
+          const payload = {
+            official_id: Number(cand.dataset.oid), work_date: _DAYOF.date,
+            working_as: cand.dataset.role,
+          };
+          if (cand.dataset.site) payload.site_id = Number(cand.dataset.site);
           await api(`/tournaments/${getActive().id}/coverage-fill`, { method: "POST",
-            body: JSON.stringify({ official_id: Number(cand.dataset.oid), work_date: _DAYOF.date, working_as: cand.dataset.role }) });
+            body: JSON.stringify(payload) });
           toast("Assigned for " + fmtMDY(_DAYOF.date), true);
           loadDayOf();
         } catch (err) { toast("Couldn't assign: " + err.message, false); }
@@ -276,12 +291,20 @@ export function createDayOfPanel(ctx) {
         severity: form.severity.value, category: form.category.value,
         description: form.description.value.trim(),
       };
-      if (!body.description) { msg.textContent = "describe what happened"; return; }
+      if (!body.description) {
+        msg.textContent = "describe what happened";
+        toast("Describe what happened", false);
+        return;
+      }
+      // Stamp the day being viewed so a future event's Day-of log isn't lost to "now".
+      if (_DAYOF.date) body.occurred_at = _DAYOF.date + "T12:00:00";
       try {
         await api(`/tournaments/${getActive().id}/incidents`, { method: "POST", body: JSON.stringify(body) });
         form.reset();
+        msg.textContent = "";
+        toast("Incident logged", true);
         loadDayOf();
-      } catch (err) { msg.textContent = err.message; }
+      } catch (err) { msg.textContent = err.message; toast(err.message, false); }
     });
   }
 

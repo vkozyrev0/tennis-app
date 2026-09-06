@@ -5,6 +5,10 @@ import {
   selectionCountLabel,
   pruneSelection,
   inboxShortcutGate,
+  inboxAxesLegend,
+  emailCreateGuard,
+  reviewFormState,
+  fileWithoutPlayerGate,
 } from "./inbox_ui.js";
 
 export function createInboxPanel(ctx) {
@@ -455,6 +459,8 @@ export function createInboxPanel(ctx) {
         };
         const doFile = () => {
           const t = FILE_TARGETS[m.classification]; if (!t) return;
+          const gate = fileWithoutPlayerGate(m.classification, m.detected_player_id);
+          if (!gate.ok) { toast(gate.reason, false); return; }
           // File into the email's OWN tournament, not whatever is active. The inbox
           // is cross-tournament and every filing form POSTs to
           // /tournaments/<active>/… , so re-scope the workspace to the email's
@@ -724,7 +730,10 @@ export function createInboxPanel(ctx) {
     } catch (_) { /* leave just the "none" option */ }
   }
 
+  let _inboxDetailOpenGen = 0;
   function _openInboxDetail(m) {
+    const form = reviewFormState(m);
+    const gen = ++_inboxDetailOpenGen;
     _populateInboxClassSelect();
     _inboxDetailId = m.id;
     _inboxDetailTid = m.tournament_id ?? null;  // preserve on save (don't re-home to active)
@@ -737,16 +746,16 @@ export function createInboxPanel(ctx) {
     document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
     document.getElementById("inbox-detail-source").textContent = m.ingest_source || "manual";
     document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
-    document.getElementById("inbox-detail-classification").value = m.classification || "";
-    document.getElementById("inbox-detail-status").value = m.status || "new";
-    // Withdrawal reason row: show only for withdrawals, pre-filled with the
-    // detected reason (a sibling helper keeps it in sync when the classification
-    // is changed to/from withdrawal in the modal).
-    _syncInboxReasonRow(m.classification, m.detected_reason);
+    document.getElementById("inbox-detail-classification").value = form.classification;
+    document.getElementById("inbox-detail-status").value = form.status;
+    // Always reset reason from this email (empty when not a withdrawal) so the
+    // previous email's Withdrawal/filed values cannot leak into the next open.
+    _syncInboxReasonRow(form.classification, form.reason);
     // Player picker reflects the detected_player_id (or "none").
     _populateInboxPlayerSelect(m.tournament_id || (getActive() && getActive().id))
       .then(() => {
-        document.getElementById("inbox-detail-player").value = m.detected_player_id || "";
+        if (gen !== _inboxDetailOpenGen) return;
+        document.getElementById("inbox-detail-player").value = form.playerId;
       });
     // Amendment picker: the earlier email this one corrects + the superseded flag.
     _populateInboxAmendsSelect(m);
@@ -762,8 +771,7 @@ export function createInboxPanel(ctx) {
     if (!row || !input) return;
     const isWd = classification === "withdrawal";
     row.hidden = !isWd;
-    if (isWd && reason !== undefined && reason !== null) input.value = reason;
-    if (!isWd) input.value = "";
+    input.value = isWd ? String(reason || "") : "";
   }
   // Toggle the reason row when the classification is changed in the modal.
   document.getElementById("inbox-detail-classification")
@@ -850,6 +858,10 @@ export function createInboxPanel(ctx) {
     const status = document.getElementById("inbox-detail-status").value;
     const pickerVal = document.getElementById("inbox-detail-player").value;
     const detected_player_id = pickerVal ? Number(pickerVal) : null;
+    if (status === "filed") {
+      const gate = fileWithoutPlayerGate(cls, detected_player_id);
+      if (!gate.ok) { setMsg("inbox-detail-msg", gate.reason, false); return; }
+    }
     try {
       await api(`/emails/${_inboxDetailId}`, {
         method: "PUT",
@@ -1000,6 +1012,34 @@ export function createInboxPanel(ctx) {
   // One-click "Detect players" over the whole inbox: runs the detector on every
   // loaded email that has no matched player yet (and an assigned tournament — the
   // detector needs a roster). No row selection required.
+  document.getElementById("inbox-confirm-suggestions")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    const ids = inboxGrid.grid.getData()
+      .filter((m) => !m.detected_player_id && m.tournament_id
+        && ((m.detected_name_pairs || []).length || m.detected_usta_text))
+      .map((m) => m.id);
+    if (!ids.length) {
+      setMsg("inbox-import-pdf-msg", "no unmatched emails with a parsed name or USTA # to confirm", true);
+      return;
+    }
+    if (!(await confirmDialog(
+      `Confirm ${ids.length} parsed suggestion(s)? Players with a USTA # in the email are added to the catalog (not the roster) when gender can be inferred, then linked.`,
+      "Confirm suggestions", "primary"))) return;
+    btn.disabled = true;
+    setMsg("inbox-import-pdf-msg", `confirming ${ids.length} suggestion(s)…`, true);
+    try {
+      const res = await api("/emails/bulk/confirm-suggestions", {
+        method: "POST", body: JSON.stringify({ email_ids: ids }),
+      });
+      const msg = `confirmed ${res.confirmed}`
+        + (res.created ? ` · ${res.created} catalog player(s)` : "")
+        + (res.still_unmatched ? ` · ${res.still_unmatched} still unmatched` : "");
+      setMsg("inbox-import-pdf-msg", msg, !res.still_unmatched);
+      toast(msg, !res.still_unmatched);
+      await loadInbox();
+    } catch (e) { setMsg("inbox-import-pdf-msg", e.message, false); toast(e.message, false); }
+    finally { btn.disabled = false; }
+  });
   document.getElementById("inbox-detect-all").addEventListener("click", async (ev) => {
     const btn = ev.currentTarget;
     const ids = inboxGrid.grid.getData()
@@ -1296,7 +1336,7 @@ export function createInboxPanel(ctx) {
     if (!c.total) { el.hidden = true; el.innerHTML = ""; return; }
     el.hidden = false;
     el.innerHTML =
-      `<a href="#" id="inbox-sum-new" class="${c.new ? "inbox-sum-todo" : ""}">${c.new} unfiled</a>` +
+      `<a href="#" id="inbox-sum-new" class="${c.new ? "inbox-sum-todo" : ""}" title="Queue: emails not yet filed into a list">${c.new} unfiled</a>` +
       ` · <span class="resp-ok">${c.filed} filed</span>` +
       (c.needs_followup ? ` · <span class="warn">${c.needs_followup} need follow-up</span>` : "") +
       (c.unmatched ? ` · <a href="#" id="inbox-sum-unmatched" class="warn">${c.unmatched} unmatched</a>` : "") +
@@ -1352,8 +1392,21 @@ export function createInboxPanel(ctx) {
   onSubmit(document.getElementById("email-form"), async (e) => {
     if (!getActive()) return;
     const b = formObj(e.target); b.tournament_id = getActive().id;
-    try { await api("/emails", { method: "POST", body: JSON.stringify(b) }); setMsg("email-msg", "added", true); e.target.reset(); loadInbox(); }
-    catch (err) { setMsg("email-msg", err.message, false); markInvalid(e.target, err.message); }
+    const guard = emailCreateGuard(b);
+    if (!guard.ok) {
+      setMsg("email-msg", guard.reason, false);
+      toast(guard.reason, false);
+      markInvalid(e.target, guard.reason);
+      return;
+    }
+    try {
+      await api("/emails", { method: "POST", body: JSON.stringify(b) });
+      setMsg("email-msg", "added", true);
+      toast("Email added to the inbox", true);
+      e.target.reset();
+      loadInbox();
+    }
+    catch (err) { setMsg("email-msg", err.message, false); toast(err.message, false); markInvalid(e.target, err.message); }
   });
 
   // Generic simple list grid (no master-detail): replaces a static table with a

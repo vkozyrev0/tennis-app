@@ -36,7 +36,7 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
             raise HTTPException(status_code=404, detail="tournament not found")
         for rec in records:
             row_num = rec["row_num"] + 1  # +1 to count the header row, matching the old wording
-            err = importer.validate(rec["data"], cfg["cols"], cur)
+            err = importer.validate(rec["data"], cfg["cols"], cur, kind="roster")
             if err:
                 errors.append(f"row {row_num}: {err}")
                 continue
@@ -102,7 +102,7 @@ def list_roster(tournament_id: int, response: Response, q: str | None = None,
         like = f"%{like_escape(q.strip())}%"
         clauses.append(
             f"({sql} OR COALESCE(nm.first_name,'') ILIKE %s OR COALESCE(nm.last_name,'') ILIKE %s "
-            f"OR e.age_division ILIKE %s OR e.events ILIKE %s OR e.selection_status ILIKE %s)"
+            f"OR e.age_division ILIKE %s OR e.events ILIKE %s OR e.selection_status::text ILIKE %s)"
         )
         params += [like] * (n + 5)
     where = " WHERE " + " AND ".join(clauses)

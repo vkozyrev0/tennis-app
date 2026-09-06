@@ -1,3 +1,5 @@
+import { looksLikeAgeDivision } from "./td_helpers.js";
+
 // Setup → Import page (upload / staging / merge) — D11.
 export function createImportPage(ctx) {
   const {
@@ -34,21 +36,25 @@ export function createImportPage(ctx) {
     selection_status: { re: /^(selected|alternate|withdrawn)$/i, msg: "selected / alternate / withdrawn" },
     request_date: { re: /^\d{4}-\d{2}-\d{2}$/, msg: "YYYY-MM-DD" },
     year_of_birth: { re: /^(19|20)\d{2}$/, msg: "4-digit year" },
-    age_division: { re: /^[a-z]{0,3}\s?\d{1,2}\b/i, msg: "e.g. B14 / G16" },
+    age_division: { msg: "e.g. B14 / Boys 14 & Under / NTRP 3.5 Men" },
   };
   // Client-side, per-cell validation for the import preview grid — the instant
   // first pass (the server's validate() still has the final say: USTA existence,
   // reason-required-on-merge, etc.). Returns an error string, or "" when fine.
-  function _importCellError(col, val, required) {
+  function _importCellError(col, val, required, kind) {
     const v = (val == null ? "" : String(val)).trim();
     if (required.has(col) && !v) return "required";
+    if (col === "age_division" && /^roster/.test(kind || "") && !v) return "required";
     if (!v) return "";
     if (_IMPORT_ID_COLS.has(col) && !/^\d+$/.test(v)) return "digits only";
     if (col === "one_way_miles") return Number(v) >= 0 ? "" : "number ≥ 0";
     if (_IMPORT_NUM_COLS.has(col)) return isNaN(Number(v)) ? "must be a number" : "";
     if (col === "emails") return /@/.test(v) ? "" : "missing @";
+    if (col === "age_division") {
+      return looksLikeAgeDivision(v) ? "" : (_IMPORT_RULES.age_division.msg);
+    }
     const rule = _IMPORT_RULES[col];
-    if (rule && !rule.re.test(v)) return rule.msg;
+    if (rule && rule.re && !rule.re.test(v)) return rule.msg;
     return "";
   }
 
@@ -69,10 +75,13 @@ export function createImportPage(ctx) {
     tshirt_hotel_dietary: { short: "Shirt + Hotel + Diet" },
     emails_pdf: { short: "Emails (PDF)" },
     distances: { short: "Distances" },
+    players: { short: "Players" },
+    officials: { short: "Officials" },
   };
   const _IMPORT_TAB_ORDER = ["roster", "roster_initial", "roster_correction", "late_entries",
     "withdrawals", "scheduling_avoidances", "division_flexibility", "pairing_avoidances",
-    "doubles_requests", "player_hotels", "tshirt_hotel_dietary", "emails_pdf", "distances"];
+    "doubles_requests", "player_hotels", "tshirt_hotel_dietary", "emails_pdf", "distances",
+    "players", "officials"];
 
   // Show/clear a "staged rows waiting" badge on an import type's tab, so the TD can
   // switch tabs without losing track of an in-progress batch.
@@ -119,7 +128,7 @@ export function createImportPage(ctx) {
     // cellErr = the standard rules PLUS the cross-row "duplicate USTA # in file"
     // check (which needs the whole dataset, so it lives here as a closure).
     const cellErr = (col, val) => {
-      const base = _importCellError(col, val, required);
+      const base = _importCellError(col, val, required, meta.key);
       if (base) return base;
       if (col === "usta_number" && val && dupUstas.has(String(val).trim())) return "duplicate USTA # in file";
       return "";
@@ -241,6 +250,18 @@ export function createImportPage(ctx) {
       if (!readyIds.length) return;
       merge.disabled = true;
       try {
+        const preview = await api(`/import/batches/${bid}/conflicts`,
+          { method: "POST", body: JSON.stringify({ row_ids: readyIds }) });
+        const nConf = (preview.conflicts || []).length;
+        if (nConf) {
+          const lines = preview.conflicts.map((c) => `row ${c.row}: ${c.detail}`);
+          const ok = await confirmDialog(
+            `Duplicate / merge conflicts (${nConf}):\n${lines.join("\n")}\n\nMerge anyway? Live tables are unchanged until you confirm.`,
+            "Merge anyway",
+            "primary",
+          );
+          if (!ok) { merge.disabled = false; return; }
+        }
         const r = await api(`/import/batches/${bid}/merge`,
           { method: "POST", body: JSON.stringify({ row_ids: readyIds }) });
         // Merged the ready rows; flagged ones stay staged for fixing.
@@ -278,13 +299,15 @@ export function createImportPage(ctx) {
     // gotoImport() can land focus here after switching tabs.
     sec.innerHTML = hstr`<h4 tabindex="-1">${t.label} ${raw(needsT)}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
     const row = document.createElement("div"); row.className = "export-grid";
-    for (const fmt of ["csv", "xlsx"]) {
-      const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
-      a.href = `/api/import/template/${t.key}?fmt=${fmt}`;
-      a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
-      row.appendChild(a);
+    if (t.key !== "emails_pdf") {
+      for (const fmt of ["csv", "xlsx"]) {
+        const a = document.createElement("a"); a.className = "export-btn"; a.setAttribute("download", "");
+        a.href = `/api/import/template/${t.key}?fmt=${fmt}`;
+        a.textContent = fmt === "csv" ? "⬇ Template CSV" : "⬇ Template Excel";
+        row.appendChild(a);
+      }
     }
-    // CSV/XLSX for the row-shaped importers; PDF for the emails_pdf type.
+    // CSV/XLSX for the row-shaped importers; PDF upload only for emails_pdf.
     const file = document.createElement("input"); file.type = "file";
     file.accept = t.key === "emails_pdf" ? ".pdf" : ".csv,.xlsx,.xlsm";
     const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";

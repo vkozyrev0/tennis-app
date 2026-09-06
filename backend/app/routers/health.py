@@ -28,7 +28,8 @@ def enums():
 
 @router.get("/api/health")
 def health():
-    info = {"status": "ok", "db": "down"}
+    from ..email_llm import probe_llm
+    info = {"status": "ok", "db": "down", "llm": probe_llm()}
     try:
         conn = get_conn()
         try:
@@ -42,3 +43,10 @@ def health():
         info["status"] = "degraded"
         info["error"] = str(e)
     return info
+
+
+@router.get("/api/health/llm")
+def llm_health():
+    """Sidecar-only probe (same values as ``GET /api/health`` ``llm``)."""
+    from ..email_llm import probe_llm
+    return {"status": probe_llm()}

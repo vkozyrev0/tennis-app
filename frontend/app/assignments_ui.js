@@ -1,5 +1,6 @@
 // Assignments panel — load, render cards, bulk invite (D11).
 import { datesInRange as datesInRangeUtil } from "./util.js";
+import { isVenueRole } from "./td_helpers.js";
 
 export function createAssignmentsPanel(ctx) {
   const {
@@ -658,6 +659,12 @@ export function createAssignmentsPanel(ctx) {
       const held = a.held_certs || [];
       if (!held.includes(certSel.value)) {
         setMsg("asg-msg", `${a.official_name} is not certified for ${certLabel(certSel.value)} — add the certification on the Official record first, or pick a role they hold.`, false);
+        return;
+      }
+      if (isVenueRole(certSel.value) && !a.site_id) {
+        const msg = "Venue officials need a site — edit the assignment and pick the venue before adding a chair or referee day.";
+        setMsg("asg-msg", msg, false);
+        toast(msg, false);
         return;
       }
       try {

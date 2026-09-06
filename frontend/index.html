@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=8" />
-  <link rel="stylesheet" href="/styles.css?v=101" />
+  <link rel="stylesheet" href="/styles.css?v=103" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -124,6 +124,7 @@
                   title="Restore trashed tournaments or incidents">Trash</button>
           <button type="button" id="change-pw-btn" class="sr-only" tabindex="-1" hidden>Change password</button>
           <button type="button" id="logout-btn" class="sr-only" tabindex="-1" hidden>Log out</button>
+          <button type="button" id="notices-btn" class="sr-only" tabindex="-1" hidden>Notices</button>
         </span>
       </div>
     </div>
@@ -182,6 +183,7 @@
            records and merge them into the catalogs); keeping it as its own
            group made it look stranded next to a 10-tab Setup. -->
       <button class="tab" data-target="panel-import">Import</button>
+      <button class="tab" data-target="panel-notices">Notices</button>
     </div>
     <div class="menu-group tgroup" data-group="tournament">
       <span class="menu-label">Tournament</span>
@@ -243,10 +245,12 @@
         <div class="dash-hero">
           <h2 id="dash-greeting">Choose a tournament</h2>
           <p class="muted" id="dash-sub">The status board fills in once an event is active.</p>
+          <p id="dash-llm" class="muted dash-llm" hidden></p>
         </div>
         <div id="dash-deadlines" class="dash-deadlines" hidden></div>
         <div id="dash-digest" class="dash-digest" hidden></div>
         <div id="dash-readiness" class="dash-readiness" hidden></div>
+        <p id="dash-coming-soon" class="dash-coming-soon">Match / draw / scoring — coming soon. CourtOps does not generate draws or live scores.</p>
         <!-- The named, actionable "needs attention" lists. A responsive grid
              so they sit side-by-side on wide screens instead of stacking into
              a tall wall; each card still hides itself when empty (display:none
@@ -571,6 +575,21 @@
       </div>
     </section>
 
+    <section class="panel" id="panel-notices">
+      <div class="card">
+        <h3>Notices</h3>
+        <p class="muted">Toasts from this browser session — timed-out messages stay here so nothing is lost. This is a session log, not the assignment / export audit trail.</p>
+        <div class="actions-row">
+          <button type="button" id="notices-clear" class="export-btn">Clear log</button>
+          <span id="notices-count" class="pill" hidden></span>
+        </div>
+        <table id="notices-table" class="list-table">
+          <thead><tr><th>When</th><th>Kind</th><th>Message</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- ============ IMPORT ============ -->
     <section class="panel" id="panel-import">
       <div class="card">
@@ -714,6 +733,7 @@
             <label>Site (mileage) <select name="site_id" id="asg-site"></select></label>
             <label>Room block (hotel) <select name="room_block_id" id="asg-room-block"></select></label>
           </div>
+          <p class="muted asg-site-hint">Site is required for chair / referee roles; optional for roving officials.</p>
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="asg-msg"></span></div>
         </form>
         <details id="asg-bulk" class="bulk-invite">
@@ -965,6 +985,12 @@
           <kbd>t</kbd> triage · <kbd>d</kbd> detect · <kbd>f</kbd> mark filed · <kbd>u</kbd> unmatched only ·
           <kbd>?</kbd> all shortcuts.
         </p>
+        <p class="inbox-axes" id="inbox-axes">
+          <strong title="Queue: emails not yet filed into a list">Unfiled</strong> (queue) ·
+          <strong title="No roster player was detected">Unmatched</strong> (player) ·
+          <strong title="Email type is not set">Unclassified</strong> (type) ·
+          <strong title="Status chip for an email that has not been filed or marked follow-up">New</strong> (status)
+        </p>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>From <input name="from_address" /></label>
@@ -982,6 +1008,7 @@
         <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
         <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
         <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
+        <button type="button" id="inbox-confirm-suggestions" class="export-btn" title="Confirm parsed name/USTA suggestions: create catalog players when gender is clear and link them. Does not add them to the roster.">Confirm suggestions</button>
         <label class="inbox-unmatched-toggle" title="Show only emails with no matched player"><input type="checkbox" id="inbox-unmatched-only" /> Unmatched only</label>
         <span class="msg" id="inbox-import-pdf-msg"></span>
         <!-- Shown when the grid has rows but none are checked — explains why

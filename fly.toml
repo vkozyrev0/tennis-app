@@ -1,6 +1,15 @@
 # Fly.io deploy for the all-in-one CourtOps POC image (Postgres + API + frontend
 # in one container). Gives HTTPS on 443 automatically via *.fly.dev (valid cert).
 #
+# Tiny-LLM: do NOT co-locate a 1.5B GGUF here (needs ~4gb and hitchs HTTP).
+# Two Machines are cheaper than one 4gb box — but Fly process groups share
+# THIS image, which has no llama-server, so the LLM is a second app:
+#   fly.llm.toml  (internal-only, 2gb, no public HTTP)
+# Site (this file): shared-cpu-1x / 512mb ≈ $3/mo
+# LLM (fly.llm.toml): shared-cpu-1x / 2gb  ≈ $11/mo  → ~$14 < 4gb combined ≈ $22
+# Dispatch: EMAIL_LLM_BASE_URL=http://courtops-llm.internal:8080/v1 (6PN, not
+# *.fly.dev). Optional EMAIL_LLM_TOKEN on both apps.
+#
 # Persistent data (recommended for a real working instance):
 #   fly volumes create courtops_data --size 1 --region iad   # once
 #   fly secrets set ADMIN_PASSWORD='choose-a-strong-one'

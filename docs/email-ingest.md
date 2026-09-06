@@ -18,6 +18,10 @@ export INGEST_DEFAULT_TOURNAMENT_ID=12
 
 Restart the API. Check:
 
+Optional **local** tiny-LLM for leftover `other` emails (heuristic first): set
+`EMAIL_LLM=1` and run llama.cpp `llama-server` on loopback. Junior PII stays
+on-box (D5). Off by default. See `.env.example`.
+
 ```bash
 curl -s http://localhost:8000/api/ingest/status
 # {"enabled": true, "default_tournament_id": 12, ...}
@@ -94,7 +98,9 @@ Recognized keys include: `from` / `sender`, `to` / `recipient`, `subject`,
 ## Provider sketches
 
 All paths need a **public HTTPS** origin (Fly / Render / Caddy). Do not expose
-ingest on a laptop without a tunnel.
+ingest on a laptop without a tunnel. Live POC origin:
+`https://courtops-poc.fly.dev` (replace `your.host` below if pointing a
+provider at this deploy).
 
 ### Mailgun route
 

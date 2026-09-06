@@ -254,8 +254,18 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
         raise HTTPException(status_code=409, detail="an email with this message_id already exists")
 
 
+_FILE_NEEDS_PLAYER = frozenset({"withdrawal", "doubles"})
+
+
 @router.put("/{email_id}", response_model=EmailOut)
 def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
+    if (body.classification in _FILE_NEEDS_PLAYER
+            and body.status == "filed"
+            and not body.detected_player_id):
+        raise HTTPException(
+            status_code=400,
+            detail="pick a player before filing a withdrawal or doubles email — those lists will not change",
+        )
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -371,7 +381,8 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
 
 @router.post("/{email_id}/suggest")
 def suggest_classification(email_id: int, conn=Depends(db_dep)):
-    """Local rule-based triage suggestion (no LLM, no data leaves the building)."""
+    """Triage suggestion: local keyword rules, plus optional local tiny-LLM
+    when EMAIL_LLM=1 and the heuristic is leftover ``other``. No cloud call."""
     with conn.cursor() as cur:
         cur.execute("SELECT subject, body FROM email_message WHERE id = %s", (email_id,))
         row = cur.fetchone()

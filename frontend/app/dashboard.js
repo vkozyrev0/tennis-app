@@ -1,5 +1,6 @@
 // Home / Today dashboard — D11.
 import { typeLabel } from "./labels.js";
+import { COMING_SOON_LABEL } from "./td_helpers.js";
 
 export function createDashboardPanel(ctx) {
   const {
@@ -146,6 +147,11 @@ export function createDashboardPanel(ctx) {
     else if (n != null && end != null && end >= 0) line = "Live now — Day-of is the venue desk";
     else if (end != null && end < 0) line = "Event complete";
     if (subEl) subEl.textContent = line;
+    const soon = document.getElementById("dash-coming-soon");
+    if (soon) {
+      soon.hidden = false;
+      if (!soon.textContent.trim()) soon.textContent = COMING_SOON_LABEL;
+    }
   }
 
   async function loadDashboard() {
@@ -239,6 +245,10 @@ export function createDashboardPanel(ctx) {
     declined: ["staffing", "panel-t-assignments"], responses: ["staffing", "panel-t-assignments"],
     roster: ["tournament", "panel-t-roster"], rooms: ["staffing", "panel-t-reports"],
     inbox: ["inbox", "panel-t-inbox"],
+    staffing: ["staffing", "panel-t-assignments"],
+    site_coverage: ["staffing", "panel-t-dayof"],
+    incidents: ["staffing", "panel-t-incidents"],
+    schedule: ["staffing", "panel-t-assignments"],
   };
   const _READY_ICON = { pass: "✓", warn: "▲", fail: "✗" };
   async function _renderReadiness() {

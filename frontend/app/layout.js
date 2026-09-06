@@ -2,6 +2,26 @@
 // Pins active-panel grids so their bottom stays at the viewport edge — the
 // page itself does not grow a vertical scrollbar for Setup master-detail lists.
 
+// Enough for AG header + horizontal scrollbar + ~2 body rows so the body
+// cannot collapse to 0px (Inbox header/scrollbar would otherwise steal clicks).
+export const LIST_MIN_HEIGHT = 220;
+export const LIST_BOTTOM_PAD = 16;
+
+/** Viewport-fill height for one .grid-mount. Never returns 0. */
+export function listMountHeight({
+  viewportHeight,
+  top,
+  bottomPad = LIST_BOTTOM_PAD,
+  mountsBelow = 0,
+  minHeight = LIST_MIN_HEIGHT,
+} = {}) {
+  const vh = Number(viewportHeight) || 0;
+  const t = Number(top) || 0;
+  const reserveBelow = (Number(mountsBelow) || 0) > 0
+    ? (Number(mountsBelow) * (minHeight + 8)) : 0;
+  return Math.max(minHeight, Math.floor(vh - t - bottomPad - reserveBelow));
+}
+
 /**
  * @param {{ redrawPanelGrids: (panelId: string) => void }} ctx
  * @returns {{ sizeLists: () => void }}
@@ -10,8 +30,8 @@ export function createLayout(ctx) {
   const { redrawPanelGrids } = ctx;
 
   // Gap between grid bottom and viewport bottom (matches visual breathing room).
-  const BOTTOM_PAD = 16;
-  const MIN_H = 140;
+  const BOTTOM_PAD = LIST_BOTTOM_PAD;
+  const MIN_H = LIST_MIN_HEIGHT;
 
   /**
    * Bound every scrollable list/grid in the active panel to the space left
@@ -54,11 +74,13 @@ export function createLayout(ctx) {
       // so the *last* mount reaches the viewport edge and earlier ones don't
       // force document overflow.
       const mountsBelow = mounts.length - 1 - i;
-      const reserveBelow = mountsBelow > 0 ? mountsBelow * (MIN_H + 8) : 0;
-      const h = Math.max(
-        MIN_H,
-        Math.floor(window.innerHeight - rect.top - BOTTOM_PAD - reserveBelow),
-      );
+      const h = listMountHeight({
+        viewportHeight: window.innerHeight,
+        top: rect.top,
+        bottomPad: BOTTOM_PAD,
+        mountsBelow,
+        minHeight: MIN_H,
+      });
       el.style.height = h + "px";
       el.style.maxHeight = h + "px";
       el.style.minHeight = MIN_H + "px";

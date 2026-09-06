@@ -1,6 +1,7 @@
 import { labelHeaderFilters, reflectAriaSort } from "./grid_a11y.js";
 import { applySavedRow, saveInGridCell } from "./cell_edit.js";
 import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
+import { parseLocaleDate, formatLocaleDate } from "./td_helpers.js";
 
 export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
 
@@ -283,6 +284,18 @@ export function createGridFactories(ctx) {
         }
       } else if (col.editor === "date") {
         cd.cellEditor = "agDateStringCellEditor";
+        // Display MM/DD/YYYY; accept that locale form or ISO YYYY-MM-DD.
+        if (!col.formatter) {
+          cd.valueFormatter = (p) => formatLocaleDate(p.value) || (p.value == null ? "" : String(p.value));
+        }
+        cd.valueParser = (p) => {
+          const parsed = parseLocaleDate(p.newValue);
+          return parsed != null ? parsed : p.newValue;
+        };
+        cd.cellEditorParams = {
+          ...(cd.cellEditorParams || {}),
+          // AG's date-string editor rejects non-ISO; parse before it validates.
+        };
       } else {
         cd.cellEditor = "agTextCellEditor";
       }
@@ -453,7 +466,13 @@ export function createGridFactories(ctx) {
       initialized: true,
       getSorters: () => _a11yTable().getSorters(),
       on: (evt, fn) => { (handlers[evt] ||= []).push(fn); },
-      setData: (rows) => api && api.setGridOption("rowData", rows || []),
+      setData: (rows) => {
+        if (!api) return;
+        const list = rows || [];
+        api.setGridOption("rowData", list);
+        if (list.length) api.hideOverlay();
+        else api.showNoRowsOverlay();
+      },
       replaceData: (rows) => api && api.setGridOption("rowData", rows || []),
       getData: (which) => which === "active" ? activeRows().map((n) => n.data) : (() => { const o = []; api.forEachNode((n) => o.push(n.data)); return o; })(),
       getRows: (which) => (which === "active" ? activeRows() : (() => { const o = []; api.forEachNode((n) => o.push(n)); return o; })())

@@ -1,0 +1,57 @@
+# Internal-only llama.cpp sidecar for courtops-poc. No public HTTP / no fly.dev.
+#
+# Cost (started Machines, Fly list prices): this 2gb box ≈ $11/mo + the site
+# 512mb box ≈ $3/mo ≈ $14/mo, which is less than one shared-cpu-2x / 4gb ≈ $22/mo.
+#
+# Fly process groups in fly.toml share one Docker image. The CourtOps image is
+# Postgres + uvicorn, so the LLM cannot be a second process group there.
+# This file is a second Fly app on the same org 6PN.
+#
+#   fly apps create courtops-llm --org personal
+#   fly volumes create courtops_llm --size 2 --region iad -a courtops-llm
+#   fly deploy -c fly.llm.toml --ha=false --no-public-ips
+#   fly secrets set EMAIL_LLM=1 \
+#     EMAIL_LLM_BASE_URL='http://courtops-llm.internal:8080/v1' \
+#     EMAIL_LLM_TOKEN='same-random-secret' -a courtops-poc
+#   fly secrets set LLAMA_API_KEY='same-random-secret' -a courtops-llm
+#
+# First boot downloads Qwen2.5-1.5B-Instruct Q4_K_M onto the volume as
+# /models/model.gguf (see Dockerfile.llm + docker/llm-entrypoint.sh).
+# Bind [::] so Fly 6PN (IPv6) can connect. Deploy with --no-public-ips.
+# Keep min_machines_running=1 — loading a 1GB GGUF on cold start misses the
+# site's 8s LLM timeout.
+
+app = "courtops-llm"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.llm"
+
+[env]
+  LLAMA_HOST = "::"
+  LLAMA_PORT = "8080"
+  GGUF_PATH = "/models/model.gguf"
+
+# Lifecycle + private health only. Public IPs are not allocated when deploying
+# with --no-public-ips (and should be released if one appears).
+[http_service]
+  internal_port = 8080
+  force_https = false
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "1m"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "2gb"
+
+[[mounts]]
+  source = "courtops_llm"
+  destination = "/models"

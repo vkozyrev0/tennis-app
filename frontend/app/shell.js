@@ -1,6 +1,8 @@
 // Core SPA shell: fetch wrapper, toasts, form messages, confirm dialog (D11).
 // Dependency-free except humanizeDetail for FastAPI error bodies.
 import { humanizeDetail } from "./util.js";
+import { toastLifetime } from "./td_helpers.js";
+import { createNoticeLog } from "./notices.js";
 
 /**
  * @returns {{
@@ -12,6 +14,7 @@ import { humanizeDetail } from "./util.js";
  * }}
  */
 export function createShell() {
+  const notices = createNoticeLog();
   let _inflight = 0;
   function _progress(delta) {
     _inflight = Math.max(0, _inflight + delta);
@@ -52,20 +55,28 @@ export function createShell() {
     }
   }
 
-  function toast(text, ok = true, action = null) {
+  function toast(text, ok = true, extra = null) {
     const box = document.getElementById("toasts");
-    if (!box || !text) return;
+    if (!text) return;
+    const action = extra && extra.label && typeof extra.onClick === "function" ? extra : null;
+    const sticky = !!(extra && extra.sticky);
+    notices.record({ text, ok, sticky: sticky || !!action });
+    if (!box) return;
     const t = document.createElement("div");
     t.className = "toast " + (ok ? "ok" : "bad");
     t.setAttribute("role", ok ? "status" : "alert");
     const span = document.createElement("span"); span.textContent = text; t.appendChild(span);
-    if (action && action.label && typeof action.onClick === "function") {
+    if (action) {
       const a = document.createElement("button");
       a.type = "button"; a.className = "toast-action"; a.textContent = action.label;
       a.addEventListener("click", () => { t.remove(); action.onClick(); });
       t.appendChild(a);
     }
-    if (!ok) {
+    const ttl = typeof extra?.timeout === "number"
+      ? extra.timeout
+      : toastLifetime({ ok, sticky, hasAction: !!action });
+    const persist = ttl == null;
+    if (!ok || persist) {
       const x = document.createElement("button");
       x.type = "button"; x.className = "toast-close"; x.textContent = "×";
       x.setAttribute("aria-label", "Dismiss notification");
@@ -73,9 +84,9 @@ export function createShell() {
       t.appendChild(x);
     }
     box.appendChild(t);
-    if (ok) {
-      const ttl = action ? 7000 : 2500;
+    if (!persist) {
       setTimeout(() => {
+        if (!t.isConnected) return;
         t.style.transition = "opacity .3s"; t.style.opacity = "0";
         setTimeout(() => t.remove(), 300);
       }, ttl);
@@ -169,5 +180,5 @@ export function createShell() {
     });
   }
 
-  return { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress };
+  return { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress, notices };
 }

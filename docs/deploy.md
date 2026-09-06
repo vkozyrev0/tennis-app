@@ -6,6 +6,9 @@ ships as one image (`Dockerfile`, a multi-stage build `FROM postgres:16-alpine`,
 runs the bundled Postgres *and* uvicorn; the demo DB is baked in at build time.
 This is a single-TD POC topology, not production (see `design.md` §11).
 
+**Live POC URL:** [https://courtops-poc.fly.dev](https://courtops-poc.fly.dev)
+(Fly.io app `courtops-poc`).
+
 ## 1. Publish the image to GitHub Container Registry (ghcr.io)
 
 **CI does this automatically.** `.github/workflows/docker.yml` builds the image on
@@ -78,6 +81,46 @@ is skipped).
 `courtops_data` · `PGDATA=/data/pgdata` · keep `ENV=dev` for the bundled
 Postgres (prod boot-guard needs managed PG + TLS). This is a **demo host**, not
 a COPPA-ready production topology — see §6.
+
+**VM size:** the site stays **`shared-cpu-1x` / 512mb** (~$3/mo). A 1.5B GGUF
+does **not** share this Machine.
+
+**Optional LLM as a second Fly app** (`fly.llm.toml`, app `courtops-llm`):
+`shared-cpu-1x` / **2gb** (~$11/mo), **no public HTTP**. Combined ~$14/mo, which
+is less than one `shared-cpu-2x` / 4gb box (~$22/mo). Fly process groups in one
+`fly.toml` must share this Postgres+uvicorn image, so they cannot host
+`llama-server`. First boot downloads Qwen2.5-1.5B-Instruct Q4_K_M onto volume
+`courtops_llm` (`/models/model.gguf`).
+
+```bash
+fly apps create courtops-llm --org personal
+fly volumes create courtops_llm --size 2 --region iad -a courtops-llm
+fly deploy -c fly.llm.toml --ha=false --no-public-ips
+fly secrets set EMAIL_LLM=1 \
+  EMAIL_LLM_BASE_URL='http://courtops-llm.internal:8080/v1' \
+  EMAIL_LLM_TOKEN='same-random-secret' -a courtops-poc
+fly secrets set LLAMA_API_KEY='same-random-secret' -a courtops-llm
+```
+
+Dispatch is Fly 6PN only: `EMAIL_LLM_BASE_URL=http://courtops-llm.internal:8080/v1`
+(not `*.fly.dev`). Optional matching `EMAIL_LLM_TOKEN` / `LLAMA_API_KEY`.
+
+**Local dual-stack** (same image/GGUF/API as Fly `courtops-llm`, loopback
+instead of 6PN). The sidecar is **not** on `*.fly.dev` — test it here:
+
+```powershell
+# Sidecar only (native uvicorn still on :8000)
+.\scripts\run_llm_local.ps1
+# backend/.env already can hold:
+#   EMAIL_LLM=1
+#   EMAIL_LLM_BASE_URL=http://127.0.0.1:8080/v1
+#   EMAIL_LLM_TOKEN=dev-local-llm
+backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
+# Site header pill: "API + DB + LLM ok" when GET /api/health has llm=ok
+# Dedicated probe: GET /api/health/llm  → {"status":"ok"|"off"|"down"}
+
+# Or both containers: docker compose up --build
+```
 
 #### Fly day-2 ops (redeploy / reseed / local image)
 
@@ -198,9 +241,9 @@ of these when `ENV=prod` (boot guard, session Secure cookie, 7d sessions,
 ```bash
 # Prefer sequential runs — parallel logins trip the process-local throttle (D14).
 set ADMIN_PASSWORD=your-password   # PowerShell: $env:ADMIN_PASSWORD="..."
-backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py https://your.host
-backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py https://your.host
-backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url https://your.host
+backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py https://courtops-poc.fly.dev
+backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py https://courtops-poc.fly.dev
+backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url https://courtops-poc.fly.dev
 ```
 
 Still **deferred** until multi-user/multi-instance: DB connection pool (D13),

@@ -1,0 +1,37 @@
+# Local dual-stack: site (Postgres+API+UI) + LLM sidecar.
+#   docker compose up --build
+# Site: http://localhost:8000  (admin / admin)
+# LLM:  http://127.0.0.1:8080/health  (not required from the browser)
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      EMAIL_LLM: "1"
+      EMAIL_LLM_BASE_URL: http://llm:8080/v1
+      EMAIL_LLM_TOKEN: ${EMAIL_LLM_TOKEN:-dev-local-llm}
+    depends_on:
+      - llm
+  llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      LLAMA_HOST: "0.0.0.0"
+      LLAMA_PORT: "8080"
+      GGUF_PATH: /models/model.gguf
+      GGUF_URL: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
+      LLAMA_API_KEY: ${EMAIL_LLM_TOKEN:-dev-local-llm}
+    volumes:
+      - ./models:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s

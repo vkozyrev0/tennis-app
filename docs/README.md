@@ -12,6 +12,10 @@ Back-office tooling for a USTA Tournament Director. Two loosely-coupled halves:
 The app is a single-page admin tool with a Setup catalog (durable
 master data) and a per-tournament workspace (scoped operations).
 
+**Live POC:** [https://courtops-poc.fly.dev](https://courtops-poc.fly.dev)
+(Fly.io — see [deploy.md](deploy.md)). Local sign-in is `admin / admin`;
+the public host uses a non-default `ADMIN_PASSWORD`.
+
 ## Docs
 
 | # | File | Purpose |

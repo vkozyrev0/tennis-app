@@ -97,7 +97,7 @@ async def upload(tournament_id: int, import_type: str,
         errors = []
         valid = 0
         for r in rows:
-            err = importer.validate(r["data"], cfg["cols"], cur)
+            err = importer.validate(r["data"], cfg["cols"], cur, kind=import_type)
             if err is None:
                 valid += 1
             else:
@@ -150,7 +150,7 @@ def edit_row(batch_id: int, row_id: int, body: ImportRowUpdate, conn=Depends(db_
         # Only keep recognized columns; ignore anything the grid sends extra.
         canon = {c.canon for c in cfg["cols"]}
         data = {k: (v if v not in ("",) else None) for k, v in body.data.items() if k in canon}
-        err = importer.validate(data, cfg["cols"], cur)
+        err = importer.validate(data, cfg["cols"], cur, kind=batch["import_type"])
         cur.execute(
             "UPDATE import_row SET data = %s, valid = %s, error = %s WHERE id = %s",
             (Json(data), err is None, err, row_id),
@@ -185,7 +185,7 @@ def _batch_for_edit(cur, batch_id: int) -> dict:
     cfg = importer.TYPES.get(batch["import_type"])
     if cfg is None:
         raise HTTPException(status_code=400, detail="unknown import type")
-    return cfg
+    return {**cfg, "key": batch["import_type"]}
 
 
 @router.post("/batches/{batch_id}/rows-delete")
@@ -216,11 +216,53 @@ def bulk_set_column(batch_id: int, body: ImportBulkSet, conn=Depends(db_dep)):
         changed = 0
         for r in rows:
             data = {**r["data"], body.column: val}
-            err = importer.validate(data, cfg["cols"], cur)
+            err = importer.validate(data, cfg["cols"], cur, kind=cfg.get("key"))
             cur.execute("UPDATE import_row SET data = %s, valid = %s, error = %s WHERE id = %s",
                         (Json(data), err is None, err, r["id"]))
             changed += 1
         return {"changed": changed, "counts": _batch_counts(cur, batch_id)}
+
+
+def _staged_rows_for_merge(cur, batch_id: int, only: list[int] | None):
+    if only is not None:
+        cur.execute("SELECT id, row_num, data FROM import_row "
+                    "WHERE batch_id = %s AND valid AND NOT merged AND id = ANY(%s) ORDER BY row_num",
+                    (batch_id, only))
+    else:
+        cur.execute("SELECT id, row_num, data FROM import_row "
+                    "WHERE batch_id = %s AND valid AND NOT merged ORDER BY row_num", (batch_id,))
+    return cur.fetchall()
+
+
+@router.post("/batches/{batch_id}/conflicts")
+def preview_conflicts(batch_id: int, body: ImportMergeOptions | None = None, conn=Depends(db_dep)):
+    """Dry-run merge: return duplicate/conflict notes without writing live tables."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT tournament_id, import_type, status FROM import_batch WHERE id = %s",
+                    (batch_id,))
+        batch = cur.fetchone()
+        if batch is None:
+            raise HTTPException(status_code=404, detail="batch not found")
+        merge = importer.TYPES[batch["import_type"]]["merge"]
+        tid = batch["tournament_id"]
+        only = body.row_ids if body else None
+        rows = _staged_rows_for_merge(cur, batch_id, only)
+        conflicts, errors = [], []
+        cur.execute("SAVEPOINT imp_preview_all")
+        for r in rows:
+            cur.execute("SAVEPOINT imp_preview")
+            try:
+                note = merge(cur, tid, r["data"])
+                if note:
+                    conflicts.append({"row": r["row_num"], "detail": note})
+            except HTTPException as e:
+                errors.append({"row": r["row_num"], "error": str(e.detail)[:300]})
+            except Exception as e:
+                errors.append({"row": r["row_num"], "error": str(e)[:300]})
+            finally:
+                cur.execute("ROLLBACK TO SAVEPOINT imp_preview")
+        cur.execute("ROLLBACK TO SAVEPOINT imp_preview_all")
+    return {"conflicts": conflicts[:50], "errors": errors[:50], "checked": len(rows)}
 
 
 @router.post("/batches/{batch_id}/merge")
@@ -237,14 +279,7 @@ def merge_batch(batch_id: int, body: ImportMergeOptions | None = None, conn=Depe
         merge = importer.TYPES[batch["import_type"]]["merge"]
         tid = batch["tournament_id"]
         only = body.row_ids if body else None
-        if only is not None:
-            cur.execute("SELECT id, row_num, data FROM import_row "
-                        "WHERE batch_id = %s AND valid AND NOT merged AND id = ANY(%s) ORDER BY row_num",
-                        (batch_id, only))
-        else:
-            cur.execute("SELECT id, row_num, data FROM import_row "
-                        "WHERE batch_id = %s AND valid AND NOT merged ORDER BY row_num", (batch_id,))
-        rows = cur.fetchall()
+        rows = _staged_rows_for_merge(cur, batch_id, only)
         merged, errors, conflicts = 0, [], []
         for r in rows:
             cur.execute("SAVEPOINT imp")

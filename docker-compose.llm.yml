@@ -1,0 +1,34 @@
+# Same image + GGUF + /health + /v1 contract as Fly app courtops-llm.
+# Bind loopback only (EMAIL_LLM_BASE_URL allowlist). First boot downloads ~1.1 GB.
+#
+#   docker compose -f docker-compose.llm.yml up --build
+# Native backend (backend/.env):
+#   EMAIL_LLM=1
+#   EMAIL_LLM_BASE_URL=http://127.0.0.1:8080/v1
+#   EMAIL_LLM_TOKEN=dev-local-llm
+#   EMAIL_LLM_TIMEOUT=30
+# Smoke (same client path as Fly):
+#   backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
+services:
+  llm:
+    build:
+      context: .
+      dockerfile: Dockerfile.llm
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      LLAMA_HOST: "0.0.0.0"
+      LLAMA_PORT: "8080"
+      GGUF_PATH: /models/model.gguf
+      GGUF_URL: https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
+      LLAMA_API_KEY: ${EMAIL_LLM_TOKEN:-dev-local-llm}
+    volumes:
+      # Repo-local, gitignored GGUF (models/model.gguf). Survives compose down.
+      - ./models:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    restart: unless-stopped

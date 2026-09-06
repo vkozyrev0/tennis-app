@@ -1,4 +1,6 @@
 # Keep the build context small — only backend/, frontend/, and docker/ are copied.
+models/
+*.gguf
 .git
 .gitignore
 .github/

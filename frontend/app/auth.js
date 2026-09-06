@@ -48,6 +48,11 @@ export function createAuth(ctx) {
           label: "Change password",
           onClick: () => _cpwBtn?.click(),
         },
+        {
+          label: "Notices",
+          title: "Review recent toasts and alerts from this session",
+          onClick: () => document.getElementById("notices-btn")?.click(),
+        },
         { separator: true },
         {
           label: "Log out",
@@ -133,7 +138,7 @@ export function createAuth(ctx) {
     if (_authExpiredFired) return;
     _authExpiredFired = true;
     const alreadyOut = document.body.classList.contains("is-signed-out");
-    if (!alreadyOut) toast("Session expired — please sign in again", false);
+    if (!alreadyOut) toast("Session expired — please sign in again", false, { sticky: true });
     applyAuth(null);
     setTimeout(() => { _authExpiredFired = false; }, 1000);
   });

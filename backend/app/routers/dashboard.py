@@ -238,7 +238,8 @@ def day_of(tournament_id: int, on: str | None = None, conn=Depends(db_dep)):
         cur.execute(
             "SELECT s.id, COALESCE(s.code, s.name) AS label, "
             "  (SELECT count(*) FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
-            "   WHERE a.tournament_id = %(t)s AND a.site_id = s.id AND ad.work_date = %(d)s) AS n "
+            "   WHERE a.tournament_id = %(t)s AND a.site_id = s.id AND ad.work_date = %(d)s "
+            "     AND ad.actual_status IS DISTINCT FROM 'no_show') AS n "
             "FROM tournament_site ts JOIN site s ON s.id = ts.site_id "
             "WHERE ts.tournament_id = %(t)s ORDER BY label",
             {"t": tournament_id, "d": day},
@@ -408,6 +409,55 @@ def readiness(tournament_id: int, conn=Depends(db_dep)):
         )
         roster_incomplete = cur.fetchone()["n"]
 
+        cur.execute(
+            "SELECT count(*) AS n FROM tournament_incident "
+            "WHERE tournament_id = %s AND deleted_at IS NULL AND resolved = false",
+            (tournament_id,),
+        )
+        open_incidents = cur.fetchone()["n"]
+
+        cur.execute(
+            "SELECT count(*) AS n FROM assignment WHERE tournament_id = %s",
+            (tournament_id,),
+        )
+        assignment_n = cur.fetchone()["n"]
+
+        cur.execute(
+            "SELECT count(*) AS n FROM assignment_day ad "
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "WHERE a.tournament_id = %s",
+            (tournament_id,),
+        )
+        scheduled_days = cur.fetchone()["n"]
+
+        cur.execute(
+            "SELECT count(*) AS sites FROM tournament_site WHERE tournament_id = %s",
+            (tournament_id,),
+        )
+        site_n = cur.fetchone()["sites"]
+
+        # Per-site play-day gaps: a linked event site with no official that day.
+        start, end = dash["tournament"]["play_start_date"], dash["tournament"]["play_end_date"]
+        # dashboard() isoformats those dates; parse back for the range walk.
+        try:
+            start_d = date.fromisoformat(start) if isinstance(start, str) else start
+            end_d = date.fromisoformat(end) if isinstance(end, str) else end
+        except (TypeError, ValueError):
+            start_d = end_d = None
+        site_gaps = 0
+        if start_d and end_d and site_n:
+            cur.execute(
+                "SELECT count(*) AS n FROM tournament_site ts "
+                "CROSS JOIN generate_series(%s::date, %s::date, '1 day') d(day) "
+                "WHERE ts.tournament_id = %s AND NOT EXISTS ("
+                "  SELECT 1 FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
+                "  WHERE a.tournament_id = ts.tournament_id AND a.site_id = ts.site_id "
+                "    AND ad.work_date = d.day AND ad.actual_status IS DISTINCT FROM 'no_show'"
+                ")",
+                (start_d, end_d, tournament_id),
+            )
+            site_gaps = cur.fetchone()["n"]
+
     cov = dash["coverage"]["uncovered_days_count"]
     off = dash["officials"]
     unused = dash["rooms"]["unused"]
@@ -430,6 +480,21 @@ def readiness(tournament_id: int, conn=Depends(db_dep)):
             "all officials have responded", f"{off['pending']} awaiting accept/decline"),
         chk("roster", "Roster completeness", roster_incomplete, False, roster_incomplete > 0,
             "every active entry is complete", f"{roster_incomplete} incomplete entr(y/ies)"),
+        chk("staffing", "Staffing", assignment_n, assignment_n == 0, off["pending"] > 0,
+            "officials are assigned",
+            "no officials assigned" if assignment_n == 0
+            else f"{off['pending']} awaiting accept/decline"),
+        chk("site_coverage", "Site coverage", site_gaps,
+            site_n > 0 and site_gaps > 0, site_n == 0,
+            "every event site has an official on each play day",
+            "no event sites linked" if site_n == 0
+            else f"{site_gaps} site-day(s) with no official"),
+        chk("incidents", "Incidents", open_incidents, False, open_incidents > 0,
+            "no open incidents", f"{open_incidents} open incident(s)"),
+        chk("schedule", "Schedule", scheduled_days, scheduled_days == 0, cov > 0,
+            "work days are scheduled across the play window",
+            "no work days scheduled" if scheduled_days == 0
+            else f"{cov} play day(s) with no official"),
         chk("rooms", "Room pickup", unused, False, unused > 0,
             "no unused reserved rooms", f"{unused} reserved room(s) unused — release before cutoff"),
         chk("inbox", "Inbox", new_mail, False, new_mail > 0,

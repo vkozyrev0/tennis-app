@@ -162,7 +162,13 @@ export function createPayrollPanel(ctx) {
   async function loadPayroll() {
     if (!getActive()) return;
     _batchSel.clear();   // record states change on reload — drop stale ticks
-    const rows = await api(`/tournaments/${getActive().id}/payroll`);
+    let rows;
+    try {
+      rows = await api(`/tournaments/${getActive().id}/payroll`);
+    } catch (e) {
+      setMsg("payroll-msg", e.message, false);
+      return;
+    }
     payrollGrid.setData(rows);
     const fin = rows.filter((r) => r.finalized);
     const paid = fin.filter((r) => r.finalized.paid);

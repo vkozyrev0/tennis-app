@@ -193,6 +193,7 @@ def coverage_fill(tournament_id: int, body: CoverageFillCreate,
     day. Reuses the cert guard + pay snapshot. 409 if they already work that day."""
     try:
         with conn.cursor() as cur:
+            _check_assignment_refs(cur, tournament_id, body.site_id, None)
             cur.execute(
                 "SELECT id FROM assignment WHERE tournament_id = %s AND official_id = %s",
                 (tournament_id, body.official_id),
@@ -200,13 +201,22 @@ def coverage_fill(tournament_id: int, body: CoverageFillCreate,
             row = cur.fetchone()
             if row is not None:
                 aid = row["id"]
+                if body.site_id is not None:
+                    cur.execute(
+                        "UPDATE assignment SET site_id = %s "
+                        "WHERE id = %s AND site_id IS NULL",
+                        (body.site_id, aid),
+                    )
             else:
                 cur.execute(
-                    "INSERT INTO assignment (tournament_id, official_id) VALUES (%s, %s) RETURNING id",
-                    (tournament_id, body.official_id),
+                    "INSERT INTO assignment (tournament_id, official_id, site_id) "
+                    "VALUES (%s, %s, %s) RETURNING id",
+                    (tournament_id, body.official_id, body.site_id),
                 )
                 aid = cur.fetchone()["id"]
-                _audit(cur, aid, "created", {"via": "coverage-fill"}, user["username"])
+                _audit(cur, aid, "created",
+                       {"via": "coverage-fill", "site_id": body.site_id},
+                       user["username"])
             _insert_day(cur, aid, body.official_id, body.work_date, body.working_as)
             _audit(cur, aid, "day_added",
                    {"work_date": str(body.work_date), "working_as": body.working_as,

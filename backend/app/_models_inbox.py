@@ -18,6 +18,14 @@ class EmailCreate(BaseModel):
     subject: Optional[str] = None
     body: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _not_blank(self):
+        def _blank(v):
+            return v is None or not str(v).strip()
+        if _blank(self.from_address) and _blank(self.subject) and _blank(self.body):
+            raise ValueError("from, subject, or body is required")
+        return self
+
 
 class EmailUpdate(BaseModel):
     tournament_id: Optional[int] = None

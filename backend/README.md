@@ -48,7 +48,9 @@ if Postgres is unreachable.)
 
 ## All-in-one Docker image
 The shipped artifact bundles **Postgres + the API + the frontend in one
-container** (DB baked at build time). See [docs/deploy.md](../docs/deploy.md):
+container** (DB baked at build time). Live POC:
+[https://courtops-poc.fly.dev](https://courtops-poc.fly.dev). See
+[docs/deploy.md](../docs/deploy.md):
 ```powershell
 docker build -t courtops:poc .
 docker run --rm -p 8000:8000 courtops:poc   # http://localhost:8000  (admin/admin)

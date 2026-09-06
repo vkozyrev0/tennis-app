@@ -21,7 +21,8 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
           withdrawals, doubles, hotels, …).</li>
       </ul>
       <p>Not in scope: draw generation, live scoring, or moving money. The product
-      stops at auditable lists and a staffing plan.</p>
+      stops at auditable lists and a staffing plan.
+      <strong>Match / draw / scoring — coming soon</strong> (not shipped).</p>
 
       <h3>Two layers of data</h3>
       <div class="help-cards">
@@ -70,6 +71,9 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       <p>Recent places you visited appear under the menus. Use ← or clear history
       when the trail gets long. <kbd>Alt</kbd>+<kbd>←</kbd> steps back one crumb
       when the bar is visible.</p>
+
+      <p>The address bar tracks the current screen (<code>#panel-t-inbox</code>,
+      <code>#panel-t-dayof</code>, …) so you can bookmark or share a page.</p>
 
       <p class="help-tip"><strong>Keyboard:</strong> <kbd>1</kbd>–<kbd>9</kbd> jump to
       the Nth visible tab in the current L2 menu. <kbd>/</kbd> focuses the page filter.</p>

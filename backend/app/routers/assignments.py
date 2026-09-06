@@ -434,6 +434,17 @@ def update_assignment(assignment_id: int, body: AssignmentCreate,
             _check_assignment_refs(
                 cur, existing["tournament_id"], body.site_id, body.room_block_id,
             )
+            if body.site_id is None:
+                cur.execute(
+                    "SELECT 1 FROM assignment_day WHERE assignment_id = %s "
+                    "AND working_as <> 'roving_official' LIMIT 1",
+                    (assignment_id,),
+                )
+                if cur.fetchone() is not None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="venue officials need a site (chair, referee, and deputy roles)",
+                    )
             _check_room_capacity(cur, body.room_block_id, exclude_id=assignment_id)
             cur.execute(
                 "UPDATE assignment SET official_id=%s, site_id=%s, room_block_id=%s "

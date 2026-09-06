@@ -4,6 +4,8 @@ Weather delays, injuries, disputes, facility problems — logged as one-liners
 while the event runs, optionally resolved later. Feeds post-event review and
 the paper trail for protests/disputes. Tournament-scoped like staff/Part B.
 """
+from datetime import datetime, time, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
@@ -39,11 +41,26 @@ def list_incidents(tournament_id: int, conn=Depends(db_dep)):
 def create_incident(tournament_id: int, body: IncidentCreate, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         _tournament_or_404(cur, tournament_id)
+        occurred_at = body.occurred_at
+        if occurred_at is None:
+            # Day-of is often opened on play_start for a future event. Stamping
+            # now() would hide the row from that day's incident list.
+            cur.execute(
+                "SELECT play_start_date, play_end_date FROM tournament WHERE id = %s",
+                (tournament_id,),
+            )
+            t = cur.fetchone()
+            today = datetime.now(timezone.utc).date()
+            if t and t["play_start_date"] and t["play_end_date"]:
+                if not (t["play_start_date"] <= today <= t["play_end_date"]):
+                    occurred_at = datetime.combine(
+                        t["play_start_date"], time(12, 0), tzinfo=timezone.utc,
+                    )
         cur.execute(
             "INSERT INTO tournament_incident "
             "  (tournament_id, site_id, occurred_at, category, severity, description) "
             "VALUES (%s, %s, COALESCE(%s, now()), %s, %s, %s) RETURNING id",
-            (tournament_id, body.site_id, body.occurred_at, body.category,
+            (tournament_id, body.site_id, occurred_at, body.category,
              body.severity, body.description),
         )
         new_id = cur.fetchone()["id"]

@@ -417,10 +417,33 @@ def _compose_invite(s: dict, first_name: str) -> dict:
     )
     return {"subject": subject, "body": body}
 
+# Chair / referee roles staff a venue; they cannot be saved without a site.
+# Roving officials may omit a site (they are not tied to one court cluster).
+VENUE_ROLES = frozenset({
+    "chair_umpire",
+    "tournament_referee",
+    "deputy_referee",
+    "referee_in_training",
+})
+
+
+def _require_site_for_venue(cur, assignment_id: int, working_as: str) -> None:
+    if working_as not in VENUE_ROLES:
+        return
+    cur.execute("SELECT site_id FROM assignment WHERE id = %s", (assignment_id,))
+    row = cur.fetchone()
+    if row is None or row["site_id"] is None:
+        raise HTTPException(
+            status_code=400,
+            detail="venue officials need a site (chair, referee, and deputy roles)",
+        )
+
+
 def _insert_day(cur, assignment_id: int, official_id: int, work_date, working_as) -> None:
     """Add a worked day to an assignment with the certification guard (audit §3.2)
     + per-day rate snapshot. Raises HTTPException on a cert mismatch / duplicate
     date. Shared by add_day and coverage_fill."""
+    _require_site_for_venue(cur, assignment_id, working_as)
     # If the official has certifications on file, the worked role must be one of
     # them. If none are recorded, allow (data may be incomplete).
     cur.execute("SELECT count(*) AS n FROM certification WHERE official_id = %s", (official_id,))
