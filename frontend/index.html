@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/tokens.css?v=8" />
-  <link rel="stylesheet" href="/styles.css?v=103" />
+  <link rel="stylesheet" href="/styles.css?v=104" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -75,6 +75,10 @@
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="4"/>
         <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
       </symbol>
       <!-- tennis ball — app brand icon. Filled ball with the classic curved
            seam (two arcs) so it reads as a tennis ball even at 18 px. -->
@@ -158,6 +162,10 @@
     <div class="menu-group group-active" data-group="home">
       <span class="menu-label">Home</span>
       <button class="tab active" data-target="panel-home">Dashboard</button>
+    </div>
+    <div class="menu-group" data-group="chat">
+      <span class="menu-label">Chat</span>
+      <button class="tab" data-target="panel-td-chat">TD chat</button>
     </div>
     <!-- Day-of mode (P0 #2): the on-site front door during play. Promoted near
          the top because it's where the TD lives once the event starts. -->
@@ -273,6 +281,23 @@
 
         <h3>Official workload <span class="h3-subtitle">(across all tournaments — balance staffing)</span></h3>
         <div id="dash-workload"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-td-chat" aria-label="TD chat">
+      <div class="card td-chat-card">
+        <h3>TD chat</h3>
+        <p class="muted">Ask about tournament status, or to add/remove a roster player. Writes wait for Confirm. Uses the local llama.cpp sidecar (not the cloud).</p>
+        <p id="td-chat-verdict" class="td-chat-verdict muted" hidden></p>
+        <div id="td-chat-log" class="td-chat-log" role="log" aria-live="polite"></div>
+        <div id="td-chat-confirm-bar" class="td-chat-confirm" hidden>
+          <button type="button" id="td-chat-confirm" class="btn btn--primary">Confirm writes</button>
+          <span class="muted">Mutating calls (add/remove player) do not apply until you confirm.</span>
+        </div>
+        <div class="td-chat-compose">
+          <textarea id="td-chat-input" rows="2" placeholder="e.g. How is this tournament looking? Add Jane Roe USTA 1234567 G16."></textarea>
+          <button type="button" id="td-chat-send" class="btn btn--primary">Send</button>
+        </div>
       </div>
     </section>
 

@@ -65,6 +65,7 @@ import { createAdminBoot } from "./app/admin_boot.js";
 import { createNoticesPanel } from "./app/notices.js";
 import { datesInRange as _datesInRange } from "./app/util.js";
 import { hashForPanel, panelFromHash, healthPillText } from "./app/td_helpers.js";
+import { createTdChatPanel } from "./app/td_chat_ui.js";
 
 // ============================================================================
 // CourtOps Tennis — frontend composition root (vanilla JS, no build step).
@@ -815,6 +816,9 @@ installFormModals({ scheduleComboSync, detailBackdrop: _detailBackdrop, setClose
 enhanceDetailDialogs();
 
 const { loadNotices } = createNoticesPanel({ notices, html, activateGroup });
+const { bind: bindTdChat } = createTdChatPanel({
+  api, getActive: () => active, toast, html, hstr,
+});
 
 // D11: admin boot (enums + Setup CRUD refresh)
 const { adminInit, resetAdminLoaded } = createAdminBoot({
@@ -875,6 +879,7 @@ installAdminUsers({
   consolidateInboxToolbar();
   consolidateRosterToolbar();
   await refreshHealth();
+  bindTdChat();
   let who = null;
   try { who = await api("/auth/me"); } catch (e) { who = null; }
   applyAuth(who);

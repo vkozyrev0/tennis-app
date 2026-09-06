@@ -240,6 +240,20 @@ header h1 {
 .pill.warn::before { background: #e6b800; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
 .dash-llm { margin: 0.35rem 0 0; font-size: 0.85rem; }
 
+.td-chat-card { display: flex; flex-direction: column; min-height: 60vh; }
+.td-chat-log {
+  flex: 1; min-height: 220px; max-height: 50vh; overflow: auto;
+  border: 1px solid var(--border, #ccc); border-radius: 8px;
+  padding: 0.6rem; background: var(--card, #fff);
+}
+.td-chat-msg { white-space: pre-wrap; margin: 0.4rem 0; padding: 0.45rem 0.6rem; border-radius: 8px; }
+.td-chat-msg--user { background: var(--sel, #e8f0d8); }
+.td-chat-msg--assistant { background: var(--bg, #f4f4f4); }
+.td-chat-compose { display: flex; gap: 0.5rem; margin-top: 0.6rem; align-items: flex-end; }
+.td-chat-compose textarea { flex: 1; }
+.td-chat-confirm { margin: 0.5rem 0; display: flex; gap: 0.6rem; align-items: center; }
+.td-chat-verdict { font-size: 0.85rem; margin: 0.3rem 0 0.6rem; }
+
 /* Shared green-bar chrome control (toolbar P0).
    One height/type/radius for theme, shortcuts, trash, change-pw, logout —
    replaces prior per-id rules that mixed 40px chips with ~26px context fields. */
@@ -468,6 +482,7 @@ body.nav-l2-solo .gbtn.active { border-radius: 6px; }
 .gbtn[data-group="tournament"]  .gicon { color: #ffb74d; }  /* amber — Tournament (trophy) */
 .gbtn[data-group="staffing"]    .gicon { color: #4cc9f0; }  /* cyan — Staffing (clipboard) */
 .gbtn[data-group="inbox"]       .gicon { color: #f78fb3; }  /* pink — Inbox (envelope) */
+.gbtn[data-group="chat"]        .gicon { color: #b39ddb; }  /* lilac — TD chat */
 .gbtn[data-group="playerlists"] .gicon { color: #ff8c42; }  /* orange — Player lists (requests + prefs) */
 .gbtn:hover .gicon, .gbtn.active .gicon { filter: brightness(1.15) saturate(1.2); }
 @media (max-width: 480px) {

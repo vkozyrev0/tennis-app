@@ -9,6 +9,11 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-06 — TD chat (local 1.5B sidecar)
+
+- Chat L1 tab: natural-language status / add-player / remove-player. Planner uses the existing llama.cpp sidecar (not cloud). Writes wait for Confirm.
+- Catalog is built from live FastAPI OpenAPI. Allowlist only is executed. 1.5B verdict: **sufficient** on those three tasks with a short tool list (see [td-chat.md](td-chat.md)). Do not redeploy `courtops-llm` unless the GGUF changes.
+
 ## 2026-09-06 — LLM health on the site + local sidecar
 
 - `GET /api/health` probes the llama.cpp sidecar (`llm`: `ok` / `off` / `down`); `GET /api/health/llm` is the dedicated probe. Site stays up if the sidecar is down.
