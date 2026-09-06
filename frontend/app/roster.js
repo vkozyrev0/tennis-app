@@ -1,4 +1,7 @@
 // Tournament roster master/detail — D11.
+import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
+import { applySavedRow } from "./cell_edit.js";
+
 export function createRosterPanel(ctx) {
   const {
     api,
@@ -64,7 +67,10 @@ export function createRosterPanel(ctx) {
     prereqCallout("panel-t-roster", !Object.keys(getPlayersById()).length,
       "The players catalog is empty — register players first, then add them to this roster (or use Import).",
       "tab-panel-players");
-    rosterRows = await api(`/tournaments/${getActive().id}/players`);  // kept for the sign-in export
+    const q = document.getElementById("roster-filter")?.value.trim() || "";
+    rosterRows = await api(listPagePath(`/tournaments/${getActive().id}/players`, {
+      q, limit: LIST_PAGE_SIZE,
+    }));  // kept for the sign-in export
     if (rosterBuilt) await rosterGrid.setData(rosterRows); else rosterPending = rosterRows;
     applyRosterSel();
     _updateRosterCounts();
@@ -280,13 +286,12 @@ export function createRosterPanel(ctx) {
         dietary_preference: e.dietary_preference || null,
         lodging_plan: e.lodging_plan || null,
       };
-      await api(`/roster/${e.id}`, { method: "PUT", body: JSON.stringify(body) });
+      const saved = await api(`/roster/${e.id}`, { method: "PUT", body: JSON.stringify(body) });
+      applySavedRow(cell, saved, rosterRows);
       setMsg("roster-msg", "saved", true);
-      await loadRoster();
     } catch (err) {
       setMsg("roster-msg", err.message, false);
       try { cell.restoreOldValue(); } catch (_) {}
-      await loadRoster();
     }
   });
   function rosterMatches(data) {
@@ -455,7 +460,11 @@ export function createRosterPanel(ctx) {
   rosterForm.querySelector(".cancel").textContent = "Cancel";
   rosterForm.querySelector(".cancel").addEventListener("click", rosterCloseModal);
   document.getElementById("roster-new").addEventListener("click", () => { rosterShowNew(); rosterOpenModal(); });
-  document.getElementById("roster-filter").addEventListener("input", () => { if (rosterBuilt) rosterGrid.setFilter(rosterMatches); });
+  let _rosterFilterTimer = 0;
+  document.getElementById("roster-filter").addEventListener("input", () => {
+    clearTimeout(_rosterFilterTimer);
+    _rosterFilterTimer = setTimeout(() => loadRoster(), 250);
+  });
 
   // Open the roster form pre-filled from an inbox email (USTA #, name, division).
   // Owned here so D11 free-vars (rosterForm / rosterShowNew / …) stay in-module.

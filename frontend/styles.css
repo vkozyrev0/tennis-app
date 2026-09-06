@@ -1436,7 +1436,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   --ag-input-background-color: rgba(255, 255, 255, 0.06);
   --ag-input-border-color: var(--border);
   --ag-control-panel-background-color: var(--bg);
-  --ag-secondary-foreground-color: var(--muted-ink, #9aa0a6);
+  --ag-secondary-foreground-color: var(--muted, #9aa0a6);
   --ag-disabled-foreground-color: #6b6f76;
 }
 .ag-theme-quartz .ag-header-cell-text { font-weight: 600; }
@@ -1454,7 +1454,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .ag-theme-quartz-dark .ag-row.row-selected {
   box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar */
 }
-.ag-empty { color: var(--muted-ink, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
+.ag-empty { color: var(--muted, #888); font-size: 0.85rem; padding: 1rem; display: inline-block; }
 /* Typeahead cell editor (inbox player/partner pickers): a filter input over a
    scrollable option list, themed to match the grid. */
 .ag-theme-quartz .ag-autocomplete-editor,
@@ -1478,7 +1478,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 }
 .ag-collapse-row { display: flex; gap: 0.4rem; padding: 0.15rem 0; }
 .ag-collapse-row + .ag-collapse-row { border-top: 1px solid var(--border, #eee); }
-.ag-collapse-key { color: var(--muted-ink, #777); min-width: 6.5rem; font-weight: 600; }
+.ag-collapse-key { color: var(--muted, #777); min-width: 6.5rem; font-weight: 600; }
 .ag-collapse-val { flex: 1; }
 /* Custom floating header filters (list dropdown + predicate text). Fill the
    floating-filter row like AG's built-in text filter so they read as one strip. */
@@ -1520,7 +1520,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .import-tabs { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
   border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; }
 .import-tabgroup-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--muted-ink, #8a8a8a); margin: 0 0.15rem; white-space: nowrap; }
+  color: var(--muted, #8a8a8a); margin: 0 0.15rem; white-space: nowrap; }
 .import-tabgroup-label:not(:first-child) { margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid var(--border); }
 .import-tab { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid transparent;
   background: transparent; color: inherit; font: inherit; font-size: 0.8rem;

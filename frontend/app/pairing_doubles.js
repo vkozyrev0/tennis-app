@@ -1,5 +1,6 @@
 // Pairing avoidances + doubles pairing panels — D11.
 import { makeOriginCol } from './origin_col.js';
+import { LIST_PAGE_SIZE, listPagePath } from './list_page.js';
 
 export function createPairingDoublesPanel(ctx) {
   const {
@@ -138,7 +139,8 @@ export function createPairingDoublesPanel(ctx) {
       { header: "wants_random", key: "wants_random" },
       { header: "partner_usta", key: "partner_usta" },
       { header: "source_email_id", key: "source_email_id" },
-    ]);
+    ], { pageSize: LIST_PAGE_SIZE });
+  doublesReqGrid.onSearch(() => loadDoubles());
   const doublesPairGrid = makeListGrid("doubles-pair-table", [
     { title: "Division", field: "age_division", editor: "list", cssClass: "editable-cell", editorParams: (cell) => divisionListParams({ gender: rowGender(cell.getData()) }) },
     { title: "Type", field: "pairing_type", formatter: (c) => chip(c.getData().pairing_type) },
@@ -165,8 +167,12 @@ export function createPairingDoublesPanel(ctx) {
     ]);
   async function loadDoubles() {
     if (!getActive()) return;
-    const data = await api(`/tournaments/${getActive().id}/doubles`);
+    const q = doublesReqGrid.getQuery();
+    const data = await api(listPagePath(`/tournaments/${getActive().id}/doubles`, {
+      q, limit: LIST_PAGE_SIZE,
+    }));
     doublesReqGrid.setData(data.requests);
+    doublesReqGrid.setPageNote((data.requests || []).length, LIST_PAGE_SIZE, q);
     doublesPairGrid.setData(data.pairs);
   }
   onSubmit(doublesForm, async (e) => {

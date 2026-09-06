@@ -1,4 +1,4 @@
-// Data → Import page (upload / staging / merge) — D11.
+// Setup → Import page (upload / staging / merge) — D11.
 export function createImportPage(ctx) {
   const {
     api,
@@ -17,7 +17,7 @@ export function createImportPage(ctx) {
     importRefresh
   } = ctx;
 
-  // --- Data → Import page: per-type upload → staging → merge (built from /api/import/types) ---
+  // --- Setup → Import page: per-type upload → staging → merge (built from /api/import/types) ---
   // After a successful merge, importRefresh (from app.js) reloads every grid
   // an importer can touch (roster, Part B, players/distances CRUD, …).
   // USTA #/id-shaped columns: digits only when present.

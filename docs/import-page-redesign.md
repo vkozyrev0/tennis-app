@@ -3,7 +3,8 @@
 Design + findings, 2026-06-28. **Status: shipped + verified.** Backend
 edit/delete endpoints in `routers/imports.py` (tested in
 `test_zz_import_export.py`); the preview grid is `_renderPreviewGrid()` in
-`frontend/app.js` (replacing the old `_renderBatch` text summary). Verified live:
+`frontend/app/import_ui.js` as `_renderPreviewGrid` (replacing the old
+`_renderBatch` text summary). Verified live:
 a roster upload with a missing-USTA row + a non-numeric-USTA row stages as
 "1 ready, 2 to fix", merge is blocked, fixing the two cells in-grid revalidates
 to "3 ready", and merge writes all three.
@@ -44,7 +45,9 @@ columns, `year_of_birth`, `email` has `@`, division shape, the enums).
 
 `buildImportPage()` (frontend/app.js) renders one section per import type:
 template downloads (CSV/XLSX) → a file input → **Upload & stage** → a result
-block rendered by `_renderBatch()`. Today that result is a **text summary**:
+block rendered by `_renderPreviewGrid()` in `frontend/app/import_ui.js`. The
+preview is an editable grid, not a **text summary**. Historical note — the
+pre-ship design was:
 "Staged N: V valid, I invalid" + an `<ul>` of the first 50 row errors + Merge /
 Discard buttons.
 

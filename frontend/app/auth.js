@@ -8,6 +8,7 @@
 // onRoleResolved / onLogout callbacks — the same dependency-injection seam
 // grids.js uses.
 import { makeMenuButton } from "./ui.js";
+import { syncSkipLink } from "./skip_link.js";
 
 export function createAuth(ctx) {
   const { api, setMsg, toast, onSubmit, onRoleResolved, onLogout } = ctx;
@@ -98,6 +99,7 @@ export function createAuth(ctx) {
     document.querySelector("main:not(#official-app)").hidden = !isAdmin;
     document.getElementById("context-bar").hidden = !isAdmin;
     document.getElementById("official-app").hidden = !isOfficial;
+    syncSkipLink(document.querySelector(".skip-link"), isOfficial ? "official" : "admin");
     const officialBar = document.getElementById("official-bar");
     if (officialBar) officialBar.hidden = !isOfficial;
 

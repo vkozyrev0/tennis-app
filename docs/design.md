@@ -27,9 +27,11 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 **Design philosophy that recurs everywhere:**
 - *Manual-first, automate-later* — every integration point (mileage, email, USTA)
   has a manual path that works before the integration exists.
-- *Flag, don't block* — data-quality problems (double-booking, uncertified day,
-  out-of-window, hotel-date mismatch) are surfaced as warnings, not hard errors;
-  the TD decides. Only physical impossibilities (a full room block) hard-block.
+- *Flag, don't block* — data-quality problems (double-booking, a day that
+  became uncertified after assignment, out-of-window, hotel-date mismatch) are
+  surfaced as warnings, not hard errors; the TD decides. Assigning a role the
+  official isn't certified for is a **hard HTTP 409** when certifications are
+  on file. Only physical impossibilities (a full room block) hard-block lodging.
 - *Provenance on Part B* — every filed row links back to its source email.
 - *Minors' PII is a constraint* — names/emails/phones/birthdate encrypted at rest.
 
@@ -121,11 +123,15 @@ fly.toml / render.yaml / Caddyfile   # hosting configs (see docs/deploy.md)
 - `FastAPI(title=..., version=...)`. On import, `settings.validate()` runs the
   **boot guard** (refuses to start a non-dev deployment that still has default
   superuser creds / no TLS / the dev encryption key).
-- **Three open routers** (no auth dep): `health`, `auth` (login), `me` (official
-  self-service — it checks the session itself via `get_current_user`).
+- **Four open routers** (no admin-cookie dep): `health` (includes unauthenticated
+  `GET /api/enums` for SPA boot), `auth` (login), `me` (official self-service —
+  it checks the session itself via `get_current_user`), `ingest` (token-gated
+  email webhook; `INGEST_TOKEN` required or 503 — see §6).
 - **Everything else is admin-only**, mounted in a loop with
   `dependencies=[Depends(require_admin)]`. This is the key security choke point:
   a new TD/back-office router is admin-gated simply by adding it to that tuple.
+  That loop includes `officials`, `coppa` (`GET /api/coppa/policy` is therefore
+  admin-session gated), `export_audit`, and `access_audit`.
 - A `@app.middleware("http")` sets `Cache-Control: no-store` on **non-`/api`**
   responses (the frontend), so the dev edit loop isn't defeated by Chromium's
   aggressive ES-module caching. (Production: hashed filenames instead.)
@@ -199,9 +205,12 @@ workspace vs Part B vs reporting:
   `users` (admin user management), `me` (official self-service: my assignments,
   my availability, my pay, my schedule as an `.ics` download).
 - **Setup catalog:** `sites`, `hotels`, `room_blocks`, `rates` (certification
-  rates), `divisions` (+ events catalog), `certifications` (per-official),
+  rates), `divisions` (+ events catalog), `officials` (CRUD + search + workload),
+  `certifications` (per-official),
   `distances` (official↔site mileage, manual + `geocode` auto), `tournaments`,
   `players`, `staff` (non-official tournament staff).
+- **Policy / audit:** `coppa` (`GET /api/coppa/policy` — admin-session gated),
+  `export_audit`, `access_audit`.
 - **Tournament workspace:** `roster` (entries + CSV import + alternates +
   completeness), `assignments` + `assignments_bulk` (CRUD/days/conflicts/pay;
   bulk-invite + invite-text + coverage fill in the bulk module — C2 2026-07-21;
@@ -252,11 +261,12 @@ and bulk populate so they can't drift), `shirtops.norm_shirt`, `crypto`,
   **frozen** into `pay_audit` (jsonb) with a `rule_version`, so a reimbursement is
   reproducible even if rates/distances change later.
 
-**Certification guard (flag, not block).** Adding a worked day whose role the
-official isn't certified for is *allowed* but flagged (manual/edit/legacy rows
-can carry it); the assign-time picker filters to held certs. An official with **no
-certs on file** is allowed any role (data may be incomplete) — but the conflict
-report then flags every such day as uncertified.
+**Certification guard (hard 409 when certs exist).** Adding a worked day whose
+role the official isn't certified for is **blocked** with HTTP 409 when that
+official has any certifications on file. An official with **no certs on file**
+is allowed any role (data may be incomplete). Days that became uncertified
+*after* assignment (cert revoked) are flagged on the card/report, not blocked
+retroactively. The assign-time picker still filters to held certs.
 
 **Conflict detection.** Within one tournament an official has a single assignment
 with one role per date (`UNIQUE(assignment_id, work_date)`), so a same-day clash

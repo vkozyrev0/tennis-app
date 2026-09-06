@@ -11,6 +11,7 @@ from .. import importer
 from ..db import db_dep
 from ..models import RosterEntryCreate, RosterEntryOut, RosterSignIn
 from ..playerops import upsert_player
+from ..query_helpers import like_escape, paged_select, person_like_sql
 from ..shirtops import norm_shirt as _norm_shirt
 
 router = APIRouter(tags=["roster"])
@@ -61,19 +62,18 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
 # Names are resolved POINT-IN-TIME: the version of the player's name valid as of
 # the tournament's play_start_date (policy A). Falls back to the current name when
 # the tournament predates any recorded version. See docs/data-model.md §PlayerHistory.
-_SELECT = """
-SELECT e.id, e.tournament_id, e.player_id, e.age_division, e.events,
+_COLS = """
+e.id, e.tournament_id, e.player_id, e.age_division, e.events,
        e.selection_status, e.t_shirt_size, e.dietary_preference,
-       -- B2a (migration 0028) payment snapshot from Full Player Data import.
        e.payment_status, e.amount_paid, e.amount_refunded,
        e.amount_due, e.amount_outstanding, e.card_stored,
-       -- B2b correction-import fields (still populated by B2a if present).
        e.signed_in, e.suspension_points,
-       -- B3 combined-import lodging fields (canonical + raw fallback).
        e.lodging_plan, e.lodging_plan_raw,
        p.usta_number,
        COALESCE(nm.first_name, p.first_name) AS first_name,
        COALESCE(nm.last_name,  p.last_name)  AS last_name
+"""
+_FROM = """
 FROM tournament_entry e
 JOIN tournament t ON t.id = e.tournament_id
 JOIN player p ON p.id = e.player_id
@@ -90,14 +90,27 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) nm ON true
 """
+_SELECT = f"SELECT {_COLS} {_FROM}"
 
 
 @router.get("/api/tournaments/{tournament_id}/players", response_model=list[RosterEntryOut])
-def list_roster(tournament_id: int, conn=Depends(db_dep)):
+def list_roster(tournament_id: int, response: Response, q: str | None = None,
+                limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    clauses, params = ["e.tournament_id = %s"], [tournament_id]
+    if q:
+        sql, n = person_like_sql("p")
+        like = f"%{like_escape(q.strip())}%"
+        clauses.append(
+            f"({sql} OR COALESCE(nm.first_name,'') ILIKE %s OR COALESCE(nm.last_name,'') ILIKE %s "
+            f"OR e.age_division ILIKE %s OR e.events ILIKE %s OR e.selection_status ILIKE %s)"
+        )
+        params += [like] * (n + 5)
+    where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        cur.execute(_SELECT + " WHERE e.tournament_id = %s ORDER BY p.last_name, p.first_name",
-                    (tournament_id,))
-        return cur.fetchall()
+        return paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+                            where=where, params=params,
+                            order_by=" ORDER BY p.last_name, p.first_name",
+                            limit=limit, offset=offset)
 
 
 @router.get("/api/tournaments/{tournament_id}/roster-completeness")

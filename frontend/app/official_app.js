@@ -1,4 +1,13 @@
 // Official self-service portal (assignments, availability, pay, profile) — D11.
+import { html } from "./html.js";
+
+/** Actionable empty-state markup — same `.grid-empty` + `.btn` treatment as TD lists. */
+export function officialEmptyState({ message, actionLabel, actionHref } = {}) {
+  const action = (actionLabel && actionHref)
+    ? html`<p><a class="btn" href="${actionHref}">${actionLabel}</a></p>`
+    : "";
+  return html`<div class="grid-empty"><span class="grid-empty-icon" aria-hidden="true">✦</span><p>${message || ""}</p>${action}</div>`;
+}
 
 export function createOfficialApp(ctx) {
   const {
@@ -45,7 +54,14 @@ export function createOfficialApp(ctx) {
     let s;
     try { s = await api("/me/pay-summary"); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; return; }
-    if (!s.tournaments.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
+    if (!s.tournaments.length) {
+      box.innerHTML = officialEmptyState({
+        message: "No assignments yet.",
+        actionLabel: "View assignments",
+        actionHref: "#me-assignments",
+      });
+      return;
+    }
     const rows = s.tournaments.map((t) =>
       html`<tr><td>${t.tournament_name || ("Tournament " + t.tournament_id)}</td><td>${t.days}</td><td>${raw(respChip(t.response_status))}</td><td class="num">${money(t.pay)}</td><td class="num">${money(t.mileage)}</td><td class="num">${money(t.total)}</td></tr>`).join("");
     box.innerHTML = `<table class="list-table"><thead><tr><th>Tournament</th><th>Days</th><th>Status</th>` +
@@ -60,7 +76,14 @@ export function createOfficialApp(ctx) {
     let rows = [];
     try { rows = await api("/me/assignments"); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }
-    if (!rows.length) { box.innerHTML = '<p class="muted">No assignments yet.</p>'; return; }
+    if (!rows.length) {
+      box.innerHTML = officialEmptyState({
+        message: "No assignments yet.",
+        actionLabel: "Set your availability",
+        actionHref: "#me-dates",
+      });
+      return;
+    }
     box.innerHTML = "";
     for (const a of rows) {
       const tname = (meTournaments.find((t) => t.id === a.tournament_id) || {}).name || `Tournament ${a.tournament_id}`;
@@ -110,7 +133,14 @@ export function createOfficialApp(ctx) {
     if (!box) return;
     if (!sel || !sel.value) { box.innerHTML = ""; return; }
     const t = meTournaments.find((x) => String(x.id) === sel.value);
-    if (!t) { box.innerHTML = '<p class="muted">Select a tournament.</p>'; return; }
+    if (!t) {
+      box.innerHTML = officialEmptyState({
+        message: "Select a tournament to mark the dates you can work.",
+        actionLabel: "Choose a tournament",
+        actionHref: "#me-tournament",
+      });
+      return;
+    }
     let av;
     try { av = await api(`/me/availability/${sel.value}`); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }

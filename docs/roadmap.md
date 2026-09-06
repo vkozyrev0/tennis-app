@@ -99,7 +99,7 @@ HTML page and creates sites/tournaments end-to-end.
 - [x] `HotelRoomBlock` inventory with `room_count`. *(migration 0002,
       `/api/hotels` CRUD, Hotels tab; block scoped to a tournament via
       `tournament_id`)*
-- [x] Official records (created by TD initially; self-service in Phase 2).
+- [x] Official records (created by TD initially; self-service availability is live on the official portal).
       *(Officials tab, full CRUD)*
 - [x] **Tournament hub + mappings**: tournament can use **>1 site**
       (`tournament_site` M2M); per-tournament **roster** (`tournament_entry`);
@@ -563,9 +563,10 @@ TD can hand each site coordinator a t-shirt count sheet.
   cumulative T-shirt grid pattern). Unassigned divisions → "Unassigned"
   bucket (do not block the report).
 
-### B2. Roster — two import flavors
+### B2. Roster — two import flavors  ✅ *Production*
 Replace today's single "Roster" importer with **Initial** + **Correction**,
-sourced from the real spreadsheets the TD receives.
+sourced from the real spreadsheets the TD receives. **Shipped:**
+`roster_initial` / `roster_correction` import types (see data-model.md).
 
 #### B2a. Initial — "Tournament Full Player Data" (xlsx)
 Real columns from the June 2026 sample (24 cols, names verbatim):
@@ -618,7 +619,7 @@ if it's player-wide rather than per-tournament — needs TD confirm).
 - Both **also surfaced** on the Tournament → Roster toolbar via the
   existing `⬆ Import…` deep-link pattern.
 
-### B3. T-shirts page — combined T-shirt + Hotel + Dietary import
+### B3. T-shirts page — combined T-shirt + Hotel + Dietary import  ✅ *Production*
 Real columns from the sample (6): `Name, UAID, Tournament Name,
 Preferred T-shirt Size, Are you planning to stay overnight in a hotel?,
 Dietary Restrictions (Level 2, Level 3, or Level 4)`.

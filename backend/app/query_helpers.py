@@ -14,6 +14,21 @@ def like_escape(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+def person_like_sql(alias: str = "p", *, usta: bool = True) -> tuple[str, int]:
+    """ILIKE fragment matching first/last (both combined forms) and optional
+    USTA #. Returns `(sql, n_placeholders)` so callers can bind
+    `[f"%{like_escape(q)}%"] * n`."""
+    parts = [
+        f"{alias}.first_name ILIKE %s",
+        f"{alias}.last_name ILIKE %s",
+        f"(COALESCE({alias}.first_name,'') || ' ' || COALESCE({alias}.last_name,'')) ILIKE %s",
+        f"(COALESCE({alias}.last_name,'') || ', ' || COALESCE({alias}.first_name,'')) ILIKE %s",
+    ]
+    if usta:
+        parts.insert(2, f"{alias}.usta_number ILIKE %s")
+    return "(" + " OR ".join(parts) + ")", len(parts)
+
+
 def paged_select(cur, response, *, cols: str, from_sql: str, where: str = "",
                  params=(), order_by: str, limit: int | None = None,
                  offset: int = 0):

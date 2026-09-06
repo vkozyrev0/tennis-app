@@ -9,7 +9,8 @@
 Cross-refs: [pii-hardening-plan.md](pii-hardening-plan.md) ·
 [pii-h2-key-management.md](pii-h2-key-management.md) ·
 [audit-register.md](audit-register.md) (D16) · machine-readable
-`GET /api/coppa/policy`.
+`GET /api/coppa/policy` (admin-session gated — the `coppa` router is mounted
+with `require_admin`, same as other TD back-office routes).
 
 ---
 

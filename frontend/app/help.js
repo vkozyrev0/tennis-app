@@ -153,8 +153,10 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
         <li>Pay = sum of per-day rates for roles worked.</li>
         <li>Mileage uses one-way miles on file: first 50 round-trip miles free,
           then rate with a hard cap. Missing distance → flag, not silent $0.</li>
-        <li>Problems (uncertified day, double-booking, hotel date mismatch) are
-          usually <em>flags</em> so the TD decides — only full room blocks hard-block.</li>
+        <li>Assigning a role the official isn't certified for is <em>blocked</em>
+          (HTTP 409) when certifications are on file. Days that became uncertified
+          later (cert revoked after assignment) are flagged. Double-booking and
+          hotel-date mismatch are flags. Only a full room block hard-blocks lodging.</li>
       </ul>
     `,
   },
@@ -176,11 +178,9 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       <p class="help-flow-line">
         <span class="help-pill">new</span>
         <span class="help-arrow">→</span>
-        <span class="help-pill">triaged</span>
-        <span class="help-arrow">→</span>
         <span class="help-pill">filed</span>
         <span class="help-arrow">/</span>
-        <span class="help-pill">ignored</span>
+        <span class="help-pill">needs_followup</span>
       </p>
       <p>Use filters and <strong>Unmatched only</strong> to work the queue. Count
       badges on L1 show where work is waiting.</p>

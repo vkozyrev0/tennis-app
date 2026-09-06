@@ -529,7 +529,7 @@ the day. Suite grew 386 → 405 over the three slices.
   tournament's operational memory — weather delays, injuries, disputes,
   facility problems logged as one-liners and resolved in place. New
   `tournament_incident` table + `routers/incidents.py` (open incidents
-  first); UI: Tournament → Incidents tab with a quick-log form and a grid
+  first); UI: Staffing → Incidents tab with a quick-log form and a grid
   where typing into the Resolution cell RESOLVES the incident (clearing it
   reopens). Demo seeds a resolved rain delay + an open facility issue.
 - **Assignment change audit (P4-5)** (commit `1b6f8c4`, migration 0044):

@@ -7,6 +7,7 @@ the next random request pairs with the longest-waiting one; binding once made.
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..query_helpers import like_escape, paged_select, person_like_sql
 from ..models import (
     DoublesPairCreate,
     DoublesPairUpdate,
@@ -17,13 +18,16 @@ from ..playerops import mark_email_filed, upsert_player
 
 router = APIRouter(tags=["doubles"])
 
-_REQ = """
-SELECT r.id, r.tournament_id, r.age_division, r.player_id, r.partner_usta,
+_REQ_COLS = """
+r.id, r.tournament_id, r.age_division, r.player_id, r.partner_usta,
        r.wants_random, r.status, r.source_email_id, em.subject AS source_subject,
        p.usta_number, p.first_name, p.last_name
+"""
+_REQ_FROM = """
 FROM doubles_request r JOIN player p ON p.id = r.player_id
 LEFT JOIN email_message em ON em.id = r.source_email_id
 """
+_REQ = f"SELECT {_REQ_COLS} {_REQ_FROM}"
 _PAIR = """
 SELECT d.id, d.tournament_id, d.age_division, d.pairing_type, d.verified,
        d.player1_id, d.player2_id,
@@ -59,10 +63,19 @@ def _make_pair(cur, tid, division, p1, p2, ptype):
 
 
 @router.get("/api/tournaments/{tournament_id}/doubles")
-def list_doubles(tournament_id: int, conn=Depends(db_dep)):
+def list_doubles(tournament_id: int, response: Response, q: str | None = None,
+                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    clauses, params = ["r.tournament_id = %s"], [tournament_id]
+    if q:
+        sql, n = person_like_sql("p")
+        clauses.append(sql)
+        params += [f"%{like_escape(q.strip())}%"] * n
+    where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        cur.execute(_REQ + " WHERE r.tournament_id = %s ORDER BY r.created_at", (tournament_id,))
-        requests = cur.fetchall()
+        requests = paged_select(cur, response, cols=_REQ_COLS, from_sql=_REQ_FROM,
+                                where=where, params=params,
+                                order_by=" ORDER BY r.created_at",
+                                limit=limit, offset=offset)
         cur.execute(_PAIR + " WHERE d.tournament_id = %s ORDER BY d.id", (tournament_id,))
         pairs = cur.fetchall()
     return {"requests": requests, "pairs": pairs}

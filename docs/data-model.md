@@ -30,6 +30,7 @@ The central entity linking both halves of the system.
 | `play_start_date`, `play_end_date` | match-play window, 3–6 days |
 | `registration_deadline` | normal registration cutoff; withdrawals happen after this |
 | `late_entry_deadline` | **distinct** date for late entries (§2.5) |
+| `ingest_address` | unique per active tournament; inbound mail To: routing (migration 0050) |
 | `deleted_at` | timestamptz, NULL = active (migration 0046 soft-delete) |
 
 > **Soft-delete (migration 0046)** is scoped to **Tournament and
@@ -77,7 +78,8 @@ every tournament held at that site, so distance is entered/geocoded once.
 > at all** and most others had only 1–2 of 3 sites filled, so mileage is simply
 > uncomputable for them until a value is entered/geocoded (audit §3.7 S4/S6). Do
 > **not** import the `182` placeholder reused across 6 officials — treat it as
-> missing.
+> missing. **Shipped:** `backend/backfill_distances.py` imports the workbook
+> matrix (first run 47 officials / 38 distances / 6 placeholders skipped).
 
 ---
 
@@ -115,10 +117,11 @@ rates on days they work different roles (audit §3.2).
 | `rate_per_day` | money |
 | `effective_from` | rate version, for auditability (audit §5.3) |
 
-### Availability  ✅ *built — TD-entered (migration 0007)*
+### Availability  ✅ *built — TD-entered + official self-service*
 Available dates per official per tournament. **Built:** the TD records dates on the
 tournament **Availability** tab (`PUT .../availability` replaces an official's set);
-`hotel_needed` is captured. Officials' self-service entry remains Phase 2.
+`hotel_needed` is captured. Officials set their own dates via
+`GET`/`PUT /api/me/availability/{tournament_id}` on the official portal.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -207,9 +210,10 @@ dollar conversion are applied here, at the pay-computation step.
 **Validation (S4):** mileage needs an `OfficialSiteDistance` for the assignment's
 `(official, site)`. **As built**, when none exists the summary returns
 `mileage = null` + `missing_distance = true` (surfaced as "no distance" in the UI)
-rather than hard-blocking; the cap and the `max(…,0)` floor are applied. *Still
-🔭:* importing the workbook matrix and rejecting the `182` placeholder, and any
-hard block on unverified distances.
+rather than hard-blocking; the cap and the `max(…,0)` floor are applied.
+Workbook-matrix import + the 182-placeholder reject **shipped**
+(`backfill_distances.py`). A hard block on unverified distances is still not
+the product rule (missing distance stays a flag).
 
 ---
 
@@ -314,16 +318,18 @@ avoidances, hotels) augments it.
 | `dietary_preference` | player dietary preference for this tournament |
 | `source` | `usta_roster` \| `late_entry` \| `manual` (late entries added by TD) |
 
-### EmailMessage  ✅ *built (migration 0011)*
-Provenance / review inbox (audit §4.3). Emails forwarded to the dedicated address
-land here (POC: entered by hand). **No automated parsing** (D5 / audit §5.1): a
-person sets `classification` and files each message into a list.
+### EmailMessage  ✅ *built (migration 0011 + 0050 ingest)*
+Provenance / review inbox (audit §4.3). Messages land here via **Inbox paste**,
+PDF import, or `POST /api/ingest/email` (token-gated webhook; a mail provider
+is still wired outside the repo). A human still **files** each message into a
+list; keyword triage v0 may *suggest* a classification (no LLM — D5).
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
 | `message_id` | unique dedup key (nullable for manual adds) |
-| `received_at`, `from_address`, `subject`, `body` | |
-| `tournament_id` | FK (set by the reviewer) |
+| `received_at`, `from_address`, `to_address`, `subject`, `body` | `to_address` used to match `tournament.ingest_address` |
+| `ingest_source` | `manual` \| `webhook` \| `form` \| `pdf_import` (how the row arrived) |
+| `tournament_id` | FK (set by the reviewer, or routed from ingest address) |
 | `classification` | **human-assigned** text: `unclassified` \| `late_entry` \| `withdrawal` \| `doubles` \| `pairing_avoidance` \| `scheduling_avoidance` \| `division_flex` \| `hotel` \| `other` |
 | `status` | `new` \| `filed` \| `needs_followup` (filing a list sets `filed`) |
 | `amends_email_id` | FK → EmailMessage (nullable), ON DELETE SET NULL — a correction email points at the earlier email it supersedes (migration 0034) |
@@ -488,7 +494,7 @@ Seed populates 26 divisions (10 junior B/G10..18 + 16 adult NTRP + Combo) +
 
 ### ImportBatch / ImportRow  ✅ *built (migration 0020)*
 Staged-import pipeline (parse → validate → review → merge). A TD uploads a
-CSV/XLSX file via **Data → Import**; rows are parsed + per-row validated and
+CSV/XLSX file via **Setup → Import**; rows are parsed + per-row validated and
 land in `import_row` first. After the review summary, valid rows merge into
 the main tables; failed/conflict rows are surfaced with row-level errors.
 | Table | Fields |

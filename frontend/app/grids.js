@@ -1,3 +1,9 @@
+import { labelHeaderFilters, reflectAriaSort } from "./grid_a11y.js";
+import { applySavedRow, saveInGridCell } from "./cell_edit.js";
+import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
+
+export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
+
 // Tabulator grid factories (plan P2 #11a) — extracted from app.js.
 //
 // Owns ALL generic grid wiring: the Setup master/detail CRUD (`wireEntity`),
@@ -391,9 +397,16 @@ export function createGridFactories(ctx) {
             localStorage.setItem(tabOpts.persistKey, JSON.stringify(st));
           } catch (_) {}
         }
+        reflectAriaSort(_a11yTable());
         (handlers.dataSorted || []).forEach((fn) => fn());
       },
-      onGridReady: (e) => { api = e.api; _restoreSort(); (handlers.tableBuilt || []).forEach((fn) => fn()); },
+      onGridReady: (e) => {
+        api = e.api;
+        _restoreSort();
+        labelHeaderFilters(_a11yTable());
+        reflectAriaSort(_a11yTable());
+        (handlers.tableBuilt || []).forEach((fn) => fn());
+      },
       // Also restore once rows first render — a grid created inside a hidden tab
       // defers layout, so applyColumnState at onGridReady can be dropped; reapply
       // when it actually renders. Idempotent, so running in both hooks is safe.
@@ -408,6 +421,16 @@ export function createGridFactories(ctx) {
       } catch (_) {}
     }
     if (tabOpts.rowClassRules) opts.rowClassRules = tabOpts.rowClassRules;
+    function _a11yTable() {
+      return {
+        element: mount,
+        getSorters: () => {
+          if (!api) return [];
+          return api.getColumnState().filter((c) => c.sort)
+            .map((c) => ({ field: c.colId, dir: c.sort }));
+        },
+      };
+    }
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
     // Toggle the collapse on/off at the mobile breakpoint: hide the collapsible
@@ -426,7 +449,9 @@ export function createGridFactories(ctx) {
     const activeRows = () => { const out = []; if (api) api.forEachNodeAfterFilterAndSort((n) => out.push(n)); return out; };
     return {
       api,
+      element: mount,
       initialized: true,
+      getSorters: () => _a11yTable().getSorters(),
       on: (evt, fn) => { (handlers[evt] ||= []).push(fn); },
       setData: (rows) => api && api.setGridOption("rowData", rows || []),
       replaceData: (rows) => api && api.setGridOption("rowData", rows || []),
@@ -477,7 +502,7 @@ export function createGridFactories(ctx) {
     };
   }
 
-  function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited, exportCols) {
+  function makeListGrid(tableId, columns, exportName, placeholder, onDelete, onEdit, onCellEdited, exportCols, serverSearch) {
     // Import/export #3: exportCols (when given) drives a *re-importable* CSV
     // export with snake_case headers, not just the visible Tabulator columns.
     // Each entry is { header, key, fmt? }; fmt(row) lets you compute e.g. a
@@ -504,6 +529,23 @@ export function createGridFactories(ctx) {
       }
     });
     mount.parentElement.insertBefore(csv, mount);
+    let filterInput = null, pageNote = null, _searchTimer = 0, _onSearch = null;
+    if (serverSearch) {
+      filterInput = document.createElement("input");
+      filterInput.type = "search";
+      filterInput.className = "filter";
+      filterInput.placeholder = "Search…";
+      filterInput.setAttribute("aria-label", "Search this list");
+      pageNote = document.createElement("span");
+      pageNote.className = "muted"; pageNote.style.fontSize = "0.72rem";
+      pageNote.setAttribute("aria-live", "polite");
+      csv.parentNode.insertBefore(filterInput, csv);
+      csv.parentNode.insertBefore(pageNote, csv);
+      filterInput.addEventListener("input", () => {
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => { if (_onSearch) _onSearch(); }, 250);
+      });
+    }
     const cols = _autoHeaderFilters(columns.slice());
     cols.push({
       title: "", field: "_act", headerSort: false, widthGrow: 0, width: onEdit ? 72 : 48, cssClass: "grid-actions-cell",
@@ -536,7 +578,18 @@ export function createGridFactories(ctx) {
     if (grid.initialized) _onBuilt();  // covers sync-fire race
     if (onCellEdited) grid.on("cellEdited", onCellEdited);
     if (panelId) (GRIDS[panelId] ||= []).push(grid);
-    return { setData: (rows) => { if (built) grid.setData(rows); else pending = rows; } };
+    return {
+      setData: (rows) => { if (built) grid.setData(rows); else pending = rows; },
+      getQuery: () => (filterInput ? filterInput.value.trim() : ""),
+      onSearch: (fn) => { _onSearch = fn; },
+      setPageNote: (n, pageSize, q) => {
+        if (!pageNote) return;
+        const size = pageSize || (serverSearch && serverSearch.pageSize) || LIST_PAGE_SIZE;
+        pageNote.textContent = n >= size
+          ? `showing the first ${size} — refine the search to narrow`
+          : (q ? `${n} match(es)` : "");
+      },
+    };
   }
 
   // AG Grid version of makeReadGrid (summaries / reference tables). Same return
@@ -759,14 +812,14 @@ export function createGridFactories(ctx) {
     table.on("dataFiltered", () => { markRows(); updateNav(); });
     table.on("dataSorted", () => { markRows(); updateNav(); });   // AG sets aria-sort natively
     // In-grid edit: PUT the whole row (the *Out record has every field the model
-    // needs; Pydantic ignores extras). Refresh to pick up server normalization.
+    // needs; Pydantic ignores extras). Apply the PUT body onto the edited row
+    // so server normalization + updated_at land without a full-grid reload.
     table.on("cellEdited", async (cell) => {
       const data = cell.getRow().getData();
       if (cell.getValue() === cell.getOldValue()) return;  // no-op
       // Cell-local save feedback (plan P1 #3): the global progress bar alone is
       // easy to miss during rapid in-grid edits. Mark the cell while the PUT is
-      // in flight; flash saved/error on settle (refresh() may replace the row's
-      // DOM node, so the flash lands on the re-fetched cell when possible).
+      // in flight; flash saved/error on settle.
       const el = cell.getElement();
       el.classList.add("cell-saving");
       const flash = (cls) => {
@@ -775,23 +828,19 @@ export function createGridFactories(ctx) {
         setTimeout(() => node.classList.remove(cls), cls === "cell-error" ? 1500 : 700);
       };
       try {
-        let body = { ...data }; delete body._act;
-        if (cfg.transform) body = cfg.transform(body);
-        // Audit M19 + M8: send the snapshot's updated_at only when the entity
-        // opts in (cfg.optimisticConcurrency); avoids implicit feature-detection
-        // on payload shape if some future *Out model adds an unrelated updated_at.
         const headers = cfg.optimisticConcurrency && data.updated_at
           ? { "X-If-Updated-At": data.updated_at } : {};
-        await api(`${cfg.path}/${data.id}`, { method: "PUT", body: JSON.stringify(body), headers });
+        await saveInGridCell({
+          cell, api, path: `${cfg.path}/${data.id}`,
+          transform: cfg.transform, headers, items,
+        });
         setMsg(cfg.msgId, "saved", true);
-        await refresh();
         if (cfg.afterChange) cfg.afterChange();
         if (selectedId === data.id) fillForm(table.getRow(data.id)?.getData() || data);
         flash("cell-saved");
       } catch (err) {
         setMsg(cfg.msgId, err.message, false);
         try { cell.restoreOldValue(); } catch (_) {}
-        await refresh();
         flash("cell-error");
       } finally {
         el.classList.remove("cell-saving");

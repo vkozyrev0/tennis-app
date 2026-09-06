@@ -3,6 +3,7 @@ Also the cumulative cross-tournament t-shirt list (derived from tournament_entry
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..query_helpers import like_escape, paged_select, person_like_sql
 import json
 from ..models import (
     PlayerHotelCreate,
@@ -16,24 +17,37 @@ from ..playerops import mark_email_filed, upsert_hotel, upsert_player
 
 router = APIRouter(tags=["player-ops"])
 
-_PH = """
-SELECT s.id, s.tournament_id, s.player_id, s.hotel_id, s.hotel_name, s.lodging_plan,
+_PH_COLS = """
+s.id, s.tournament_id, s.player_id, s.hotel_id, s.hotel_name, s.lodging_plan,
        s.source_email_id, em.subject AS source_subject,
        p.usta_number, p.first_name, p.last_name,
        te.age_division
+"""
+_PH_FROM = """
 FROM player_hotel_stay s
 JOIN player p ON p.id = s.player_id
 LEFT JOIN tournament_entry te
        ON te.tournament_id = s.tournament_id AND te.player_id = s.player_id
 LEFT JOIN email_message em ON em.id = s.source_email_id
 """
+_PH = f"SELECT {_PH_COLS} {_PH_FROM}"
 
 
 @router.get("/api/tournaments/{tournament_id}/player-hotels", response_model=list[PlayerHotelOut])
-def list_player_hotels(tournament_id: int, conn=Depends(db_dep)):
+def list_player_hotels(tournament_id: int, response: Response, q: str | None = None,
+                       limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    clauses, params = ["s.tournament_id = %s"], [tournament_id]
+    if q:
+        sql, n = person_like_sql("p")
+        clauses.append(f"({sql} OR s.hotel_name ILIKE %s)")
+        like = f"%{like_escape(q.strip())}%"
+        params += [like] * n + [like]
+    where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        cur.execute(_PH + " WHERE s.tournament_id = %s ORDER BY s.id", (tournament_id,))
-        return cur.fetchall()
+        return paged_select(cur, response, cols=_PH_COLS, from_sql=_PH_FROM,
+                            where=where, params=params,
+                            order_by=" ORDER BY s.id",
+                            limit=limit, offset=offset)
 
 
 @router.post("/api/tournaments/{tournament_id}/player-hotels",

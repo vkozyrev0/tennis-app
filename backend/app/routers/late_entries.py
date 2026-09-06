@@ -5,28 +5,40 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from ..db import db_dep
 from ..models import LateEntryCreate, LateEntryOut, LateEntryUpdate
 from ..playerops import mark_email_filed, upsert_player
+from ..query_helpers import like_escape, paged_select, person_like_sql
 
 router = APIRouter(tags=["late-entries"])
 
-_SELECT = """
-SELECT le.id, le.tournament_id, le.player_id, le.request_date, le.request_time,
+_COLS = """
+le.id, le.tournament_id, le.player_id, le.request_date, le.request_time,
        le.age_division, le.events, le.source_email_id, em.subject AS source_subject,
        p.usta_number, p.first_name, p.last_name,
        (t.late_entry_deadline IS NOT NULL
         AND COALESCE(le.request_date, CURRENT_DATE) > t.late_entry_deadline) AS past_deadline
+"""
+_FROM = """
 FROM late_entry le
 JOIN player p ON p.id = le.player_id
 JOIN tournament t ON t.id = le.tournament_id
 LEFT JOIN email_message em ON em.id = le.source_email_id
 """
+_SELECT = f"SELECT {_COLS} {_FROM}"
 
 
 @router.get("/api/tournaments/{tournament_id}/late-entries", response_model=list[LateEntryOut])
-def list_late_entries(tournament_id: int, conn=Depends(db_dep)):
+def list_late_entries(tournament_id: int, response: Response, q: str | None = None,
+                      limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    clauses, params = ["le.tournament_id = %s"], [tournament_id]
+    if q:
+        sql, n = person_like_sql("p")
+        clauses.append(sql)
+        params += [f"%{like_escape(q.strip())}%"] * n
+    where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        cur.execute(_SELECT + " WHERE le.tournament_id = %s ORDER BY le.request_date, le.id",
-                    (tournament_id,))
-        return cur.fetchall()
+        return paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+                            where=where, params=params,
+                            order_by=" ORDER BY le.request_date, le.id",
+                            limit=limit, offset=offset)
 
 
 @router.post("/api/tournaments/{tournament_id}/late-entries",

@@ -41,9 +41,15 @@ decrypted for the detail pane. Search also matches classification, division,
 and player name. Frontend inbox scopes to the active tournament and shows
 `X-Total-Count` ("N of M").
 
+### Fixed — `payroll.finalize_all` / invite texts batch via `_summaries`
+Both `payroll.finalize_all` and the invite-text builders load assignment
+summaries in one `_summaries()` pass (5 set queries) rather than looping
+`_summary` per row. Keep using that helper for any new N-assignment decorate
+path.
+
 ### Known follow-ups (not yet done)
-- **`payroll.finalize_all` / `assignment_invite_texts`** still loop the single
-  `_summary`; batch them with `_summaries` (and `executemany` the inserts).
+- None in this batching family; remaining scale work is parked on P3 triggers
+  (connection pooling, cluster-safe login throttle).
 
 ## Frontend
 

@@ -1,5 +1,6 @@
 // Part B lists: late entries, withdrawals, scheduling/div-flex, player hotels — D11.
 import { makeOriginCol } from './origin_col.js';
+import { LIST_PAGE_SIZE, listPagePath } from './list_page.js';
 
 export function createPartBPanels(ctx) {
   const {
@@ -75,10 +76,16 @@ export function createPartBPanels(ctx) {
       { header: "request_date", key: "request_date" },
       { header: "request_time", key: "request_time" },
       { header: "source_email_id", key: "source_email_id" },
-    ]);
+    ], { pageSize: LIST_PAGE_SIZE });
+  lateGrid.onSearch(() => loadLate());
   async function loadLate() {
     if (!getActive()) return;
-    lateGrid.setData(await api(`/tournaments/${getActive().id}/late-entries`));
+    const q = lateGrid.getQuery();
+    const rows = await api(listPagePath(`/tournaments/${getActive().id}/late-entries`, {
+      q, limit: LIST_PAGE_SIZE,
+    }));
+    lateGrid.setData(rows);
+    lateGrid.setPageNote(rows.length, LIST_PAGE_SIZE, q);
   }
   function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
   onSubmit(lateForm, async (e) => {
@@ -124,10 +131,16 @@ export function createPartBPanels(ctx) {
       { header: "reason", key: "reason" },
       { header: "notes", key: "notes" },
       { header: "source_email_id", key: "source_email_id" },
-    ]);
+    ], { pageSize: LIST_PAGE_SIZE });
+  wdGrid.onSearch(() => loadWithdrawals());
   async function loadWithdrawals() {
     if (!getActive()) return;
-    wdGrid.setData(await api(`/tournaments/${getActive().id}/withdrawals`));
+    const q = wdGrid.getQuery();
+    const rows = await api(listPagePath(`/tournaments/${getActive().id}/withdrawals`, {
+      q, limit: LIST_PAGE_SIZE,
+    }));
+    wdGrid.setData(rows);
+    wdGrid.setPageNote(rows.length, LIST_PAGE_SIZE, q);
   }
   function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
   onSubmit(wdForm, async (e) => {

@@ -7,6 +7,8 @@
 // of use, after `active` / expandPlayerRef / loadInbox exist), whereas
 // createGridFactories runs at module top. Dependency-injected like grids.js;
 // `active` is read through getActive() since it's a reassigned module global.
+import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
+
 export function createPlayerList(ctx) {
   const {
     api, setMsg, confirmDialog, markInvalid, formObj, _csvDownload,
@@ -41,6 +43,21 @@ export function createPlayerList(ctx) {
       }
     });
     mount.parentElement.insertBefore(csv, mount);
+    const filterInput = document.createElement("input");
+    filterInput.type = "search";
+    filterInput.className = "filter";
+    filterInput.placeholder = "Search…";
+    filterInput.setAttribute("aria-label", "Search this list");
+    const pageNote = document.createElement("span");
+    pageNote.className = "muted"; pageNote.style.fontSize = "0.72rem";
+    pageNote.setAttribute("aria-live", "polite");
+    csv.parentNode.insertBefore(filterInput, csv);
+    csv.parentNode.insertBefore(pageNote, csv);
+    let _searchTimer = 0;
+    filterInput.addEventListener("input", () => {
+      clearTimeout(_searchTimer);
+      _searchTimer = setTimeout(() => load(), 250);
+    });
 
     const columns = cfg.columns.slice();
     columns.push({
@@ -84,8 +101,14 @@ export function createPlayerList(ctx) {
     async function load() {
       const active = getActive();
       if (!active) return;
-      const rows = await api(`/tournaments/${active.id}${cfg.path}`);
+      const q = filterInput.value.trim();
+      const rows = await api(listPagePath(`/tournaments/${active.id}${cfg.path}`, {
+        q, limit: LIST_PAGE_SIZE,
+      }));
       if (built) await table.setData(rows); else pending = rows;
+      pageNote.textContent = rows.length >= LIST_PAGE_SIZE
+        ? `showing the first ${LIST_PAGE_SIZE} — refine the search to narrow`
+        : (q ? `${rows.length} match(es)` : "");
       if (cfg.after) cfg.after();
     }
     function reset() { form.reset(); form.source_email_id.value = ""; }
