@@ -58,7 +58,7 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
         <li><strong>Find player or official</strong> — global search in the context bar;
           jumps into the right record.</li>
         <li><strong>Account menu</strong> (your username ▾) — Trash, Change password,
-          Log out.</li>
+          Notices, Log out.</li>
       </ol>
 
       <h3>Header chips</h3>
@@ -104,6 +104,7 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
           <tr><td>Users</td><td>Admin/TD logins (not official portal accounts)</td></tr>
           <tr><td>Gmail</td><td>IMAP app-password feed, UID cursor, Get latest</td></tr>
           <tr><td>Import</td><td>Stage CSV/XLSX/PDF rows, validate, then merge into catalogs</td></tr>
+          <tr><td>Notices</td><td>Toasts and alerts from this session (also in the account menu)</td></tr>
         </tbody>
       </table>
       <p class="help-tip"><strong>Catalog vs event:</strong> Setup → Sites is the master
@@ -177,13 +178,18 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
     html: `
       <h3>Why Inbox is its own section</h3>
       <p>Parent and player email is the input stream for player operations.
-      Nothing auto-files without you. Workflow is always:</p>
+      Nothing auto-files without you. The usual path is:</p>
       <ol class="help-steps help-steps--flow">
         <li><strong>Classify</strong> — what kind of request (withdrawal, late entry, doubles, …)</li>
         <li><strong>Detect</strong> — match player(s) on the roster (USTA #, name layers)</li>
         <li><strong>File</strong> — write the structured row and mark the email filed</li>
       </ol>
-      <p><strong>Triage</strong> runs those three in one pass on a selection.</p>
+      <p><strong>Triage</strong> (button or <kbd>t</kbd>) runs those three in one pass
+      on the selected emails. It skips anything without a matched player, and it
+      leaves <strong>doubles</strong> and <strong>pairing avoidance</strong> for you
+      to file individually (those need a partner or a group, which bulk cannot
+      supply). <kbd>d</kbd> is detect only; <kbd>f</kbd> is mark filed; <kbd>u</kbd>
+      toggles Unmatched only.</p>
 
       <h3>Review</h3>
       <p>Click <strong>Review</strong> (or the row) to open the original message.
@@ -235,14 +241,15 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
           <tr><td>Late entries</td><td>late_entry</td></tr>
           <tr><td>Withdrawals</td><td>withdrawal</td></tr>
           <tr><td>Scheduling</td><td>scheduling_avoidance (can’t play certain days/times)</td></tr>
-          <tr><td>Div. flex</td><td>division_flex</td></tr>
-          <tr><td>Pairing avoid.</td><td>pairing_avoidance (group of players)</td></tr>
+          <tr><td>Division flex</td><td>division_flex</td></tr>
+          <tr><td>Pairing avoidances</td><td>pairing_avoidance (group of players)</td></tr>
           <tr><td>Doubles</td><td>doubles (player + partner)</td></tr>
           <tr><td>Player hotels</td><td>hotel / lodging request</td></tr>
         </tbody>
       </table>
-      <p>Badges on the L1 <strong>Player lists</strong> button and each tab show
-      row counts so you know which lists have data without opening every tab.</p>
+      <p>Count badges sit on the L1 <strong>Inbox</strong> button (unfiled) and on
+      each Player lists tab so you know which lists have data without opening
+      every tab.</p>
     `,
   },
   {

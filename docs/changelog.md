@@ -9,6 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — Help matches live nav and triage
+
+- Setup and the account menu now mention Notices. Player lists use the tab names Division flex and Pairing avoidances. Inbox Help says bulk triage skips unmatched mail plus doubles/pairing avoidance (file those individually).
+
+## 2026-09-07 — Login court frame (no sideline through the brand)
+
+- Signed-out page no longer paints full-width singles sidelines through the header. A service-box frame sits behind the login card instead.
+
 ## 2026-09-07 — My Ad, LLC logo
 
 - Header uses the My Ad racket mark plus a CourtOps Tennis / My Ad, LLC lockup. Sign-in shows the full wordmark. Favicon is the racket mark.

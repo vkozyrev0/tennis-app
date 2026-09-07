@@ -430,15 +430,28 @@ input.date-locale {
   font-variant-numeric: tabular-nums;
 }
 
-/* Signed-out: the page is the court. Header stays brand-only; help is unused. */
+/* Signed-out: the page is the court. Full-viewport sidelines used to run
+   through the header lockup; the court frame now sits behind the login card. */
 body.is-signed-out {
   background-color: var(--court, #1b4d32);
-  background-image:
-    linear-gradient(90deg, transparent 11.5%, rgba(255,255,255,0.12) 11.5%, rgba(255,255,255,0.12) 11.85%, transparent 11.85%),
-    linear-gradient(90deg, transparent 88.15%, rgba(255,255,255,0.12) 88.15%, rgba(255,255,255,0.12) 88.5%, transparent 88.5%);
-  background-size: 100% 100%, 100% 100%;
-  background-repeat: no-repeat;
   min-height: 100vh;
+}
+body.is-signed-out::before {
+  content: "";
+  position: fixed;
+  left: 50%;
+  top: 6.25rem;
+  bottom: 3.5rem;
+  width: min(28rem, calc(100vw - 2.5rem));
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 0;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+}
+body.is-signed-out header,
+body.is-signed-out #login-view {
+  position: relative;
+  z-index: 1;
 }
 body.is-signed-out header {
   background: transparent;
