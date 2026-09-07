@@ -24,6 +24,7 @@ from .routers import (
     emails,
     emails_bulk,
     export_audit,
+    gmail_feed,
     health,
     hotels,
     imports,
@@ -79,7 +80,7 @@ for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, divisions, roster, assignments, assignments_bulk, reports, dashboard, certifications, availability,
           emails, emails_bulk, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users,
-          export_audit, access_audit, coppa, td_chat):
+          export_audit, access_audit, coppa, td_chat, gmail_feed):
     app.include_router(r.router, dependencies=_admin)
 
 # Disable browser caching of the frontend assets. POC dev loop edits HTML +

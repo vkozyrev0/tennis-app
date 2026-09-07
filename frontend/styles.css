@@ -185,6 +185,7 @@ header h1 {
    is monospaced + larger so threaded quote markers ("From: …") read cleanly. */
 .inbox-detail-subject { margin: 0 0 0.4rem 0; }
 .inbox-detail-meta { font-size: 0.85rem; margin-bottom: 0.6rem; }
+.inbox-email-body,
 #inbox-detail-body {
   width: 100%; margin: 0.25rem 0 0.6rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -194,17 +195,43 @@ header h1 {
   background: var(--field-bg); color: var(--ink);
   border: 1px solid var(--border); border-radius: 5px; padding: 0.6rem 0.7rem;
 }
+.inbox-email-body:focus-visible,
 #inbox-detail-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Header-line highlight: "From:" / "To:" / "Subject:" / "Sent:" / "Date:".
    Key in accent (the strong color we already use for links etc.); value in
    normal ink. Quoted-thread boundary ("On <date>, X wrote:") muted italic
    so the eye can find each new reply quickly. */
+.inbox-email-body .email-hdr-key,
 #inbox-detail-body .email-hdr-key { color: var(--link); font-weight: 600; }
+.inbox-email-body .email-hdr-val,
 #inbox-detail-body .email-hdr-val { color: var(--ink); }
+.inbox-email-body .email-quote-marker,
 #inbox-detail-body .email-quote-marker { color: var(--muted); font-style: italic; }
+.inbox-email-body .email-meta,
 #inbox-detail-body .email-meta { color: var(--muted); font-style: italic; }
+.inbox-email-body .email-meta .email-hdr-key,
 #inbox-detail-body .email-meta .email-hdr-key { color: var(--link); font-style: normal; }
 .inbox-detail-body-label { display: block; }
+.inbox-detail-players {
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.7rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  min-width: 0;
+}
+.inbox-detail-players legend {
+  padding: 0 0.35rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+#inbox-detail-players {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.55rem 0.8rem;
+}
+.inbox-detail-player-slot label { display: flex; flex-direction: column; gap: 0.2rem; }
+.inbox-detail-player-hint { font-size: 0.78rem; }
 .brand-icon {
   width: 1.4em; height: 1.4em;
   vertical-align: -0.35em;
@@ -1026,7 +1053,7 @@ button.touch-btn:hover:not(:disabled) {
 .tabulator .tabulator-header .tabulator-col {
   background: var(--card); border-right: 0;
 }
-.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.25rem 0.45rem; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.2rem 0.4rem; }
 /* Compact column header labels. */
 .tabulator .tabulator-col-title {
   font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;
@@ -1447,7 +1474,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .list-table th {
   color: var(--muted); font-weight: 650;
   font-size: 8pt; line-height: 1.15;
-  padding: 0.15rem 0.4rem;
+  padding: 0.2rem 0.4rem;
   position: sticky; top: 0; background: var(--card); z-index: 1;
 }
 .list-table tbody tr:nth-of-type(even) { background: var(--zebra); }  /* zebra */
@@ -1470,60 +1497,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 /* #avail-save / #me-avail-save / .export-btn → Button utilities */
 .import-result { margin-top: 0.4rem; }
 .import-errors { margin: 0.2rem 0 0.3rem 1.1rem; padding: 0; color: var(--bad); font-size: 0.8rem; }
-/* ===== AG Grid theme overrides — tune quartz to match the app's look ===== */
-.ag-theme-quartz, .ag-theme-quartz-dark {
-  --ag-font-family: inherit;
-  --ag-font-size: 0.8rem;
-  --ag-accent-color: var(--accent);
-  --ag-row-height: 32px;
-  --ag-header-height: 22px;
-  --ag-grid-size: 4px;
-  --ag-cell-horizontal-padding: 6px;
-  --ag-borders: solid 1px;
-  --ag-border-color: var(--border);
-  --ag-row-border-color: var(--border);
-  --ag-header-column-separator-display: none;
-  --ag-selected-row-background-color: var(--sel, rgba(0,0,0,0.05));
-  --ag-row-hover-color: var(--sel, rgba(0,0,0,0.04));
-  --ag-header-background-color: transparent;
-  --ag-odd-row-background-color: rgba(0,0,0,0.015);
-  --ag-wrapper-border-radius: 8px;
-}
-/* Dark mode: the app toggles :root[data-theme="dark"]; repaint AG with the
-   app's dark tokens so the grid isn't a white slab. */
-:root[data-theme="dark"] .ag-theme-quartz {
-  --ag-background-color: var(--bg, #16181c);
-  --ag-foreground-color: var(--ink, #e6e6e6);
-  --ag-header-foreground-color: var(--ink, #e6e6e6);
-  --ag-header-background-color: transparent;
-  --ag-odd-row-background-color: rgba(255, 255, 255, 0.025);
-  --ag-row-hover-color: rgba(255, 255, 255, 0.06);
-  --ag-selected-row-background-color: var(--sel, rgba(255, 255, 255, 0.1));
-  --ag-border-color: var(--border);
-  --ag-row-border-color: var(--border);
-  --ag-input-background-color: rgba(255, 255, 255, 0.06);
-  --ag-input-border-color: var(--border);
-  --ag-control-panel-background-color: var(--bg);
-  --ag-secondary-foreground-color: var(--muted, #9aa0a6);
-  --ag-disabled-foreground-color: #6b6f76;
-}
-.ag-theme-quartz .ag-header-cell-text,
-.ag-theme-quartz .ag-header-group-cell-label,
-.ag-theme-quartz .ag-header-group-text {
-  font-size: 8pt;
-  font-weight: 650;
-  line-height: 1.15;
-  letter-spacing: 0.01em;
-}
-.ag-theme-quartz .ag-header-cell,
-.ag-theme-quartz .ag-header-group-cell {
-  padding-top: 0;
-  padding-bottom: 0;
-}
-.ag-theme-quartz .ag-header-cell-comp-wrapper,
-.ag-theme-quartz .ag-header-group-cell-label {
-  min-height: 0;
-}
+/* AG Grid look: vendor/ag-theme-courtops.css (Quartz params). App-only rules below. */
 /* the app's grids sit flush in the card; trim AG's default outer chrome */
 .grid-mount.ag-theme-quartz { width: 100%; }
 .ag-theme-quartz .ag-body-viewport { min-height: 96px; pointer-events: auto; }
@@ -1575,28 +1549,6 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .ag-collapse-row + .ag-collapse-row { border-top: 1px solid var(--border, #eee); }
 .ag-collapse-key { color: var(--muted, #777); min-width: 6.5rem; font-weight: 600; }
 .ag-collapse-val { flex: 1; }
-/* Custom floating header filters (list dropdown + predicate text). Fill the
-   floating-filter row like AG's built-in text filter so they read as one strip. */
-.ag-theme-quartz .ag-list-floating,
-.ag-theme-quartz-dark .ag-list-floating {
-  width: 100%; box-sizing: border-box;
-  /* match AG's built-in floating text input: it fills the floating-filter body
-     (min-height = grid-size*4). No vertical margin — that was making the select
-     shorter than the neighboring text filters. */
-  height: auto; min-height: 18px; margin: 0; line-height: 1.15;
-  border: 1px solid var(--ag-border-color, var(--border)); border-radius: 3px;
-  background: var(--ag-background-color, var(--card)); color: inherit;
-  font: inherit; font-size: 8pt; padding: 0 0.15rem;
-}
-/* The floating-filter cell wraps our control in .ag-floating-filter-body; now
-   that the funnel button is gone, stretch our control to the body height so it
-   is exactly as tall as AG's built-in floating text input in sibling columns. */
-.ag-theme-quartz .ag-floating-filter-body,
-.ag-theme-quartz-dark .ag-floating-filter-body { display: flex; align-items: stretch; }
-.ag-theme-quartz .ag-custom-filter,
-.ag-theme-quartz-dark .ag-custom-filter { padding: 6px; min-width: 180px; }
-.ag-theme-quartz .ag-custom-filter input { width: 100%; }
-
 /* Import preview grid (edit-before-merge). */
 .import-preview-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.35rem 0; }
 .import-counts { font-size: 0.82rem; }

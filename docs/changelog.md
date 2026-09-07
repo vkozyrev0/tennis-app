@@ -9,6 +9,42 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-06 — Singles copies of doubles email fixtures
+
+- Every doubles-topic row in `tournament_emails.pdf` is copied with doubles→singles (`backend/tests/singles_from_doubles.py`, gold `tournament_emails_singles_gold.json`).
+- Heuristic `classify()` never labels a singles-only email `doubles`. Add / play / confirm / partner in singles is `late_entry` (no new `singles` inbox class — that files as late entry).
+- Leftover 1.5B gold: add-for-singles → `late_entry`; named pairing copies stay `doubles`; acks `other`; withdrawals `withdrawal`. The leftover prompt is unchanged (extra singles few-shots broke PDF 30/30). Example 1 / 5 already cover singles withdraw and still-enter.
+
+## 2026-09-06 — Gmail feed settings (latest-mail cursor)
+
+- Setup → **Gmail** stores the TD address, encrypted App Password, mailbox, optional Gmail search, poll minutes, lookback days, and optional tournament. **Get latest** IMAP-fetches only UIDs newer than the saved cursor (`last_uid` / `uidvalidity`) and files them in Inbox as `gmail`. Step-by-step App Password instructions are on the page.
+
+## 2026-09-06 — Review modal lists every detected player
+
+- Review says **Players detected**, not a single “Player (detected)” picker. Doubles / name-pairs / pairing groups get one dropdown per person; a singles-style email still gets one. Parsed USTA #s select the matching catalog player so a last-name collision (Casey Davis vs James Davis) does not steal the slot.
+
+## 2026-09-06 — Inbox Review column; drop Email and Tournament
+
+- Inbox is already scoped to the active tournament, so the **Tournament** column is gone.
+- The **Email** (Open original) column is gone — **Review** already opens the message. Review now sits after From, where Email was; the trailing ⋯ menu stays at the end.
+
+## 2026-09-06 — Doubles event titles + inbox Review click
+
+- Heuristic `classify()` keeps **doubles** for event-title subjects like “Southerns Boys 14 Doubles” and “Boys 14s Doubles Confirmation-Level 3 Macon” even without two extracted names. Generic “L3 Macon - Doubles” acknowledgements stay Other.
+- Inbox **Review** still opens the review modal; a click on a non-editor / non-checkbox row cell does too (`stopPropagation` on Review so the grid does not swallow it).
+
+## 2026-09-06 — Inbox original-email column
+
+- Inbox grid has an **Email** column. Open shows the original message (From, To, Cc/Bcc when present, Date, Subject, body) in a read-only modal. Review stays the classify/file dialog.
+
+## 2026-09-06 — Inbox From/Subject column floor
+
+- From / Subject / Tournament no longer collapse to a few pixels under flex fit. Flex columns without a width get a 96px floor; inbox sets higher mins so headers stay readable.
+
+## 2026-09-06 — Tighter grid header rows
+
+- Compact Quartz parameters live in `frontend/vendor/ag-theme-courtops.css`. Header / group / floating-filter rows are **20px** (8pt labels, 14px icons) so text is not clipped. Duplicate header filter funnels are off (`suppressHeaderFilterButton`); filters stay on the floating row.
+
 ## 2026-09-06 — TD chat answers typical director requests
 
 - Planner prompt is a short tool list + few-shots (no 231-route dump). `say` is a string field, never a tool.

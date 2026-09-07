@@ -1,4 +1,5 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
+import { enhanceSelect } from "./combobox.js";
 import {
   bulkBarHidden,
   selectHintHidden,
@@ -9,6 +10,8 @@ import {
   emailCreateGuard,
   EMAIL_MSG_ID,
   reviewFormState,
+  reviewDetectedPlayers,
+  inboxRowClickOpensReview,
   fileWithoutPlayerGate,
   inboxConfidence,
 } from "./inbox_ui.js";
@@ -336,14 +339,21 @@ export function createInboxPanel(ctx) {
         return cb;
       } },
     { title: "Received", field: "received_at", width: 110, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
-    // Which tournament this email is filed under. The inbox shows every
-    // tournament's mail; this column (+ its header filter) is how the TD scopes
-    // or reassigns. Header-filtered to the active tournament by default.
-    { title: "Tournament", field: "tournament_name", width: 150,
-      formatter: (c) => c.getValue() ? hstr`${c.getValue()}` : `<span class="muted">— unassigned —</span>`,
-      headerFilter: "input" },
-    { title: "From", field: "from_address" },
-    { title: "Subject", field: "subject", formatter: (c) => {
+    { title: "From", field: "from_address", minWidth: 140, widthGrow: 1 },
+    // Review sits here (early, after From) so the TD can open the message
+    // without scrolling past Player / Classification. Row click does the same.
+    { title: "Review", field: "_review", headerSort: false, width: 80, minWidth: 80, widthGrow: 0,
+      formatter: (cell) => {
+        const m = cell.getData();
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "btn-link";
+        btn.textContent = "Review";
+        btn.title = "Open the full email in a modal";
+        btn.setAttribute("aria-label", "Review email");
+        btn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
+        return btn;
+      } },
+    { title: "Subject", field: "subject", minWidth: 180, widthGrow: 2, formatter: (c) => {
         const m = c.getData();
         const corr = m.amends_email_id ? ' <span class="badge badge-info" title="corrects an earlier email">↻ correction</span>' : "";
         const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
@@ -355,7 +365,7 @@ export function createInboxPanel(ctx) {
     // USTA # (number cell). Display priority per slot: matched roster player →
     // (name, USTA#) parsed from the email text (✉) → bare email-text number.
     { title: "Player 1", columns: [
-      { title: "Player", field: "detected_player_name", width: 165, ..._PLAYER_EDITOR,
+      { title: "Player", field: "detected_player_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
         formatter: (cell) => _inboxNameCell(cell, 0),
         headerFilter: "input",
         headerFilterFunc: (term, _v, e) =>
@@ -373,7 +383,7 @@ export function createInboxPanel(ctx) {
             .includes(String(term).trim()) },
     ] },
     { title: "Player 2", columns: [
-      { title: "Player", field: "detected_partner_name", width: 165, ..._PLAYER_EDITOR,
+      { title: "Player", field: "detected_partner_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
         formatter: (cell) => _inboxNameCell(cell, 1),
         headerFilter: "input",
         headerFilterFunc: (term, _v, e) =>
@@ -408,18 +418,14 @@ export function createInboxPanel(ctx) {
       } },
     { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
       headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 150, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 48, cssClass: "grid-actions-cell",
       formatter: (cell) => {
-        // Review is the primary per-row action; Suggest / File / Delete fold into
-        // a ⋯ overflow menu (design-crit I-2) to keep the row uncluttered. The
-        // menu is body-anchored so it isn't clipped by the grid cell.
+        // Suggest / File / Delete fold into a ⋯ overflow menu (design-crit I-2).
+        // Review lives in its own early column. The menu is body-anchored so it
+        // isn't clipped by the grid cell.
         const m = cell.getData(); const row = cell.getRow();
         const fileable = !!FILE_TARGETS[m.classification];
         const wrap = document.createElement("div"); wrap.className = "grid-actions";
-        const rvBtn = document.createElement("button"); rvBtn.type = "button";
-        rvBtn.className = "btn-link"; rvBtn.textContent = "Review";
-        rvBtn.title = "Open the full email in a modal";
-        rvBtn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
 
         const doSuggest = async () => {
           try {
@@ -618,7 +624,7 @@ export function createInboxPanel(ctx) {
           { label: "Delete email", danger: true, onClick: doDelete },
         ];
         const menu = makeMenuButton("⋯", items, { className: "btn-icon row-more", title: "More actions", anchor: true, noCaret: true });
-        wrap.append(rvBtn, menu); return wrap;
+        wrap.append(menu); return wrap;
       } },
   ], "inbox",
   "Inbox empty — paste a forwarded email above, or use Import → PDF. "
@@ -710,24 +716,63 @@ export function createInboxPanel(ctx) {
     }).join("\n");
   }
 
-  async function _populateInboxPlayerSelect(activeId) {
-    const sel = document.getElementById("inbox-detail-player");
-    if (!sel) return;
-    // Populate once per open: roster of the active tournament.
-    sel.innerHTML = '<option value="">— none —</option>';
-    if (!activeId) return;
-    try {
-      const roster = await api(`/tournaments/${activeId}/players`);
-      for (const r of roster) {
-        const o = document.createElement("option"); o.value = r.player_id;
-        const usta = r.usta_number ? ` (${r.usta_number})` : "";
-        o.textContent = `${r.last_name || ""}, ${r.first_name || ""}${usta}`.trim();
+  function _reviewPlayerOptions() {
+    return Object.values(getPlayersById())
+      .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)));
+  }
+  function _resolveReviewSlotId(slot) {
+    const usta = slot && slot.usta;
+    if (usta) {
+      const byUsta = getPlayersByUsta();
+      const hit = byUsta && byUsta[usta];
+      if (hit && hit.id != null) return String(hit.id);
+    }
+    return (slot && slot.id) || "";
+  }
+  function _renderInboxDetailPlayers(m, classification) {
+    const box = document.getElementById("inbox-detail-players");
+    if (!box) return;
+    const slots = reviewDetectedPlayers({ ...m, classification: classification || m.classification });
+    const opts = _reviewPlayerOptions();
+    box.replaceChildren();
+    slots.forEach((slot, i) => {
+      const wrap = document.createElement("div");
+      wrap.className = "inbox-detail-player-slot";
+      const lab = document.createElement("label");
+      lab.textContent = slots.length === 1 ? "Player" : `Player ${i + 1}`;
+      const sel = document.createElement("select");
+      sel.className = "inbox-detail-player-sel";
+      sel.dataset.slot = String(i);
+      sel.setAttribute("aria-label", slots.length === 1
+        ? "Player detected on this email"
+        : `Player ${i + 1} detected on this email`);
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "— none —";
+      sel.appendChild(none);
+      for (const p of opts) {
+        const o = document.createElement("option");
+        o.value = String(p.id);
+        const usta = p.usta_number ? ` (${p.usta_number})` : "";
+        o.textContent = `${p.last_name || ""}, ${p.first_name || ""}${usta}`.trim();
         sel.appendChild(o);
       }
-    } catch (_) { /* leave just the "none" option */ }
+      sel.value = _resolveReviewSlotId(slot);
+      lab.appendChild(sel);
+      wrap.appendChild(lab);
+      if (slot.hint && !_resolveReviewSlotId(slot)) {
+        const hint = document.createElement("span");
+        hint.className = "inbox-detail-player-hint muted";
+        hint.textContent = `From email: ${slot.hint}`;
+        wrap.appendChild(hint);
+      }
+      box.appendChild(wrap);
+      enhanceSelect(sel);
+      if (typeof sel._comboSync === "function") sel._comboSync();
+    });
   }
 
   let _inboxDetailOpenGen = 0;
+  let _inboxDetailEmail = null;
   function _openInboxDetail(m) {
     const form = reviewFormState(m);
     const gen = ++_inboxDetailOpenGen;
@@ -735,6 +780,7 @@ export function createInboxPanel(ctx) {
     _inboxDetailId = m.id;
     _inboxDetailTid = m.tournament_id ?? null;  // preserve on save (don't re-home to active)
     _inboxDetailPartnerId = m.detected_partner_id ?? null;
+    _inboxDetailEmail = m;
     const box = document.getElementById("inbox-detail");
     box.hidden = false;
     document.getElementById("inbox-detail-subject").textContent = m.subject || "(no subject)";
@@ -754,14 +800,7 @@ export function createInboxPanel(ctx) {
     // Always reset reason from this email (empty when not a withdrawal) so the
     // previous email's Withdrawal/filed values cannot leak into the next open.
     _syncInboxReasonRow(form.classification, form.reason);
-    // Player picker reflects the detected_player_id (or "none").
-    _populateInboxPlayerSelect(m.tournament_id || (getActive() && getActive().id))
-      .then(() => {
-        if (gen !== _inboxDetailOpenGen) return;
-        const psel = document.getElementById("inbox-detail-player");
-        psel.value = form.playerId;
-        if (typeof psel._comboSync === "function") psel._comboSync();
-      });
+    _renderInboxDetailPlayers(m, form.classification);
     // Amendment picker: the earlier email this one corrects + the superseded flag.
     _populateInboxAmendsSelect(m, gen);
     setMsg("inbox-detail-msg", "", true);
@@ -780,7 +819,10 @@ export function createInboxPanel(ctx) {
   }
   // Toggle the reason row when the classification is changed in the modal.
   document.getElementById("inbox-detail-classification")
-    ?.addEventListener("change", (e) => _syncInboxReasonRow(e.target.value));
+    ?.addEventListener("change", (e) => {
+      _syncInboxReasonRow(e.target.value);
+      if (_inboxDetailEmail) _renderInboxDetailPlayers(_inboxDetailEmail, e.target.value);
+    });
   // Fill the "corrects earlier email" picker with the other emails in this
   // email's tournament, select the current link, and show the superseded flag.
   async function _populateInboxAmendsSelect(m, gen) {
@@ -814,6 +856,7 @@ export function createInboxPanel(ctx) {
   });
   function _closeInboxDetail() {
     _inboxDetailId = null;
+    _inboxDetailEmail = null;
     document.getElementById("inbox-detail").hidden = true;
   }
   // Esc closes the detail modal — but not while focus is in a form control
@@ -856,15 +899,20 @@ export function createInboxPanel(ctx) {
       e.target.value = "";
     }
   });
-  // Note: rowClick used to open the detail pane; replaced by the per-row
-  // Review button so a stray click while bulk-selecting doesn't pop the modal.
+  inboxGrid.grid.on("rowClick", (ev, row) => {
+    if (!inboxRowClickOpensReview(ev && ev.target)) return;
+    const data = row && row.getData && row.getData();
+    if (data) _openInboxDetail(data);
+  });
   document.getElementById("inbox-detail-close").addEventListener("click", _closeInboxDetail);
   document.getElementById("inbox-detail-save").addEventListener("click", async () => {
     if (_inboxDetailId == null) return;
     const cls = document.getElementById("inbox-detail-classification").value;
     const status = document.getElementById("inbox-detail-status").value;
-    const pickerVal = document.getElementById("inbox-detail-player").value;
-    const detected_player_id = pickerVal ? Number(pickerVal) : null;
+    const pickers = [...document.querySelectorAll("#inbox-detail-players select")];
+    const ids = pickers.map((s) => (s.value ? Number(s.value) : null));
+    const detected_player_id = ids[0] || null;
+    const detected_partner_id = detected_player_id == null ? null : (ids[1] || null);
     if (status === "filed") {
       const gate = fileWithoutPlayerGate(cls, detected_player_id);
       if (!gate.ok) {
@@ -882,9 +930,7 @@ export function createInboxPanel(ctx) {
           tournament_id: _inboxDetailTid ?? (getActive() && getActive().id) ?? null,
           classification: cls, status,
           detected_player_id,
-          // keep the detected partner unless the primary was cleared (the pane
-          // has no partner picker; the inbox grid's Player 2 column does)
-          detected_partner_id: detected_player_id == null ? null : _inboxDetailPartnerId,
+          detected_partner_id,
         }),
       });
       setMsg("inbox-detail-msg", "saved", true);

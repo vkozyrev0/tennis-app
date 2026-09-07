@@ -53,11 +53,19 @@ test("inbox grid is a sized grid-mount; action cells keep pointer-events", () =>
   assert.match(css, /ag-body-viewport\s*\{\s*min-height:\s*96px/);
 });
 
-test("grid headers are compact 8pt / 22px", () => {
-  const css = readFileSync(join(here, "../styles.css"), "utf8");
-  assert.match(css, /--ag-header-height:\s*22px/);
-  assert.match(css, /\.ag-header-cell-text[\s\S]{0,200}font-size:\s*8pt/);
-  assert.equal(LIST_HEADER_ROW_HEIGHT, 22);
+test("grid headers stay 8pt in a 20px Quartz header row", () => {
+  const theme = readFileSync(join(here, "../vendor/ag-theme-courtops.css"), "utf8");
+  assert.match(theme, /--ag-header-height:\s*20px/);
+  assert.match(theme, /font-size:\s*8pt/);
+  assert.match(theme, /--ag-icon-size:\s*14px/);
+  assert.doesNotMatch(theme, /--ag-header-height:\s*16px/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /ag-theme-courtops\.css/);
+  assert.equal(LIST_HEADER_ROW_HEIGHT, 20);
+  const grids = readFileSync(join(here, "grids.js"), "utf8");
+  assert.match(grids, /headerHeight:\s*LIST_HEADER_ROW_HEIGHT/);
+  assert.match(grids, /floatingFiltersHeight:\s*LIST_HEADER_ROW_HEIGHT/);
+  assert.match(grids, /suppressHeaderFilterButton:\s*true/);
 });
 
 console.log(`\n${passed} layout checks passed`);

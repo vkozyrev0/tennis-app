@@ -37,8 +37,8 @@ def test_corpus_classification_split():
     # Pairing-change confirmations stay doubles even without two extracted names.
     # Quote-stripping turns a few reply stubs into `other`.
     assert counts["withdrawal"] == 9
-    assert counts["doubles"] >= 14
-    assert counts["other"] >= 5
+    assert counts["doubles"] >= 15
+    assert counts["other"] >= 4
     assert counts["withdrawal"] + counts["doubles"] + counts["other"] == 30
 
 
@@ -72,6 +72,22 @@ def test_doubles_pairing_request_mentioning_withdraw_classifies_as_doubles():
     assert classify("L3 Southern - Withdrawal Request",
         "Zeal Reynolds will be unable to participate. Please withdraw her "
         "from singles and doubles.") == "withdrawal"
+
+
+def test_event_title_doubles_subjects_stay_doubles_without_two_names():
+    # QA: event-title subjects were Other when no pair was extracted.
+    assert classify("Southerns Boys 14 Doubles", "") == "doubles"
+    assert classify("Southerns Boys 14 Doubles", "Thank you") == "doubles"
+    assert classify("Boys 14s Doubles Confirmation-Level 3 Macon", "") == "doubles"
+    assert classify("Re: Boys 14s Doubles Confirmation-Level 3 Macon",
+                    "[Date: Tuesday, May 26, 2026]\n[To: Gemma Kim]\n\nC: Inkilh@gmail.com"
+                    ) == "doubles"
+    assert classify("Re: Southerns Boys 14 Doubles",
+                    "Thank you\nSara Hudgens") == "doubles"
+    # Generic doubles-topic ack without an age-division event title stays other.
+    assert classify("RE: **EXTERNAL** Re: L3 Macon - Doubles",
+        "No worries thank you!! I do not have a message from Mia's parent yet. "
+        "I will need the confirmation to pair them. Thanks, Julie") == "other"
 
 
 def test_named_doubles_confirmation_and_pairing_change():

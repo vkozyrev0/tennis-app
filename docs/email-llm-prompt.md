@@ -31,6 +31,15 @@ This PDF corpus has **singles and doubles cancellations** (gold =
 `late_entry` is still in the prompt so a future “can we still enter
 singles?” email classifies without a new template.
 
+Each doubles-topic PDF row is **copied** with doubles→singles
+(`backend/tests/singles_from_doubles.py`, gold in
+`tournament_emails_singles_gold.json`). Heuristic `classify()` labels
+those copies `late_entry` (never `doubles`). Leftover 1.5B gold keeps
+named pairing as `doubles` and only the add-for-singles copy as
+`late_entry` — extra singles few-shots broke the original 30/30, so the
+shipped prompt is unchanged. Acks stay `other`; withdrawals stay
+`withdrawal`.
+
 `extract_email` returns the model’s parsed JSON **unguarded** (no
 post-rewrite of `intent`).
 
@@ -253,3 +262,5 @@ pairing from the Subject); `will partner` with two named players stays
 - `test_zz_pdf_leftover_llm.py` — one `leftover_model_intent` case per
   parsed `tournament_emails.pdf` row (unguarded `parse_llm_json`); gold in
   `backend/tests/fixtures/tournament_emails_gold.json`.
+- `test_zz_singles_corpus.py` — doubles→singles copies: heuristic never
+  `doubles`; leftover gold in `tournament_emails_singles_gold.json`.

@@ -147,7 +147,9 @@ def test_leftover_prompt_is_one_shared_template():
     assert a.count("Now extract") == 1
     assert '{"intent":"withdrawal"' in a
     assert '{"intent":"doubles"' in a
+    assert '{"intent":"late_entry"' in a
     assert '{"intent":"other"' in a
+    assert "enter jordan blake in singles" in a.lower()
     assert a.count("{subject}") == 0
 
 

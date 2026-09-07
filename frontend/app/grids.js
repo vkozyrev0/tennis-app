@@ -2,6 +2,7 @@ import { labelHeaderFilters, reflectAriaSort } from "./grid_a11y.js";
 import { applySavedRow, saveInGridCell } from "./cell_edit.js";
 import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
 import { dateCellParser, formatLocaleDate } from "./td_helpers.js";
+import { LIST_HEADER_ROW_HEIGHT } from "./layout.js";
 
 export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
 
@@ -237,7 +238,9 @@ export function createGridFactories(ctx) {
     if (col.field && !col.field.startsWith("_")) cd.field = col.field;
     if (col.width) cd.width = col.width;
     if (col.minWidth) cd.minWidth = col.minWidth;
+    else if (!col.width) cd.minWidth = 96;
     // widthGrow 0 / fixed width → no flex; else share leftover space (fitColumns).
+    // Flex columns without a floor were collapsing to a few pixels (From / Subject).
     if (col.width || col.widthGrow === 0) cd.flex = 0; else cd.flex = col.widthGrow || 1;
     if (col.headerSort === false) cd.sortable = false;
     // initial sort: AG with getRowId set does delta updates and doesn't preserve
@@ -399,11 +402,15 @@ export function createGridFactories(ctx) {
       isExternalFilterPresent: () => !!extFilter,
       doesExternalFilterPass: (node) => !extFilter || extFilter(node.data),
       defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
+        suppressHeaderFilterButton: true,
         ...(tabOpts.columnDefaults && tabOpts.columnDefaults.tooltip ? {} : {}) },
       getRowId: tabOpts.index ? (p) => String(p.data[tabOpts.index]) : undefined,
       singleClickEdit: tabOpts.editTriggerEvent === "click",
       stopEditingWhenCellsLoseFocus: true,
       suppressMovableColumns: true,
+      headerHeight: LIST_HEADER_ROW_HEIGHT,
+      groupHeaderHeight: LIST_HEADER_ROW_HEIGHT,
+      floatingFiltersHeight: LIST_HEADER_ROW_HEIGHT,
       overlayNoRowsTemplate: `<span class="ag-empty">${esc(tabOpts.placeholder || "No data")}</span>`,
       domLayout: "normal",
       onCellValueChanged: (p) => {

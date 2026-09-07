@@ -64,7 +64,7 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       <h3>Header chips</h3>
       <ul class="help-list">
         <li><strong>API / DB / Intelligence</strong> — three independent status
-          chips. Yellow pip = healthy. Amber = on but not answering. Red = down.
+          chips. Green pip = healthy. Amber = on but not answering. Red = down.
           Gray = Intelligence off (keyword triage only).</li>
         <li><strong>Dark / Light</strong> — theme toggle.</li>
         <li><kbd>?</kbd> — this Help center.</li>
@@ -102,6 +102,7 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
           <tr><td>Divisions / Events</td><td>Junior/adult division catalog and event types</td></tr>
           <tr><td>T-shirts</td><td>Cumulative shirt inventory across tournaments</td></tr>
           <tr><td>Users</td><td>Admin/TD logins (not official portal accounts)</td></tr>
+          <tr><td>Gmail</td><td>IMAP app-password feed, UID cursor, Get latest</td></tr>
           <tr><td>Import</td><td>Stage CSV/XLSX/PDF rows, validate, then merge into catalogs</td></tr>
         </tbody>
       </table>
@@ -184,6 +185,14 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       </ol>
       <p><strong>Triage</strong> runs those three in one pass on a selection.</p>
 
+      <h3>Review</h3>
+      <p>Click <strong>Review</strong> (or the row) to open the original message.
+      Classification, status, and <strong>Players detected</strong> are on that
+      dialog. Doubles and pairing emails show every named player (one picker each);
+      a singles-style email shows one. USTA #s parsed from the body win over a
+      last-name collision, so two Davises stay two people. Save writes Player 1
+      and Player 2 back onto the email.</p>
+
       <h3>Status lifecycle</h3>
       <p class="help-flow-line">
         <span class="help-pill">new</span>
@@ -201,8 +210,14 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
         <li><strong>Webhook ingest</strong> — providers POST to
           <code>/api/ingest/email</code> with <code>INGEST_TOKEN</code>; optional
           per-tournament ingest address for routing.</li>
-        <li><strong>PDF import</strong> — stage a tournament-emails PDF via Setup → Import.</li>
+        <li><strong>PDF import</strong> — Inbox or Setup → Import, then merge.</li>
+        <li><strong>Gmail feed</strong> — Setup → Gmail stores the TD address + App
+          Password (encrypted) and a UID cursor. <em>Get latest</em> pulls only
+          newer mail into Inbox (source <code>gmail</code>). Step-by-step enablement
+          is on that page.</li>
       </ul>
+      <p>The grid is scoped to the tournament in <em>Working on</em> (no Tournament
+      column). <strong>Review</strong> sits after From and opens the message.</p>
       <p class="help-tip"><strong>Provenance:</strong> every filed list row can point
       back to its source email so you can re-open the original wording later.</p>
     `,

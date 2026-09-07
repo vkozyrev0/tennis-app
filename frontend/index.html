@@ -8,8 +8,9 @@
   <!-- AG Grid Community — every grid in the app. -->
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
+  <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=1" />
   <link rel="stylesheet" href="/tokens.css?v=8" />
-  <link rel="stylesheet" href="/styles.css?v=109" />
+  <link rel="stylesheet" href="/styles.css?v=114" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -187,6 +188,7 @@
       <button class="tab" data-target="panel-events">Events</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
       <button class="tab" data-target="panel-users">Users</button>
+      <button class="tab" data-target="panel-gmail">Gmail</button>
       <!-- design-crit pass 2 #2: folded the orphan one-tab "Data" group into
            Setup. Bulk import is a Setup workflow conceptually (you stage
            records and merge them into the catalogs); keeping it as its own
@@ -603,6 +605,69 @@
           <thead><tr><th>Username</th><th>Created</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-gmail">
+      <div class="card">
+        <h3>Gmail inbox feed</h3>
+        <p class="muted">Connect the TD Gmail so CourtOps can pull new parent/player mail into the review inbox. Credentials stay on this server (the app password is encrypted). <strong>Get latest</strong> only fetches messages newer than the stored IMAP UID cursor.</p>
+        <p class="muted" id="gmail-feed-status"></p>
+        <form id="gmail-feed-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label class="check"><input type="checkbox" name="enabled" /> Enable Gmail feed</label>
+          </div>
+          <div class="row">
+            <label>Gmail address
+              <input name="gmail_address" type="email" autocomplete="off" placeholder="td@gmail.com" />
+            </label>
+            <label>App password
+              <input name="app_password" type="password" autocomplete="new-password"
+                     placeholder="16-character App Password" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Mailbox
+              <input name="mailbox" value="INBOX" />
+            </label>
+            <label>Gmail search (optional)
+              <input name="gmail_query" placeholder="from:playtennis.usta.com newer_than:14d" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Poll every (minutes)
+              <input name="poll_minutes" type="number" min="1" max="1440" value="15" />
+            </label>
+            <label>First-fetch lookback (days)
+              <input name="lookback_days" type="number" min="1" max="90" value="7" />
+            </label>
+            <label>File under tournament
+              <select name="tournament_id"></select>
+            </label>
+          </div>
+          <div class="actions-row">
+            <button type="submit">Save settings</button>
+            <button type="button" id="gmail-feed-fetch">Get latest</button>
+            <span class="msg" id="gmail-feed-msg"></span>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h3>How to enable the Gmail feed</h3>
+        <p class="muted">Gmail will not accept the account’s normal password over IMAP. Use a Google <strong>App Password</strong> (2-Step Verification required). CourtOps talks to <code>imap.gmail.com</code> and never sends mail.</p>
+        <ol class="help-steps">
+          <li>Sign in to the TD Gmail in a browser (the mailbox that receives USTA / parent mail, or a dedicated inbox that those messages are forwarded to).</li>
+          <li>Open <a href="https://myaccount.google.com/security" target="_blank" rel="noopener">Google Account → Security</a>.</li>
+          <li>Turn on <strong>2-Step Verification</strong> if it is off. App Passwords only appear after that.</li>
+          <li>Open <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App passwords</a>. If Google hides the page, search the account for “App passwords”.</li>
+          <li>Create an app password: app = <strong>Mail</strong>, device = <strong>Other (CourtOps)</strong>. Google shows a 16-character password once.</li>
+          <li>Copy that password into <strong>App password</strong> above (spaces are fine). Save settings. The password is encrypted at rest and is never shown again.</li>
+          <li>Optional: set a <strong>Gmail search</strong> so the feed only pulls tournament mail, e.g. <code>from:playtennis.usta.com</code> or <code>newer_than:14d</code> (<a href="https://support.google.com/mail/answer/7190" target="_blank" rel="noopener">Gmail search operators</a>).</li>
+          <li>Optional: pick <strong>File under tournament</strong>. If you leave it blank, CourtOps routes by the message <code>To:</code> against Setup → Tournaments → Ingest address.</li>
+          <li>Click <strong>Get latest</strong>. New messages land in Inbox with source <code>gmail</code>. The UID cursor advances so the next fetch only asks for newer mail. First run uses the lookback window (default 7 days, at most 50 messages).</li>
+        </ol>
+        <p class="help-tip"><strong>Workspace / school Google accounts:</strong> the admin may have to allow IMAP and App Passwords (or “Less secure apps” is not enough — use an App Password). If login fails with “Application-specific password required”, the field is still the account’s normal Gmail password instead of the 16-character App Password.</p>
+        <p class="help-tip"><strong>Forwarding:</strong> you can keep using a personal Gmail and auto-forward USTA mail into the TD inbox, then connect that inbox here. Poll minutes are stored for a future background worker; until then, use Get latest (or refresh this page and fetch after mail arrives).</p>
       </div>
     </section>
 
@@ -1086,7 +1151,7 @@
         <div id="inbox-status-summary" class="inbox-summary" hidden></div>
         <div id="inbox-aging" class="inbox-aging" hidden></div>
         <table id="inbox-table" class="list-table">
-          <thead><tr><th></th><th>Received</th><th>From</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Received</th><th>From</th><th>Review</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <!-- Click "Review" on a row to open it. Modal overlay so the list
@@ -1105,7 +1170,7 @@
             <!-- Styled pre with header-aware highlighting. Body text is
                  inserted as innerHTML by _formatEmailBody() — escaped first,
                  then the email-header lines get colored spans. -->
-            <pre id="inbox-detail-body" tabindex="0" aria-label="Email body"></pre>
+            <pre id="inbox-detail-body" class="inbox-email-body" tabindex="0" aria-label="Email body"></pre>
           </div>
           <div class="row">
             <label>Classification
@@ -1118,12 +1183,11 @@
                 <option value="needs_followup">needs_followup</option>
               </select>
             </label>
-            <label>Player (detected)
-              <select id="inbox-detail-player" aria-label="Player this email is about">
-                <option value="">— none —</option>
-              </select>
-            </label>
           </div>
+          <fieldset class="inbox-detail-players">
+            <legend id="inbox-detail-players-label">Players detected</legend>
+            <div id="inbox-detail-players"></div>
+          </fieldset>
           <!-- Withdrawal reason — auto-parsed from the email; only shown when
                the email is classified as a withdrawal. Editable so the TD can
                correct it before filing. -->
@@ -1563,6 +1627,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=258"></script>
+  <script type="module" src="/app.js?v=266"></script>
 </body>
 </html>

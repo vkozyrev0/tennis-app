@@ -4,6 +4,10 @@ Dedicated tournament addresses can forward into the **review inbox** without
 manual paste. Classification is still the local keyword suggester (no LLM);
 a human files each message into structured lists.
 
+A **Gmail IMAP feed** (Setup → Gmail) is the other path: the TD stores a
+Gmail address + App Password (encrypted) and a UID cursor. **Get latest**
+pulls only newer messages. See [How to enable](#gmail-imap-feed) below.
+
 ## Enable
 
 Set a shared secret on the server:
@@ -156,6 +160,29 @@ curl -sS -X POST http://localhost:8000/api/ingest/email \
 
 Then open the Inbox tab — the message should appear with classification
 `late_entry` (keyword suggest) and status `new`.
+
+## Gmail IMAP feed
+
+Setup → **Gmail** stores one feed per deployment:
+
+| Field | Purpose |
+|---|---|
+| Gmail address + App Password | IMAP login (`imap.gmail.com:993`). Password is Fernet-encrypted (`secret_enc`); GET never returns it (`has_secret` only). |
+| Mailbox | Default `INBOX`. |
+| Gmail search | Optional `X-GM-RAW` query (`from:playtennis.usta.com`, `newer_than:14d`, …). |
+| Poll minutes | Stored for a future worker; until then use **Get latest**. |
+| Lookback days | First fetch (no UID cursor yet) searches `SINCE` that many days. At most 50 messages per fetch. |
+| Tournament | Optional. Blank → route by `To:` vs tournament ingest address. |
+| `last_uid` / `uidvalidity` | Cursor so the next fetch only asks for newer UIDs. If Gmail rebuilds the mailbox (`UIDVALIDITY` changes), the cursor resets. |
+
+API (admin session):
+
+- `GET /api/gmail-feed` — public settings (no secret)
+- `PUT /api/gmail-feed` — save; omit `app_password` to keep the stored one
+- `POST /api/gmail-feed/fetch` — IMAP pull → `ingest_email` (`ingest_source=gmail`)
+
+Enablement steps (2-Step Verification, App passwords, Get latest) live on the
+Setup → Gmail page.
 
 ## Wiring checklist (next real event)
 

@@ -16,6 +16,8 @@ import {
   emailCreateGuard,
   EMAIL_MSG_ID,
   reviewFormState,
+  reviewDetectedPlayers,
+  inboxRowClickOpensReview,
   fileWithoutPlayerGate,
   FILE_NEEDS_PLAYER_REASON,
   inboxConfidence,
@@ -97,6 +99,37 @@ test("unknown key", () => {
   assert.equal(inboxShortcutGate("x", 0).ok, false);
 });
 
+test("reviewDetectedPlayers is one slot, or many for doubles/name pairs", () => {
+  const one = reviewDetectedPlayers({
+    classification: "withdrawal", detected_player_id: 11,
+  });
+  assert.equal(one.length, 1);
+  assert.equal(one[0].id, "11");
+  const two = reviewDetectedPlayers({
+    classification: "doubles",
+    detected_player_id: 1,
+    detected_partner_id: 2,
+  });
+  assert.equal(two.length, 2);
+  assert.equal(two[1].id, "2");
+  const fromPairs = reviewDetectedPlayers({
+    classification: "doubles",
+    detected_name_pairs: [
+      { name: "Alexandra Dimitrov", usta: "2018522196" },
+      { name: "Casey Davis", usta: "2018389707" },
+    ],
+  });
+  assert.equal(fromPairs.length, 2);
+  assert.equal(fromPairs[0].name, "Alexandra Dimitrov");
+  assert.equal(fromPairs[1].usta, "2018389707");
+  const members = reviewDetectedPlayers({
+    classification: "pairing_avoidance",
+    detected_member_ids: [8, 9, 10],
+    detected_member_names: ["A", "B", "C"],
+  });
+  assert.equal(members.length, 3);
+});
+
 test("review modal state comes only from the current email", () => {
   const a = reviewFormState({
     classification: "withdrawal", status: "filed",
@@ -113,6 +146,7 @@ test("review modal state comes only from the current email", () => {
   assert.equal(b.classification, "doubles");
   assert.equal(b.status, "new");
   assert.equal(b.playerId, "22");
+  assert.equal(b.players.length, 2);
   assert.equal(b.reason, "");
   const empty = reviewFormState({ classification: "withdrawal", status: "new" });
   assert.equal(empty.playerId, "");
@@ -125,6 +159,11 @@ test("review open resyncs combo overlays so classification/status are this email
   assert.match(src, /inbox-detail-classification[\s\S]*_comboSync/);
   assert.match(src, /inbox-detail-status/);
   assert.match(src, /_populateInboxAmendsSelect\(m, gen\)/);
+  assert.match(src, /_renderInboxDetailPlayers/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /Players detected/);
+  assert.match(html, /id="inbox-detail-players"/);
+  assert.doesNotMatch(html, /Player \(detected\)/);
 });
 
 test("confidence formatter does not nest hstr strings (escaped markup)", () => {
@@ -176,6 +215,42 @@ test("classified withdrawal with a player suggestion is not Low", () => {
     detected_usta_text: "1234567890",
   });
   assert.equal(otherUnmatched.label, "Low");
+});
+
+test("inbox Review control and non-editor row click open the review modal", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
+  assert.match(src, /stopPropagation\(\);\s*_openInboxDetail\(m\)/);
+  assert.match(src, /inboxGrid\.grid\.on\("rowClick"/);
+  assert.match(src, /inboxRowClickOpensReview/);
+  assert.match(src, /_openInboxDetail\(data\)/);
+  const fake = (sel) => ({ closest: (q) => (sel.split(",").some((s) => q.includes(s.trim())) ? {} : null) });
+  assert.equal(inboxRowClickOpensReview(null), true);
+  assert.equal(inboxRowClickOpensReview({ closest: () => null }), true);
+  assert.equal(inboxRowClickOpensReview(fake("input")), false);
+  assert.equal(inboxRowClickOpensReview(fake("button")), false);
+  assert.equal(inboxRowClickOpensReview(fake(".editable-cell")), false);
+  assert.equal(inboxRowClickOpensReview(fake(".grid-actions")), false);
+});
+
+test("inbox Review column sits after From; Email and Tournament columns are gone", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
+  const from = src.search(/title:\s*"From"/);
+  const review = src.search(/title:\s*"Review"/);
+  const subject = src.search(/title:\s*"Subject"/);
+  assert.ok(from >= 0 && review > from && subject > review);
+  assert.doesNotMatch(src, /title:\s*"Email"/);
+  assert.doesNotMatch(src, /title:\s*"Tournament"/);
+  assert.doesNotMatch(src, /_openOriginalEmail/);
+  const html = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../index.html"), "utf8");
+  assert.doesNotMatch(html, /id="inbox-original"/);
+});
+
+test("inbox From and Subject columns have a width floor so headers do not collapse", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
+  assert.match(src, /title:\s*"From"[\s\S]{0,80}minWidth:\s*1[4-9]\d/);
+  assert.match(src, /title:\s*"Subject"[\s\S]{0,80}minWidth:\s*1[6-9]\d/);
+  const grids = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "grids.js"), "utf8");
+  assert.match(grids, /else if \(!col\.width\) cd\.minWidth = 96/);
 });
 
 test("blank email reason is written to #email-msg", () => {

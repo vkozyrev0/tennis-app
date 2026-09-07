@@ -65,15 +65,72 @@ export function pruneSelection(selectedIds, presentIds) {
  */
 export { emailCreateGuard, EMAIL_MSG_ID } from "./td_helpers.js";
 
-/** Classification / Status / Player / Reason for the review modal — always from this email. */
+/** True when an inbox row click should open Review (not checkbox/editor/actions). */
+export function inboxRowClickOpensReview(target) {
+  if (!target || typeof target.closest !== "function") return true;
+  return !target.closest(
+    "input, button, a, select, textarea, .ag-cell-inline-editing, .grid-actions, .editable-cell",
+  );
+}
+
+/**
+ * Detected-player slots for the review modal. One row for a single-player
+ * email; two (or more) for doubles / pairing / parsed name pairs.
+ */
+export function reviewDetectedPlayers(m) {
+  if (!m) return [{ role: "player", id: "", name: "", usta: "", hint: "" }];
+  const cls = String(m.classification || "");
+  const pairs = Array.isArray(m.detected_name_pairs)
+    ? m.detected_name_pairs.filter(Boolean) : [];
+  const memberIds = Array.isArray(m.detected_member_ids)
+    ? m.detected_member_ids.filter((id) => id != null && id !== "") : [];
+  const memberNames = Array.isArray(m.detected_member_names) ? m.detected_member_names : [];
+  const primary = m.detected_player_id != null && m.detected_player_id !== ""
+    ? String(m.detected_player_id) : "";
+  const partner = m.detected_partner_id != null && m.detected_partner_id !== ""
+    ? String(m.detected_partner_id) : "";
+  const hintAt = (i, fallbackName, fallbackUsta) => {
+    const p = pairs[i] || {};
+    const name = String(p.name || fallbackName || "").trim();
+    const usta = String(p.usta || fallbackUsta || "").trim();
+    return { name, usta, hint: [name, usta].filter(Boolean).join(" · ") };
+  };
+  if (memberIds.length >= 2) {
+    return memberIds.map((id, i) => ({
+      role: i === 0 ? "player" : (i === 1 ? "partner" : "member"),
+      id: String(id),
+      ...hintAt(i, memberNames[i], ""),
+    }));
+  }
+  const n = Math.max(
+    cls === "doubles" ? 2 : 1,
+    pairs.length,
+    (primary ? 1 : 0) + (partner ? 1 : 0),
+  );
+  const slots = [];
+  for (let i = 0; i < n; i++) {
+    const id = i === 0 ? primary : (i === 1 ? partner : "");
+    const h = hintAt(
+      i,
+      i === 0 ? m.detected_player_name : m.detected_partner_name,
+      i === 0 ? m.detected_usta : m.detected_partner_usta,
+    );
+    slots.push({ role: i === 0 ? "player" : "partner", id, ...h });
+  }
+  return slots;
+}
+
+/** Classification / Status / Players / Reason for the review modal — always from this email. */
 export function reviewFormState(m) {
   const classification = (m && m.classification) || "";
-  const playerId = m && m.detected_player_id != null && m.detected_player_id !== ""
-    ? String(m.detected_player_id) : "";
+  const players = reviewDetectedPlayers(m);
+  const playerId = players[0] ? players[0].id : "";
   return {
     classification,
     status: (m && m.status) || "new",
     playerId,
+    partnerId: (players[1] && players[1].id) || "",
+    players,
     reason: classification === "withdrawal" ? String((m && m.detected_reason) || "") : "",
   };
 }

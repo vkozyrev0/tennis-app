@@ -54,7 +54,17 @@ _STRONG = [
                  r"\b(?:doubles?\s+)?pairing[- ]change\b",
                  r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b"]),
     ("late_entry", [r"\blate\s+(?:entry|entrant|add)\b", r"\bmissed\s+the\s+deadline\b",
-                    r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b"]),
+                    r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b",
+                    r"\badd\b[\s\S]{0,40}\bfor\s+singles\b",
+                    r"\benter\b[\s\S]{0,40}\bsingles\b",
+                    r"\bplay(?:ing)?\s+(?:in\s+)?(?:\w+\s+)?singles\b",
+                    r"\bconfirm(?:ed|ing)?\s+[\s\S]{0,40}\bfor\s+singles\b",
+                    r"\bsingles?\s+confirmation\b",
+                    r"\bwould\s+like\s+to\s+(?:play|enter|be\s+in)\s+[\s\S]{0,40}\bsingles\b",
+                    r"\bsingles?\s+partners?\b",
+                    r"\bwould\s+like\s+to\s+be\s+singles\s+partners?\b",
+                    r"\bpair(?:\s+up|\s+together)?\b[\s\S]{0,80}\bsingles\b",
+                    r"\bwill\s+partner\s+in[\s\S]{0,40}\bsingles\b"]),
 ]
 _STRONG_RE = [(label, [re.compile(p, re.I) for p in pats]) for label, pats in _STRONG]
 _DOUBLES_KEEP_ONE = [
@@ -67,6 +77,10 @@ _DOUBLES_KEEP_ONE = [
         r"\badd\b.{0,40}\bfor\s+doubles\b",
         r"\benter\b.{0,40}\bdoubles\b",
         r"\bfind\s+a\s+partner\b",
+        # Event-title subjects (Boys 14 Doubles / Southerns Boys 14 Doubles)
+        # are doubles even with no extracted pair — not generic "… Doubles" acks.
+        r"\b(?:boys?|girls?)\s*\d{1,2}(?:s|'s)?\s+doubles?\b",
+        r"\b[bg]\s*-?\s*\d{1,2}s?\s+doubles?\b",
     )
 ]
 
@@ -91,6 +105,13 @@ def _kw_match(text: str, kw) -> bool:
 
 
 _RANDOM_PAIR_RE = re.compile(r"\brandom\s+pair", re.I)
+_SINGLES_WORD_RE = re.compile(r"\bsingles?\b", re.I)
+_DOUBLES_WORD_RE = re.compile(r"\bdoubles?\b", re.I)
+
+
+def _singles_only(text: str) -> bool:
+    """True when the email is about singles and never mentions doubles."""
+    return bool(_SINGLES_WORD_RE.search(text)) and not _DOUBLES_WORD_RE.search(text)
 
 
 def classify(subject: str | None, body: str | None) -> str:
@@ -102,13 +123,18 @@ def classify(subject: str | None, body: str | None) -> str:
     # Strong pairing-change / confirmation phrases keep `doubles` even with one
     # named player — those are the emails that used to land as Other.
     if label == "doubles":
-        # Pairing-change / confirmation phrases keep doubles even with one name.
-        # Other STRONG doubles hits (e.g. "pair them") still need two players.
-        keep_one = any(p.search(text) for p in _DOUBLES_KEEP_ONE)
-        if (_doubles_name_count(subject, body) < 2
-                and not _RANDOM_PAIR_RE.search(text)
-                and not keep_one):
-            label = "other"
+        # Pairing / partner language on a singles-only email is a singles entry,
+        # not a doubles request (the doubles→singles fixture copies).
+        if _singles_only(text):
+            label = "late_entry"
+        else:
+            # Pairing-change / confirmation phrases keep doubles even with one name.
+            # Other STRONG doubles hits (e.g. "pair them") still need two players.
+            keep_one = any(p.search(text) for p in _DOUBLES_KEEP_ONE)
+            if (_doubles_name_count(subject, body) < 2
+                    and not _RANDOM_PAIR_RE.search(text)
+                    and not keep_one):
+                label = "other"
     if label == "withdrawal" and not extract_withdraw_name(subject, body):
         # Portal subject "Withdrawal Request" is enough to keep the label even
         # when the quoted original (with the name) was stripped.
@@ -132,17 +158,24 @@ def classify_timed(subject: str | None, body: str | None) -> tuple[str, int]:
 def _classify_raw(subject: str | None, body: str | None) -> str:
     subj = (subject or "").lower()
     text = f"{subj} {(body or '').lower()}"
+    singles_only = _singles_only(text)
     # 1) Strongest, unambiguous phrases first — resolves competing signals.
     for label, pats in _STRONG_RE:
+        if label == "doubles" and singles_only:
+            continue
         if any(p.search(text) for p in pats):
             return label
     # 2) The SUBJECT is the deliberate intent line; trust a keyword there over an
     #    incidental mention in the quoted body ("Macon L3 Doubles" → doubles).
     for label, keywords in _RULES:
+        if label == "doubles" and singles_only:
+            continue
         if any(_kw_match(subj, k) for k in keywords):
             return label
     # 3) Fall back to broad keywords over the whole text.
     for label, keywords in _RULES:
+        if label == "doubles" and singles_only:
+            continue
         if any(_kw_match(text, k) for k in keywords):
             return label
     return "other"

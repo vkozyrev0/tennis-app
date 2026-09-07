@@ -4,7 +4,7 @@
 
 // Inbox uses grouped headers (2 rows) + floating filters + h-scroll. A 220px
 // mount left ~58px of body after that chrome. Floor is chrome + ~2 data rows.
-export const LIST_HEADER_ROW_HEIGHT = 22;
+export const LIST_HEADER_ROW_HEIGHT = 20;
 export const LIST_GROUPED_HEADER_ROWS = 3; // group + column + floating filter
 export const LIST_ROW_HEIGHT = 32;
 export const LIST_MIN_DATA_ROWS = 2;

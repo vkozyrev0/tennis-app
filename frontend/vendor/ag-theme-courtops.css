@@ -1,0 +1,87 @@
+/* CourtOps compact Quartz — load AFTER vendor/ag-theme-quartz.css.
+   Quartz sizes the header as font-size + grid-size × 4.25 (≈48px at defaults).
+   This file only changes those theme parameters so 8pt labels + 14px icons
+   fit a 20px header row without clipping. Body rows stay 32px. */
+.ag-theme-quartz,
+.ag-theme-quartz-dark {
+  --ag-font-family: inherit;
+  --ag-font-size: 0.8rem;
+  --ag-grid-size: 4px;
+  --ag-icon-size: 14px;
+  /* 8pt (~11px) + 4px × 2.25 ≈ 20px — one line of label + sort icon. */
+  --ag-header-height: 20px;
+  --ag-row-height: 32px;
+  --ag-cell-horizontal-padding: 6px;
+  --ag-header-column-separator-display: none;
+  --ag-wrapper-border-radius: 8px;
+  --ag-borders: solid 1px;
+  --ag-border-color: var(--border);
+  --ag-row-border-color: var(--border);
+  --ag-header-background-color: transparent;
+  --ag-selected-row-background-color: var(--sel, rgba(0, 0, 0, 0.05));
+  --ag-row-hover-color: var(--sel, rgba(0, 0, 0, 0.04));
+  --ag-odd-row-background-color: rgba(0, 0, 0, 0.015);
+  --ag-accent-color: var(--accent);
+}
+
+:root[data-theme="dark"] .ag-theme-quartz {
+  --ag-background-color: var(--bg, #16181c);
+  --ag-foreground-color: var(--ink, #e6e6e6);
+  --ag-header-foreground-color: var(--ink, #e6e6e6);
+  --ag-header-background-color: transparent;
+  --ag-odd-row-background-color: rgba(255, 255, 255, 0.025);
+  --ag-row-hover-color: rgba(255, 255, 255, 0.06);
+  --ag-selected-row-background-color: var(--sel, rgba(255, 255, 255, 0.1));
+  --ag-border-color: var(--border);
+  --ag-row-border-color: var(--border);
+  --ag-input-background-color: rgba(255, 255, 255, 0.06);
+  --ag-input-border-color: var(--border);
+  --ag-control-panel-background-color: var(--bg);
+  --ag-secondary-foreground-color: var(--muted, #9aa0a6);
+  --ag-disabled-foreground-color: #6b6f76;
+}
+
+.ag-theme-quartz .ag-header-cell-text,
+.ag-theme-quartz .ag-header-group-text,
+.ag-theme-quartz .ag-header-group-cell-label {
+  font-size: 8pt;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.ag-theme-quartz .ag-header-cell,
+.ag-theme-quartz .ag-header-group-cell {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.ag-theme-quartz .ag-list-floating {
+  width: 100%;
+  box-sizing: border-box;
+  height: calc(var(--ag-header-height) - 4px);
+  min-height: 0;
+  margin: 0;
+  line-height: 1.15;
+  border: 1px solid var(--ag-border-color, var(--border));
+  border-radius: 3px;
+  background: var(--ag-background-color, var(--card));
+  color: inherit;
+  font: inherit;
+  font-size: 8pt;
+  padding: 0 0.2rem;
+}
+
+.ag-theme-quartz .ag-floating-filter-body {
+  display: flex;
+  align-items: stretch;
+}
+
+.ag-theme-quartz .ag-custom-filter {
+  padding: 6px;
+  min-width: 180px;
+}
+.ag-theme-quartz .ag-custom-filter input {
+  width: 100%;
+}
