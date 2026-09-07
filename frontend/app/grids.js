@@ -41,6 +41,20 @@ export function createGridFactories(ctx) {
   /* global agGrid */
   const _AG_THEME = "ag-theme-quartz";
 
+  // v33.2+ accepts theme:"legacy" so CSS-file Quartz (ag-theme-courtops) wins
+  // over the JS Theming API. This repo still vendors AG Grid 32.2, which has
+  // handleThemeGridOptionChange but treats the value as a Theme object — the
+  // string "legacy" then throws (startUse is not a function) and no grid mounts.
+  function _agLegacyCssTheme() {
+    const g = typeof agGrid === "undefined" ? null : agGrid;
+    if (!g) return undefined;
+    const ver = String(g.version || g.VERSION || "");
+    const maj = parseInt(ver.split(".")[0], 10);
+    const min = parseInt(ver.split(".")[1], 10) || 0;
+    if (Number.isFinite(maj) && (maj > 33 || (maj === 33 && min >= 2))) return "legacy";
+    return undefined;
+  }
+
   // A Tabulator-like `row` facade over an AG row node. Covers the imperative row
   // API the per-grid code calls: update() (merge a patch into the row data),
   // reformat() (re-run cell renderers for this row), delete() (drop the row).
@@ -398,9 +412,6 @@ export function createGridFactories(ctx) {
       rowData: [],
       isExternalFilterPresent: () => !!extFilter,
       doesExternalFilterPass: (node) => !extFilter || extFilter(node.data),
-      // v33+ defaults to the JS Theming API (14px Quartz). "legacy" uses the
-      // CSS files so CourtOps 8pt / 20px tokens actually apply.
-      theme: "legacy",
       defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
         suppressHeaderFilterButton: false,
         wrapHeaderText: false, autoHeaderHeight: false, floatingFilter: false,
@@ -464,6 +475,8 @@ export function createGridFactories(ctx) {
         },
       };
     }
+    const legacyTheme = _agLegacyCssTheme();
+    if (legacyTheme !== undefined) opts.theme = legacyTheme;
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
     // Toggle the collapse on/off at the mobile breakpoint: hide the collapsible
@@ -547,6 +560,9 @@ export function createGridFactories(ctx) {
     // Each entry is { header, key, fmt? }; fmt(row) lets you compute e.g. a
     // comma-joined player USTA list for pairing-avoidance groups.
     const tableEl = document.getElementById(tableId);
+    if (!tableEl) {
+      return { initialized: false, setData() {}, getQuery: () => "", onSearch() {}, setPageNote() {} };
+    }
     const panelId = tableEl.closest(".panel")?.id;
     const mount = document.createElement("div"); mount.className = "grid-mount";
     tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
@@ -635,6 +651,10 @@ export function createGridFactories(ctx) {
   // shape { grid, setData, setFilter } so consumers don't change.
   function _makeReadGridAg(tableId, columns, exportName, placeholder, opts) {
     const tableEl = document.getElementById(tableId);
+    if (!tableEl) {
+      const grid = { initialized: false, setData() {}, getData: () => [], on() {}, setFilter() {}, redraw() {} };
+      return { grid, setData() {}, setFilter() {} };
+    }
     const panelId = tableEl.closest(".panel")?.id;
     const mount = document.createElement("div"); mount.className = "grid-mount";
     if (opts.compact) mount.classList.add("grid-mount--compact");

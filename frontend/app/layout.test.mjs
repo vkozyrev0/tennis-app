@@ -65,7 +65,9 @@ test("grid headers stay 8pt in a 20px Quartz header row", () => {
   assert.equal(LIST_HEADER_ROW_HEIGHT, 20);
   const grids = readFileSync(join(here, "grids.js"), "utf8");
   assert.match(grids, /headerHeight:\s*LIST_HEADER_ROW_HEIGHT/);
-  assert.match(grids, /theme:\s*"legacy"/);
+  assert.match(grids, /function _agLegacyCssTheme/);
+  assert.match(grids, /return "legacy"/);
+  assert.doesNotMatch(grids, /theme:\s*"legacy",/);
   assert.doesNotMatch(grids, /floatingFiltersHeight:\s*LIST_HEADER_ROW_HEIGHT/);
 });
 

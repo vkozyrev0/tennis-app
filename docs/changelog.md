@@ -9,6 +9,10 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — Gate theme:"legacy" on AG Grid 32.2
+
+- `theme: "legacy"` is v33.2+. The vendored `ag-grid-community.min.js` is 32.2, which treats that string as a Theme object and throws `startUse is not a function`, so no grid mounted. Only pass `"legacy"` on 33.2+; 32.2 keeps CSS-file Quartz.
+
 ## 2026-09-07 — One-row 8pt headers; live Mark-filed gate
 
 - List grids use AG Grid `theme: "legacy"` so CourtOps CSS wins over the JS Theming API’s 14px Quartz. One 20px header row (no grouped Player headers, no floating-filter row); labels are 8pt nowrap. Filter is the header-button popup.
