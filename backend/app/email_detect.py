@@ -122,12 +122,20 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
         return {"detected_player_id": r["id"], "detected_usta": r["usta_number"],
                 "detected_player_name": r["name"], "match_kind": kind}
 
-    def fullname_in(hay_low, r):
-        f = (r["first_name"] or "").strip().lower()
-        l = (r["last_name"] or "").strip().lower()
-        if not f or not l:
-            return False
-        return f"{f} {l}" in hay_low or f"{l}, {f}" in hay_low
+    def earliest_fullname(hay_low, rows):
+        """Requester-first: the full name that appears earliest in the text wins
+        (not SQL roster order, which is unordered without ORDER BY)."""
+        best, best_at = None, None
+        for r in rows:
+            f = (r["first_name"] or "").strip().lower()
+            l = (r["last_name"] or "").strip().lower()
+            if not f or not l:
+                continue
+            for form in (f"{f} {l}", f"{l}, {f}"):
+                at = hay_low.find(form)
+                if at >= 0 and (best_at is None or at < best_at):
+                    best, best_at = r, at
+        return best
 
     # L1 — explicit USTA # anywhere in the email matched to a roster player.
     # Candidates (labeled / number-before-name / bare runs) come back in ORDER
@@ -141,9 +149,9 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
                 return ret(by_usta[num], "usta")
 
     # L2 — full name in the SUBJECT (subjects are deliberate → high precision).
-    for r in roster:
-        if fullname_in(subj_low, r):
-            return ret(r, "fullname_subject")
+    hit = earliest_fullname(subj_low, roster)
+    if hit:
+        return ret(hit, "fullname_subject")
 
     # L3 — USTA portal body template "<Full Name> has requested to be withdrawn".
     m = _WITHDRAW_BODY_RE.search(body)
@@ -153,10 +161,10 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
             if r["name"].lower() == cand:
                 return ret(r, "withdraw_template")
 
-    # L4 — full name anywhere in the body.
-    for r in roster:
-        if fullname_in(text_low, r):
-            return ret(r, "fullname_body")
+    # L4 — full name anywhere in the body (earliest mention is the requester).
+    hit = earliest_fullname(text_low, roster)
+    if hit:
+        return ret(hit, "fullname_body")
 
     # L5 — USTA portal subject template (first name + gender + age division).
     # Catches "WITHDRAWAL REQUEST: Siddhanth, Boys' 14 & under singles" where the

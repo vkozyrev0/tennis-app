@@ -1367,7 +1367,10 @@ def test_certifications_and_role_guard():
 
     # assignment day as a role they DON'T hold is rejected; one they hold is allowed
     t = _tournament()
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    site = _site()
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites", json={"site_ids": [site["id"]]}), 200)
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                       json={"official_id": o["id"], "site_id": site["id"]}))
     bad = client.post(f"/api/assignments/{a['id']}/days", json={"work_date": "2026-06-01", "working_as": "tournament_referee"})
     assert bad.status_code == 409, bad.text
     ok = client.post(f"/api/assignments/{a['id']}/days", json={"work_date": "2026-06-01", "working_as": "chair_umpire"})

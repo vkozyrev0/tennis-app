@@ -9,6 +9,12 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — CI: venue site, detect order, clock-safe tests
+
+- Chair/referee assignment tests attach a tournament site (venue roles require one).
+- Player detect picks the earliest full name in the email, not unordered SQL roster order.
+- Filing status-count fixtures use hotel (no player-required gate). Soft-delete digest tests use future play dates.
+
 ## 2026-09-06 — Singles copies of doubles email fixtures
 
 - Every doubles-topic row in `tournament_emails.pdf` is copied with doubles→singles (`backend/tests/singles_from_doubles.py`, gold `tournament_emails_singles_gold.json`).

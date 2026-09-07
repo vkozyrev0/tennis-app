@@ -101,7 +101,8 @@ def test_uncertified_day_listed():
     # day is flagged uncertified (the report surfaces these for the TD to fix).
     t = _tournament()
     o = _official()  # no certifications
-    a = _assign(t["id"], o["id"])
+    s = _site()
+    a = _assign(t["id"], o["id"], s["id"])
     _add_day(a["id"], "2026-06-02", role="chair_umpire")
     rep = _report(t["id"])
     assert rep["counts"]["uncertified"] == 1

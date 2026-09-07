@@ -1,6 +1,7 @@
 """Soft-delete (P2 #13): tournaments + incidents trash/restore, and that
 trashed rows leave the lists but survive for restore."""
 import uuid
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -26,9 +27,11 @@ def _ok(r, code=201):
 
 
 def _tournament():
+    start = date.today() + timedelta(days=30)
     return _ok(client.post("/api/tournaments", json={
         "name": "SD " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-09-01", "play_end_date": "2026-09-02"}))
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat()}))
 
 
 def _ids(rows):
@@ -105,10 +108,12 @@ def test_soft_deleted_tournament_leaves_dashboard_digest():
 
 def test_soft_deleted_tournament_leaves_deadlines():
     # Locks the deadlines filter. within_days=120 so the ~Sep deadline is in range.
+    start = date.today() + timedelta(days=40)
     t = _ok(client.post("/api/tournaments", json={
         "name": "DL " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-09-01", "play_end_date": "2026-09-03",
-        "registration_deadline": "2026-09-01"}))
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat(),
+        "registration_deadline": (date.today() + timedelta(days=20)).isoformat()}))
     dl = _ok(client.get("/api/dashboard/deadlines?within_days=120"), 200)["deadlines"]
     assert t["id"] in {d["tournament_id"] for d in dl}
     assert client.delete(f"/api/tournaments/{t['id']}").status_code == 204

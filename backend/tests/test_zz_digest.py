@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.venue_site import attach_venue_site
 
 client = TestClient(app)
 
@@ -102,7 +103,9 @@ def test_conflicts_in_digest_tasks_and_totals():
     # official with no certs, assigned a day → uncertified hard conflict
     o = _ok(client.post("/api/officials", json={
         "first_name": "Dg", "last_name": "O" + uuid.uuid4().hex[:5]}))
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    site = attach_venue_site(client, _ok, t["id"])
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                       json={"official_id": o["id"], "site_id": site["id"]}))
     day = _iso(date.today() + timedelta(days=20))  # within the play window
     _ok(client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": day, "working_as": "chair_umpire"}))

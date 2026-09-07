@@ -41,7 +41,7 @@ def _email(tid, subject="hi", status=None):
     if status:
         # PUT is a full replace — keep tournament_id so the row stays scoped.
         _ok(client.put(f"/api/emails/{e['id']}",
-                       json={"tournament_id": tid, "classification": "withdrawal", "status": status}), 200)
+                       json={"tournament_id": tid, "classification": "hotel", "status": status}), 200)
     return e
 
 

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.venue_site import attach_venue_site
 
 client = TestClient(app)
 
@@ -44,8 +45,9 @@ def _official(*certs):
     return o
 
 
-def _assign(tid, oid, role, *days):
-    a = _ok(client.post(f"/api/tournaments/{tid}/assignments", json={"official_id": oid}))
+def _assign(tid, oid, role, *days, site_id=None):
+    a = _ok(client.post(f"/api/tournaments/{tid}/assignments",
+                       json={"official_id": oid, "site_id": site_id}))
     for d in days:
         _ok(client.post(f"/api/assignments/{a['id']}/days",
                         json={"work_date": d, "working_as": role}))
@@ -62,10 +64,11 @@ def _role(report, role):
 
 def test_role_coverage_counts_per_role_per_day():
     t = _tournament()
+    site = attach_venue_site(client, _ok, t["id"])
     chair1, chair2 = _official("chair_umpire"), _official("chair_umpire")
     rover = _official("roving_official")
-    _assign(t["id"], chair1["id"], "chair_umpire", "2026-06-01", "2026-06-02")
-    _assign(t["id"], chair2["id"], "chair_umpire", "2026-06-01")          # chairs: 06-01=2, 06-02=1
+    _assign(t["id"], chair1["id"], "chair_umpire", "2026-06-01", "2026-06-02", site_id=site["id"])
+    _assign(t["id"], chair2["id"], "chair_umpire", "2026-06-01", site_id=site["id"])          # chairs: 06-01=2, 06-02=1
     _assign(t["id"], rover["id"], "roving_official", "2026-06-02")        # rover: 06-02=1
 
     rep = _report(t["id"])

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.venue_site import attach_venue_site
 
 client = TestClient(app)
 
@@ -47,8 +48,14 @@ def _official(*cert_types):
     return o, certs
 
 
-def _assign(tid, oid):
-    return _ok(client.post(f"/api/tournaments/{tid}/assignments", json={"official_id": oid}))
+def _assign(tid, oid, site_id=None):
+    return _ok(client.post(f"/api/tournaments/{tid}/assignments",
+                           json={"official_id": oid, "site_id": site_id}))
+
+
+def _venue_assign(tid, oid):
+    s = attach_venue_site(client, _ok, tid)
+    return _assign(tid, oid, s["id"])
 
 
 def _add_day(aid, work_date, role):
@@ -79,7 +86,7 @@ def test_add_day_blocks_uncertified_role():
     # path: a cert removed after the day was booked (next test).
     t = _tournament()
     o, _ = _official("roving_official")           # holds roving only
-    a = _assign(t["id"], o["id"])
+    a = _venue_assign(t["id"], o["id"])
     r = client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": "2026-06-03", "working_as": "chair_umpire"})
     assert r.status_code == 409, r.text
@@ -89,7 +96,7 @@ def test_add_day_blocks_uncertified_role():
 def test_uncertified_day_flagged_after_cert_removed():
     t = _tournament()
     o, certs = _official("roving_official", "chair_umpire")   # holds both
-    a = _assign(t["id"], o["id"])
+    a = _venue_assign(t["id"], o["id"])
     _add_day(a["id"], "2026-06-02", "roving_official")
     _add_day(a["id"], "2026-06-03", "chair_umpire")
     assert _summary(t["id"], a["id"])["has_uncertified"] is False
@@ -106,7 +113,7 @@ def test_uncertified_day_flagged_after_cert_removed():
 def test_removing_a_cert_after_assignment_flags_the_day():
     t = _tournament()
     o, certs = _official("chair_umpire")
-    a = _assign(t["id"], o["id"])
+    a = _venue_assign(t["id"], o["id"])
     _add_day(a["id"], "2026-06-02", "chair_umpire")
     assert _summary(t["id"], a["id"])["has_uncertified"] is False
     # TD removes the cert later → the existing day is now uncertified
@@ -117,7 +124,7 @@ def test_removing_a_cert_after_assignment_flags_the_day():
 def test_report_totals_count_uncertified_officials():
     t = _tournament()
     o, certs = _official("chair_umpire")
-    a = _assign(t["id"], o["id"])
+    a = _venue_assign(t["id"], o["id"])
     _add_day(a["id"], "2026-06-02", "chair_umpire")
     client.delete(f"/api/certifications/{certs['chair_umpire']}")   # now uncertified
     rep = client.get(f"/api/tournaments/{t['id']}/reports/officials").json()

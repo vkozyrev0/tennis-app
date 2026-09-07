@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.venue_site import attach_venue_site
 
 client = TestClient(app)
 
@@ -70,7 +71,9 @@ def test_dashboard_conflicts_count_uncertified_day():
     # hard conflict (uncertified) → surfaced as the dashboard conflict count.
     t = _tournament()
     o = _official()  # no certifications
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    site = attach_venue_site(client, _ok, t["id"])
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                       json={"official_id": o["id"], "site_id": site["id"]}))
     _ok(client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": "2026-06-02", "working_as": "chair_umpire"}))
     assert _dash(t["id"])["conflicts"] == 1
@@ -161,7 +164,9 @@ def test_day_of_empty_is_zeroed():
 def test_day_of_lists_officials_working_that_date():
     t = _tournament()
     o = _official("chair_umpire")
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    site = attach_venue_site(client, _ok, t["id"])
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                       json={"official_id": o["id"], "site_id": site["id"]}))
     _ok(client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": "2026-06-02", "working_as": "chair_umpire"}))
     # the official shows up on the day they work...
