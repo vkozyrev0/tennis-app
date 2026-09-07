@@ -9,6 +9,10 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — Help dialog follows the viewport
+
+- Help fills remaining window height (dvh) instead of a 28rem body cap. Narrow screens stack topics into a horizontal scroller; short screens drop the lede and tighten chrome; phones go edge-to-edge.
+
 ## 2026-09-07 — Gate theme:"legacy" on AG Grid 32.2
 
 - `theme: "legacy"` is v33.2+. The vendored `ag-grid-community.min.js` is 32.2, which treats that string as a Theme object and throws `startUse is not a function`, so no grid mounted. Only pass `"legacy"` on 33.2+; 32.2 keeps CSS-file Quartz.

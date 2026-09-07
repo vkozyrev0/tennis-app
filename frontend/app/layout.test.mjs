@@ -88,4 +88,13 @@ test("header labels cannot wrap to a second line or auto-grow", () => {
   assert.match(roster, /title:\s*"Player"/);
 });
 
+test("help dialog fills the viewport instead of a fixed 28rem body", () => {
+  const css = readFileSync(join(here, "../styles.css"), "utf8");
+  assert.match(css, /\.modal-box--help[\s\S]*100dvh/);
+  assert.match(css, /\.help-layout[\s\S]*flex:\s*1/);
+  assert.doesNotMatch(css, /\.help-body[\s\S]{0,200}max-height:\s*min\(58vh/);
+  assert.match(css, /@media \(max-width:\s*720px\)/);
+  assert.match(css, /@media \(max-height:\s*560px\)/);
+});
+
 console.log(`\n${passed} layout checks passed`);
