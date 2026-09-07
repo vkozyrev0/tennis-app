@@ -9,6 +9,10 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — My Ad, LLC logo
+
+- Header uses the My Ad racket mark plus a CourtOps Tennis / My Ad, LLC lockup. Sign-in shows the full wordmark. Favicon is the racket mark.
+
 ## 2026-09-07 — Help dialog follows the viewport
 
 - Help fills remaining window height (dvh) instead of a 28rem body cap. Narrow screens stack topics into a horizontal scroller; short screens drop the lede and tighten chrome; phones go edge-to-edge.

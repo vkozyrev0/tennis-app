@@ -88,6 +88,14 @@ test("header labels cannot wrap to a second line or auto-grow", () => {
   assert.match(roster, /title:\s*"Player"/);
 });
 
+test("header and login use the My Ad, LLC brand assets", () => {
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /\/brand\/my-ad-mark\.png/);
+  assert.match(html, /\/brand\/my-ad-llc\.png/);
+  assert.match(html, /\/brand\/favicon\.png/);
+  assert.match(html, /My Ad, LLC/);
+});
+
 test("help dialog fills the viewport instead of a fixed 28rem body", () => {
   const css = readFileSync(join(here, "../styles.css"), "utf8");
   assert.match(css, /\.modal-box--help[\s\S]*100dvh/);
