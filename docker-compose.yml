@@ -18,6 +18,7 @@ services:
       EMAIL_LLM_TOKEN: ${EMAIL_LLM_TOKEN:-dev-local-llm}
       EMAIL_LLM_TIMEOUT: "30"
       EMAIL_LLM_CHAT_TIMEOUT: ${EMAIL_LLM_CHAT_TIMEOUT:-180}
+      UVICORN_RELOAD: "1"
     volumes:
       - ./frontend:/app/frontend
       - ./backend:/app/backend

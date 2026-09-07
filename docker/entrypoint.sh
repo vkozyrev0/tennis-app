@@ -98,6 +98,10 @@ shutdown() {
 }
 trap shutdown TERM INT
 
-uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --app-dir /app/backend &
+reload_args=()
+if [ "${UVICORN_RELOAD:-0}" = "1" ]; then
+  reload_args=(--reload --reload-dir /app/backend)
+fi
+uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --app-dir /app/backend "${reload_args[@]}" &
 uvicorn_pid=$!
 wait "$uvicorn_pid"

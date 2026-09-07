@@ -318,7 +318,7 @@ export function createGridFactories(ctx) {
     }
     // header filter — `list` → exact-match dropdown; `input` with a custom
     // headerFilterFunc → whole-row substring filter; plain `input` → built-in
-    // text filter. Floating (always-visible in the header) in every case.
+    // text filter. Shown via the header filter button (not a second header row).
     if (col.headerFilter) {
       if (col.headerFilter === "list") {
         const vals = (col.headerFilterParams && col.headerFilterParams.values) || [];
@@ -330,11 +330,8 @@ export function createGridFactories(ctx) {
       } else {
         cd.filter = "agTextColumnFilter";
       }
-      cd.floatingFilter = true;
-      // The inline floating control IS the filter UI (like Tabulator) — hide AG's
-      // funnel button that would otherwise sit beside every column's filter and
-      // eat the width the dropdown/input needs.
-      cd.suppressFloatingFilterButton = true;
+      // Filter lives in the header-button popup — a floating-filter row would
+      // be a second 20px strip and make every list ~40px of header chrome.
     }
     // cellClick → onCellClicked (e.g. the roster's signed-in toggle column).
     if (typeof col.cellClick === "function") {
@@ -401,9 +398,12 @@ export function createGridFactories(ctx) {
       rowData: [],
       isExternalFilterPresent: () => !!extFilter,
       doesExternalFilterPass: (node) => !extFilter || extFilter(node.data),
+      // v33+ defaults to the JS Theming API (14px Quartz). "legacy" uses the
+      // CSS files so CourtOps 8pt / 20px tokens actually apply.
+      theme: "legacy",
       defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
-        suppressHeaderFilterButton: true,
-        wrapHeaderText: false, autoHeaderHeight: false,
+        suppressHeaderFilterButton: false,
+        wrapHeaderText: false, autoHeaderHeight: false, floatingFilter: false,
         ...(tabOpts.columnDefaults && tabOpts.columnDefaults.tooltip ? {} : {}) },
       getRowId: tabOpts.index ? (p) => String(p.data[tabOpts.index]) : undefined,
       singleClickEdit: tabOpts.editTriggerEvent === "click",
@@ -411,7 +411,6 @@ export function createGridFactories(ctx) {
       suppressMovableColumns: true,
       headerHeight: LIST_HEADER_ROW_HEIGHT,
       groupHeaderHeight: LIST_HEADER_ROW_HEIGHT,
-      floatingFiltersHeight: LIST_HEADER_ROW_HEIGHT,
       overlayNoRowsTemplate: `<span class="ag-empty">${esc(tabOpts.placeholder || "No data")}</span>`,
       domLayout: "normal",
       onCellValueChanged: (p) => {

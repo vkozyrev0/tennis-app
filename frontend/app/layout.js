@@ -2,10 +2,9 @@
 // Pins active-panel grids so their bottom stays at the viewport edge — the
 // page itself does not grow a vertical scrollbar for Setup master-detail lists.
 
-// Inbox uses grouped headers (2 rows) + floating filters + h-scroll. A 220px
-// mount left ~58px of body after that chrome. Floor is chrome + ~2 data rows.
+// One 20px title row (no grouped header, no floating-filter row) + h-scroll.
 export const LIST_HEADER_ROW_HEIGHT = 20;
-export const LIST_GROUPED_HEADER_ROWS = 3; // group + column + floating filter
+export const LIST_GROUPED_HEADER_ROWS = 1;
 export const LIST_ROW_HEIGHT = 32;
 export const LIST_MIN_DATA_ROWS = 2;
 export const LIST_HSCROLL = 16;
@@ -31,7 +30,7 @@ export function listBodyMinFromMount(mountHeight) {
   return Math.max(0, (Number(mountHeight) || 0) - listChromeHeight());
 }
 
-// 380px leaves ~2 data rows after grouped header + floating filters (~118px chrome).
+// 380px leaves several data rows after a single 20px header + h-scroll.
 export const LIST_MIN_HEIGHT = 380;
 export const LIST_BOTTOM_PAD = 16;
 

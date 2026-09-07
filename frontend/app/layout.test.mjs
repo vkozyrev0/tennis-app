@@ -56,28 +56,32 @@ test("inbox grid is a sized grid-mount; action cells keep pointer-events", () =>
 test("grid headers stay 8pt in a 20px Quartz header row", () => {
   const theme = readFileSync(join(here, "../vendor/ag-theme-courtops.css"), "utf8");
   assert.match(theme, /--ag-header-height:\s*20px/);
+  assert.match(theme, /--ag-font-size:\s*8pt/);
   assert.match(theme, /font-size:\s*8pt/);
-  assert.match(theme, /--ag-icon-size:\s*14px/);
+  assert.match(theme, /--ag-icon-size:\s*12px/);
   assert.doesNotMatch(theme, /--ag-header-height:\s*16px/);
   const html = readFileSync(join(here, "../index.html"), "utf8");
   assert.match(html, /ag-theme-courtops\.css\?v=/);
   assert.equal(LIST_HEADER_ROW_HEIGHT, 20);
   const grids = readFileSync(join(here, "grids.js"), "utf8");
   assert.match(grids, /headerHeight:\s*LIST_HEADER_ROW_HEIGHT/);
-  assert.match(grids, /floatingFiltersHeight:\s*LIST_HEADER_ROW_HEIGHT/);
-  assert.match(grids, /suppressHeaderFilterButton:\s*true/);
+  assert.match(grids, /theme:\s*"legacy"/);
+  assert.doesNotMatch(grids, /floatingFiltersHeight:\s*LIST_HEADER_ROW_HEIGHT/);
 });
 
 test("header labels cannot wrap to a second line or auto-grow", () => {
   const theme = readFileSync(join(here, "../vendor/ag-theme-courtops.css"), "utf8");
   assert.match(theme, /white-space:\s*nowrap\s*!important/);
   assert.match(theme, /font-size:\s*8pt\s*!important/);
+  assert.match(theme, /ag-header-row-column-filter/);
   const grids = readFileSync(join(here, "grids.js"), "utf8");
   assert.match(grids, /wrapHeaderText:\s*false/);
   assert.match(grids, /autoHeaderHeight:\s*false/);
+  assert.match(grids, /floatingFilter:\s*false/);
   const inbox = readFileSync(join(here, "inbox.js"), "utf8");
   assert.match(inbox, /title:\s*"Player 1"/);
   assert.match(inbox, /title:\s*"Player 2"/);
+  assert.doesNotMatch(inbox, /title:\s*"Player 1",\s*columns:/);
   const roster = readFileSync(join(here, "roster.js"), "utf8");
   assert.match(roster, /title:\s*"Player"/);
 });

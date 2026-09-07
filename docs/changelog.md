@@ -9,6 +9,11 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — One-row 8pt headers; live Mark-filed gate
+
+- List grids use AG Grid `theme: "legacy"` so CourtOps CSS wins over the JS Theming API’s 14px Quartz. One 20px header row (no grouped Player headers, no floating-filter row); labels are 8pt nowrap. Filter is the header-button popup.
+- Local Compose sets `UVICORN_RELOAD=1` so backend volume mounts (the bulk-status player gate) pick up without rebuilding the image.
+
 ## 2026-09-07 — Compact headers + restore no-player filing block
 
 - List-grid headers stay one 8pt line in a 20px Quartz row (`nowrap !important`, wrap/auto-height off). Cache-bust CourtOps theme `?v=2`.

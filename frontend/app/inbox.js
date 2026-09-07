@@ -359,45 +359,38 @@ export function createInboxPanel(ctx) {
         const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
         return hstr`${m.subject || ""}${raw(corr)}${raw(sup)}`;
       } },
-    // Two player-related column GROUPS — Player/USTA # and Player 2/USTA #2.
-    // Each cell is double-click editable so the TD can manually assign a player
-    // when detection can't: pick from the roster dropdown (name cell) or type a
-    // USTA # (number cell). Display priority per slot: matched roster player →
-    // (name, USTA#) parsed from the email text (✉) → bare email-text number.
-    { title: "Player 1", columns: [
-      { title: "Player", field: "detected_player_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
-        formatter: (cell) => _inboxNameCell(cell, 0),
-        headerFilter: "input",
-        headerFilterFunc: (term, _v, e) =>
-          ((e.detected_player_name || "") + " " + (e.detected_usta || ""))
-            .toLowerCase().includes(String(term).toLowerCase()) },
-      { title: "USTA #", field: "detected_usta", width: 115, ..._USTA_EDITOR,
-        formatter: (c) => {
-          const s = _inboxSlots(c.getData())[0];
-          if (!s.usta) return '<span class="muted">—</span>';
-          return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
-        },
-        headerFilter: "input",
-        headerFilterFunc: (term, _v, e) =>
-          ((e.detected_usta || "") + " " + (e.detected_usta_text || ""))
-            .includes(String(term).trim()) },
-    ] },
-    { title: "Player 2", columns: [
-      { title: "Player", field: "detected_partner_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
-        formatter: (cell) => _inboxNameCell(cell, 1),
-        headerFilter: "input",
-        headerFilterFunc: (term, _v, e) =>
-          ((e.detected_partner_name || "") + " " + ((e.detected_member_names || []).slice(1).join(" ")) + " " +
-           (e.detected_partner_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
-      { title: "USTA #", field: "detected_partner_usta", width: 115, ..._USTA_EDITOR,
-        formatter: (c) => {
-          const s = _inboxSlots(c.getData())[1];
-          if (!s.usta) return '<span class="muted">—</span>';
-          return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
-        },
-        headerFilter: "input",
-        headerFilterFunc: (term, _v, e) => (e.detected_partner_usta || "").includes(String(term).trim()) },
-    ] },
+    // Leaf columns (not groups) so Player 1 / Player 2 stay one 20px header
+    // row instead of a group row + "Player" child row.
+    { title: "Player 1", field: "detected_player_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
+      formatter: (cell) => _inboxNameCell(cell, 0),
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_player_name || "") + " " + (e.detected_usta || ""))
+          .toLowerCase().includes(String(term).toLowerCase()) },
+    { title: "USTA #1", field: "detected_usta", width: 115, ..._USTA_EDITOR,
+      formatter: (c) => {
+        const s = _inboxSlots(c.getData())[0];
+        if (!s.usta) return '<span class="muted">—</span>';
+        return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_usta || "") + " " + (e.detected_usta_text || ""))
+          .includes(String(term).trim()) },
+    { title: "Player 2", field: "detected_partner_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
+      formatter: (cell) => _inboxNameCell(cell, 1),
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) =>
+        ((e.detected_partner_name || "") + " " + ((e.detected_member_names || []).slice(1).join(" ")) + " " +
+         (e.detected_partner_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
+    { title: "USTA #2", field: "detected_partner_usta", width: 115, ..._USTA_EDITOR,
+      formatter: (c) => {
+        const s = _inboxSlots(c.getData())[1];
+        if (!s.usta) return '<span class="muted">—</span>';
+        return hstr`${s.usta}${s.matched ? "" : raw(_MAIL_MARK)}`;
+      },
+      headerFilter: "input",
+      headerFilterFunc: (term, _v, e) => (e.detected_partner_usta || "").includes(String(term).trim()) },
     { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
       formatter: (c) => classChip(c.getValue()),
       editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },

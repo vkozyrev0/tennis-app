@@ -1,14 +1,13 @@
 /* CourtOps compact Quartz — load AFTER vendor/ag-theme-quartz.css.
-   Quartz sizes the header as font-size + grid-size × 4.25 (≈48px at defaults).
-   This file only changes those theme parameters so 8pt labels + 14px icons
-   fit a 20px header row without clipping. Body rows stay 32px. */
+   Quartz sizes the header as font-size + grid-size × 4.25 (≈48px at 14px).
+   8pt labels + 12px icons in ONE 20px header row. Body rows stay 32px.
+   Grids must use theme:"legacy" or the JS Theming API keeps 14px. */
 .ag-theme-quartz,
 .ag-theme-quartz-dark {
   --ag-font-family: inherit;
-  --ag-font-size: 0.8rem;
+  --ag-font-size: 8pt;
   --ag-grid-size: 4px;
-  --ag-icon-size: 14px;
-  /* 8pt (~11px) + 4px × 2.25 ≈ 20px — one line of label + sort icon. */
+  --ag-icon-size: 12px;
   --ag-header-height: 20px;
   --ag-row-height: 32px;
   --ag-cell-horizontal-padding: 6px;
@@ -41,8 +40,12 @@
   --ag-disabled-foreground-color: #6b6f76;
 }
 
-/* nowrap must beat Quartz `.ag-header-cell-text { white-space: normal }` so
-   labels stay one 8pt line in the 20px header (not 14px wrapping to ~40px). */
+/* 8pt + nowrap on the whole header tree so Theming-API / Quartz 14px cannot
+   win, and labels cannot wrap into a second line. */
+.ag-theme-quartz .ag-header,
+.ag-theme-quartz .ag-header-row,
+.ag-theme-quartz .ag-header-cell,
+.ag-theme-quartz .ag-header-group-cell,
 .ag-theme-quartz .ag-header-cell-text,
 .ag-theme-quartz .ag-header-group-text,
 .ag-theme-quartz .ag-header-group-cell-label,
@@ -52,6 +55,11 @@
   line-height: 1.1 !important;
   letter-spacing: 0.01em;
   white-space: nowrap !important;
+}
+
+.ag-theme-quartz .ag-header-cell-text,
+.ag-theme-quartz .ag-header-group-text,
+.ag-theme-quartz .ag-header-cell-label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -60,12 +68,19 @@
 .ag-theme-quartz .ag-header-group-cell {
   padding-top: 0;
   padding-bottom: 0;
-  white-space: nowrap;
 }
 
 .ag-theme-quartz .ag-header-cell-comp-wrapper,
 .ag-theme-quartz .ag-header-group-cell-label {
   min-height: 0;
+  overflow: hidden;
+}
+
+/* A leftover filter row must not add a second 20px strip. */
+.ag-theme-quartz .ag-header-row-column-filter {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
   overflow: hidden;
 }
 
