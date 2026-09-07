@@ -403,6 +403,7 @@ export function createGridFactories(ctx) {
       doesExternalFilterPass: (node) => !extFilter || extFilter(node.data),
       defaultColDef: { resizable: true, sortable: true, suppressHeaderMenuButton: true,
         suppressHeaderFilterButton: true,
+        wrapHeaderText: false, autoHeaderHeight: false,
         ...(tabOpts.columnDefaults && tabOpts.columnDefaults.tooltip ? {} : {}) },
       getRowId: tabOpts.index ? (p) => String(p.data[tabOpts.index]) : undefined,
       singleClickEdit: tabOpts.editTriggerEvent === "click",

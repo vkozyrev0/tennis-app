@@ -70,15 +70,36 @@ def bulk_reassign(body: EmailBulkReassign, conn=Depends(db_dep)):
 def bulk_status(body: EmailBulkStatus, conn=Depends(db_dep)):
     """Mark every selected email filed / needs-follow-up / new. Lets the TD clear
     the info-only emails (hotel notes, acknowledgements) that don't populate a
-    request list but should still leave the 'unfiled' queue."""
+    request list but should still leave the 'unfiled' queue.
+
+    Withdrawal / doubles still need a matched player to mark filed — same gate
+    as PUT-as-filed — because that would not change those lists.
+    """
     if not body.email_ids:
-        return {"updated": 0}
+        return {"updated": 0, "skipped": []}
     with conn.cursor() as cur:
+        skipped: list[dict] = []
+        ids = list(body.email_ids)
+        if body.status == "filed":
+            cur.execute(
+                "SELECT id, classification, detected_player_id FROM email_message "
+                "WHERE id = ANY(%s)",
+                (body.email_ids,),
+            )
+            keep = []
+            for em in cur.fetchall():
+                if em["classification"] in FILE_NEEDS_PLAYER and em["detected_player_id"] is None:
+                    skipped.append({"id": em["id"], "reason": FILE_NEEDS_PLAYER_REASON})
+                else:
+                    keep.append(em["id"])
+            if not keep:
+                raise HTTPException(status_code=400, detail=FILE_NEEDS_PLAYER_REASON)
+            ids = keep
         cur.execute(
             "UPDATE email_message SET status = %s WHERE id = ANY(%s)",
-            (body.status, body.email_ids),
+            (body.status, ids),
         )
-        return {"updated": cur.rowcount}
+        return {"updated": cur.rowcount, "skipped": skipped}
 
 
 @router.post("/bulk/detect-players", response_model=list[EmailDetectResult])

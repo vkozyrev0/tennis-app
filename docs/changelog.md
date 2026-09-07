@@ -9,6 +9,11 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-07 — Compact headers + restore no-player filing block
+
+- List-grid headers stay one 8pt line in a 20px Quartz row (`nowrap !important`, wrap/auto-height off). Cache-bust CourtOps theme `?v=2`.
+- `POST /api/emails/bulk/status` with `status=filed` no longer files player-less withdrawal/doubles (same pick-a-player reason as PUT-as-filed). Hotel/acks still mark filed. Inbox **Mark filed** uses the same gate.
+
 ## 2026-09-07 — CI: venue site, detect order, clock-safe tests
 
 - Chair/referee assignment tests attach a tournament site (venue roles require one).

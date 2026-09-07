@@ -41,20 +41,32 @@
   --ag-disabled-foreground-color: #6b6f76;
 }
 
+/* nowrap must beat Quartz `.ag-header-cell-text { white-space: normal }` so
+   labels stay one 8pt line in the 20px header (not 14px wrapping to ~40px). */
 .ag-theme-quartz .ag-header-cell-text,
 .ag-theme-quartz .ag-header-group-text,
-.ag-theme-quartz .ag-header-group-cell-label {
-  font-size: 8pt;
+.ag-theme-quartz .ag-header-group-cell-label,
+.ag-theme-quartz .ag-header-cell-label {
+  font-size: 8pt !important;
   font-weight: 650;
-  line-height: 1.15;
+  line-height: 1.1 !important;
   letter-spacing: 0.01em;
-  white-space: nowrap;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ag-theme-quartz .ag-header-cell,
 .ag-theme-quartz .ag-header-group-cell {
   padding-top: 0;
   padding-bottom: 0;
+  white-space: nowrap;
+}
+
+.ag-theme-quartz .ag-header-cell-comp-wrapper,
+.ag-theme-quartz .ag-header-group-cell-label {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ag-theme-quartz .ag-list-floating {

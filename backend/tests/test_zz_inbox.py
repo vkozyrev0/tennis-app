@@ -415,6 +415,55 @@ def test_file_withdrawal_without_player_does_not_insert():
     assert not any(isinstance(r, dict) and r.get("source_email_id") == e["id"] for r in rows)
 
 
+def test_bulk_status_filed_blocks_playerless_withdrawal_and_doubles():
+    from app.email_targets import FILE_NEEDS_PLAYER_REASON
+    t = _tournament()
+    wd = _email(t["id"], subject="Please withdraw", body="injury, cannot play")
+    client.put(f"/api/emails/{wd['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal",
+        "status": "new", "detected_player_id": None,
+    })
+    blocked = client.post("/api/emails/bulk/status",
+                          json={"email_ids": [wd["id"]], "status": "filed"})
+    assert blocked.status_code == 400, blocked.text
+    assert "player" in blocked.json()["detail"].lower()
+    assert "will not change" in blocked.json()["detail"].lower()
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == wd["id"])
+    assert row["status"] == "new"
+    wd_list = client.get(f"/api/tournaments/{t['id']}/withdrawals").json()
+    assert not any(r.get("source_email_id") == wd["id"] for r in wd_list)
+    dbl = _email(t["id"], subject="Boys 14s Doubles Confirmation",
+                 body="Scarlett Milner doubles pairing change")
+    client.put(f"/api/emails/{dbl['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles",
+        "status": "new", "detected_player_id": None,
+    })
+    blocked2 = client.post("/api/emails/bulk/status",
+                           json={"email_ids": [dbl["id"]], "status": "filed"})
+    assert blocked2.status_code == 400, blocked2.text
+    assert blocked2.json()["detail"] == FILE_NEEDS_PLAYER_REASON
+    hotel = _email(t["id"], subject="Marriott block", body="we are staying at the Marriott")
+    client.put(f"/api/emails/{hotel['id']}", json={
+        "tournament_id": t["id"], "classification": "hotel",
+        "status": "new", "detected_player_id": None,
+    })
+    ok = _ok(client.post("/api/emails/bulk/status",
+                         json={"email_ids": [hotel["id"]], "status": "filed"}), 200)
+    assert ok["updated"] == 1
+    hotel_row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+                     if m["id"] == hotel["id"])
+    assert hotel_row["status"] == "filed"
+    mixed = _ok(client.post("/api/emails/bulk/status",
+                            json={"email_ids": [wd["id"], hotel["id"]], "status": "filed"}), 200)
+    assert mixed["updated"] == 1
+    assert mixed["skipped"] and mixed["skipped"][0]["id"] == wd["id"]
+    assert mixed["skipped"][0]["reason"] == FILE_NEEDS_PLAYER_REASON
+    still_new = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+                     if m["id"] == wd["id"])
+    assert still_new["status"] == "new"
+
+
 def test_bulk_populate_skips_unmatched_withdrawal_and_does_not_insert():
     from app.email_targets import FILE_NEEDS_PLAYER_REASON
     t = _tournament()

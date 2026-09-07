@@ -181,11 +181,21 @@ test("inbox File, review Save-as-filed, and bulk populate use the hard gate", ()
   assert.match(src, /setMsg\(EMAIL_MSG_ID, guard\.reason/);
 });
 
+test("Mark filed and bulk-status use the same player gate", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(src, /doSetStatus[\s\S]*fileWithoutPlayerGate\(m\.classification, m\.detected_player_id\)/);
+  assert.match(src, /_inboxBulkStatus[\s\S]*fileWithoutPlayerGate\(m\.classification, m\.detected_player_id\)/);
+  assert.match(src, /\/emails\/bulk\/status/);
+  assert.match(src, /res\.skipped/);
+});
+
 test("file without player is blocked for withdrawal and doubles", () => {
   assert.equal(fileWithoutPlayerGate("withdrawal", null).ok, false);
   assert.equal(fileWithoutPlayerGate("doubles", "").ok, false);
   assert.equal(fileWithoutPlayerGate("withdrawal", 9).ok, true);
   assert.equal(fileWithoutPlayerGate("late_entry", null).ok, true);
+  assert.equal(fileWithoutPlayerGate("hotel", null).ok, true);
   assert.equal(fileWithoutPlayerGate("doubles", null).reason, FILE_NEEDS_PLAYER_REASON);
   assert.match(FILE_NEEDS_PLAYER_REASON, /will not change those lists/i);
 });

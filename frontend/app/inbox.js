@@ -595,6 +595,13 @@ export function createInboxPanel(ctx) {
         // info-only email (hotel note, ack) — or flag one for follow-up — straight
         // from its row, without bulk-selecting. Reuses /emails/bulk/status.
         const doSetStatus = (status, verb) => async () => {
+          if (status === "filed") {
+            const gate = fileWithoutPlayerGate(m.classification, m.detected_player_id);
+            if (!gate.ok) {
+              await confirmDialog(gate.reason, "OK", "primary");
+              return;
+            }
+          }
           try {
             await api("/emails/bulk/status", { method: "POST", body: JSON.stringify({ email_ids: [m.id], status }) });
             toast(verb, true); loadInbox();
@@ -1169,6 +1176,16 @@ export function createInboxPanel(ctx) {
   // bulk actions: POST /emails/bulk/status → toast + reload + refresh summary.
   const _inboxBulkStatus = (status, verb) => async (ev) => {
     if (!_inboxSelected.size) return;
+    if (status === "filed") {
+      const rows = (inboxGrid.grid.getData() || []).filter((m) => _inboxSelected.has(m.id));
+      const blocked = rows.filter((m) => !fileWithoutPlayerGate(m.classification, m.detected_player_id).ok);
+      if (blocked.length === _inboxSelected.size) {
+        const reason = fileWithoutPlayerGate("withdrawal", null).reason;
+        setMsg("inbox-bulk-msg", reason, false);
+        await confirmDialog(reason, "OK", "primary");
+        return;
+      }
+    }
     const btn = ev.currentTarget;
     btn.disabled = true;
     try {
@@ -1176,8 +1193,13 @@ export function createInboxPanel(ctx) {
         method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected], status }),
       });
       const n = res.updated;
-      setMsg("inbox-bulk-msg", `${verb} ${n} email${n === 1 ? "" : "s"}`, true);
-      toast(`${verb} ${n} email${n === 1 ? "" : "s"}`, true);
+      const skipped = (res.skipped || []).length;
+      let msg = `${verb} ${n} email${n === 1 ? "" : "s"}`;
+      if (skipped) {
+        msg += `. ${skipped} skipped — ${fileWithoutPlayerGate("withdrawal", null).reason}`;
+      }
+      setMsg("inbox-bulk-msg", msg, !skipped);
+      toast(msg, !skipped);
       _inboxSelected.clear();
       await loadInbox();
       _inboxBulkRefreshUi();
