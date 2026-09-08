@@ -28,8 +28,10 @@ export function chip(v) {
   return hstr`<span class="badge badge-${BADGE[v] || "muted"}">${label}</span>`;
 }
 
+const _USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
 export function money(n) {
-  return n == null ? "—" : "$" + Number(n).toFixed(2);
+  return n == null ? "—" : _USD.format(Number(n));
 }
 
 // Lightweight dropdown-menu button — collapses a cluster of related toolbar

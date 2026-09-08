@@ -9,6 +9,7 @@
 // grids.js uses.
 import { makeMenuButton } from "./ui.js";
 import { syncSkipLink } from "./skip_link.js";
+import { syncThemeColor } from "./theme.js";
 
 export function createAuth(ctx) {
   const { api, setMsg, toast, onSubmit, onRoleResolved, onLogout } = ctx;
@@ -87,6 +88,7 @@ export function createAuth(ctx) {
     document.body.classList.toggle("is-signed-out", !logged);
     document.body.classList.toggle("is-admin", isAdmin);
     document.body.classList.toggle("is-official", isOfficial);
+    syncThemeColor();
     document.getElementById("login-view").hidden = logged;
     document.getElementById("user-box").hidden = !logged;
     const label = document.getElementById("username-label");

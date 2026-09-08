@@ -862,7 +862,7 @@ installTrash({
 });
 
 // D11: form required markers + toolbar consolidation
-const { markRequiredFields, enhanceDateFields, consolidateInboxToolbar, consolidateRosterToolbar } = installFormA11y({
+const { markRequiredFields, enhanceDateFields, enhanceContactFields, consolidateInboxToolbar, consolidateRosterToolbar } = installFormA11y({
   makeMenuButton, gotoImport,
 });
 
@@ -879,6 +879,7 @@ const { loadGmailFeed } = installGmailFeed({
   enhanceAllSelects();
   markRequiredFields();
   enhanceDateFields();
+  enhanceContactFields();
   consolidateInboxToolbar();
   consolidateRosterToolbar();
   bindTdChat();

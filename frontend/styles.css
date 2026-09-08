@@ -3,6 +3,11 @@
 
 * { box-sizing: border-box; }
 
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: color-mix(in srgb, var(--accent, #2e6f40) 22%, transparent);
+}
+
 /* a11y 4th-pass #2: honor prefers-reduced-motion. Kills the indeterminate
    progress-bar animation, toast slide-ins, skip-link transition, etc. for
    users who've requested less motion at the OS level (WCAG 2.3.3). */
@@ -35,7 +40,8 @@
   z-index: 9999;
   transform: translateY(-150%); transition: transform 0.15s ease-out;
 }
-.skip-link:focus { transform: translateY(0); outline: 2px solid var(--accent-ink); outline-offset: -4px; }
+.skip-link:focus,
+.skip-link:focus-visible { transform: translateY(0); outline: 2px solid var(--accent-ink); outline-offset: -4px; }
 
 /* Visually hidden but still in the accessibility tree — for landmark
    headings (h2) that the design doesn't render but screen-reader users
@@ -79,13 +85,13 @@
 /* Dialog overlay base. Sits above the edit layers (.detail-backdrop 1550,
    .detail-pane 1600) but BELOW .combo-list (1850) so a modal that contains a
    player/division combo (inbox-filing dialogs) shows its dropdown on top. */
-.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1800; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1800; overscroll-behavior: contain; }
 /* The confirm dialog is the exception: it must clear .combo-list (1850) because
    a Delete confirm can be raised from inside an open edit overlay while a combo
    is open — at a lower z it would render hidden behind the combo/overlay. */
 #confirm-modal { z-index: 1900; }
 .modal[hidden] { display: none; }
-.modal-box { background: var(--card); border-radius: var(--radius, 10px); padding: 1.25rem 1.5rem; max-width: 360px; width: min(360px, calc(100vw - 2rem)); box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+.modal-box { background: var(--card); border-radius: var(--radius, 10px); padding: 1.25rem 1.5rem; max-width: 360px; width: min(360px, calc(100vw - 2rem)); box-shadow: 0 8px 30px rgba(0,0,0,0.25); overscroll-behavior: contain; }
 .modal-box p { margin: 0 0 0.5rem; }
 .modal-box h3 { margin: 0 0 0.75rem; }
 .modal-box .row { margin-bottom: 0.55rem; }
@@ -128,12 +134,16 @@ h1, h2, h3, h4 {
   font-family: var(--font-display, inherit);
   font-weight: 600;
   letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+main h2, main h3, main h4, .panel h2, .panel h3, .card h2, .card h3 {
+  scroll-margin-top: calc(var(--nav-sticky-crumbs, 9.75rem) + 0.5rem);
 }
 
 header {
   background: var(--court, var(--accent));
   color: var(--accent-ink);
-  padding: 0.3rem 1rem 0.28rem;
+  padding: max(0.3rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px)) 0.28rem max(1rem, env(safe-area-inset-left, 0px));
   /* Signature: tennis-ball baseline under the chrome (court line). */
   border-bottom: 3px solid var(--ball, #d6ec4a);
   /* Sticky top region so the title + menus stay in view while users scroll
@@ -435,6 +445,8 @@ input.date-locale {
 body.is-signed-out {
   background-color: var(--court, #1b4d32);
   min-height: 100vh;
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 body.is-signed-out::before {
   content: "";
@@ -670,7 +682,7 @@ body.nav-l2-solo .gbtn.active { border-radius: 6px; }
 .gbtn .tab-badge { margin-left: 0.15rem; }
 
 /* Use the full window width (back-office data app) — no centered narrow column. */
-main { padding: 1.25rem 1.75rem; max-width: 1440px; margin: 0 auto; }
+main { padding: 1.25rem max(1.75rem, env(safe-area-inset-right, 0px)) 1.25rem max(1.75rem, env(safe-area-inset-left, 0px)); max-width: 1440px; margin: 0 auto; }
 
 /* ---- panels ---- */
 .panel { display: none; }
@@ -1392,7 +1404,15 @@ table.shortcuts td { padding: 0.3rem 0; color: var(--ink); }
   .help-title { font-size: 0.95rem; }
 }
 @media (max-width: 480px) {
-  .modal-box--help { --help-gap: 0; height: 100%; max-height: 100%; max-width: 100%; border-radius: 0; }
+  .modal-box--help {
+    --help-gap: 0;
+    height: 100%;
+    max-height: 100%;
+    max-width: 100%;
+    border-radius: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
   #help-modal.modal { align-items: stretch; padding: 0; }
 }
 kbd {
@@ -2320,7 +2340,7 @@ td.toggle { white-space: nowrap; }
 .dash-dl-head { font-weight: 700; color: var(--warn-ink); font-size: 0.9rem; }
 .dash-dl-list { list-style: none; margin: 0.3rem 0 0; padding: 0; }
 .dash-dl-item { padding: 0.2rem 0.3rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-.dash-dl-item:hover, .dash-dl-item:focus-visible { background: rgba(0,0,0,0.05); outline: none; }
+.dash-dl-item:hover, .dash-dl-item:focus-visible { background: rgba(0,0,0,0.05); }
 .dash-deadlines .resp-bad { color: var(--bad); font-weight: 700; }
 
 /* Official workload (dashboard) */
@@ -2341,7 +2361,7 @@ td.toggle { white-space: nowrap; }
 .rdy-list { list-style: none; margin: 0; padding: 0.35rem 0.5rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .rdy-row { display: flex; align-items: center; gap: 0.55rem; padding: 0.25rem 0.4rem; border-radius: 6px;
   cursor: pointer; font-size: 0.86rem; }
-.rdy-row:hover, .rdy-row:focus-visible { background: var(--sel); outline: none; }
+.rdy-row:hover, .rdy-row:focus-visible { background: var(--sel); }
 .rdy-icon { width: 1.1rem; text-align: center; font-weight: 800; }
 .rdy-row.rdy-pass .rdy-icon { color: #1f7a44; }
 .rdy-row.rdy-warn .rdy-icon { color: #c08a00; }
@@ -2393,7 +2413,7 @@ td.toggle { white-space: nowrap; }
 .dash-dg-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
   padding: 0.3rem 0.4rem; border-radius: 6px; border: 1px solid var(--line); background: var(--card, #fff); }
 .dash-dg-name { cursor: pointer; font-size: 0.9rem; }
-.dash-dg-name:hover, .dash-dg-name:focus-visible { text-decoration: underline; outline: none; }
+.dash-dg-name:hover, .dash-dg-name:focus-visible { text-decoration: underline; }
 .dash-dg-chips { margin-left: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; align-items: center; }
 .dash-dg-chip { font-size: 0.74rem; font-weight: 600; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--warn-border, #d8a400); background: var(--warn-bg); color: #8a6500; cursor: pointer; }
@@ -2413,7 +2433,7 @@ td.toggle { white-space: nowrap; }
 .p360-sec li { font-size: 0.9rem; margin: 0.1rem 0; }
 .p360-reqhead { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.8rem; }
 .p360-link { color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
-.p360-link:hover, .p360-link:focus-visible { text-decoration-style: solid; outline: none; }
+.p360-link:hover, .p360-link:focus-visible { text-decoration-style: solid; }
 
 /* Global player search (context bar) */
 #player-search-wrap {
@@ -2428,7 +2448,7 @@ td.toggle { white-space: nowrap; }
 }
 .ps-item { display: flex; flex-direction: column; gap: 0.05rem; width: 100%; text-align: left; padding: 0.4rem 0.6rem; background: none; border: 0; border-bottom: 1px solid var(--border); cursor: pointer; color: inherit; }
 .ps-item:last-child { border-bottom: 0; }
-.ps-item:hover, .ps-item:focus-visible { background: var(--sel); outline: none; }
+.ps-item:hover, .ps-item:focus-visible { background: var(--sel); }
 .ps-name { font-weight: 600; font-size: 0.85rem; }
 .ps-meta { font-size: 0.76rem; color: var(--muted); }
 .ps-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;

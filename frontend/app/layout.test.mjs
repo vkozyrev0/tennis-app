@@ -105,4 +105,18 @@ test("help dialog fills the viewport instead of a fixed 28rem body", () => {
   assert.match(css, /@media \(max-height:\s*560px\)/);
 });
 
+test("guidelines audit: focus, overscroll, tap, and safe-area", () => {
+  const css = readFileSync(join(here, "../styles.css"), "utf8");
+  assert.match(css, /touch-action:\s*manipulation/);
+  assert.match(css, /\.skip-link:focus-visible/);
+  assert.match(css, /\.modal\s*\{[^}]*overscroll-behavior:\s*contain/);
+  assert.match(css, /env\(safe-area-inset-top/);
+  assert.doesNotMatch(css, /\.dash-dl-item:hover, \.dash-dl-item:focus-visible \{[^}]*outline:\s*none/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /name="theme-color"/);
+  assert.match(html, /viewport-fit=cover/);
+  assert.match(html, /fetchpriority="high"/);
+  assert.match(html, /type="tel"/);
+});
+
 console.log(`\n${passed} layout checks passed`);

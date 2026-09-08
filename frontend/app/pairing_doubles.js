@@ -33,6 +33,7 @@ export function createPairingDoublesPanel(ctx) {
     const sel = document.createElement("select"); sel.className = "pm-player player-ref";
     lbl.appendChild(sel); div.appendChild(lbl);
     const del = document.createElement("button"); del.type = "button"; del.className = "btn-link danger"; del.textContent = "×";
+    del.setAttribute("aria-label", "Remove player from group");
     del.addEventListener("click", () => { div.remove(); if (!pairingMembersBox.children.length) pairingMemberRow(); });
     div.appendChild(del); pairingMembersBox.appendChild(div);
     fillPlayerRef(sel);     // reference the existing Players list

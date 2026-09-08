@@ -1,10 +1,23 @@
 // Theme (light/dark) + static a11y bootstrapping (D11 slice from app.js).
 // Runs at import so the theme applies before first paint when possible.
 
+export function syncThemeColor() {
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "theme-color";
+    document.head.appendChild(meta);
+  }
+  const signedOut = document.body?.classList.contains("is-signed-out");
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  meta.content = signedOut ? "#1b4d32" : (dark ? "#0f1612" : "#eef3f0");
+}
+
 export function applyTheme(t) {
   const dark = t === "dark";
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
   try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) { /* ignore */ }
+  syncThemeColor();
   const btn = document.getElementById("theme-toggle");
   if (!btn) return;
   const label = dark ? "Light" : "Dark";

@@ -77,6 +77,7 @@ export function createSetupCrud(ctx) {
       chip.textContent = c.cert_type + " ";
       const x = document.createElement("button");
       x.type = "button"; x.className = "chip-x"; x.textContent = "×";
+      x.setAttribute("aria-label", `Remove ${c.cert_type} certification`);
       x.addEventListener("click", async () => {
         try { await api(`/certifications/${c.id}`, { method: "DELETE" }); loadCerts(id); }
         catch (e) { setMsg("cert-msg", e.message, false); }

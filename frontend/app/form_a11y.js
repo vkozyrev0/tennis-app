@@ -10,7 +10,7 @@ export function installFormA11y(ctx) {
       el.dataset.dateLocale = "1";
       el.type = "text";
       el.classList.add("date-locale");
-      el.placeholder = el.placeholder || "MM/DD/YYYY";
+      el.placeholder = el.placeholder || "MM/DD/YYYY…";
       el.setAttribute("inputmode", "numeric");
       el.setAttribute("autocomplete", "off");
       el.title = "MM/DD/YYYY or YYYY-MM-DD";
@@ -20,6 +20,21 @@ export function installFormA11y(ctx) {
       hint.className = "date-hint";
       hint.textContent = "MM/DD/YYYY";
       el.insertAdjacentElement("afterend", hint);
+    });
+  }
+
+  function enhanceContactFields() {
+    document.querySelectorAll('input[name="phone"]').forEach((el) => {
+      if (el.type === "text" || el.type === "") {
+        el.type = "tel";
+      }
+      if (!el.getAttribute("autocomplete")) el.setAttribute("autocomplete", "tel");
+      if (!el.getAttribute("inputmode")) el.setAttribute("inputmode", "tel");
+    });
+    document.querySelectorAll(
+      'input[type="email"], input[type="password"], input[name="username"], input[autocomplete="username"]',
+    ).forEach((el) => {
+      el.setAttribute("spellcheck", "false");
     });
   }
 
@@ -93,6 +108,7 @@ export function installFormA11y(ctx) {
   return {
     markRequiredFields,
     enhanceDateFields,
+    enhanceContactFields,
     consolidateInboxToolbar: _consolidateInboxToolbar,
     consolidateRosterToolbar: _consolidateRosterToolbar,
   };

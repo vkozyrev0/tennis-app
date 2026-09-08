@@ -180,5 +180,27 @@ export function createShell() {
     });
   }
 
+  function controlDirty(el) {
+    if (!el || el.disabled || !el.name) return false;
+    if (el.tagName === "BUTTON" || el.type === "submit" || el.type === "button" || el.type === "hidden") return false;
+    if (el.type === "checkbox" || el.type === "radio") return el.checked !== el.defaultChecked;
+    if (el.tagName === "SELECT") return [...el.options].some((o) => o.selected !== o.defaultSelected);
+    return (el.value || "") !== (el.defaultValue || "");
+  }
+
+  function pageHasUnsavedEdits() {
+    for (const form of document.querySelectorAll("form")) {
+      if (form.closest("[hidden]") || form.id === "login-form") continue;
+      if ([...form.elements].some(controlDirty)) return true;
+    }
+    return false;
+  }
+
+  window.addEventListener("beforeunload", (e) => {
+    if (!pageHasUnsavedEdits()) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
   return { api, toast, setMsg, markInvalid, confirmDialog, progress: _progress, notices };
 }
