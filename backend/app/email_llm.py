@@ -34,6 +34,8 @@ _SYSTEM = (
     "Reply with JSON only, no markdown. "
     "intent must be one of: withdrawal, doubles, late_entry, pairing_avoidance, "
     "scheduling_avoidance, division_flex, hotel, other. "
+    "Treat those intents equally; do not prefer doubles over withdrawal, "
+    "late_entry (singles entry), or other. "
     "players is a list of {name, usta}. confidence is 0..1. "
     "Classify the LATEST body only (ignore Re:/FW:/**EXTERNAL** and quotes). "
     "Cancel / cancellation of singles or doubles is withdrawal (same as "
@@ -47,7 +49,9 @@ _SYSTEM = (
     "OR asks someone to email / confirm they are good → other, even if the "
     "subject says withdraw, cancel, doubles, singles, confirmation, or pairing. "
     "(2) Else two people named as partners / would like to be partners / "
-    "will partner → doubles (a trailing Thank you does not cancel that). "
+    "will partner / pair two named players for doubles → doubles "
+    "(a trailing Thank you does not cancel that; still doubles if the body "
+    "mentions someone else's partner is withdrawing). "
     "(3) Else withdraw / cancel / WITHDRAWAL REQUEST / requested to be "
     "withdrawn from singles and/or doubles → withdrawal. "
     "(4) Else missed the deadline / still enter / add NAME in singles → "
@@ -59,7 +63,12 @@ _SYSTEM = (
     "Set intent to match the rule. Do not set intent from the subject alone "
     "when the body is an ack. "
     "If reason is acknowledgement or waiting on email, intent is other "
-    "unless the body lists two people as doubles partners."
+    "unless the body lists two people as doubles partners. "
+    "After intent, fill players for that intent: players[0] first named "
+    "player {name, usta}, players[1] only if a second player is named "
+    "(doubles partner). usta is digits or null if not stated. His/Her "
+    "USTA # is N after a name belongs to that player. Skip parent, "
+    "sign-off, and a partner only said to be withdrawing. other → []."
 )
 
 _SHOTS = """\
@@ -257,13 +266,22 @@ def parse_llm_json(raw: str | None) -> dict | None:
     intent = str(data.get("intent") or "other").strip().lower().replace(" ", "_")
     if intent not in INTENTS:
         intent = "other"
+    raw_players = data.get("players")
+    if not isinstance(raw_players, list) or not raw_players:
+        raw_players = []
+        for key in ("player1", "player2", "first_player", "second_player"):
+            p = data.get(key)
+            if isinstance(p, dict):
+                raw_players.append(p)
     players = []
-    for p in data.get("players") or []:
+    for p in raw_players:
         if not isinstance(p, dict):
             continue
         name = str(p.get("name") or "").strip()
         usta = p.get("usta") or p.get("usta_id") or p.get("usta_number")
         usta = str(usta).strip() if usta else None
+        if usta in {"null", "none", "n/a", ""}:
+            usta = None
         if name or usta:
             players.append({"name": name or None, "usta": usta})
     try:
@@ -398,17 +416,28 @@ def leftover_prompt(subject: str | None, body: str | None) -> str:
     )
 
 
+# Last leftover parse for this process — classify() then suggest() can share it.
+_LEFTOVER_LAST: tuple | None = None
+
+
 def leftover_model_intent(subject: str | None, body: str | None) -> dict | None:
     """Clip + shared leftover_prompt + sidecar + parse_llm_json. No intent rewrite."""
+    global _LEFTOVER_LAST
     if not llm_enabled():
         return None
     subj, clipped = clip_email_text(subject, body)
+    key = (subj, clipped)
+    if _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
+        return _LEFTOVER_LAST[1]
     prompt = leftover_prompt(subj, clipped)
     try:
         raw = _complete(prompt)
     except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError):
+        _LEFTOVER_LAST = (key, None)
         return None
-    return parse_llm_json(raw)
+    parsed = parse_llm_json(raw)
+    _LEFTOVER_LAST = (key, parsed)
+    return parsed
 
 
 def extract_email(subject: str | None, body: str | None) -> dict | None:

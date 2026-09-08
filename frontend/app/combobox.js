@@ -42,6 +42,10 @@ export function enhanceSelect(sel) {
   const input = document.createElement("input");
   input.type = "text"; input.className = "combo-input"; input.autocomplete = "off";
   input.id = "combo-input-" + listId.replace(/^combo-list-/, "");
+  input.setAttribute("data-lpignore", "true");
+  input.setAttribute("data-1p-ignore", "true");
+  input.setAttribute("data-bwignore", "true");
+  input.setAttribute("data-form-type", "other");
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "false");

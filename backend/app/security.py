@@ -7,7 +7,7 @@ import hashlib
 import hmac
 import secrets
 
-from fastapi import Cookie, Depends, HTTPException
+from fastapi import Cookie, Depends, HTTPException, Response
 
 from .db import db_dep
 
@@ -34,7 +34,11 @@ def verify_pw(password: str, stored: str) -> bool:
         return False
 
 
-def get_current_user(sid: str | None = Cookie(default=None), conn=Depends(db_dep)) -> dict:
+def get_current_user(
+    response: Response,
+    sid: str | None = Cookie(default=None),
+    conn=Depends(db_dep),
+) -> dict:
     if not sid:
         raise HTTPException(status_code=401, detail="not authenticated")
     with conn.cursor() as cur:
@@ -46,8 +50,23 @@ def get_current_user(sid: str | None = Cookie(default=None), conn=Depends(db_dep
             (sid,),
         )
         user = cur.fetchone()
-    if user is None:
-        raise HTTPException(status_code=401, detail="not authenticated")
+        if user is None:
+            raise HTTPException(status_code=401, detail="not authenticated")
+        # Sliding expiry: any authenticated API call renews the session.
+        # Throttle writes to ~hourly so a menu click (many parallel GETs)
+        # does not UPDATE once per request.
+        from .routers.auth import _attach_cookie, _session_ttl_sql
+        ttl = _session_ttl_sql()
+        cur.execute(
+            """
+            UPDATE session SET expires_at = now() + %s::interval
+            WHERE token = %s
+              AND expires_at < now() + %s::interval - interval '1 hour'
+            """,
+            (ttl, sid, ttl),
+        )
+        if cur.rowcount:
+            _attach_cookie(response, sid)
     user["must_change_password"] = bool(user.get("must_change_password"))
     user["can_export_pii"] = bool(user.get("can_export_pii", True))
     return user

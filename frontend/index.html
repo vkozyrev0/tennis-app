@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=3" />
   <link rel="stylesheet" href="/tokens.css?v=9" />
-  <link rel="stylesheet" href="/styles.css?v=124" />
+  <link rel="stylesheet" href="/styles.css?v=128" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -81,6 +81,13 @@
       <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>
+      </symbol>
+      <!-- bell — L1 Notifications (session Notices page). Referenced
+           dynamically as #i-${group} from app.js. -->
+      <symbol id="i-notifications" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+        <path d="M10 21a2 2 0 0 0 4 0"/>
       </symbol>
       <!-- tennis ball — app brand icon. Filled ball with the classic curved
            seam (two arcs) so it reads as a tennis ball even at 18 px. -->
@@ -193,13 +200,11 @@
       <button class="tab" data-target="panel-events">Events</button>
       <button class="tab" data-target="panel-tshirts">T-shirts</button>
       <button class="tab" data-target="panel-users">Users</button>
-      <button class="tab" data-target="panel-gmail">Gmail</button>
       <!-- design-crit pass 2 #2: folded the orphan one-tab "Data" group into
            Setup. Bulk import is a Setup workflow conceptually (you stage
            records and merge them into the catalogs); keeping it as its own
            group made it look stranded next to a 10-tab Setup. -->
       <button class="tab" data-target="panel-import">Import</button>
-      <button class="tab" data-target="panel-notices">Notices</button>
     </div>
     <div class="menu-group tgroup" data-group="tournament">
       <span class="menu-label">Tournament</span>
@@ -225,6 +230,8 @@
     <div class="menu-group tgroup" data-group="inbox">
       <span class="menu-label">Inbox</span>
       <button class="tab needs-active" data-target="panel-t-inbox">Inbox</button>
+      <button class="tab" data-target="panel-gmail">Gmail</button>
+      <button class="tab" data-target="panel-outlook">Outlook</button>
     </div>
     <!-- IA cleanup (P0 #1): "Player requests" and "Player preferences" were two
          separate top-level groups, both holding per-player data lists. Merged
@@ -241,6 +248,12 @@
       <button class="tab needs-active" data-target="panel-t-pairing">Pairing avoidances</button>
       <button class="tab needs-active" data-target="panel-t-doubles">Doubles</button>
       <button class="tab needs-active" data-target="panel-t-photels">Player hotels</button>
+    </div>
+    <!-- Session log: L1 at the end so catalogs and event work stay first.
+         One tab (Notices) so L2 hides — click Notifications, land on the page. -->
+    <div class="menu-group" data-group="notifications">
+      <span class="menu-label">Notifications</span>
+      <button class="tab" data-target="panel-notices">Notices</button>
     </div>
   </nav>
 
@@ -659,7 +672,7 @@
       </div>
       <div class="card">
         <h3>How to enable the Gmail feed</h3>
-        <p class="muted">Gmail will not accept the account’s normal password over IMAP. Use a Google <strong>App Password</strong> (2-Step Verification required). CourtOps talks to <code>imap.gmail.com</code> and never sends mail.</p>
+        <p class="muted">Gmail will not accept the account’s normal password over IMAP. Use a Google <strong>App Password</strong> (2-Step Verification required). CourtOps talks to <code>imap.gmail.com</code> read-only and never sends or deletes mail.</p>
         <ol class="help-steps">
           <li>Sign in to the TD Gmail in a browser (the mailbox that receives USTA / parent mail, or a dedicated inbox that those messages are forwarded to).</li>
           <li>Open <a href="https://myaccount.google.com/security" target="_blank" rel="noopener">Google Account → Security</a>.</li>
@@ -673,6 +686,73 @@
         </ol>
         <p class="help-tip"><strong>Workspace / school Google accounts:</strong> the admin may have to allow IMAP and App Passwords (or “Less secure apps” is not enough — use an App Password). If login fails with “Application-specific password required”, the field is still the account’s normal Gmail password instead of the 16-character App Password.</p>
         <p class="help-tip"><strong>Forwarding:</strong> you can keep using a personal Gmail and auto-forward USTA mail into the TD inbox, then connect that inbox here. Poll minutes are stored for a future background worker; until then, use Get latest (or refresh this page and fetch after mail arrives).</p>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-outlook">
+      <div class="card">
+        <h3>Outlook / Microsoft inbox feed</h3>
+        <p class="muted">Connect the TD Microsoft 365 mailbox so CourtOps can pull new parent/player mail into the review inbox via Microsoft Graph (app-only). Credentials stay on this server (the client secret is encrypted). <strong>Get latest</strong> only fetches messages newer than the stored received-time cursor. This is not interactive Microsoft login.</p>
+        <p class="muted" id="outlook-feed-status"></p>
+        <form id="outlook-feed-form" autocomplete="off" class="inline-form">
+          <div class="row">
+            <label class="check"><input type="checkbox" name="enabled" /> Enable Outlook feed</label>
+          </div>
+          <div class="row">
+            <label>Mailbox
+              <input name="mailbox" type="email" autocomplete="off" spellcheck="false" placeholder="TD@myadllc.com…" />
+            </label>
+            <label>Directory (tenant) ID
+              <input name="tenant_id" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Application (client) ID
+              <input name="client_id" autocomplete="off" spellcheck="false" placeholder="guid or api://guid" />
+            </label>
+            <label>Client secret
+              <input name="client_secret" type="password" autocomplete="new-password" spellcheck="false"
+                     placeholder="Entra client secret value…" />
+            </label>
+            <label>Client secret expires
+              <input name="client_secret_expires" type="date" autocomplete="off" />
+            </label>
+          </div>
+          <div class="row">
+            <label>Mail search (optional)
+              <input name="mail_query" placeholder="from:playtennis.usta.com…" spellcheck="false" />
+            </label>
+            <label>Poll every (minutes)
+              <input name="poll_minutes" type="number" min="1" max="1440" value="15" />
+            </label>
+            <label>First-fetch lookback (days)
+              <input name="lookback_days" type="number" min="1" max="90" value="7" />
+            </label>
+            <label>File under tournament
+              <select name="tournament_id"></select>
+            </label>
+          </div>
+          <div class="actions-row">
+            <button type="submit">Save settings</button>
+            <button type="button" id="outlook-feed-fetch">Get latest</button>
+            <span class="msg" id="outlook-feed-msg"></span>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h3>How to enable the Outlook / Microsoft feed</h3>
+        <p class="muted">CourtOps reads mail with Microsoft Graph <strong>application permissions</strong> (OAuth 2.0 client credentials, scope <code>https://graph.microsoft.com/.default</code>). There is no interactive Microsoft sign-in. The app must have admin-consented <strong>Mail.Read</strong> (not <code>Mail.ReadWrite</code>). CourtOps calls <code>GET /v1.0/users/{mailbox}/messages</code> (not <code>/me</code>) and never sends or deletes mail.</p>
+        <ol class="help-steps">
+          <li>In the Entra admin center, open the app registration that should read the TD mailbox. Copy <strong>Directory (tenant) ID</strong> and <strong>Application (client) ID</strong> (the GUID, or <code>api://{guid}</code> — token calls use the GUID).</li>
+          <li>Under <strong>Certificates &amp; secrets</strong>, create a client secret if the current one is expired. Copy the secret <strong>Value</strong> once (it is not shown again in Entra).</li>
+          <li>Under <strong>API permissions</strong>, add Microsoft Graph <strong>Application</strong> permission <strong>Mail.Read</strong> (not a delegated permission). Click <strong>Grant admin consent</strong> for the tenant.</li>
+          <li>Mailbox is the user principal to read, e.g. <code>TD@myadllc.com</code>. Graph app-only mail is <code>/users/{mailbox}/messages</code>, not the signed-in <code>/me</code> mailbox.</li>
+          <li>Paste tenant ID, client ID, mailbox, and client secret above. Enable the feed. Save settings. The secret is encrypted at rest and is never shown again.</li>
+          <li>Optional: set a <strong>Mail search</strong> so Graph <code>$search</code> narrows to tournament mail. Optional: pick <strong>File under tournament</strong>. If you leave it blank, CourtOps routes by the message <code>To:</code> against Setup → Tournaments → Ingest address.</li>
+          <li>Click <strong>Get latest</strong>. New messages land in Inbox with source <code>outlook</code>. The received-time cursor advances so the next fetch only asks for newer mail. First run uses the lookback window (default 7 days, at most 50 messages).</li>
+        </ol>
+        <p class="help-tip"><strong>Admin consent:</strong> without tenant admin consent for application <code>Mail.Read</code>, Get latest returns 403 even with a valid secret. Personal outlook.com / Hotmail without this Entra app is not supported.</p>
+        <p class="help-tip"><strong>Poll minutes</strong> are stored for a future background worker; until then, use Get latest (or refresh this page and fetch after mail arrives).</p>
       </div>
     </section>
 
@@ -1074,24 +1154,64 @@
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <h3>Review inbox — <span class="t-name"></span></h3>
-        <p class="muted">Human-reviewed email — <strong>classify → detect player → file</strong> into a list.
-          <details class="inline-help"><summary>How to add email</summary>
-          Paste a forwarded message below (From / Subject / Body), or use <strong>Import → PDF email thread</strong>.
-          Auto-ingest to a dedicated address is optional server config.</details>
-        </p>
-        <p class="inbox-triage-hint muted" id="inbox-triage-hint">
-          Add or import email, then tick rows for bulk actions
+        <div class="muted">Classify, match a player, file into a list.
+          <details class="inline-help"><summary>How this page works</summary>
+          <strong>Mailbox</strong> pulls Gmail/Outlook for the dates. <strong>Add</strong> pastes
+          a message or imports a PDF. Then tick rows for bulk actions
           (<span class="inbox-triage-hint-em">Triage all</span>).
-          Keys (when not in a field):
-          <kbd>t</kbd> triage · <kbd>d</kbd> detect · <kbd>f</kbd> mark filed · <kbd>u</kbd> unmatched only ·
-          <kbd>?</kbd> all shortcuts.
-        </p>
-        <p class="inbox-axes" id="inbox-axes">
-          <strong title="Queue: emails not yet filed into a list">Unfiled</strong> (queue) ·
-          <strong title="No roster player was detected">Unmatched</strong> (player) ·
-          <strong title="Email type is not set">Unclassified</strong> (type) ·
-          <strong title="Status chip for an email that has not been filed or marked follow-up">New</strong> (status)
-        </p>
+          <p class="inbox-triage-hint muted" id="inbox-triage-hint">
+            Keys (when not in a field):
+            <kbd>t</kbd> triage · <kbd>d</kbd> detect · <kbd>f</kbd> mark filed · <kbd>u</kbd> unmatched only ·
+            <kbd>?</kbd> all shortcuts.
+          </p>
+          <p class="inbox-axes" id="inbox-axes">
+            <strong title="Queue: emails not yet filed into a list">Unfiled</strong> (queue) ·
+            <strong title="No roster player was detected">Unmatched</strong> (player) ·
+            <strong title="Email type is not set">Unclassified</strong> (type) ·
+            <strong title="Status chip for an email that has not been filed or marked follow-up">New</strong> (status)
+          </p>
+          </details>
+        </div>
+        <!-- Three labeled clusters so Mailbox / Add / Queue don't compete as
+             one wrap of equal buttons. Import PDF stays outside the paste form
+             (that form is collapsed into a modal). JS moves + Add email, the
+             Import menu, and CSV into #inbox-entry-row. -->
+        <div class="inbox-desk">
+          <div class="inbox-cluster" role="group" aria-labelledby="inbox-cluster-mailbox">
+            <div id="inbox-cluster-mailbox" class="inbox-cluster-label">Mailbox</div>
+            <div class="inbox-cluster-controls">
+              <span class="inbox-date-range" role="group" aria-label="Mail date range">
+                <label>From <input type="date" id="inbox-mail-since" /></label>
+                <label>to <input type="date" id="inbox-mail-until" /></label>
+              </span>
+              <label class="inbox-unmatched-toggle" title="Include mail received before the date range or last fetch, and restore copies hidden by Clear inbox. Gmail and Outlook/Hotmail are not changed.">
+                <input type="checkbox" id="inbox-get-all" /> Get all
+              </label>
+              <button type="button" id="inbox-get-mails" class="export-btn primary" title="Pull mailbox mail in this date range, including already-read messages. Mail already in CourtOps is not duplicated. Turn on Get all for earlier event mail and to restore a cleared inbox.">Get mails</button>
+              <span class="msg" id="inbox-feed-msg"></span>
+            </div>
+          </div>
+          <div class="inbox-cluster" role="group" aria-labelledby="inbox-cluster-add">
+            <div id="inbox-cluster-add" class="inbox-cluster-label">Add</div>
+            <div class="inbox-cluster-controls" id="inbox-entry-row">
+              <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
+              <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
+              <span class="msg" id="inbox-import-pdf-msg"></span>
+            </div>
+          </div>
+          <div class="inbox-cluster" role="group" aria-labelledby="inbox-cluster-queue">
+            <div id="inbox-cluster-queue" class="inbox-cluster-label">Queue</div>
+            <div class="inbox-cluster-controls inbox-cluster-controls--queue">
+              <input type="search" id="inbox-search" class="filter filter--narrow" autocomplete="off"
+                     placeholder="Search subject / sender…" aria-label="Search inbox (server-side)" />
+              <span class="muted" id="inbox-search-note"></span>
+              <label class="inbox-unmatched-toggle" title="Show only emails with no matched player"><input type="checkbox" id="inbox-unmatched-only" /> Unmatched only</label>
+              <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
+              <button type="button" id="inbox-confirm-suggestions" class="export-btn" title="Confirm parsed name/USTA suggestions: create catalog players when gender is clear and link them. Does not add them to the roster.">Confirm suggestions</button>
+              <button type="button" id="inbox-clear" class="btn-link danger inbox-clear" title="Remove CourtOps copies for this tournament. Gmail and Outlook/Hotmail mailboxes are not changed.">Clear inbox</button>
+            </div>
+          </div>
+        </div>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>From <input name="from_address" autocomplete="off" /></label>
@@ -1102,16 +1222,6 @@
           </div>
           <div class="actions-row"><button type="submit">Save</button><span class="msg" id="email-msg"></span></div>
         </form>
-        <!-- Dedicated Import PDF button — outside the email-form so it stays
-             visible even when the form is collapsed. JS at init moves this
-             button (and the inbox grid's CSV button) into the same row as the
-             auto-created "+ Add email" trigger so all three sit inline. -->
-        <button type="button" id="inbox-import-pdf-btn" class="export-btn" title="Upload a printed email-thread PDF directly into this inbox"><span aria-hidden="true">⬆</span> Import PDF</button>
-        <input type="file" id="inbox-import-pdf-input" accept=".pdf" hidden />
-        <button type="button" id="inbox-detect-all" class="export-btn" title="Run the player detector on every inbox email that has no matched player yet"><span aria-hidden="true">⚲</span> Detect players</button>
-        <button type="button" id="inbox-confirm-suggestions" class="export-btn" title="Confirm parsed name/USTA suggestions: create catalog players when gender is clear and link them. Does not add them to the roster.">Confirm suggestions</button>
-        <label class="inbox-unmatched-toggle" title="Show only emails with no matched player"><input type="checkbox" id="inbox-unmatched-only" /> Unmatched only</label>
-        <span class="msg" id="inbox-import-pdf-msg"></span>
         <!-- Shown when the grid has rows but none are checked — explains why
              the bulk bar is missing (progressive disclosure). Hidden when empty
              (use the grid empty-state) or when a selection is active. -->
@@ -1132,7 +1242,8 @@
                together so it reads as one action, not three loose controls. -->
           <span class="bulk-group">
             <label for="inbox-bulk-tournament">Reassign to</label>
-            <select id="inbox-bulk-tournament" aria-label="Tournament to reassign selected emails to">
+            <select id="inbox-bulk-tournament" aria-label="Tournament to reassign selected emails to"
+                    autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other">
               <option value="">— pick tournament —</option>
             </select>
             <button type="button" id="inbox-bulk-reassign">Reassign</button>
@@ -1148,15 +1259,10 @@
           <span class="msg" id="inbox-bulk-msg"></span>
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
-        <div class="row mb-half">
-          <input type="search" id="inbox-search" class="filter filter--narrow" autocomplete="off"
-                 placeholder="Search subject / sender…" aria-label="Search inbox (server-side)" />
-          <span class="muted" id="inbox-search-note"></span>
-        </div>
         <div id="inbox-status-summary" class="inbox-summary" hidden></div>
         <div id="inbox-aging" class="inbox-aging" hidden></div>
         <table id="inbox-table" class="list-table">
-          <thead><tr><th></th><th>Received</th><th>From</th><th>Review</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Received</th><th>From</th><th>Source</th><th>Review</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
         <!-- Click "Review" on a row to open it. Modal overlay so the list
@@ -1576,6 +1682,16 @@
       </div>
     </div>
   </div>
+  <div id="idle-modal" class="modal" hidden role="dialog" aria-modal="true"
+       aria-labelledby="idle-title" aria-describedby="idle-text">
+    <div class="modal-box">
+      <h3 id="idle-title">Still there?</h3>
+      <p id="idle-text">Your session will expire soon due to inactivity. Continue to stay signed in.</p>
+      <div class="modal-actions">
+        <button type="button" id="idle-continue" class="confirm-ok primary">Continue</button>
+      </div>
+    </div>
+  </div>
   <!-- Player 360 drawer: everything about one player across the Part B lists. -->
   <div id="player360-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="player360-title">
     <div class="modal-box modal-box--wide">
@@ -1632,6 +1748,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=276"></script>
+  <script type="module" src="/app.js?v=280"></script>
 </body>
 </html>

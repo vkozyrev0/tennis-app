@@ -127,6 +127,16 @@ def _session_ttl_sql() -> str:
     return f"{_session_days()} days"
 
 
+def _attach_cookie(response: Response, token: str) -> None:
+    """HttpOnly session cookie; max_age tracks COURTOPS_SESSION_DAYS."""
+    response.set_cookie(
+        COOKIE_NAME, token,
+        httponly=True, samesite="strict", path="/",
+        secure=_secure_cookie(),
+        max_age=_session_days() * 86400,
+    )
+
+
 def _user_public(user: dict) -> dict:
     return {
         "username": user["username"],
@@ -178,10 +188,7 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
             (token, user["id"], _session_ttl_sql()),
         )
     _clear_attempts(key)
-    response.set_cookie(
-        COOKIE_NAME, token, httponly=True, samesite="strict", path="/",
-        secure=_secure_cookie(),
-    )
+    _attach_cookie(response, token)
     return _user_public(user)
 
 

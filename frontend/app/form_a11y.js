@@ -79,8 +79,24 @@ export function stampFormControls(root = (typeof document !== "undefined" ? docu
       const ac = suggestedAutocomplete(el);
       if (ac) el.setAttribute("autocomplete", ac);
     }
+    ignorePasswordManagers(el);
   });
   return n;
+}
+
+/** LastPass/1Password/Bitwarden treat CourtOps combos as login fields. */
+function ignorePasswordManagers(el) {
+  if (!el || el.nodeType !== 1) return;
+  const tag = String(el.tagName || "").toUpperCase();
+  const type = String(el.type || "").toLowerCase();
+  const isCombo = el.classList && el.classList.contains("combo-input");
+  const isSelect = tag === "SELECT";
+  const isDate = type === "date";
+  if (!isCombo && !isSelect && !isDate) return;
+  el.setAttribute("data-lpignore", "true");
+  el.setAttribute("data-1p-ignore", "true");
+  el.setAttribute("data-bwignore", "true");
+  if (isCombo || isSelect) el.setAttribute("data-form-type", "other");
 }
 
 export function watchFormControls(root = (typeof document !== "undefined" ? document : null)) {
@@ -97,23 +113,11 @@ export function watchFormControls(root = (typeof document !== "undefined" ? docu
 export function installFormA11y(ctx) {
   const { makeMenuButton, gotoImport } = ctx;
 
-  /** Native date inputs reject typed MM/DD/YYYY. Use a text field + hint. */
+  /** Keep native calendar datepickers. Do not convert them to text. */
   function enhanceDateFields() {
     document.querySelectorAll('input[type="date"]').forEach((el) => {
-      if (el.dataset.dateLocale) return;
-      el.dataset.dateLocale = "1";
-      el.type = "text";
-      el.classList.add("date-locale");
-      el.placeholder = el.placeholder || "MM/DD/YYYY…";
-      el.setAttribute("inputmode", "numeric");
       el.setAttribute("autocomplete", "off");
-      el.title = "MM/DD/YYYY or YYYY-MM-DD";
-      if (!el.parentElement) return;
-      if (el.parentElement.querySelector(".date-hint")) return;
-      const hint = document.createElement("span");
-      hint.className = "date-hint";
-      hint.textContent = "MM/DD/YYYY";
-      el.insertAdjacentElement("afterend", hint);
+      ignorePasswordManagers(el);
     });
   }
 
@@ -147,10 +151,10 @@ export function installFormA11y(ctx) {
     });
   }
 
-  // Consolidate the Inbox panel's top toolbar so "+ Add email", "⬆ Import PDF"
-  // and "⬇ CSV" sit inline on the same row. The trigger and the CSV button
-  // are both injected by other init code; this runs after both so it can wrap
-  // all three into a shared flex container.
+  // Put "+ Add email", the Import menu, and CSV into the Inbox Add cluster
+  // (#inbox-entry-row). The trigger and CSV button are injected by other init
+  // code; this runs after both. Falls back to a generated row if the slot is
+  // missing (older markup).
   function _consolidateInboxToolbar() {
     const trigger = document.querySelector('#panel-t-inbox .add-trigger');
     const importBtn = document.getElementById("inbox-import-pdf-btn");
@@ -160,10 +164,13 @@ export function installFormA11y(ctx) {
       .find((b) => /CSV/.test(b.textContent) && b.id !== "inbox-import-pdf-btn"
         && !b.classList.contains("menu-btn-trigger"));
     if (!trigger || !importBtn) return;
-    if (document.getElementById("inbox-toolbar-row")) return;  // idempotent
-    const row = document.createElement("div");
-    row.id = "inbox-toolbar-row"; row.className = "actions-row mb-half";
-    trigger.parentNode.insertBefore(row, trigger);
+    if (document.getElementById("inbox-import-menu")) return;  // idempotent
+    const slot = document.getElementById("inbox-entry-row");
+    const row = slot || document.createElement("div");
+    if (!slot) {
+      row.id = "inbox-toolbar-row"; row.className = "actions-row mb-half";
+      trigger.parentNode.insertBefore(row, trigger);
+    }
     // design-crit I-8: a single "⬆ Import ▾" menu replaces the separate
     // "Import PDF" + auto-injected "Import…" buttons. The original PDF button is
     // hidden but kept wired (its hidden file input does the upload); the menu's
@@ -173,6 +180,7 @@ export function installFormA11y(ctx) {
       { label: "PDF email thread", title: "Upload a printed email-thread PDF directly into this inbox", onClick: () => importInput.click() },
       { label: "Staged import…", title: "Open the Import page to preview + merge", onClick: () => gotoImport("emails_pdf") },
     ], { className: "export-btn no-print" });
+    importMenu.id = "inbox-import-menu";
     row.append(trigger, importMenu, importBtn);
     if (importInput) row.append(importInput);
     if (importMsg) row.append(importMsg);

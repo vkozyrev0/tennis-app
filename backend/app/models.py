@@ -90,6 +90,8 @@ from ._models_inbox import (  # noqa: F401
     EmailDetectResult,
     EmailOut,
     EmailUpdate,
+    InboxPersonOut,
+    InboxPersonPromote,
     LateEntryCreate,
     LateEntryOut,
     LateEntryUpdate,

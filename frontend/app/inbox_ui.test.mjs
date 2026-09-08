@@ -21,6 +21,14 @@ import {
   fileWithoutPlayerGate,
   FILE_NEEDS_PLAYER_REASON,
   inboxConfidence,
+  inboxSourceLabel,
+  INBOX_OPTION_PREFIX,
+  inboxOptionValue,
+  parseInboxOptionValue,
+  mergePlayerDropdownOptions,
+  inboxAddPlayerVisible,
+  inboxKnownUsta,
+  INBOX_ADD_TO_PLAYERS,
 } from "./inbox_ui.js";
 
 let passed = 0;
@@ -122,6 +130,17 @@ test("reviewDetectedPlayers is one slot, or many for doubles/name pairs", () => 
   assert.equal(fromPairs.length, 2);
   assert.equal(fromPairs[0].name, "Alexandra Dimitrov");
   assert.equal(fromPairs[1].usta, "2018389707");
+  assert.equal(fromPairs[0].hint, "Alexandra Dimitrov · 2018522196");
+  const unnamed = reviewDetectedPlayers({
+    classification: "doubles",
+    detected_name_pairs: [
+      { name: "Ernesto Del Valle" },
+      { name: "Ulrich Novakovitch", usta: "2018838558" },
+    ],
+  });
+  assert.equal(unnamed[0].id, "");
+  assert.equal(unnamed[0].hint, "Ernesto Del Valle");
+  assert.equal(unnamed[1].hint, "Ulrich Novakovitch · 2018838558");
   const members = reviewDetectedPlayers({
     classification: "pairing_avoidance",
     detected_member_ids: [8, 9, 10],
@@ -263,10 +282,182 @@ test("inbox From and Subject columns have a width floor so headers do not collap
   assert.match(grids, /else if \(!col\.width\) cd\.minWidth = 96/);
 });
 
+test("Help describes inbox people, Add to Players, Get all, and Outlook", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const help = readFileSync(join(here, "help.js"), "utf8");
+  assert.match(help, /inbox people/);
+  assert.match(help, /Add to Players/);
+  assert.match(help, /Get all/);
+  assert.match(help, /Outlook \/ Microsoft feed/);
+  assert.match(help, /Still there\?/);
+});
+
+test("inbox source labels map gmail, outlook, and pdf", () => {
+  assert.equal(inboxSourceLabel("gmail"), "gmail");
+  assert.equal(inboxSourceLabel("outlook"), "outlook");
+  assert.equal(inboxSourceLabel("pdf"), "pdf");
+  assert.equal(inboxSourceLabel("pdf_import"), "pdf");
+  assert.equal(inboxSourceLabel("emails_pdf"), "pdf");
+  assert.equal(inboxSourceLabel("manual"), "manual");
+  assert.equal(inboxSourceLabel(""), "manual");
+  assert.equal(inboxSourceLabel("microsoft"), "outlook");
+});
+
+test("inbox markup has Clear (not bulk-clear) plus date range Get mails", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  const js = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(html, /id="inbox-clear"/);
+  assert.match(html, /id="inbox-bulk-clear"/);
+  assert.match(html, /id="inbox-get-mails"/);
+  assert.match(html, /already-read/);
+  assert.match(html, /id="inbox-mail-since"/);
+  assert.match(html, /id="inbox-mail-until"/);
+  assert.match(html, /id="panel-t-inbox"[\s\S]*id="inbox-clear"/);
+  assert.match(html, /data-group="inbox"[\s\S]*data-target="panel-gmail"/);
+  assert.match(html, /data-group="inbox"[\s\S]*data-target="panel-outlook"/);
+  assert.match(html, /id="inbox-cluster-mailbox"/);
+  assert.match(html, /id="inbox-entry-row"/);
+  assert.match(html, /id="inbox-cluster-queue"/);
+  assert.match(html, /class="btn-link danger inbox-clear"/);
+  assert.equal((html.match(/id="inbox-search"/g) || []).length, 1);
+  {
+    const setup = html.slice(html.indexOf('data-group="setup"'), html.indexOf('data-group="tournament"'));
+    assert.doesNotMatch(setup, /panel-notices/);
+  }
+  assert.match(html, /data-group="notifications"[\s\S]*data-target="panel-notices"/);
+  assert.match(html, /id="i-notifications"/);
+  const notices = readFileSync(join(here, "notices.js"), "utf8");
+  assert.match(notices, /activateGroup\("notifications"\)/);
+  assert.doesNotMatch(notices, /activateGroup\("setup"\)/);
+  assert.match(js, /\/emails\/clear/);
+  assert.match(js, /does not delete anything in Gmail or Outlook\/Hotmail/);
+  assert.match(html, /Gmail and Outlook\/Hotmail mailboxes are not changed/);
+  assert.match(html, /id="inbox-bulk-tournament"[\s\S]{0,200}data-lpignore="true"/);
+  assert.match(js, /\/inbox-feeds\/fetch/);
+  assert.match(js, /q\.set\("tournament_id"/);
+  assert.match(html, /id="inbox-get-all"/);
+  assert.match(js, /get_all/);
+  assert.match(js, /Hide CourtOps copies/);
+  assert.match(js, /title:\s*"Source"/);
+  assert.match(js, /inboxSourceLabel/);
+  assert.notEqual(
+    html.match(/id="inbox-clear"/)?.[0],
+    html.match(/id="inbox-bulk-clear"/)?.[0],
+  );
+});
+
 test("blank email reason is written to #email-msg", () => {
   assert.equal(EMAIL_MSG_ID, "email-msg");
   const g = emailCreateGuard({ subject: "", body: "", from_address: "" });
   assert.equal(g.reason, "Enter a from address, subject, or body — blank emails are not saved");
+});
+
+test("merge includes inbox person when usta/name not on catalog", () => {
+  const catalog = [
+    { id: 1, first_name: "Ada", last_name: "Lovelace", usta_number: "111", gender: "F" },
+  ];
+  const people = [
+    { id: 5, name: "Casey Davis", first_name: "Casey", last_name: "Davis",
+      usta_number: "2018389707", gender: "F", promoted_player_id: null, source_email_id: 9 },
+  ];
+  const opts = mergePlayerDropdownOptions(catalog, people);
+  assert.equal(opts.length, 2);
+  assert.equal(opts[0].source, "catalog");
+  assert.equal(opts[0].playerId, 1);
+  assert.equal(opts[1].source, "inbox");
+  assert.equal(opts[1].value, "inbox:5");
+  assert.equal(opts[1].inboxPersonId, 5);
+  assert.match(opts[1].label, /Davis, Casey/);
+  assert.match(opts[1].label, /2018389707/);
+  assert.match(opts[1].label, / · inbox$/);
+});
+
+test("merge EXCLUDES inbox person when usta already on catalog", () => {
+  const catalog = [
+    { id: 1, first_name: "Casey", last_name: "Davis", usta_number: 2018389707, gender: "F" },
+  ];
+  const people = [
+    { id: 5, name: "Casey Davis", first_name: "Casey", last_name: "Davis",
+      usta_number: "2018389707", gender: "F", promoted_player_id: null, source_email_id: 9 },
+  ];
+  const opts = mergePlayerDropdownOptions(catalog, people);
+  assert.equal(opts.length, 1);
+  assert.equal(opts[0].source, "catalog");
+  assert.equal(opts[0].playerId, 1);
+  assert.equal(opts.some((o) => o.source === "inbox"), false);
+});
+
+test("merge EXCLUDES inbox person when promoted_player_id is on catalog", () => {
+  const catalog = [
+    { id: 11, first_name: "Ada", last_name: "Lovelace", usta_number: "111", gender: "F" },
+  ];
+  const people = [
+    { id: 5, name: "Ada Lovelace", first_name: "Ada", last_name: "Lovelace",
+      usta_number: "999", gender: "F", promoted_player_id: 11, source_email_id: 9 },
+  ];
+  const opts = mergePlayerDropdownOptions(catalog, people);
+  assert.equal(opts.length, 1);
+  assert.equal(opts[0].source, "catalog");
+  assert.equal(opts[0].playerId, 11);
+  assert.equal(opts.some((o) => o.source === "inbox"), false);
+});
+
+test("option value is inbox:5 and parseInboxOptionValue round-trips", () => {
+  const person = { id: 5, name: "Casey Davis" };
+  assert.equal(INBOX_OPTION_PREFIX, "inbox:");
+  assert.equal(inboxOptionValue(person), "inbox:5");
+  assert.equal(parseInboxOptionValue("inbox:5"), 5);
+  assert.equal(parseInboxOptionValue(inboxOptionValue(person)), person.id);
+  assert.equal(parseInboxOptionValue("11"), null);
+  assert.equal(parseInboxOptionValue(""), null);
+  assert.equal(parseInboxOptionValue("inbox:"), null);
+});
+
+test("inboxAddPlayerVisible true for unmatched inbox person, false when catalog id present", () => {
+  const person = {
+    id: 5, name: "Casey Davis", usta_number: "2018389707", promoted_player_id: null,
+  };
+  assert.equal(inboxAddPlayerVisible({
+    catalogPlayerId: "",
+    inboxPerson: person,
+    catalogByUsta: {},
+  }), true);
+  assert.equal(inboxAddPlayerVisible({
+    catalogPlayerId: 11,
+    inboxPerson: person,
+    catalogByUsta: {},
+  }), false);
+});
+
+test("inboxKnownUsta uses slot usta when the inbox person has none", () => {
+  assert.equal(
+    inboxKnownUsta({ id: 4, name: "Ulrich Novakovitch", usta_number: null },
+      { name: "Ulrich Novakovitch", usta: "2018838558" }),
+    "2018838558",
+  );
+  assert.equal(
+    inboxKnownUsta({ id: 4, usta_number: "2018838558" }, { usta: null }),
+    "2018838558",
+  );
+  assert.equal(inboxKnownUsta({ id: 3, name: "Ernesto Del Valle" }, { name: "Ernesto Del Valle" }), "");
+});
+
+test("INBOX_ADD_TO_PLAYERS label / className are the shipped strings", () => {
+  assert.equal(INBOX_ADD_TO_PLAYERS.label, "Add to Players");
+  assert.equal(INBOX_ADD_TO_PLAYERS.className, "inbox-add-to-players");
+});
+
+test("Review and grid markup builders use Add to Players", () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const js = readFileSync(join(here, "inbox.js"), "utf8");
+  assert.match(js, /INBOX_ADD_TO_PLAYERS/);
+  assert.match(js, /_appendPromoteControls/);
+  assert.match(js, /mergePlayerDropdownOptions/);
+  assert.match(js, /\/inbox-people\/\$\{/);
+  assert.match(js, /stopGridEdit/);
+  assert.match(js, /inbox-promote-gender/);
+  assert.match(js, /mousedown/);
 });
 
 console.log(`\n${passed} inbox_ui checks passed`);

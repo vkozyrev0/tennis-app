@@ -61,6 +61,7 @@ import { createOfficialApp } from "./app/official_app.js";
 import { installTrash } from "./app/trash.js";
 import { installAdminUsers } from "./app/admin_users.js";
 import { installGmailFeed } from "./app/gmail_feed.js";
+import { installOutlookFeed } from "./app/outlook_feed.js";
 import { installFormA11y } from "./app/form_a11y.js";
 import { createAdminBoot } from "./app/admin_boot.js";
 import { createNoticesPanel } from "./app/notices.js";
@@ -330,6 +331,7 @@ _menuEl.addEventListener("click", (e) => {
   if (tab.dataset.target === "panel-tshirts") loadTshirts();  // Setup tab (no active needed)
   if (tab.dataset.target === "panel-users") loadUsers();      // Setup tab (admin accounts)
   if (tab.dataset.target === "panel-gmail") loadGmailFeed();
+  if (tab.dataset.target === "panel-outlook") loadOutlookFeed();
   if (tab.dataset.target === "panel-import") buildImportPage();
   if (tab.dataset.target === "panel-notices") loadNotices();
   // Opening any counted list (or the Inbox) re-pulls badge counts so a chip
@@ -734,6 +736,7 @@ const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel(
   progress: _progress, humanizeDetail: _humanizeDetail,
   rosterAddFromEmail: inboxAddToRoster,
   rosterAddBothFromEmail: inboxAddBothToRoster,
+  playersCrudRefresh: () => _rosterRefs.playersCrudRefresh(),
 });
 _rosterRefs.loadInbox = loadInbox;
 
@@ -886,6 +889,10 @@ const { loadUsers } = installAdminUsers({
 });
 
 const { loadGmailFeed } = installGmailFeed({
+  api, setMsg, formObj, onSubmit, fillSelect,
+});
+
+const { loadOutlookFeed } = installOutlookFeed({
   api, setMsg, formObj, onSubmit, fillSelect,
 });
 

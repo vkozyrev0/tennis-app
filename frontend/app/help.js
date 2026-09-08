@@ -49,10 +49,10 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       <h3>Navigation map</h3>
       <ol class="help-steps">
         <li><strong>L1 section bar</strong> (under the header) — Home, Day-of, Setup,
-          Tournament, Staffing, Inbox, Player lists.</li>
+          Tournament, Staffing, Inbox, Player lists, Notifications.</li>
         <li><strong>L2 tabs</strong> — pages inside that section. Home is Dashboard
-          and Chat. Single-tab sections (Day-of, Inbox) skip the second bar so
-          one click opens the page.</li>
+          and Chat. Inbox is Inbox, Gmail, and Outlook. Single-tab sections
+          (Day-of, Notifications) skip the second bar so one click opens the page.</li>
         <li><strong>Working on</strong> — active tournament in the context bar.
           Scopes every tournament-dependent page.</li>
         <li><strong>Find player or official</strong> — global search in the context bar;
@@ -60,6 +60,9 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
         <li><strong>Account menu</strong> (your username ▾) — Trash, Change password,
           Notices, Log out.</li>
       </ol>
+      <p>After 13 minutes idle a <strong>Still there?</strong> dialog asks you to
+      continue. If you do not, CourtOps signs you out at 15 minutes so an
+      unattended desk does not keep the session.</p>
 
       <h3>Header chips</h3>
       <ul class="help-list">
@@ -77,6 +80,11 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
 
       <p>The address bar tracks the current screen (<code>#panel-t-inbox</code>,
       <code>#panel-t-dayof</code>, …) so you can bookmark or share a page.</p>
+
+      <h3>Notifications</h3>
+      <p>Session toasts and alerts live on L1 <strong>Notifications</strong> (the
+      Notices page). The account menu still opens the same log. This is not the
+      assignment / export audit trail.</p>
 
       <p class="help-tip"><strong>Keyboard:</strong> <kbd>1</kbd>–<kbd>9</kbd> jump to
       the Nth visible tab in the current L2 menu. <kbd>/</kbd> focuses the page filter.</p>
@@ -102,9 +110,7 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
           <tr><td>Divisions / Events</td><td>Junior/adult division catalog and event types</td></tr>
           <tr><td>T-shirts</td><td>Cumulative shirt inventory across tournaments</td></tr>
           <tr><td>Users</td><td>Admin/TD logins (not official portal accounts)</td></tr>
-          <tr><td>Gmail</td><td>IMAP app-password feed, UID cursor, Get latest</td></tr>
           <tr><td>Import</td><td>Stage CSV/XLSX/PDF rows, validate, then merge into catalogs</td></tr>
-          <tr><td>Notices</td><td>Toasts and alerts from this session (also in the account menu)</td></tr>
         </tbody>
       </table>
       <p class="help-tip"><strong>Catalog vs event:</strong> Setup → Sites is the master
@@ -196,8 +202,12 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       Classification, status, and <strong>Players detected</strong> are on that
       dialog. Doubles and pairing emails show every named player (one picker each);
       a singles-style email shows one. USTA #s parsed from the body win over a
-      last-name collision, so two Davises stay two people. Save writes Player 1
-      and Player 2 back onto the email.</p>
+      last-name collision, so two Davises stay two people. Names parsed from mail
+      also land on a parallel <strong>inbox people</strong> list (name + USTA),
+      separate from Setup Players. Those people appear in the player dropdown
+      when they are not already in Players. <strong>Add to Players</strong> copies
+      a new person onto the permanent Players catalog (not the tournament roster).
+      Save writes Player 1 and Player 2 back onto the email.</p>
 
       <h3>Status lifecycle</h3>
       <p class="help-flow-line">
@@ -211,16 +221,30 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       badges on L1 show where work is waiting.</p>
 
       <h3>Getting mail in</h3>
+      <p>The Inbox desk has three rows: <strong>Mailbox</strong> (dates + Get mails),
+      <strong>Add</strong> (paste, Import, CSV), and <strong>Queue</strong> (search,
+      unmatched, detect, confirm). Clear inbox is a quiet link on the Queue row —
+      it hides CourtOps copies for this tournament (soft-delete); Get mails or
+      <strong>Get all</strong> can bring them back. Never deletes mail in Gmail
+      or Outlook/Hotmail.</p>
       <ul class="help-list">
         <li><strong>Paste / create</strong> a message in the Inbox UI (POC default).</li>
         <li><strong>Webhook ingest</strong> — providers POST to
           <code>/api/ingest/email</code> with <code>INGEST_TOKEN</code>; optional
           per-tournament ingest address for routing.</li>
         <li><strong>PDF import</strong> — Inbox or Setup → Import, then merge.</li>
-        <li><strong>Gmail feed</strong> — Setup → Gmail stores the TD address + App
-          Password (encrypted) and a UID cursor. <em>Get latest</em> pulls only
-          newer mail into Inbox (source <code>gmail</code>). Step-by-step enablement
-          is on that page.</li>
+        <li><strong>Gmail feed</strong> — Inbox → Gmail stores the TD address + App
+          Password (encrypted) and a UID cursor. Inbox <em>Get mails</em> pulls the
+          selected date range when the feed is enabled (source <code>gmail</code>)
+          and files it under the tournament in <em>Working on</em>.
+          <em>Get all</em> also pulls mail from the event start (or 90 days)
+          and restores copies hidden by Clear.</li>
+        <li><strong>Outlook / Microsoft feed</strong> — Inbox → Outlook stores tenant ID,
+          application (client) ID, mailbox, and client secret (encrypted). App-only
+          Graph <code>Mail.Read</code>. Inbox <em>Get mails</em> pulls the date range
+          when the feed is enabled (source <code>outlook</code>)
+          and files it under the tournament in <em>Working on</em>.
+          Same <em>Get all</em> window and restore as Gmail.</li>
       </ul>
       <p>The grid is scoped to the tournament in <em>Working on</em> (no Tournament
       column). <strong>Review</strong> sits after From and opens the message.</p>

@@ -47,6 +47,24 @@ def test_parse_llm_json_accepts_fenced_and_bare():
     assert parse_llm_json('{"intent":"bananas"}')["intent"] == "other"
 
 
+def test_parse_llm_json_accepts_player1_player2():
+    p = parse_llm_json(
+        '{"intent":"doubles","player1":{"name":"Jane Roe","usta":"2018111222"},'
+        '"player2":{"name":"Alex Kim","usta":null},"confidence":0.9}'
+    )
+    assert p["players"] == [
+        {"name": "Jane Roe", "usta": "2018111222"},
+        {"name": "Alex Kim", "usta": None},
+    ]
+
+
+def test_leftover_system_asks_for_players_after_equal_intents():
+    assert "Treat those intents equally" in _SYSTEM
+    assert "do not prefer doubles" in _SYSTEM
+    assert "players[0] first named player" in _SYSTEM
+    assert "players[1] only if a second player is named" in _SYSTEM
+
+
 def test_clip_drops_outlook_and_iphone_signatures():
     _, body = clip_email_text("Re: Partner", "We will pair them.\nGet Outlook for iOS")
     assert body.strip() == "We will pair them."
@@ -153,6 +171,29 @@ def test_leftover_prompt_is_one_shared_template():
     assert a.count("{subject}") == 0
 
 
+def test_docs_inventory_cites_shipped_inbox_idle_mail():
+    """docs/README + data-model + test-coverage must name live surfaces."""
+    root = Path(__file__).resolve().parents[2]
+    readme = (root / "docs" / "README.md").read_text(encoding="utf-8")
+    # docker-compose mounts backend/ not docs/; the baked image README still
+    # says 0055. CI copies the tree, so 0060 must be present there.
+    if "migrations through **0055**" in readme and "0060" not in readme:
+        pytest.skip("docs/ not mounted in this environment")
+    model = (root / "docs" / "data-model.md").read_text(encoding="utf-8")
+    coverage = (root / "docs" / "test-coverage.md").read_text(encoding="utf-8")
+    ingest = (root / "docs" / "email-ingest.md").read_text(encoding="utf-8")
+    assert "0060" in readme
+    assert "inbox people" in readme.lower() or "inbox_person" in readme
+    assert "Still there?" in readme
+    assert "inbox_person" in model
+    assert "outlook_feed" in model
+    assert "deleted_at" in model
+    assert "985" in coverage
+    assert "test_zz_inbox_people" in coverage
+    assert "Get all" in ingest
+    assert "outlook" in ingest.lower()
+
+
 def test_docs_quote_shipped_leftover_prompt():
     """docs/email-llm-prompt.md must quote the live _SYSTEM and _SHOTS."""
     from app.email_llm import _SHOTS
@@ -183,6 +224,39 @@ def test_leftover_shots_are_not_corpus_emails():
     ]
     for g in gold:
         assert g["subject"] not in shot_subjects, g["subject"]
+
+
+def test_leftover_model_intent_caches_same_clip(monkeypatch):
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.setenv("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+    n = {"calls": 0}
+
+    def fake_complete(prompt):
+        n["calls"] += 1
+        return '{"intent":"doubles","players":[{"name":"Jane Roe"}],"confidence":0.9}'
+
+    monkeypatch.setattr("app.email_llm._complete", fake_complete)
+    import app.email_llm as llm
+    llm._LEFTOVER_LAST = None
+    a = llm.leftover_model_intent("S", "Body one")
+    b = llm.leftover_model_intent("S", "Body one")
+    assert a["intent"] == "doubles"
+    assert b is a
+    assert n["calls"] == 1
+    llm.leftover_model_intent("S", "Body two")
+    assert n["calls"] == 2
+    n["calls"] = 0
+
+    def boom(prompt):
+        n["calls"] += 1
+        raise TimeoutError("nope")
+
+    monkeypatch.setattr("app.email_llm._complete", boom)
+    llm._LEFTOVER_LAST = None
+    assert llm.leftover_model_intent("Sx", "Bx") is None
+    assert llm.leftover_model_intent("Sx", "Bx") is None
+    assert n["calls"] == 1
+    llm._LEFTOVER_LAST = None
 
 
 def test_extract_formats_prompt_without_eating_json_braces(monkeypatch):

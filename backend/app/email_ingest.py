@@ -20,8 +20,10 @@ from typing import Any
 
 import psycopg
 
+from .bulk_ops import savepoint
 from .crypto import encrypt as _enc_body
-from .email_extract import compute_extracted_fields
+from .email_extract import compute_extracted_fields, infer_gender_from_email
+from .inbox_person import upsert_inbox_people
 from .triage import classify_timed
 import json
 
@@ -286,12 +288,120 @@ def resolve_tournament_id(
     return default_tournament_id()
 
 
+def sender_key(addr: str | None) -> str:
+    """Canonical sender for same-email matching (address, not display name)."""
+    addrs = extract_addresses(addr)
+    if addrs:
+        return addrs[0]
+    return (addr or "").strip().lower()
+
+
+def subject_key(subj: str | None) -> str:
+    return (subj or "").strip().lower()
+
+
+def _duplicate_hit(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "duplicate": True,
+        "tournament_id": row["tournament_id"],
+        "classification": row["classification"],
+        "status": row["status"],
+    }
+
+
+def restore_hidden(cur, tournament_id: int) -> int:
+    """Un-hide CourtOps copies for one tournament. Mailboxes are not touched."""
+    cur.execute(
+        """
+        UPDATE email_message SET deleted_at = NULL
+        WHERE tournament_id = %s AND deleted_at IS NOT NULL
+        """,
+        (tournament_id,),
+    )
+    return cur.rowcount or 0
+
+
+def _reuse_existing(cur, existing: dict, tournament_id: int | None) -> dict:
+    """Un-hide and/or adopt an existing row onto the active tournament.
+
+    Hidden (Clear inbox) and unscoped (tournament_id NULL) hits count as
+    imported so Get mails can refill the grid. Visible duplicates stay
+    ``duplicate=True``.
+    """
+    hidden = existing.get("deleted_at") is not None
+    unscoped = tournament_id is not None and existing.get("tournament_id") is None
+    if not hidden and not unscoped:
+        return _duplicate_hit(existing)
+    sets: list[str] = []
+    params: list = []
+    if hidden:
+        sets.append("deleted_at = NULL")
+        existing["deleted_at"] = None
+    if tournament_id is not None and (
+        existing.get("tournament_id") is None or hidden
+    ):
+        sets.append("tournament_id = %s")
+        params.append(tournament_id)
+        existing["tournament_id"] = tournament_id
+    if sets:
+        params.append(existing["id"])
+        cur.execute(
+            "UPDATE email_message SET " + ", ".join(sets) + " WHERE id = %s",
+            params,
+        )
+    hit = _duplicate_hit(existing)
+    hit["duplicate"] = False
+    return hit
+
+
+def find_existing_email(cur, payload: IngestPayload, tournament_id: int | None) -> dict | None:
+    """Return an existing inbox row that is the same mail, or None.
+
+    Match order: RFC ``message_id``, then tournament + sender + subject when
+    the stored row has no usable ``message_id`` (PDF-then-feed). Hidden
+    (soft-deleted) rows are returned so ingest can un-hide them.
+    """
+    if payload.message_id:
+        cur.execute(
+            "SELECT id, tournament_id, classification, status, deleted_at "
+            "FROM email_message WHERE message_id = %s",
+            (payload.message_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+    if tournament_id is None:
+        return None
+    subj = subject_key(payload.subject)
+    want = sender_key(payload.from_address)
+    if not subj or not want:
+        return None
+    cur.execute(
+        """
+        SELECT id, tournament_id, classification, status, from_address, subject,
+               deleted_at
+        FROM email_message
+        WHERE tournament_id = %s
+          AND (message_id IS NULL OR btrim(message_id) = '')
+          AND lower(btrim(coalesce(subject, ''))) = %s
+        """,
+        (tournament_id, subj),
+    )
+    for row in cur.fetchall() or []:
+        if sender_key(row.get("from_address")) == want:
+            return dict(row)
+    return None
+
+
 def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> dict:
     """Insert (or dedup) one inbound email. Returns a result dict.
 
-    On unique ``message_id`` collision returns ``{"duplicate": True, "id": …}``
-    so webhooks can ACK without retry storms. New rows encrypt the body and
-    optionally pre-fill a keyword classification (status stays ``new``).
+    On unique ``message_id`` collision, or a PDF-style row with the same
+    tournament + sender + subject, returns ``{"duplicate": True, "id": …}``
+    and does not UPDATE the existing row — except a hidden (Clear inbox)
+    or unscoped (``tournament_id`` NULL) row is restored onto the payload
+    tournament so Get mails can refill the grid.
     """
     if not payload.subject and not payload.body and not payload.from_address:
         raise ValueError("empty message: need at least subject, body, or from_address")
@@ -304,6 +414,10 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
         )
     except LookupError:
         raise
+
+    existing = find_existing_email(cur, payload, tournament_id)
+    if existing:
+        return _reuse_existing(cur, existing, tournament_id)
 
     classification = "unclassified"
     classified_ms = None
@@ -321,98 +435,80 @@ def ingest_email(cur, payload: IngestPayload, *, auto_classify: bool = True) -> 
     )
     received_at = payload.received_at  # None → DB default now()
 
-    if payload.message_id:
-        cur.execute(
-            "SELECT id, tournament_id, classification, status "
-            "FROM email_message WHERE message_id = %s",
-            (payload.message_id,),
-        )
-        existing = cur.fetchone()
-        if existing:
-            return {
-                "id": existing["id"],
-                "duplicate": True,
-                "tournament_id": existing["tournament_id"],
-                "classification": existing["classification"],
-                "status": existing["status"],
-            }
-
     try:
-        if received_at is not None:
-            cur.execute(
-                """
-                INSERT INTO email_message (
-                    tournament_id, message_id, from_address, to_address,
-                    subject, body, classification, status,
-                    detected_usta_text, detected_reason, detected_division,
-                    detected_events, detected_name_pairs, detected_avoid_day,
-                    detected_avoid_time, detected_text_ready,
-                    ingest_source, received_at
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, 'new',
-                    %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
-                    %s, %s
+        with savepoint(cur, "ingest_email"):
+            if received_at is not None:
+                cur.execute(
+                    """
+                    INSERT INTO email_message (
+                        tournament_id, message_id, from_address, to_address,
+                        subject, body, classification, status,
+                        detected_usta_text, detected_reason, detected_division,
+                        detected_events, detected_name_pairs, detected_avoid_day,
+                        detected_avoid_time, detected_text_ready,
+                        ingest_source, received_at
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, 'new',
+                        %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
+                        %s, %s
+                    )
+                    RETURNING id, tournament_id, classification, status, message_id
+                    """,
+                    (
+                        tournament_id, payload.message_id, payload.from_address,
+                        payload.to_address, payload.subject, enc_body,
+                        classification,
+                        fields["detected_usta_text"], fields["detected_reason"],
+                        fields["detected_division"], fields["detected_events"],
+                        pairs_json, fields["detected_avoid_day"],
+                        fields["detected_avoid_time"],
+                        payload.ingest_source, received_at,
+                    ),
                 )
-                RETURNING id, tournament_id, classification, status, message_id
-                """,
-                (
-                    tournament_id, payload.message_id, payload.from_address,
-                    payload.to_address, payload.subject, enc_body,
-                    classification,
-                    fields["detected_usta_text"], fields["detected_reason"],
-                    fields["detected_division"], fields["detected_events"],
-                    pairs_json, fields["detected_avoid_day"],
-                    fields["detected_avoid_time"],
-                    payload.ingest_source, received_at,
-                ),
-            )
-        else:
-            cur.execute(
-                """
-                INSERT INTO email_message (
-                    tournament_id, message_id, from_address, to_address,
-                    subject, body, classification, status,
-                    detected_usta_text, detected_reason, detected_division,
-                    detected_events, detected_name_pairs, detected_avoid_day,
-                    detected_avoid_time, detected_text_ready,
-                    ingest_source
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, 'new',
-                    %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
-                    %s
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO email_message (
+                        tournament_id, message_id, from_address, to_address,
+                        subject, body, classification, status,
+                        detected_usta_text, detected_reason, detected_division,
+                        detected_events, detected_name_pairs, detected_avoid_day,
+                        detected_avoid_time, detected_text_ready,
+                        ingest_source
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, 'new',
+                        %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE,
+                        %s
+                    )
+                    RETURNING id, tournament_id, classification, status, message_id
+                    """,
+                    (
+                        tournament_id, payload.message_id, payload.from_address,
+                        payload.to_address, payload.subject, enc_body,
+                        classification,
+                        fields["detected_usta_text"], fields["detected_reason"],
+                        fields["detected_division"], fields["detected_events"],
+                        pairs_json, fields["detected_avoid_day"],
+                        fields["detected_avoid_time"],
+                        payload.ingest_source,
+                    ),
                 )
-                RETURNING id, tournament_id, classification, status, message_id
-                """,
-                (
-                    tournament_id, payload.message_id, payload.from_address,
-                    payload.to_address, payload.subject, enc_body,
-                    classification,
-                    fields["detected_usta_text"], fields["detected_reason"],
-                    fields["detected_division"], fields["detected_events"],
-                    pairs_json, fields["detected_avoid_day"],
-                    fields["detected_avoid_time"],
-                    payload.ingest_source,
-                ),
+            row = cur.fetchone()
+            upsert_inbox_people(
+                cur, row["id"], fields.get("detected_name_pairs") or [],
+                infer_gender_from_email(payload.subject, payload.body),
             )
     except psycopg.errors.UniqueViolation:
         # Race: another worker inserted the same message_id between SELECT and INSERT.
         cur.execute(
-            "SELECT id, tournament_id, classification, status "
+            "SELECT id, tournament_id, classification, status, deleted_at "
             "FROM email_message WHERE message_id = %s",
             (payload.message_id,),
         )
-        existing = cur.fetchone()
-        if existing:
-            return {
-                "id": existing["id"],
-                "duplicate": True,
-                "tournament_id": existing["tournament_id"],
-                "classification": existing["classification"],
-                "status": existing["status"],
-            }
+        raced = cur.fetchone()
+        if raced:
+            return _reuse_existing(cur, dict(raced), tournament_id)
         raise
-
-    row = cur.fetchone()
     if classified_ms is not None:
         cur.execute(
             "UPDATE email_message SET classified_ms = %s WHERE id = %s",

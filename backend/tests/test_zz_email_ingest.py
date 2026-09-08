@@ -143,6 +143,126 @@ def test_ingest_json_classifies_and_encrypts_body():
     assert hit["to_address"] == "macon-demo@inbox.example.com"
 
 
+def test_pdf_style_row_is_not_replaced_on_feed_ingest():
+    """Same tournament + sender + subject with no stored message_id (PDF) skips."""
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, ingest_email, sender_key
+
+    assert sender_key("Jane Roe <jane@x.com>") == "jane@x.com"
+    t = _tournament()
+    pasted = _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "from_address": "Jane Roe <parent@example.com>",
+        "subject": "Boys 14 Withdrawal",
+        "body": "please withdraw",
+    }))
+    put = client.put(f"/api/emails/{pasted['id']}", json={
+        "tournament_id": t["id"],
+        "classification": "hotel",
+        "status": "needs_followup",
+    })
+    assert put.status_code == 200, put.text
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_message SET message_id = NULL WHERE id = %s",
+                (pasted["id"],),
+            )
+            result = ingest_email(cur, IngestPayload(
+                message_id="<feed-1@gmail.com>",
+                from_address="parent@example.com",
+                to_address="td@example.com",
+                subject="Boys 14 Withdrawal",
+                body="Please withdraw Jane Roe from singles.",
+                tournament_id=t["id"],
+                ingest_source="gmail",
+            ))
+        conn.commit()
+    assert result["duplicate"] is True
+    assert result["id"] == pasted["id"]
+    row = next(e for e in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if e["id"] == pasted["id"])
+    assert row["classification"] == "hotel"
+    assert row["status"] == "needs_followup"
+    assert row["body"] == "please withdraw"
+    assert len([e for e in client.get(f"/api/emails?tournament_id={t['id']}").json()
+                if (e.get("subject") or "") == "Boys 14 Withdrawal"]) == 1
+
+
+def test_ingest_unique_violation_race_still_returns_duplicate(monkeypatch):
+    from app import email_ingest as ei
+    from app.email_ingest import IngestPayload
+    t = _tournament()
+    mid = f"race-{uuid.uuid4().hex}@example.com"
+    monkeypatch.setattr(ei, "find_existing_email", lambda *_a, **_k: None)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            first = ei.ingest_email(cur, IngestPayload(
+                message_id=mid, from_address="a@b.com", to_address=None,
+                subject="race subject", body="body", tournament_id=t["id"],
+            ))
+            assert first["duplicate"] is False
+            second = ei.ingest_email(cur, IngestPayload(
+                message_id=mid, from_address="a@b.com", to_address=None,
+                subject="race subject", body="body", tournament_id=t["id"],
+            ))
+            assert second["duplicate"] is True
+            assert second["id"] == first["id"]
+        conn.commit()
+
+
+def test_ingest_adopts_unscoped_message_id():
+    """Get mails after Clear: unscoped message_id rows attach to the active event."""
+    from app.email_ingest import IngestPayload, ingest_email
+    t = _tournament()
+    mid = f"<orphan-{uuid.uuid4().hex}@mail.test>"
+    row = _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "message_id": mid,
+        "from_address": "parent@example.com",
+        "subject": "Boys 14 Withdrawal",
+        "body": "please withdraw",
+    }))
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_message SET tournament_id = NULL WHERE id = %s",
+                (row["id"],),
+            )
+            result = ingest_email(cur, IngestPayload(
+                message_id=mid,
+                from_address="parent@example.com",
+                to_address="td@example.com",
+                subject="Boys 14 Withdrawal",
+                body="please withdraw",
+                tournament_id=t["id"],
+                ingest_source="outlook",
+            ))
+        conn.commit()
+    assert result["duplicate"] is False
+    assert result["id"] == row["id"]
+    assert result["tournament_id"] == t["id"]
+    listed = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert any(e["id"] == row["id"] for e in listed)
+
+
+def test_find_existing_needs_sender_subject_and_tournament():
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, find_existing_email
+    t = _tournament()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            assert find_existing_email(cur, IngestPayload(
+                message_id=None, from_address="a@b.com", to_address=None,
+                subject="", body="x"), t["id"]) is None
+            assert find_existing_email(cur, IngestPayload(
+                message_id=None, from_address="", to_address=None,
+                subject="Hi", body="x"), t["id"]) is None
+            assert find_existing_email(cur, IngestPayload(
+                message_id=None, from_address="a@b.com", to_address=None,
+                subject="Hi", body="x"), None) is None
+
+
 def test_dedup_by_message_id_returns_200():
     mid = f"dup-{uuid.uuid4().hex}@example.com"
     payload = {

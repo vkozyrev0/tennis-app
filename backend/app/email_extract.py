@@ -31,6 +31,14 @@ _USTA_NAME_RE = re.compile(r"\b(\d{8,11})\b" + _SKIP + _USTA_LBL + _NAME_GRP)
 # "Alexandra Dimitrov (USTA 2018522196)", "Ava Wright — 2018460819"
 _NAME_USTA_AFTER_RE = re.compile(
     _NAME_GRP + r"(?:'s|’s)?" + _SKIP + _USTA_LBL + r"#?\s*(\d{8,11})\b")
+# "Ulrich Novakovitch. His USTA # is 2018838558" — the pronoun sits in the
+# next sentence, so _SKIP (punctuation-only) cannot bridge it.
+_NAME_USTA_NEXT_SENT_RE = re.compile(
+    _NAME_GRP
+    + r"[.\s]{1,16}(?:His|Her|Their)\s+"
+    + _USTA_LBL
+    + r"#?\s*(\d{8,11})\b"
+)
 # A USTA # explicitly labeled in the text ("USTA #: 1234567890", "membership
 # number 1234567890"). Higher confidence than a bare run of digits, so it wins.
 _USTA_LABELED_RE = re.compile(
@@ -86,6 +94,8 @@ def extract_name_usta_pairs(subject: str | None, body: str | None,
     text = f"{subject or ''}\n{body or ''}"
     hits: list[tuple[int, str, str]] = []
     for m in _NAME_USTA_AFTER_RE.finditer(text):
+        hits.append((m.start(1), m.group(1), m.group(2)))
+    for m in _NAME_USTA_NEXT_SENT_RE.finditer(text):
         hits.append((m.start(1), m.group(1), m.group(2)))
     for m in _USTA_NAME_RE.finditer(text):
         hits.append((m.start(1), m.group(2), m.group(1)))
@@ -220,6 +230,49 @@ _PAIR_CONTEXT = re.compile(
     r"\b(doubles?|partners?|partnering|pair|paired|pairing|together)\b", re.I)
 _PAIR_CONTEXT_WINDOW = 60
 
+# "my son name is X" / "my son's name is X" / "His name is Y" — partner-swap
+# emails introduce players on their own lines instead of "X and Y".
+_INTRO_NAME_RE = re.compile(
+    r"(?i:(?:my\s+sons?['’]?s?\s+name\s+is)|(?:his\s+name\s+is)|(?:her\s+name\s+is))\s+"
+    r"(" + _PERSON_NAME + r")"
+)
+_SIGNOFF_SPLIT_RE = re.compile(
+    r"\n(?:thank\s+you|thanks|regards|best(?:\s+regards)?)\b", re.I,
+)
+_GREETING_LINE_RE = re.compile(r"^(?:hi|hello|dear|hey)\b", re.I)
+
+
+def _name_only_in_greeting_or_signoff(name: str, text: str) -> bool:
+    """True when the span is the TD greeting or the parent's sign-off, not a player."""
+    key = name.casefold()
+    lines = text.strip().splitlines()
+    first = lines[0] if lines else ""
+    if _GREETING_LINE_RE.search(first) and key in first.casefold():
+        rest = "\n".join(lines[1:])
+        if key not in rest.casefold():
+            return True
+    parts = _SIGNOFF_SPLIT_RE.split(text, maxsplit=1)
+    if len(parts) == 2:
+        head, tail = parts[0], parts[1]
+        if key in tail.casefold() and key not in head.casefold():
+            return True
+    return False
+
+
+def extract_introduced_players(subject: str | None, body: str | None) -> list[str]:
+    """Players introduced as 'my son name is X' / 'His name is Y'."""
+    text = f"{subject or ''}\n{body or ''}"
+    out: list[str] = []
+    seen: set[str] = set()
+    for m in _INTRO_NAME_RE.finditer(text):
+        nm = _clean_name(m.group(1))
+        key = (nm or "").casefold()
+        if not nm or key in seen:
+            continue
+        seen.add(key)
+        out.append(nm)
+    return out
+
 
 def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
     """The TWO player names in a doubles request that names them but gives no
@@ -246,6 +299,16 @@ def extract_doubles_pair(subject: str | None, body: str | None) -> list[str]:
                 out.append(nm)
         if len(out) == 2:
             return out
+    intros = extract_introduced_players(subject, body)
+    if len(intros) >= 2:
+        return intros[:2]
+    if len(intros) == 1:
+        seen = {intros[0].casefold()}
+        for nm in extract_names(subject, body):
+            key = nm.casefold()
+            if key in seen or _name_only_in_greeting_or_signoff(nm, text):
+                continue
+            return [intros[0], nm]
     return []
 
 
@@ -473,6 +536,44 @@ def _pair_name_key(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
+def merge_leftover_players(pairs, leftover):
+    """Fill extract name-pairs from leftover-LLM players. Extract wins on conflict."""
+    base = [{"name": p.get("name"), "usta": p.get("usta")} for p in (pairs or [])]
+    extra = leftover or []
+    if not extra:
+        return base or None
+    by_name = {_pair_name_key(p.get("name")): p for p in base if p.get("name")}
+    for i, lp in enumerate(extra):
+        if not isinstance(lp, dict):
+            continue
+        name = str(lp.get("name") or "").strip() or None
+        usta = lp.get("usta")
+        usta = str(usta).strip() if usta else None
+        if usta in {"null", "none", "n/a", ""}:
+            usta = None
+        if not name and not usta:
+            continue
+        key = _pair_name_key(name)
+        if key and key in by_name:
+            if usta and not by_name[key].get("usta"):
+                by_name[key]["usta"] = usta
+            continue
+        if i < len(base):
+            slot = base[i]
+            if name and not slot.get("name"):
+                slot["name"] = name
+                if key:
+                    by_name[key] = slot
+            if usta and not slot.get("usta"):
+                slot["usta"] = usta
+            continue
+        rec = {"name": name, "usta": usta}
+        base.append(rec)
+        if key:
+            by_name[key] = rec
+    return base[:4] or None
+
+
 def compute_extracted_fields(
     subject: str | None,
     body: str | None,
@@ -510,6 +611,23 @@ def compute_extracted_fields(
                 if key and key not in have:
                     pairs.append({"name": nm, "usta": None})
                     have.add(key)
+        numbered = {
+            _pair_name_key(p["name"]): p.get("usta")
+            for p in extract_name_usta_pairs(subject, body)
+            if p.get("usta")
+        }
+        for p in pairs:
+            if p.get("usta"):
+                continue
+            key = _pair_name_key(p["name"])
+            if numbered.get(key):
+                p["usta"] = numbered[key]
+                continue
+            last = key.split()[-1] if key else ""
+            for nk, nu in numbered.items():
+                if last and nk.split()[-1] == last:
+                    p["usta"] = nu
+                    break
         name_pairs = pairs[:4] or None
     elif cls == "withdrawal" and not has_detected_player:
         usta_text = extract_usta(subject, body)

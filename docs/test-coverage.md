@@ -1,11 +1,13 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-09-07):** **917 tests** pass. Line coverage of `backend/app` is
-**100%** (`6803/6803`, `--cov-fail-under=100` in `backend/pytest.ini` + `pytest-cov`
-in `requirements.txt`). The only shipped `# pragma: no cover` is health.py when
-the DB is down. CI still runs `pytest -q` without coverage. Re-run
-`pytest --collect-only -q` after large adds.
+**Status (2026-09-08):** **985 tests** collected (`pytest --collect-only -q`).
+Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
+`backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
+`# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
+without coverage. Re-run `pytest --collect-only -q` after large adds.
+Migrations through **0060** (`inbox_person`; Outlook feed 0058; email
+`deleted_at` 0059).
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
 are split out of the large routers; API paths and re-exports for tests are
@@ -48,7 +50,11 @@ DOM-free node test files (independent of AG Grid):
 - `frontend/app/html.test.mjs` — `html`` / `hstr` / `raw()` escaping (incl. quotes).
 - `frontend/app/ui.test.mjs` — `money` / `chip` helpers (D11 slice).
 - `frontend/app/inbox_ui.test.mjs` — bulk bar / select-hint visibility, prune selection,
-  inbox shortcut gates (`t`/`d`/`f`/`u`).
+  inbox shortcut gates (`t`/`d`/`f`/`u`), inbox-people dropdown merge, Add to Players,
+  Help strings for inbox people / Get all / Outlook.
+- `frontend/app/inactivity.test.mjs` — idle warn → Continue vs expire/logout; Still there? modal markup.
+- `frontend/app/session_expired.test.mjs` — `sessionIsGone` 401 vs offline.
+- `frontend/app/gmail_feed.test.mjs` / `outlook_feed.test.mjs` — mailbox feed UI contracts.
 
 Run: `node frontend/app/<name>.test.mjs`.
 
@@ -428,7 +434,10 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **~591 tests** across **89** files (see the status line at the top).
+Total suite count: **985 tests** across **112** files (see the status line at the top).
+Recent inbox/mail additions (2026-09-08): `test_zz_inbox_people` (parallel
+name+USTA list + promote to Players), `test_zz_outlook_feed`, `test_zz_inbox_feeds`,
+`test_zz_gmail_feed` (Get mails / Get all, mailbox-safe Clear).
 Recent hardening additions (2026-07-19 → 07-21): `test_zz_export_audit`,
 `test_zz_export_gate`, `test_zz_coppa`, `test_zz_h2_rotation`,
 `test_zz_access_audit`, `test_zz_security_headers`, D3 session/password-change

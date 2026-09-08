@@ -13,6 +13,16 @@ import { createNoticeLog } from "./notices.js";
  *   confirmDialog: (message: string, okLabel?: string, okKind?: string) => Promise<boolean>,
  * }}
  */
+/** True only when /api/auth/me is 401. A stray 401 must not log the TD out. */
+export async function sessionIsGone(fetcher = fetch) {
+  try {
+    const r = await fetcher("/api/auth/me", { credentials: "same-origin" });
+    return r.status === 401;
+  } catch (_) {
+    return false;
+  }
+}
+
 export function createShell() {
   const notices = createNoticeLog();
   let _inflight = 0;
@@ -33,6 +43,7 @@ export function createShell() {
       const headers = hasBody && !(options.body instanceof FormData)
         ? { "Content-Type": "application/json" } : {};
       const res = await fetch("/api" + path, {
+        credentials: "same-origin",
         ...options,
         headers: { ...headers, ...(options && options.headers) },
       });
@@ -45,7 +56,9 @@ export function createShell() {
         const detail = body && body.detail !== undefined ? body.detail : res.statusText;
         if (res.status === 401 && !path.startsWith("/auth/")
             && !document.body.classList.contains("is-signed-out")) {
-          document.dispatchEvent(new CustomEvent("auth-expired"));
+          if (await sessionIsGone()) {
+            document.dispatchEvent(new CustomEvent("auth-expired"));
+          }
         }
         throw new Error(humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));
       }

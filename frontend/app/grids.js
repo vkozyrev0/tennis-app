@@ -1,7 +1,7 @@
 import { labelHeaderFilters, reflectAriaSort } from "./grid_a11y.js";
 import { applySavedRow, saveInGridCell } from "./cell_edit.js";
 import { LIST_PAGE_SIZE, listPagePath } from "./list_page.js";
-import { dateCellParser, formatLocaleDate } from "./td_helpers.js";
+import { dateCellParser, formatLocaleDate, parseLocaleDate } from "./td_helpers.js";
 import { LIST_HEADER_ROW_HEIGHT } from "./layout.js";
 
 export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
@@ -230,17 +230,18 @@ export function createGridFactories(ctx) {
       init(params) {
         this.params = params;
         const i = document.createElement("input");
-        i.type = "text";
-        i.className = "ag-input-field-input date-locale";
-        i.name = "ag-date"; i.setAttribute("autocomplete", "off");
-        i.placeholder = "MM/DD/YYYY";
-        i.title = "MM/DD/YYYY or YYYY-MM-DD";
-        i.setAttribute("inputmode", "numeric");
-        i.value = formatLocaleDate(params.value) || (params.value == null ? "" : String(params.value));
+        i.type = "date";
+        i.className = "ag-input-field-input";
+        i.name = "ag-date";
+        i.setAttribute("autocomplete", "off");
+        i.setAttribute("data-lpignore", "true");
+        i.setAttribute("data-1p-ignore", "true");
+        i.setAttribute("data-bwignore", "true");
+        i.value = parseLocaleDate(params.value) || "";
         this.eInput = i;
       }
       getGui() { return this.eInput; }
-      afterGuiAttached() { this.eInput.focus(); this.eInput.select(); }
+      afterGuiAttached() { this.eInput.focus(); }
       getValue() { return dateCellParser(this.eInput.value, this.params.value); }
     };
   }
@@ -326,8 +327,6 @@ export function createGridFactories(ctx) {
           cd.valueFormatter = (p) => (p.value == null || p.value === "" ? "" : (_lab[String(p.value)] ?? String(p.value)));
         }
       } else if (col.editor === "date") {
-        // Text editor + dateCellParser: AG's date-string editor rejects MM/DD/YYYY
-        // as "Malformed value" before valueParser can run.
         cd.cellEditor = _agDateTextEditor();
         if (!col.formatter) {
           cd.valueFormatter = (p) => formatLocaleDate(p.value) || (p.value == null ? "" : String(p.value));
@@ -967,7 +966,9 @@ export function createGridFactories(ctx) {
           [...el.options].forEach((o) => { o.selected = wanted.has(o.value); });
           continue;
         }
-        if (el.classList.contains("date-locale") || el.type === "date") {
+        if (el.type === "date") {
+          el.value = v ? (parseLocaleDate(String(v)) || "") : "";
+        } else if (el.classList.contains("date-locale")) {
           el.value = v ? (formatLocaleDate(v) || String(v)) : "";
         } else {
           el.value = v === null || v === undefined ? "" : v;

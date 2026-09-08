@@ -268,6 +268,17 @@ header h1 {
 }
 .inbox-detail-player-slot label { display: flex; flex-direction: column; gap: 0.2rem; }
 .inbox-detail-player-hint { font-size: 0.78rem; }
+.inbox-detail-player-slot .inbox-add-to-players {
+  margin-top: 0.25rem;
+  align-self: flex-start;
+}
+.inbox-name-cell .inbox-add-to-players { margin-left: 0.2rem; }
+.inbox-promote-gender, .inbox-promote-usta {
+  font: inherit;
+  font-size: 0.8rem;
+  max-width: 7.5rem;
+  margin: 0.15rem 0.2rem 0 0;
+}
 .brand-icon {
   width: 1.4em; height: 1.4em;
   vertical-align: -0.35em;
@@ -649,6 +660,7 @@ body.nav-l2-solo .gbtn[aria-current="true"] {
 .gbtn[data-group="inbox"]       .gicon { color: #f78fb3; }  /* pink — Inbox (envelope) */
 .gbtn[data-group="chat"]        .gicon { color: #b39ddb; }  /* lilac — TD chat */
 .gbtn[data-group="playerlists"] .gicon { color: #ff8c42; }  /* orange — Player lists (requests + prefs) */
+.gbtn[data-group="notifications"] .gicon { color: #7eb8da; }  /* sky — Notifications (bell) */
 .gbtn:hover .gicon, .gbtn.active .gicon { filter: brightness(1.15) saturate(1.2); }
 @media (max-width: 480px) {
   /* On phones, drop the label and show icon-only — saves horizontal real
@@ -898,6 +910,15 @@ input, select, textarea {
   color: var(--muted); font-size: 0.65rem;
 }
 .combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
+/* LastPass/1Password inject an account menu over CourtOps combos (Reassign). */
+.combo [data-lastpass-icon-root],
+.combo [data-lastpass-root],
+.combo + [data-lastpass-icon-root],
+.bulk-group [data-lastpass-icon-root],
+.combo-input + [data-lastpass-icon-root],
+select + [data-lastpass-icon-root] {
+  display: none !important;
+}
 .combo-list {
   /* position:fixed coordinates are set inline by positionList() at open time;
      the list is portaled to <body>, so this z-index must clear every dialog it
@@ -2123,7 +2144,9 @@ td.toggle { white-space: nowrap; }
    stay quiet (faded) until the row is hovered so the names read cleanly, then
    surface for single-click edit / clear / add-to-roster. */
 .inbox-name-cell { display: inline-flex; align-items: center; gap: 0.15rem; max-width: 100%; }
-.inbox-name-cell > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.inbox-name-cell > span:first-child {
+  overflow: hidden; text-overflow: ellipsis; min-width: 4.5rem; flex: 1 1 auto;
+}
 .btn-icon.inbox-affordance {
   min-width: 1.35rem; min-height: 1.35rem; padding: 0 0.15rem; font-size: 0.9rem;
   opacity: 0; transition: opacity 0.1s ease; flex: 0 0 auto;
@@ -2458,6 +2481,69 @@ td.toggle { white-space: nowrap; }
   background: var(--sel, transparent);
 }
 .inbox-select-hint kbd { font-size: 0.75rem; padding: 0.05rem 0.3rem; }
+
+/* Inbox desk: Mailbox / Add / Queue as labeled rows, not one wrap of
+   equal-weight buttons. Lives inside .t-content.card — no nested card. */
+.inbox-desk {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0.15rem 0 0.85rem;
+}
+.inbox-cluster {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  gap: 0.35rem 0.7rem;
+  align-items: center;
+  margin: 0;
+  padding: 0.55rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  min-inline-size: 0;
+}
+.inbox-cluster:first-child { border-top: 0; padding-top: 0.15rem; }
+.inbox-cluster-label {
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.inbox-cluster-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  min-inline-size: 0;
+}
+.inbox-date-range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+}
+.inbox-date-range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: 0.82rem;
+}
+.inbox-cluster-controls--queue .filter {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  margin: 0;
+}
+.inbox-cluster .inbox-clear {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .inbox-cluster {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+  }
+  .inbox-cluster .inbox-clear { margin-left: 0; }
+}
 .ag-empty {
   white-space: normal; max-width: 36rem; line-height: 1.45;
   display: inline-block; text-align: center; padding: 0.5rem 1rem;

@@ -274,3 +274,113 @@ def test_extract_names_keeps_middle_initial_and_dedupes():
         ["Maya R Quintero"]
     # a lone capitalized first name (1 token) is not a name span
     assert extract_names("", "just Maya here") == []
+
+
+_ERNESTO_BODY = (
+    "Hi Mrs Kozyreva\n\n"
+    "Hi my son name is Ernesto Del Valle. He is schedule to play doubles this "
+    "weekend at L5 in Macon. His double partner just call him and told him that "
+    "he is going to withdraw. I talk to another player and he wants to pair up "
+    "with Ernesto. His name is Ulrich Novakovitch. Please let me know if he can "
+    "be pair with him so can also play doubles this weekend. Thanks for your time.\n\n"
+    "Regards\n\nErnesto Del Valle\n\nSent from my iPhone"
+)
+_ULRICH_BODY = (
+    "Hi.  My son’s name is Ulrich Novakovitch.   His USTA # is 2018838558\n\n"
+    "Ernesto Del Valley reached out and asked if my son Ulrich can play doubles "
+    "with him since Ernesto’s partner is withdrawing from the tournament.  Yes, "
+    "Ulrich can play.  Please let me know if this is possible and what else you "
+    "need from me.\nThank you\nMelanie Novakovitch\n425-263-0736\n\n"
+    "Sent from my iPhone"
+)
+
+
+def _pair_names(pairs):
+    return {(p["name"] or "").casefold() for p in (pairs or [])}
+
+
+def test_partner_swap_ernesto_stamps_both_players():
+    from app.email_extract import compute_extracted_fields, extract_doubles_pair
+    from app.triage import classify, _classify_raw
+    assert _classify_raw("", _ERNESTO_BODY) == "doubles"
+    assert classify("", _ERNESTO_BODY) == "doubles"
+    pair = extract_doubles_pair("", _ERNESTO_BODY)
+    assert "ernesto del valle" in {n.casefold() for n in pair}
+    assert "ulrich novakovitch" in {n.casefold() for n in pair}
+    fields = compute_extracted_fields("", _ERNESTO_BODY, "doubles")
+    names = _pair_names(fields["detected_name_pairs"])
+    assert "ernesto del valle" in names
+    assert "ulrich novakovitch" in names
+
+
+def test_partner_swap_ulrich_stamps_both_and_usta():
+    from app.email_extract import (
+        compute_extracted_fields, extract_doubles_pair, extract_name_usta_pairs,
+    )
+    from app.triage import classify, _classify_raw
+    assert _classify_raw("", _ULRICH_BODY) == "doubles"
+    assert classify("", _ULRICH_BODY) == "doubles"
+    pair = extract_doubles_pair("", _ULRICH_BODY)
+    keys = {n.casefold() for n in pair}
+    assert "ulrich novakovitch" in keys
+    assert any("ernesto del valle" in k for k in keys)
+    numbered = extract_name_usta_pairs("", _ULRICH_BODY)
+    assert any(p["usta"] == "2018838558" and "ulrich" in p["name"].casefold()
+               for p in numbered)
+    fields = compute_extracted_fields("", _ULRICH_BODY, "doubles")
+    pairs = fields["detected_name_pairs"] or []
+    names = _pair_names(pairs)
+    assert "ulrich novakovitch" in names
+    assert any("ernesto del valle" in n for n in names)
+    ulrich = next(p for p in pairs if "ulrich" in p["name"].casefold())
+    assert ulrich["usta"] == "2018838558"
+
+
+def test_partner_swap_invented_intro_and_next_sentence_usta():
+    from app.email_extract import compute_extracted_fields, extract_doubles_pair
+    body = (
+        "My son's name is Jane Roe. His name is Alex Kim. "
+        "They want to pair up for doubles.\n"
+        "Alex Kim. Her USTA # is 2018111222"
+    )
+    assert extract_doubles_pair("", body) == ["Jane Roe", "Alex Kim"]
+    fields = compute_extracted_fields("", body, "doubles")
+    pairs = fields["detected_name_pairs"] or []
+    assert _pair_names(pairs) == {"jane roe", "alex kim"}
+    alex = next(p for p in pairs if "alex" in p["name"].casefold())
+    assert alex["usta"] == "2018111222"
+
+
+def test_merge_leftover_players_fills_gaps_extract_wins():
+    from app.email_extract import merge_leftover_players
+    merged = merge_leftover_players(
+        [{"name": "Jane Roe", "usta": None}],
+        [{"name": "Jane Roe", "usta": "2018111001"},
+         {"name": "Alex Kim", "usta": "2018111002"}],
+    )
+    assert merged == [
+        {"name": "Jane Roe", "usta": "2018111001"},
+        {"name": "Alex Kim", "usta": "2018111002"},
+    ]
+    kept = merge_leftover_players(
+        [{"name": "Jane Roe", "usta": "111"}],
+        [{"name": "Jane Roe", "usta": "999"}],
+    )
+    assert kept == [{"name": "Jane Roe", "usta": "111"}]
+    assert merge_leftover_players([{"name": "Jane Roe", "usta": None}], None) == [
+        {"name": "Jane Roe", "usta": None},
+    ]
+    assert merge_leftover_players(None, None) is None
+    filled_slot = merge_leftover_players(
+        [{"name": None, "usta": None}],
+        [{"name": "Alex Kim", "usta": "n/a"}, "skip", {"name": "", "usta": ""}],
+    )
+    assert filled_slot == [{"name": "Alex Kim", "usta": None}]
+
+
+def test_real_withdrawal_not_partner_swap():
+    from app.triage import classify
+    assert classify(
+        "Please withdraw Jane Roe from the tournament",
+        "Please withdraw Jane Roe from the tournament. She is injured.",
+    ) == "withdrawal"

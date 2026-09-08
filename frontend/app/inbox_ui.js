@@ -21,6 +21,18 @@ export function inboxAxesLegend() {
   return INBOX_AXES.map((a) => `${a.label} (${a.axis}): ${a.meaning}`).join(" · ");
 }
 
+/** Map stored ingest_source to the inbox grid label (gmail / outlook / pdf). */
+export function inboxSourceLabel(source) {
+  const key = String(source || "").trim().toLowerCase();
+  if (key === "gmail") return "gmail";
+  if (key === "outlook") return "outlook";
+  if (key === "pdf" || key === "pdf_import" || key === "emails_pdf") return "pdf";
+  if (key.includes("gmail")) return "gmail";
+  if (key === "microsoft" || key === "graph" || key.includes("outlook")) return "outlook";
+  if (key.includes("pdf")) return "pdf";
+  return key || "manual";
+}
+
 /** Inbox-panel keys (when not typing in a field). */
 export const INBOX_SHORTCUTS = Object.freeze([
   { key: "t", needsSelection: true,  help: "Triage selected emails (classify → detect → file)" },
@@ -209,4 +221,173 @@ export function inboxShortcutGate(key, selectedCount) {
     return { ok: false, reason: null }; // f with no selection: silent no-op
   }
   return { ok: true, reason: null, def };
+}
+
+/** Prefix for dropdown values that point at an inbox-people row, not Setup Players. */
+export const INBOX_OPTION_PREFIX = "inbox:";
+
+/** Named spec for the review/grid “Add to Players” control (catalog, not roster). */
+export const INBOX_ADD_TO_PLAYERS = Object.freeze({
+  className: "inbox-add-to-players",
+  label: "Add to Players",
+  title: "Add this person to Setup Players (catalog, not roster)",
+});
+
+export function inboxOptionValue(person) {
+  return `${INBOX_OPTION_PREFIX}${person && person.id != null ? person.id : ""}`;
+}
+
+/** Numeric inbox-person id, or null when `value` is not an inbox option. */
+export function parseInboxOptionValue(value) {
+  const s = String(value ?? "");
+  if (!s.startsWith(INBOX_OPTION_PREFIX)) return null;
+  const rest = s.slice(INBOX_OPTION_PREFIX.length);
+  if (!/^\d+$/.test(rest)) return null;
+  return Number(rest);
+}
+
+function _ustaDigits(value) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function _lastFirstKey(last, first) {
+  return `${String(last || "")}\0${String(first || "")}`;
+}
+
+/** Split inbox `name` / first+last into Last, First when we can; else a single Name. */
+function _inboxNameParts(person) {
+  const first = String((person && person.first_name) || "").trim();
+  const last = String((person && person.last_name) || "").trim();
+  if (first || last) return { first, last, display: [last, first].filter(Boolean).join(", ") };
+  const raw = String((person && person.name) || "").trim();
+  if (!raw) return { first: "", last: "", display: "" };
+  const comma = raw.indexOf(",");
+  if (comma >= 0) {
+    const lastPart = raw.slice(0, comma).trim();
+    const firstPart = raw.slice(comma + 1).trim();
+    if (lastPart && firstPart) {
+      return { first: firstPart, last: lastPart, display: `${lastPart}, ${firstPart}` };
+    }
+  }
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    const firstPart = parts[0];
+    const lastPart = parts.slice(1).join(" ");
+    return { first: firstPart, last: lastPart, display: `${lastPart}, ${firstPart}` };
+  }
+  return { first: "", last: "", display: raw };
+}
+
+function _personUsta(person) {
+  return String((person && (person.usta_number || person.usta)) || "").trim();
+}
+
+function _personNameRaw(person) {
+  if (!person) return "";
+  const named = String(person.name || "").trim();
+  if (named) return named;
+  return [person.first_name, person.last_name].filter(Boolean).join(" ").trim();
+}
+
+function _catalogOption(p) {
+  const first = String((p && p.first_name) || "").trim();
+  const last = String((p && p.last_name) || "").trim();
+  const name = [last, first].filter(Boolean).join(", ");
+  const usta = String((p && p.usta_number) || "").trim();
+  return {
+    value: String(p.id),
+    label: usta ? `${name || "?"} (${usta})` : (name || "?"),
+    source: "catalog",
+    usta,
+    name,
+    playerId: p.id,
+    inboxPersonId: null,
+    promotedPlayerId: null,
+  };
+}
+
+function _inboxOption(person) {
+  const parts = _inboxNameParts(person);
+  const usta = _personUsta(person);
+  const name = parts.display || _personNameRaw(person);
+  const core = name && usta ? `${name} (${usta})` : (name || usta);
+  return {
+    value: inboxOptionValue(person),
+    label: `${core} · inbox`,
+    source: "inbox",
+    usta,
+    name,
+    playerId: null,
+    inboxPersonId: person.id,
+    promotedPlayerId: person.promoted_player_id == null ? null : person.promoted_player_id,
+  };
+}
+
+function _ustaInCatalogMap(usta, catalogByUsta) {
+  const digits = _ustaDigits(usta);
+  if (!digits || catalogByUsta == null || typeof catalogByUsta !== "object") return false;
+  if (catalogByUsta[usta] || catalogByUsta[digits]) return true;
+  const keys = catalogByUsta instanceof Map ? catalogByUsta.keys() : Object.keys(catalogByUsta);
+  for (const key of keys) {
+    if (_ustaDigits(key) === digits) return true;
+  }
+  return false;
+}
+
+/**
+ * Catalog Setup Players first (Last, First), then inbox-people who are not
+ * already on that catalog (promoted id or non-empty USTA digits).
+ */
+export function mergePlayerDropdownOptions(catalogPlayers, inboxPeople) {
+  const catalog = Array.isArray(catalogPlayers) ? catalogPlayers.filter(Boolean) : [];
+  const people = Array.isArray(inboxPeople) ? inboxPeople.filter(Boolean) : [];
+  const catalogOpts = catalog.slice().sort((a, b) =>
+    _lastFirstKey(a.last_name, a.first_name).localeCompare(_lastFirstKey(b.last_name, b.first_name)),
+  ).map(_catalogOption);
+
+  const catalogIds = new Set(catalog.map((p) => String(p.id)));
+  const catalogUsta = new Set();
+  for (const p of catalog) {
+    const d = _ustaDigits(p.usta_number);
+    if (d) catalogUsta.add(d);
+  }
+
+  const inboxOpts = [];
+  for (const person of people) {
+    if (person.id == null || person.id === "") continue;
+    const name = _personNameRaw(person);
+    const usta = _personUsta(person);
+    if (!name && !usta) continue;
+    const promoted = person.promoted_player_id;
+    if (promoted != null && promoted !== "" && catalogIds.has(String(promoted))) continue;
+    const digits = _ustaDigits(usta);
+    if (digits && catalogUsta.has(digits)) continue;
+    inboxOpts.push(_inboxOption(person));
+  }
+  inboxOpts.sort((a, b) => a.label.localeCompare(b.label));
+  return catalogOpts.concat(inboxOpts);
+}
+
+/**
+ * Show “Add to Players” when the slot is an unmatched inbox person (or a
+ * parsed name/USTA) rather than a real Setup Players catalog id.
+ */
+/** USTA digits from the inbox person or the email slot — slot wins gaps. */
+export function inboxKnownUsta(person, slot) {
+  const fromPerson = _ustaDigits(person && (person.usta_number || person.usta));
+  const fromSlot = _ustaDigits(slot && slot.usta);
+  return fromPerson || fromSlot || "";
+}
+
+export function inboxAddPlayerVisible({ catalogPlayerId, inboxPerson, catalogByUsta } = {}) {
+  const pid = catalogPlayerId == null ? "" : String(catalogPlayerId).trim();
+  if (pid && parseInboxOptionValue(pid) == null) return false;
+  if (!inboxPerson) return false;
+  const name = _personNameRaw(inboxPerson);
+  const usta = _personUsta(inboxPerson);
+  if (!name && !usta) return false;
+  const promoted = inboxPerson.promoted_player_id;
+  if (promoted != null && String(promoted).trim() !== "") return false;
+  if (usta && _ustaInCatalogMap(usta, catalogByUsta)) return false;
+  return true;
 }

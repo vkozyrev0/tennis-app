@@ -1,4 +1,4 @@
-// Setup → Gmail: IMAP app-password feed + latest-UID cursor.
+// Inbox → Gmail: IMAP app-password feed + latest-UID cursor.
 
 export function installGmailFeed(ctx) {
   const { api, setMsg, formObj, onSubmit, fillSelect } = ctx;

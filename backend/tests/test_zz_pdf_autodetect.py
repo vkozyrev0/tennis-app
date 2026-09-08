@@ -78,6 +78,7 @@ def test_pdf_merge_auto_detects_player_by_usta():
     assert row["detected_usta"] == usta            # matched player's number
     assert row["detected_match_kind"] == "usta"
     assert row["detected_usta_text"] == usta        # also parsed from the email
+    assert row["ingest_source"] == "pdf"
 
 
 def test_pdf_merge_auto_detects_by_full_name_in_subject():

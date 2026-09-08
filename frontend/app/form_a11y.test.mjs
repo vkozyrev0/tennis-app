@@ -76,6 +76,24 @@ test("index.html Autofill tokens: catalog off, own-profile on", () => {
   assert.match(html, /id="inbox-search"[\s\S]*autocomplete="off"/);
 });
 
+test("date fields stay native datepickers", () => {
+  const src = readFileSync(join(here, "form_a11y.js"), "utf8");
+  assert.doesNotMatch(src, /el\.type = "text"/);
+  assert.match(src, /input\[type="date"\]/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /<input type="date" id="inbox-mail-since"/);
+  assert.match(html, /name="client_secret_expires" type="date"/);
+});
+
+test("combos and the reassign select ignore LastPass", () => {
+  const combo = readFileSync(join(here, "combobox.js"), "utf8");
+  assert.match(combo, /data-lpignore/);
+  const a11y = readFileSync(join(here, "form_a11y.js"), "utf8");
+  assert.match(a11y, /data-lpignore/);
+  const html = readFileSync(join(here, "../index.html"), "utf8");
+  assert.match(html, /id="inbox-bulk-tournament"[\s\S]{0,200}data-lpignore="true"/);
+});
+
 test("inbox row checkboxes carry a name so Chrome Autofill is satisfied", () => {
   const inbox = readFileSync(join(here, "inbox.js"), "utf8");
   assert.match(inbox, /cb\.name = "inbox-select-all"/);

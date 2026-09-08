@@ -69,6 +69,42 @@ def test_create_stamps_and_list_reads():
     assert row["detected_events"] == "Singles"
 
 
+def test_list_restamps_null_doubles_name_pairs():
+    """Ready=TRUE + NULL pairs (ingest before intro-name extract) restamps on GET."""
+    t = _tournament()
+    body = (
+        "Hi my son name is Ernesto Del Valle. He is schedule to play doubles. "
+        "His double partner is going to withdraw. His name is Ulrich Novakovitch. "
+        "Please pair them for doubles."
+    )
+    e = _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "L5 doubles Macon",
+        "body": body,
+        "from_address": "p@example.com",
+    }))
+    up = _ok(client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "doubles",
+        "status": "new", "detected_player_id": None,
+    }), 200)
+    assert up["classification"] == "doubles"
+    from app.db import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_message SET detected_name_pairs = NULL, "
+                "detected_text_ready = TRUE WHERE id = %s",
+                (e["id"],),
+            )
+        conn.commit()
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    names = {(p.get("name") or "").casefold()
+             for p in (row.get("detected_name_pairs") or [])}
+    assert "ernesto del valle" in names
+    assert "ulrich novakovitch" in names
+
+
 def test_update_classification_restamps_reason():
     t = _tournament()
     e = _ok(client.post("/api/emails", json={

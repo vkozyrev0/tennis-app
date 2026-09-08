@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app import coppa, crypto, email_ingest, email_llm, email_stamp, export_gate
+from app import inbox_person
 from app import geocode, gmail_feed, importer, playerops, retention, security
 from app import shirtops, td_chat
 from app.config import Settings, settings
@@ -239,6 +240,12 @@ def test_extract_gender_and_pairs():
     assert extract_doubles_pair("Hello", "Jane Doe and John Smith went to lunch") == []
     pairs = extract_name_usta_pairs("x", "Jane Doe 1234567890 Jane Doe 1234567890")
     assert len(pairs) == 1
+
+
+def test_inbox_person_split_name_edges():
+    assert inbox_person.split_name(None) == (None, None)
+    assert inbox_person.split_name("Ada Lovelace") == ("Ada", "Lovelace")
+    assert inbox_person.split_name("Lovelace, Ada") == ("Ada", "Lovelace")
 
 
 def test_apply_extracted_to_row():
@@ -709,3 +716,32 @@ def test_login_lockout_and_logout_clears_cookie():
     # restore admin session for later tests in this module
     client.post("/api/auth/logout")
     client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+
+
+def test_api_activity_renews_session_expiry():
+    """Using the app (GET /auth/me) slides expires_at forward, same token."""
+    from app.db import get_conn
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    sid = client.cookies.get("sid")
+    assert sid
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE session SET expires_at = now() + interval '2 hours' "
+                "WHERE token = %s",
+                (sid,),
+            )
+            cur.execute("SELECT expires_at FROM session WHERE token = %s", (sid,))
+            before = cur.fetchone()["expires_at"]
+        conn.commit()
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200, r.text
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT expires_at FROM session WHERE token = %s", (sid,))
+            after = cur.fetchone()["expires_at"]
+    assert after > before
+    # still the same cookie token
+    assert client.cookies.get("sid") == sid
+    # a second call while TTL is full does not 401
+    assert client.get("/api/tournaments").status_code == 200
