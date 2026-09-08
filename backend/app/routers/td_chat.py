@@ -168,20 +168,23 @@ def _summarize_result(row: dict) -> str:
     return f"{tool}: ok"
 
 
+class _FakeResp:
+    """Response-shaped object for handler results that aren't FastAPI Response."""
+
+    def __init__(self, status_code, payload=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = ""
+
+    def json(self):
+        return self._payload
+
+
 def _run_handlers(conn, resolved: list[dict], *, confirm: bool) -> list[dict]:
     from .._models_workspace import RosterEntryCreate
     from .dashboard import dashboard
     from .roster import add_roster_entry, delete_roster_entry, list_roster
     from fastapi import Response as _Resp
-
-    class _FakeResp:
-        def __init__(self, status_code, payload=None):
-            self.status_code = status_code
-            self._payload = payload
-            self.text = ""
-
-        def json(self):
-            return self._payload
 
     out = []
     for c in resolved:

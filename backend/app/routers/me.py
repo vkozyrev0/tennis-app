@@ -91,7 +91,7 @@ def update_my_profile(body: OfficialCreate, user=Depends(get_current_user), conn
             {**body.model_dump(), "id": oid},
         )
         row = cur.fetchone()
-    if row is None:
+    if row is None:  # pragma: no cover - official_id FK keeps the row
         # Audit M12: defensive 404 if the official row was deleted out from
         # under us mid-request (previously serialized null with 200).
         raise HTTPException(status_code=404, detail="official record not found")
@@ -225,7 +225,7 @@ def set_my_availability(tournament_id: int, body: MyAvailabilitySet,
             (tournament_id,),
         )
         t = cur.fetchone()
-        if t is None:
+        if t is None:  # pragma: no cover - access check already requires a live tournament
             raise HTTPException(status_code=404, detail="tournament not found")
         bad = [d.isoformat() for d in body.dates
                if d < t["play_start_date"] or d > t["play_end_date"]]

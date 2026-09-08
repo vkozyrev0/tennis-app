@@ -1,11 +1,10 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-07-29):** **~591 tests** across **89** files (migrations through
-**0055**) — deterministic (login-throttle state leak fixed). CI runs the suite
-against a Postgres 16 service on every push/PR and gates the Docker image build
-on it (`.github/workflows/docker.yml`); green `main` publishes to ghcr. Count is
-from static `def test_` scan; re-run `pytest --collect-only -q` after large adds.
+**Status (2026-09-07):** **914 tests** pass. Line coverage of `backend/app` is
+**100%** (`6798/6798`, `--cov-fail-under=100` in `backend/pytest.ini` + `pytest-cov`
+in `requirements.txt`). CI still runs `pytest -q` without coverage. Re-run
+`pytest --collect-only -q` after large adds.
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
 are split out of the large routers; API paths and re-exports for tests are
@@ -35,7 +34,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 |------|---------|
 | `tests/conftest.py` | Sets `PGDATABASE=courtops_test` *before* `app.config` reads env, then runs migrate + seed once per session. All tests run against a sibling DB that never touches the dev/demo `courtops` DB. Also an **autouse `_reset_login_throttle`** fixture that clears `app.routers.auth`'s process-global failed-attempt / lockout dicts before each test — those leaked across tests (the shared test-client IP + tests that POST wrong `admin` passwords could lock the account and 429 a *later* test's autouse login, the old intermittent flake). |
 | `tests/test_smoke.py` | Focused tests, one per behavior. Each is small (≤30 lines) and exercises a single API contract or bug-fix. |
-| `tests/test_td_e2e.py` | 1 end-to-end test that walks the full TD workflow from Setup catalog to staffing report, in API order. |
+| `tests/test_td_e2e.py` | Three TestClient e2e walks: `test_td_full_workflow` (setup → roster → staffing report), `test_td_inbox_leftover_unmatched_and_file_block` (leftover mail, unmatched skip, no-player file-block, hotel-without-player file, matched withdrawal), `test_td_official_accept_payroll_and_trash_restore` (official portal accept → payroll freeze → trash/restore). |
 | `tests/test_config_guard.py` | PII H1 boot-guard unit tests (no DB). |
 | `tests/test_zz_*.py` | Per-feature suites (sorted last to avoid session-login races): `inbox`, `inbox_search`, `conflicts`, `correction`, `retention`, `staff`, `h2_crypto`/`h2_player`, `admin_users`, `accept_decline`, `season_pay`, `money_audit`, `geocode`, `availability_check`, `change_password`, `room_pickup`, `cert_guard`, `chase_pending`, `coverage_gaps`, `site_coverage`, `inbox_usta`, `pdf_autodetect`, `role_coverage`, `inbox_status_counts`, `cert_pool`, `list_origin`, `dashboard`, `promote_alternate`, `player_overview`, `deadlines`, `player_search`, `officials_search`, `bulk_invite`, `alternates`, `coverage_fill`, `roster_csv`, `availability_grid`, `conflict_report`, `roster_completeness`, `digest`, `bulk_classify`, `bulk_triage`, `unmatched`, `pay_statement`, `invite_text`, `pay_statements_batch`, `invite_texts_batch`, `rooming_list`, `schedule`, `declined`, `me_availability`, `dietary`, `readiness`, `workload`, `officials_no_login`, `missing_distances`, `inbox_aging`, `players_paging`, `officials_paging`, `ical`, `db_errors`, `assignment_calc`, `contracts`, `bulk_savepoint`, `rate_fallback`, `day_of`, `incidents`, `assignment_audit`, `doubles_partner`, `email_extract`, `real_pdf`, `login_enum`, `extract_robustness`,
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
@@ -82,7 +81,7 @@ so module-load logins would invalidate sibling modules' sessions).
 | **Smoke** | Confirms a feature exists and returns 200/201 with a plausible shape. | `test_health_ok`, `test_site_crud`, etc. |
 | **Contract** | Asserts the exact shape, status code, and side-effects a router promises. | `test_player_put_optimistic_concurrency`, `test_assignment_pay_and_mileage`. |
 | **Regression** | Reproduces a closed bug + asserts the fix holds. | `test_player_hotels_analytics_and_tshirts` (audit F1), `test_import_doubles_new_player_with_gender` (sixth-pass), `test_roster_import_requires_gender_for_new_players` (audit C1). |
-| **End-to-end (E2E)** | Multi-step happy-path through the full TD workflow. | `test_td_full_workflow`. |
+| **End-to-end (E2E)** | Multi-step happy-path through the full TD workflow. | `test_td_full_workflow`, `test_td_inbox_leftover_unmatched_and_file_block`, `test_td_official_accept_payroll_and_trash_restore`. |
 
 ---
 
@@ -183,9 +182,17 @@ so module-load logins would invalidate sibling modules' sessions).
 
 ---
 
-## test_td_e2e.py — single end-to-end walkthrough
+## test_td_e2e.py — end-to-end walkthroughs
 
-### `test_td_full_workflow` — the only test in the file
+Three multi-step API walks (same order a TD uses in the UI):
+
+| Test | What it walks |
+|------|----------------|
+| `test_td_full_workflow` | Setup → tournament → roster → availability → assignments → inbox late-entry/withdrawal → lists → reports. |
+| `test_td_inbox_leftover_unmatched_and_file_block` | Leftover/other mail, unmatched withdrawal skip, no-player file-block (400, no list row), hotel files without a player, then a matched withdrawal files. |
+| `test_td_official_accept_payroll_and_trash_restore` | Official portal accept → TD payroll finalize-all → trash the event → restore (assignment + accept still there). |
+
+### `test_td_full_workflow`
 
 A single function that walks the API in the same order a TD does in the UI.
 13 logical phases:

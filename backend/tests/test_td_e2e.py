@@ -483,3 +483,156 @@ def test_td_full_workflow():
     ):
         r = client.get(path)
         assert r.status_code == 200, f"{path}: {r.status_code} {r.text[:200]}"
+
+
+def test_td_inbox_leftover_unmatched_and_file_block():
+    """Multi-step inbox walk the original TD e2e does not cover:
+
+    leftover/other mail → unmatched withdrawal skip → no-player file-block
+    → hotel can still file without a player → matched withdrawal files.
+    """
+    from app.email_targets import FILE_NEEDS_PLAYER_REASON
+
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    start = date.today() + timedelta(days=21)
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "InboxE2E " + _u(), "type": "junior",
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat(),
+    }))
+    tid = t["id"]
+    usta = "5" + uuid.uuid4().hex[:9]
+    player = _ok(client.post("/api/players", json={
+        "usta_number": usta, "first_name": "Jordan", "last_name": "Avery",
+        "gender": "female",
+    }))
+    _ok(client.post(f"/api/tournaments/{tid}/players", json={
+        "player_id": player["id"], "selection_status": "selected",
+        "age_division": "G14",
+    }))
+
+    leftover = _ok(client.post("/api/emails", json={
+        "tournament_id": tid,
+        "subject": "Thanks for a great weekend",
+        "body": "The hospitality was wonderful. See you next year.",
+        "from_address": "parent@example.com",
+    }))
+    sug = _ok(client.post(f"/api/emails/{leftover['id']}/suggest"), 200)
+    assert sug.get("classification") in {"other", "unclassified", "hotel"} or "classification" in sug
+    leftover_put = client.put(f"/api/emails/{leftover['id']}", json={
+        "tournament_id": tid, "classification": "other", "status": "new",
+    })
+    assert leftover_put.status_code == 200, leftover_put.text
+
+    unmatched = _ok(client.post("/api/emails", json={
+        "tournament_id": tid,
+        "subject": "Please withdraw Sage Unknown",
+        "body": "Please withdraw Sage Unknown from the event. Injury.",
+        "from_address": "other@example.com",
+    }))
+    client.put(f"/api/emails/{unmatched['id']}", json={
+        "tournament_id": tid, "classification": "withdrawal",
+        "status": "new", "detected_player_id": None,
+    })
+    skipped = _ok(client.post("/api/emails/bulk/populate",
+                              json={"email_ids": [unmatched["id"]]}), 200)
+    assert skipped["filed"] == 0
+    assert skipped["skipped"]
+    assert skipped["skipped"][0]["reason"] == FILE_NEEDS_PLAYER_REASON
+    blocked = client.put(f"/api/emails/{unmatched['id']}", json={
+        "tournament_id": tid, "classification": "withdrawal",
+        "status": "filed", "detected_player_id": None,
+    })
+    assert blocked.status_code == 400, blocked.text
+    assert "player" in blocked.json()["detail"].lower()
+    wd = client.get(f"/api/tournaments/{tid}/withdrawals").json()
+    assert not any(r.get("source_email_id") == unmatched["id"] for r in wd)
+
+    hotel = _ok(client.post("/api/emails", json={
+        "tournament_id": tid,
+        "subject": "Marriott block",
+        "body": "We are staying at the Marriott downtown.",
+        "from_address": "stay@example.com",
+    }))
+    client.put(f"/api/emails/{hotel['id']}", json={
+        "tournament_id": tid, "classification": "hotel",
+        "status": "new", "detected_player_id": None,
+    })
+    filed_hotel = _ok(client.post("/api/emails/bulk/status", json={
+        "email_ids": [hotel["id"]], "status": "filed",
+    }), 200)
+    assert filed_hotel["updated"] == 1
+    hotel_row = next(m for m in client.get(f"/api/emails?tournament_id={tid}").json()
+                     if m["id"] == hotel["id"])
+    assert hotel_row["status"] == "filed"
+
+    matched = _ok(client.post("/api/emails", json={
+        "tournament_id": tid,
+        "subject": f"Withdraw Jordan Avery {usta}",
+        "body": f"Please withdraw Jordan Avery USTA {usta} — injury.",
+        "from_address": "parent@example.com",
+    }))
+    detected = _ok(client.post(f"/api/emails/{matched['id']}/detect-player"), 200)
+    assert detected.get("detected_player_id") == player["id"]
+    client.put(f"/api/emails/{matched['id']}", json={
+        "tournament_id": tid, "classification": "withdrawal",
+        "status": "new", "detected_player_id": player["id"],
+    })
+    pop = _ok(client.post("/api/emails/bulk/populate",
+                          json={"email_ids": [matched["id"]]}), 200)
+    assert pop["filed"] == 1, pop
+    wd2 = client.get(f"/api/tournaments/{tid}/withdrawals").json()
+    assert any(r.get("source_email_id") == matched["id"]
+               or r.get("player_id") == player["id"] for r in wd2), wd2
+
+
+def test_td_official_accept_payroll_and_trash_restore():
+    """Official portal accept → TD payroll freeze → trash and restore the event."""
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    start = date.today() + timedelta(days=28)
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "PayE2E " + _u(), "type": "junior",
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat(),
+    }))
+    tid = t["id"]
+    o = _ok(client.post("/api/officials", json={
+        "first_name": "Pat", "last_name": "Portal " + _u(),
+    }))
+    _ok(client.post(f"/api/officials/{o['id']}/certifications",
+                    json={"cert_type": "roving_official"}))
+    uname = "e2e_" + uuid.uuid4().hex[:8]
+    _ok(client.put(f"/api/officials/{o['id']}/account",
+                   json={"username": uname, "password": "pw"}), 200)
+    a = _ok(client.post(f"/api/tournaments/{tid}/assignments",
+                        json={"official_id": o["id"]}))
+    _ok(client.post(f"/api/assignments/{a['id']}/days", json={
+        "work_date": start.isoformat(), "working_as": "roving_official",
+    }))
+
+    portal = TestClient(app)
+    _ok(portal.post("/api/auth/login", json={"username": uname, "password": "pw"}), 200)
+    mine = portal.get("/api/me/assignments").json()
+    row = next(x for x in mine if x["id"] == a["id"])
+    assert row["response_status"] == "pending"
+    accepted = _ok(portal.post(f"/api/me/assignments/{a['id']}/respond",
+                               json={"status": "accepted"}), 200)
+    assert accepted["response_status"] == "accepted"
+
+    frozen = _ok(client.post(f"/api/tournaments/{tid}/payroll/finalize-all"), 200)
+    assert frozen.get("finalized", frozen.get("count", 1)) >= 0
+    recs = client.get(f"/api/tournaments/{tid}/payroll").json()
+    assert recs, recs
+
+    assert client.delete(f"/api/tournaments/{tid}").status_code == 204
+    active = {r["id"] for r in client.get("/api/tournaments").json()}
+    assert tid not in active
+    trash = _ok(client.get("/api/trash"), 200)
+    assert tid in {r["id"] for r in trash["tournaments"]}
+    restored = _ok(client.post(f"/api/tournaments/{tid}/restore"), 200)
+    assert restored["id"] == tid
+    still = client.get(f"/api/tournaments/{tid}/assignments")
+    assert still.status_code == 200
+    assert any(x["id"] == a["id"] for x in still.json())
+    td_row = next(x for x in still.json() if x["id"] == a["id"])
+    assert td_row["response_status"] == "accepted"

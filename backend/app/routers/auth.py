@@ -66,7 +66,7 @@ def _record_fail(key: tuple[str, str]) -> None:
     if len(_attempts) > _MAX_TRACKED_KEYS or random.random() < 0.01:
         _gc_attempts(now)
     with _lock:
-        bucket = [t for t in _attempts[key] if now - t < _FAIL_WINDOW_S]
+        bucket = [t for t in _attempts.get(key, []) if now - t < _FAIL_WINDOW_S]
         bucket.append(now)
         _attempts[key] = bucket
         if len(bucket) >= _FAIL_LIMIT:

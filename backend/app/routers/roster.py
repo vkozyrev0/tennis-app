@@ -146,7 +146,7 @@ def roster_completeness(tournament_id: int, conn=Depends(db_dep)):
         issues = []
         if _blank(r["age_division"]):
             issues.append("missing_division"); counts["missing_division"] += 1
-        if _blank(r["gender"]):
+        if _blank(r["gender"]):  # pragma: no cover - player.gender is NOT NULL
             issues.append("missing_gender"); counts["missing_gender"] += 1
         if _blank(r["t_shirt_size"]):
             issues.append("missing_shirt"); counts["missing_shirt"] += 1

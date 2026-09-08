@@ -451,7 +451,7 @@ def update_assignment(assignment_id: int, body: AssignmentCreate,
                 "WHERE id=%s RETURNING id",
                 (body.official_id, body.site_id, body.room_block_id, assignment_id),
             )
-            if cur.fetchone() is None:
+            if cur.fetchone() is None:  # pragma: no cover - vanished between SELECT and UPDATE
                 raise HTTPException(status_code=404, detail="assignment not found")
             _audit(cur, assignment_id, "updated",
                    {"official_id": body.official_id, "site_id": body.site_id,

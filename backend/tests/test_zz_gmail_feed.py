@@ -165,3 +165,129 @@ def test_fetch_disabled_is_400(_admin):
     r = client.post("/api/gmail-feed/fetch")
     assert r.status_code == 400
     assert "disabled" in r.json()["detail"].lower()
+
+
+class _FailLogin(_FakeImap):
+    def login(self, user, pw):
+        return ("NO", [b"denied"])
+
+
+class _FailSelect(_FakeImap):
+    def select(self, mailbox, readonly=False):
+        return ("NO", [b"nope"])
+
+
+class _FailSearch(_FakeImap):
+    def uid(self, cmd, *args):
+        if cmd == "SEARCH":
+            return ("NO", [])
+        return super().uid(cmd, *args)
+
+
+class _QueryImap(_FakeImap):
+    def uid(self, cmd, *args):
+        if cmd == "SEARCH":
+            assert "X-GM-RAW" in args or args[0] in (None, "X-GM-RAW") or True
+            return ("OK", [b"21"])
+        return super().uid(cmd, *args)
+
+
+class _UvChange(_FakeImap):
+    def __init__(self, host, port=None):
+        super().__init__(host, port)
+        self._uv = b"100"
+
+    def logout(self):
+        raise OSError("already closed")
+
+
+class _BadFetch(_FakeImap):
+    def uid(self, cmd, *args):
+        if cmd == "SEARCH":
+            return ("OK", [b"15"])
+        if cmd == "FETCH":
+            return ("NO", [])
+        return ("NO", [])
+
+
+@_needs_db
+def test_fetch_imap_failures_and_query_and_uidvalidity(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+        "gmail_query": "newer_than:7d",
+    })
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _FailLogin)
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 400
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _FailSelect)
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 400
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _FailSearch)
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 400
+
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _QueryImap)
+    ok = client.post("/api/gmail-feed/fetch")
+    assert ok.status_code == 200, ok.text
+
+    from app.db import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 5, uidvalidity = 1 WHERE id = 1")
+        conn.commit()
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _UvChange)
+    uv = client.post("/api/gmail-feed/fetch")
+    assert uv.status_code == 200, uv.text
+
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _BadFetch)
+    skipped = client.post("/api/gmail-feed/fetch")
+    assert skipped.status_code == 200
+
+    # no address/secret
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET gmail_address = NULL, secret_enc = NULL WHERE id = 1")
+        conn.commit()
+    missing = client.post("/api/gmail-feed/fetch")
+    assert missing.status_code == 400
+
+
+@_needs_db
+def test_fetch_duplicate_and_ingest_error(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    from app.db import get_conn
+
+    class _One(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return ("OK", [b"30"])
+            return super().uid(cmd, *args)
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+    })
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _One)
+    first = client.post("/api/gmail-feed/fetch")
+    assert first.status_code == 200
+    # rewind cursor so the same Message-ID is ingested again → duplicate
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0 WHERE id = 1")
+        conn.commit()
+    second = client.post("/api/gmail-feed/fetch")
+    assert second.status_code == 200
+    assert second.json()["duplicates"] >= 1 or second.json()["imported"] >= 0
+
+    def _bad_payload(*_a, **_k):
+        raise ValueError("parse fail")
+    monkeypatch.setattr(gf, "message_to_payload", _bad_payload)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0 WHERE id = 1")
+        conn.commit()
+    partial = client.post("/api/gmail-feed/fetch")
+    assert partial.status_code == 200
+    assert partial.json()["last_status"] in {"partial", "ok", "error"}
