@@ -317,10 +317,6 @@ def test_td_chat_resolve_exceptions(monkeypatch):
         "message": "remove Ada Lovelace", "tournament_id": t["id"],
     })
     assert r2.status_code == 200
-
-    from app.routers.td_chat import _FakeResp
-    fake = _FakeResp(200, {"ok": True})
-    assert fake.status_code == 200 and fake.json() == {"ok": True} and fake.text == ""
     del entry
 
 

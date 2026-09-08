@@ -5,6 +5,7 @@ import time
 import uuid
 from datetime import date, timedelta
 
+import psycopg
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -375,9 +376,21 @@ def test_users_last_admin_409_direct():
 def test_official_account_unique_violation(monkeypatch):
     o = _ok(client.post("/api/officials", json={"first_name": "Uv", "last_name": uuid.uuid4().hex[:5]}))
     uname = "uv_" + uuid.uuid4().hex[:6]
-    _ok(client.put(f"/api/officials/{o['id']}/account", json={"username": uname, "password": "pw"}), 200)
-    # second put same official is update, not unique; create another with same
-    # username is 409 already covered. Call UniqueViolation by monkeypatch execute — skip
+    real = psycopg.Cursor.execute
+
+    def wrapped(self, query, params=None):
+        q = query if isinstance(query, str) else str(query)
+        if "INSERT INTO user_account" in q and "ON CONFLICT (username)" in q:
+            raise psycopg.errors.UniqueViolation("dup username")
+        if params is None:
+            return real(self, query)
+        return real(self, query, params)
+
+    monkeypatch.setattr(psycopg.Cursor, "execute", wrapped)
+    r = client.put(f"/api/officials/{o['id']}/account",
+                   json={"username": uname, "password": "pw"})
+    assert r.status_code == 409, r.text
+    assert "username" in r.json()["detail"].lower()
 
 
 def test_room_block_update_missing():

@@ -1,9 +1,10 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-09-07):** **914 tests** pass. Line coverage of `backend/app` is
-**100%** (`6798/6798`, `--cov-fail-under=100` in `backend/pytest.ini` + `pytest-cov`
-in `requirements.txt`). CI still runs `pytest -q` without coverage. Re-run
+**Status (2026-09-07):** **917 tests** pass. Line coverage of `backend/app` is
+**100%** (`6803/6803`, `--cov-fail-under=100` in `backend/pytest.ini` + `pytest-cov`
+in `requirements.txt`). The only shipped `# pragma: no cover` is health.py when
+the DB is down. CI still runs `pytest -q` without coverage. Re-run
 `pytest --collect-only -q` after large adds.
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk

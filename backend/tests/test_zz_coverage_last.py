@@ -273,9 +273,7 @@ def test_official_id_unique_second_login():
     assert r.status_code in (200, 409)
 
 
-def test_assignment_update_race_404():
-    # Race window (SELECT then UPDATE returning None) is not reliably
-    # reproducible without breaking the cursor; covered by a missing-id PUT.
+def test_assignment_update_missing_id_404():
     r = client.put("/api/assignments/9555777", json={"official_id": 1})
     assert r.status_code in (400, 404)
 
@@ -373,18 +371,97 @@ def test_merge_bookkeeping_update_fails(monkeypatch):
     assert body["merged"] >= 1
 
 
-def test_fake_resp_json_payload():
-    from app.routers.td_chat import _FakeResp
-    resp = _FakeResp(200, {"ok": True})
-    assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
-    assert resp.text == ""
+def _patch_sql_fetchone(monkeypatch, sql_substr, value):
+    """After a matching execute(), fetchone() returns `value` (row consumed).
+
+    psycopg Cursor has no __dict__, so the last SQL is kept in this closure.
+    """
+    real_ex = psycopg.Cursor.execute
+    real_fo = psycopg.Cursor.fetchone
+    last_sql = [""]
+
+    def execute(self, query, params=None):
+        last_sql[0] = query if isinstance(query, str) else str(query)
+        if params is None:
+            return real_ex(self, query)
+        return real_ex(self, query, params)
+
+    def fetchone(self):
+        if sql_substr in last_sql[0]:
+            try:
+                real_fo(self)
+            except Exception:
+                pass
+            return value
+        return real_fo(self)
+
+    monkeypatch.setattr(psycopg.Cursor, "execute", execute)
+    monkeypatch.setattr(psycopg.Cursor, "fetchone", fetchone)
 
 
-def test_roster_missing_gender_via_sql():
+def test_assignment_update_vanished_between_select_and_update(monkeypatch):
     t = _t()
-    # gender is NOT NULL; skip if the constraint holds. Try completeness anyway
-    # with a player whose gender column we can't null.
+    o = _ok(client.post("/api/officials", json={
+        "first_name": "Race", "last_name": uuid.uuid4().hex[:5],
+    }))
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                        json={"official_id": o["id"]}))
+    _patch_sql_fetchone(monkeypatch, "UPDATE assignment SET official_id", None)
+    r = client.put(f"/api/assignments/{a['id']}", json={"official_id": o["id"]})
+    assert r.status_code == 404, r.text
+    assert "not found" in r.json()["detail"].lower()
+
+
+def test_me_profile_404_when_update_returns_no_row(monkeypatch):
+    o = _ok(client.post("/api/officials", json={
+        "first_name": "Prof", "last_name": uuid.uuid4().hex[:5],
+    }))
+    uname = "prof_" + uuid.uuid4().hex[:6]
+    _ok(client.put(f"/api/officials/{o['id']}/account",
+                   json={"username": uname, "password": "pw"}), 200)
+    sess = TestClient(app)
+    _ok(sess.post("/api/auth/login", json={"username": uname, "password": "pw"}), 200)
+    _patch_sql_fetchone(monkeypatch, "UPDATE official SET", None)
+    r = sess.put("/api/me/profile", json={"first_name": "X", "last_name": "Y"})
+    assert r.status_code == 404, r.text
+    assert "official record not found" in r.json()["detail"].lower()
+
+
+def test_me_availability_404_when_tournament_vanishes(monkeypatch):
+    t = _t()
+    o = _ok(client.post("/api/officials", json={
+        "first_name": "Avl", "last_name": uuid.uuid4().hex[:5],
+    }))
+    uname = "avl_" + uuid.uuid4().hex[:6]
+    _ok(client.put(f"/api/officials/{o['id']}/account",
+                   json={"username": uname, "password": "pw"}), 200)
+    sess = TestClient(app)
+    _ok(sess.post("/api/auth/login", json={"username": uname, "password": "pw"}), 200)
+    _patch_sql_fetchone(
+        monkeypatch, "SELECT play_start_date, play_end_date FROM tournament", None,
+    )
+    r = sess.put(f"/api/me/availability/{t['id']}", json={
+        "dates": [t["play_start_date"]], "hotel_needed": False,
+    })
+    assert r.status_code == 404, r.text
+    assert "tournament not found" in r.json()["detail"].lower()
+
+
+def test_users_last_admin_count_409(monkeypatch):
+    extra = _ok(client.post("/api/admin/users", json={
+        "username": "tmp_" + uuid.uuid4().hex[:6], "password": "password1",
+    }))
+    _patch_sql_fetchone(
+        monkeypatch, "SELECT count(*) AS n FROM user_account WHERE role = 'admin'",
+        {"n": 1},
+    )
+    r = client.delete(f"/api/admin/users/{extra['id']}")
+    assert r.status_code == 409, r.text
+    assert "last admin" in r.json()["detail"].lower()
+
+
+def test_roster_missing_gender_via_fetchall(monkeypatch):
+    t = _t()
     p = _ok(client.post("/api/players", json={
         "usta_number": "g" + uuid.uuid4().hex[:9], "first_name": "Ng", "last_name": "En",
         "gender": "female",
@@ -392,5 +469,26 @@ def test_roster_missing_gender_via_sql():
     _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
         "player_id": p["id"], "selection_status": "selected",
     }))
+    real_ex = psycopg.Cursor.execute
+    real_fa = psycopg.Cursor.fetchall
+    last_sql = [""]
+
+    def execute(self, query, params=None):
+        last_sql[0] = query if isinstance(query, str) else str(query)
+        if params is None:
+            return real_ex(self, query)
+        return real_ex(self, query, params)
+
+    def fetchall(self):
+        rows = real_fa(self)
+        if "FROM tournament_entry e JOIN player p" in last_sql[0]:
+            return [{**dict(r), "gender": None} for r in rows]
+        return rows
+
+    monkeypatch.setattr(psycopg.Cursor, "execute", execute)
+    monkeypatch.setattr(psycopg.Cursor, "fetchall", fetchall)
     r = client.get(f"/api/tournaments/{t['id']}/roster-completeness")
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["counts"]["missing_gender"] >= 1
+    assert any("missing_gender" in e["issues"] for e in body["entries"])

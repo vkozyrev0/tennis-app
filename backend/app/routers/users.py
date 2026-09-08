@@ -98,7 +98,7 @@ def delete_admin(user_id: int, me=Depends(get_current_user), conn=Depends(db_dep
         if user_id == me["id"]:
             raise HTTPException(status_code=400, detail="you can't delete your own account")
         cur.execute("SELECT count(*) AS n FROM user_account WHERE role = 'admin'")
-        if cur.fetchone()["n"] <= 1:  # pragma: no cover - self-delete is rejected first
+        if cur.fetchone()["n"] <= 1:
             raise HTTPException(status_code=409, detail="can't delete the last admin account")
         cur.execute("DELETE FROM user_account WHERE id = %s", (user_id,))  # sessions cascade
     return Response(status_code=204)
