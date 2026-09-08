@@ -423,7 +423,7 @@ export function createGridFactories(ctx) {
       headerHeight: LIST_HEADER_ROW_HEIGHT,
       groupHeaderHeight: LIST_HEADER_ROW_HEIGHT,
       overlayNoRowsTemplate: `<span class="ag-empty">${esc(tabOpts.placeholder || "No data")}</span>`,
-      domLayout: "normal",
+      domLayout: tabOpts.domLayout || "normal",
       onCellValueChanged: (p) => {
         if (p.oldValue === p.newValue) return;
         (handlers.cellEdited || []).forEach((fn) => fn(_agCell(p)));
@@ -619,8 +619,7 @@ export function createGridFactories(ctx) {
       },
     });
     let built = false, pending = null;
-    // Viewport-fill height applied by sizeLists(); interim until first measure.
-    mount.style.height = mount.style.height || "50vh";
+    // sizeLists() pins height to remaining viewport minus after-grid HTML.
     const grid = _makeAgGrid(mount, {
       index: "id", placeholder, editTriggerEvent: "click",
       columnDefaults: { tooltip: true }, columns: cols,
@@ -657,11 +656,16 @@ export function createGridFactories(ctx) {
     }
     const panelId = tableEl.closest(".panel")?.id;
     const mount = document.createElement("div"); mount.className = "grid-mount";
-    if (opts.compact) mount.classList.add("grid-mount--compact");
-    mount.style.height = mount.style.height || (opts.maxHeight || "55vh");
+    if (opts.compact) {
+      mount.classList.add("grid-mount--compact");
+      if (opts.maxHeight) mount.style.maxHeight = opts.maxHeight;
+    } else if (opts.maxHeight) {
+      mount.style.height = opts.maxHeight;
+    }
     tableEl.parentElement.insertBefore(mount, tableEl); tableEl.remove();
     const grid = _makeAgGrid(mount, {
       placeholder, columns,
+      ...(opts.compact ? { domLayout: "autoHeight" } : {}),
       ...(opts.index ? { index: opts.index } : {}),
       ...(opts.editable ? { editTriggerEvent: opts.editable === true ? "click" : opts.editable } : {}),
       // rowClassRules replaces Tabulator's rowFormatter for row-level styling
@@ -758,8 +762,7 @@ export function createGridFactories(ctx) {
     const titles = [...tableEl.querySelectorAll("thead th")].map((t) => t.textContent.trim());
     const mount = tableEl.closest(".list-scroll") || tableEl.parentElement;
     mount.classList.remove("list-scroll"); mount.innerHTML = ""; mount.classList.add("grid-mount");
-    // height filled by sizeLists() to the remaining viewport; interim value until then.
-    mount.style.height = mount.style.height || "50vh";
+    // sizeLists() pins height to remaining viewport.
 
     // Columns may opt into in-grid editing via `c.edit` (double-click a cell).
     // Only columns whose `key` maps 1:1 to a writable DB field should set it;

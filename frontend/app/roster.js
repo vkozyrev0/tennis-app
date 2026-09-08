@@ -134,8 +134,7 @@ export function createRosterPanel(ctx) {
   const rosterMount = rosterTableEl.closest(".list-scroll") || rosterTableEl.parentElement;
   rosterMount.classList.remove("list-scroll"); rosterMount.innerHTML = ""; rosterMount.classList.add("grid-mount");
   let rosterBuilt = false, rosterPending = null;
-  // Final height set by sizeLists() to remaining viewport; interim until shown.
-  rosterMount.style.height = rosterMount.style.height || "50vh";
+  // sizeLists() pins height to remaining viewport minus after-grid HTML.
   const rosterGrid = makeGrid(rosterMount, {
     index: "id",
     placeholder: "No players on this roster yet.",

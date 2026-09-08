@@ -13,6 +13,7 @@ import {
   formatLocaleDate,
   hashForPanel,
   panelFromHash,
+  markL1Current,
   COMING_SOON_LABEL,
   isVenueRole,
   toastLifetime,
@@ -108,6 +109,35 @@ test("format ISO as MM/DD/YYYY", () => {
 
 test("round-trip locale date display", () => {
   assert.equal(parseLocaleDate(formatLocaleDate("2026-11-02")), "2026-11-02");
+});
+
+test("markL1Current sets active class and aria-current on the matching L1 button", () => {
+  function fakeBtn(group) {
+    const classes = new Set();
+    const attrs = {};
+    return {
+      dataset: { group },
+      classList: {
+        toggle(name, on) { if (on) classes.add(name); else classes.delete(name); },
+        contains(name) { return classes.has(name); },
+      },
+      setAttribute(k, v) { attrs[k] = v; },
+      removeAttribute(k) { delete attrs[k]; },
+      attrs,
+    };
+  }
+  const home = fakeBtn("home");
+  const inbox = fakeBtn("inbox");
+  markL1Current([home, inbox], "inbox");
+  assert.equal(home.classList.contains("active"), false);
+  assert.equal(home.attrs["aria-current"], undefined);
+  assert.equal(inbox.classList.contains("active"), true);
+  assert.equal(inbox.attrs["aria-current"], "true");
+  markL1Current([home, inbox], "home");
+  assert.equal(home.classList.contains("active"), true);
+  assert.equal(home.attrs["aria-current"], "true");
+  assert.equal(inbox.classList.contains("active"), false);
+  assert.equal(inbox.attrs["aria-current"], undefined);
 });
 
 test("hash serializes and restores a panel id", () => {

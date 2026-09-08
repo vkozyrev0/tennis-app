@@ -65,7 +65,7 @@ import { installFormA11y } from "./app/form_a11y.js";
 import { createAdminBoot } from "./app/admin_boot.js";
 import { createNoticesPanel } from "./app/notices.js";
 import { datesInRange as _datesInRange } from "./app/util.js";
-import { hashForPanel, panelFromHash, healthIndicators, applyHealthPills, intelStatusLine } from "./app/td_helpers.js";
+import { hashForPanel, panelFromHash, healthIndicators, applyHealthPills, intelStatusLine, markL1Current } from "./app/td_helpers.js";
 import { createTdChatPanel } from "./app/td_chat_ui.js";
 
 // ============================================================================
@@ -164,7 +164,7 @@ const _groupsEl = document.getElementById("menu-groups");
 const _groups = [...document.querySelectorAll(".menu-group")];
 function _markGroup(key) {
   _groups.forEach((g) => g.classList.toggle("group-active", g.dataset.group === key));
-  [..._groupsEl.children].forEach((b) => b.classList.toggle("active", b.dataset.group === key));
+  markL1Current(_groupsEl.children, key);
 }
 function _syncL2Bar(grp) {
   // Toolbar P2: hide L2 when the group has only one tab (Day-of/Inbox)
@@ -246,9 +246,23 @@ _groups.forEach((g) => {
   // aria-label keeps the button identifiable when the label is visually
   // hidden under the icon-only narrow-viewport CSS rule.
   b.setAttribute("aria-label", labelText);
-  if (g.classList.contains("group-active")) b.classList.add("active");
+  if (g.classList.contains("group-active")) {
+    b.classList.add("active");
+    b.setAttribute("aria-current", "true");
+  }
   b.addEventListener("click", () => activateGroup(g.dataset.group));
   _groupsEl.appendChild(b);
+});
+_groupsEl.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp"
+      && e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  const btns = [..._groupsEl.querySelectorAll(".gbtn")];
+  const i = btns.indexOf(document.activeElement);
+  if (i < 0) return;
+  e.preventDefault();
+  const dir = (e.key === "ArrowDown" || e.key === "ArrowRight") ? 1 : -1;
+  const next = btns[(i + dir + btns.length) % btns.length];
+  next.focus();
 });
 // Initial L2 solo state (Home is the default single-tab group).
 _syncL2Bar(_groups.find((g) => g.classList.contains("group-active")) || _groups[0]);

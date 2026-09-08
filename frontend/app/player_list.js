@@ -77,7 +77,7 @@ export function createPlayerList(ctx) {
       },
     });
     let built = false, pending = null;
-    mount.style.height = "55vh";
+    // sizeLists() pins height to remaining viewport minus after-grid HTML.
     const table = makeGrid(mount, {
       index: "id", placeholder: cfg.empty, editTriggerEvent: "click",  // single click opens the cell editor (where set)
       columnDefaults: { tooltip: true }, columns: _autoHeaderFilters(columns),

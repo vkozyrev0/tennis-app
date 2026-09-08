@@ -111,6 +111,18 @@ export function panelFromHash(hash) {
   return h || null;
 }
 
+/** Mark the L1 section button for `key` as the current location. */
+export function markL1Current(buttons, key) {
+  const list = buttons && typeof buttons[Symbol.iterator] === "function" ? [...buttons] : [];
+  const want = String(key || "");
+  for (const b of list) {
+    const on = String(b.dataset?.group || "") === want;
+    b.classList.toggle("active", on);
+    if (on) b.setAttribute("aria-current", "true");
+    else b.removeAttribute("aria-current");
+  }
+}
+
 export const COMING_SOON_LABEL = "Match / draw / scoring — coming soon";
 
 /** Chair / referee roles must have a site; roving may omit one. */

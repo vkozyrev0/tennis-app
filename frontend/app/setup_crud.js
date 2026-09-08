@@ -142,7 +142,7 @@ export function createSetupCrud(ctx) {
     { title: "Name", field: "last_name", formatter: playerCell },
     { title: "USTA #", field: "usta_number" },
     { title: "Change", field: "change_type" },
-  ], null, "No prior versions — this is the original record.", { maxHeight: "30vh" });
+  ], null, "No prior versions — this is the original record.", { compact: true, maxHeight: "30vh" });
   async function loadPlayerHistory(id) {
     const box = document.getElementById("player-history");
     box.hidden = false;

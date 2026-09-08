@@ -6,7 +6,9 @@
 html {
   touch-action: manipulation;
   -webkit-tap-highlight-color: color-mix(in srgb, var(--accent, #2e6f40) 22%, transparent);
+  height: 100%;
 }
+html:has(body:not(.is-signed-out)) { overflow: hidden; }
 
 /* a11y 4th-pass #2: honor prefers-reduced-motion. Kills the indeterminate
    progress-bar animation, toast slide-ins, skip-link transition, etc. for
@@ -589,10 +591,43 @@ body.is-official #context-bar { display: none; }
   display: inline-flex; align-items: center; gap: 0.35rem;
 }
 .gbtn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
-.gbtn.active { background: var(--court-deep, #163f29); color: #fff; }
+/* Selected L1 sits on the paper surface with a ball-yellow baseline so it
+   cannot be mistaken for an idle chip (court vs court-deep was ~1 shade). */
+.gbtn.active,
+.gbtn[aria-current="true"] {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 var(--ball, #d6ec4a);
+}
+.gbtn.active:hover,
+.gbtn[aria-current="true"]:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+.gbtn.active .gicon,
+.gbtn[aria-current="true"] .gicon {
+  background: var(--court, #1b4d32);
+}
 /* Solo L1 (no L2 row): full pill radius so the chip doesn't look half-cut. */
 body.nav-l2-solo .gbtn { border-radius: 6px; }
-body.nav-l2-solo .gbtn.active { border-radius: 6px; }
+body.nav-l2-solo .gbtn.active,
+body.nav-l2-solo .gbtn[aria-current="true"] {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--ball, #d6ec4a), inset 0 -3px 0 var(--ball, #d6ec4a);
+}
+/* Dark court (#10281c) vs --bg (#0f1612) is also a near-match; keep the ball
+   edge as the primary "you are here" cue in dark. */
+:root[data-theme="dark"] .gbtn.active,
+:root[data-theme="dark"] .gbtn[aria-current="true"] {
+  background: var(--elev, #1c2822);
+  box-shadow: inset 0 -3px 0 var(--ball, #d6ec4a), inset 0 0 0 1px color-mix(in srgb, var(--ball, #d6ec4a) 70%, transparent);
+}
+:root[data-theme="dark"] .gbtn.active:hover,
+:root[data-theme="dark"] .gbtn[aria-current="true"]:hover {
+  background: var(--elev, #1c2822);
+  color: var(--ink);
+}
 /* Level-1 nav group icon. 16 px stroke icons; each group gets a distinct
    warm/cool hue (set as `color` so currentColor stroke follows). On hover and
    when the group is active we bump saturation/brightness slightly.
@@ -680,6 +715,93 @@ body.nav-l2-solo .gbtn.active { border-radius: 6px; }
   vertical-align: middle;
 }
 .gbtn .tab-badge { margin-left: 0.15rem; }
+
+/* ---- court sideline (L1) -----------------------------------------------
+   The header is the baseline; L1 is the sideline — court green with a ball
+   inner line — so the work surface (L2 + main) is the court. A generic
+   admin rail (navy, 240px, nested tree) would erase that. L2 stays a
+   horizontal service line because Setup has a dozen tabs that should not
+   become a second nested list. */
+body:not(.is-signed-out):not(.is-official) {
+  display: grid;
+  grid-template-columns: var(--nav-sideline, 9.5rem) minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "hdr hdr"
+    "l1  l2"
+    "l1  crumbs"
+    "l1  main";
+  height: 100dvh;
+  overflow: hidden;
+}
+body:not(.is-signed-out):not(.is-official) > header { grid-area: hdr; }
+body:not(.is-signed-out):not(.is-official) > .menu-l1 { grid-area: l1; }
+body:not(.is-signed-out):not(.is-official) > .menu { grid-area: l2; }
+body:not(.is-signed-out):not(.is-official) > .crumbs { grid-area: crumbs; }
+body:not(.is-signed-out):not(.is-official) > #main-app { grid-area: main; }
+body:not(.is-signed-out) > .skip-link,
+body:not(.is-signed-out) > .progress,
+body:not(.is-signed-out) > .toasts,
+body:not(.is-signed-out) > .modal {
+  grid-area: 1 / 1 / 2 / -1;
+}
+body:not(.is-signed-out):not(.is-official) > .menu-l1 {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-self: stretch;
+  gap: 0.2rem;
+  padding: 0.55rem 0.4rem 1rem max(0.4rem, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  top: auto;
+  /* Ball-yellow inner edge — the sideline itself. */
+  box-shadow: inset -3px 0 0 var(--ball, #d6ec4a);
+}
+body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn {
+  width: 100%;
+  height: auto;
+  min-height: 2.5rem;
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  justify-content: flex-start;
+}
+body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn.active,
+body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn[aria-current="true"] {
+  /* Paper chip + ball tick on the inner edge, pointing onto the court. */
+  box-shadow: inset -3px 0 0 var(--ball, #d6ec4a);
+}
+body.nav-l2-solo:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn.active,
+body.nav-l2-solo:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn[aria-current="true"] {
+  box-shadow: inset 0 0 0 2px var(--ball, #d6ec4a), inset -3px 0 0 var(--ball, #d6ec4a);
+}
+body:not(.is-signed-out):not(.is-official) > .menu,
+body:not(.is-signed-out):not(.is-official) > .crumbs {
+  position: relative;
+  top: auto;
+}
+body:not(.is-signed-out):not(.is-official) > #main-app {
+  max-width: none;
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+}
+body.is-official {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "hdr" "main";
+  height: 100dvh;
+  overflow: hidden;
+}
+body.is-official > header { grid-area: hdr; }
+body.is-official > #official-app {
+  grid-area: main;
+  min-height: 0;
+  overflow: auto;
+}
 
 /* Use the full window width (back-office data app) — no centered narrow column. */
 main { padding: 1.25rem max(1.75rem, env(safe-area-inset-right, 0px)) 1.25rem max(1.75rem, env(safe-area-inset-left, 0px)); max-width: 1440px; margin: 0 auto; }
@@ -1083,19 +1205,21 @@ button.touch-btn:hover:not(:disabled) {
 .msg.bad { color: var(--bad); }
 
 /* ---- AG Grid mounts (Setup + workspace lists) ----
-   Height is set in px by sizeLists() (layout.js) so the bottom of the grid
-   sits at the viewport edge — the browser page scrollbar should not appear
-   for master-detail Setup panels. Compact summary mounts keep fixed heights. */
+   Height is set in px by sizeLists() (layout.js) to remaining viewport minus
+   HTML after the grid, so summaries / headings stay on-screen and the page
+   does not grow a stray scrollbar. Compact summary mounts size to content. */
 .grid-mount {
   margin-top: 0.1rem;
   box-sizing: border-box;
-  min-height: 380px;
+  min-height: 0;
   /* Internal scroll lives on the AG body; overflow hidden keeps chrome tight. */
   overflow: hidden;
 }
 .grid-mount--compact {
-  max-height: none; /* don't force viewport-fill on small summary grids */
+  height: auto;
+  max-height: min(12.5rem, 40vh);
   max-width: 520px;
+  overflow: auto;
 }
 .tabulator {
   background: var(--card); border: 1px solid var(--border); border-radius: 8px;
@@ -1537,7 +1661,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   /* JS keeps --list-max in sync with the real space below the list (sizeLists);
      the calc() is a sane fallback before the first measurement. */
   max-height: var(--list-max, calc(100vh - 200px));
-  min-height: 120px;
+  min-height: 0;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2027,6 +2151,37 @@ td.toggle { white-space: nowrap; }
 
 /* ---- responsive ---- */
 @media (max-width: 720px) {
+  /* Narrow: L1 returns to a top strip so the sideline doesn't steal grid width. */
+  body:not(.is-signed-out):not(.is-official) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas:
+      "hdr"
+      "l1"
+      "l2"
+      "crumbs"
+      "main";
+  }
+  body:not(.is-signed-out):not(.is-official) > .menu-l1 {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-end;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.2rem 1rem 0;
+    box-shadow: none;
+  }
+  body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn {
+    width: auto;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 6px 6px 0 0;
+    padding: 0 0.75rem;
+  }
+  body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn.active,
+  body:not(.is-signed-out):not(.is-official) > .menu-l1 .gbtn[aria-current="true"] {
+    box-shadow: inset 0 -3px 0 var(--ball, #d6ec4a);
+  }
   /* Both nav rows scroll horizontally instead of wrapping into many rows. */
   .menu-l1, .menu {
     overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch;
