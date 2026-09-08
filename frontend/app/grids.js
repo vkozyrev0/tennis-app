@@ -127,6 +127,8 @@ export function createGridFactories(ctx) {
       init(params) {
         const sel = document.createElement("select");
         sel.className = "ag-floating-filter-input ag-list-floating";
+        sel.name = "ag-list-filter"; sel.setAttribute("autocomplete", "off");
+        sel.setAttribute("aria-label", "Filter");
         if (!pairs.some(([v]) => v === "")) sel.appendChild(new Option("All", ""));
         for (const [v, label] of pairs) sel.appendChild(new Option(label, v));
         sel.addEventListener("change", () => params.parentFilterInstance((inst) => inst.onFloating(sel.value)));
@@ -144,6 +146,7 @@ export function createGridFactories(ctx) {
       init(params) { this.params = params; this.term = ""; }
       getGui() { const d = document.createElement("div"); d.className = "ag-filter-body-wrapper ag-custom-filter";
         const i = document.createElement("input"); i.type = "text"; i.className = "ag-input-field-input ag-text-field-input";
+        i.name = "ag-text-filter"; i.setAttribute("autocomplete", "off"); i.setAttribute("aria-label", "Filter");
         i.value = this.term; i.addEventListener("input", () => { this.term = i.value; this.params.filterChangedCallback(); });
         d.appendChild(i); this.eInput = i; return d; }
       isFilterActive() { return !!this.term; }
@@ -161,6 +164,7 @@ export function createGridFactories(ctx) {
       init(params) {
         const i = document.createElement("input"); i.type = "text";
         i.className = "ag-input-field-input ag-text-field-input ag-floating-filter-input";
+        i.name = "ag-text-filter"; i.setAttribute("autocomplete", "off"); i.setAttribute("aria-label", "Filter");
         i.addEventListener("input", () => params.parentFilterInstance((inst) => inst.onFloating(i.value)));
         this.eInput = i;
       }
@@ -196,6 +200,8 @@ export function createGridFactories(ctx) {
         const wrap = document.createElement("div"); wrap.className = "ag-autocomplete-editor";
         const input = document.createElement("input"); input.type = "text";
         input.className = "ag-input-field-input"; input.placeholder = params.placeholderEmpty || "type to filter…";
+        input.name = "ag-autocomplete"; input.setAttribute("autocomplete", "off");
+        input.setAttribute("aria-label", params.placeholderEmpty || "type to filter");
         const list = document.createElement("div"); list.className = "ag-autocomplete-list";
         wrap.append(input, list);
         const cur = this.opts.find((o) => o.value === this.value); if (cur) input.value = cur.label;
@@ -226,6 +232,7 @@ export function createGridFactories(ctx) {
         const i = document.createElement("input");
         i.type = "text";
         i.className = "ag-input-field-input date-locale";
+        i.name = "ag-date"; i.setAttribute("autocomplete", "off");
         i.placeholder = "MM/DD/YYYY";
         i.title = "MM/DD/YYYY or YYYY-MM-DD";
         i.setAttribute("inputmode", "numeric");
@@ -589,6 +596,8 @@ export function createGridFactories(ctx) {
       filterInput = document.createElement("input");
       filterInput.type = "search";
       filterInput.className = "filter";
+      filterInput.name = "list-search";
+      filterInput.setAttribute("autocomplete", "off");
       filterInput.placeholder = "Search…";
       filterInput.setAttribute("aria-label", "Search this list");
       pageNote = document.createElement("span");

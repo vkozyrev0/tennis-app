@@ -143,7 +143,7 @@
     </div>
     <div id="context-bar">
       <span class="ctx-label">Working on:</span>
-      <select id="active-tournament" class="chrome-field" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
+      <select id="active-tournament" class="chrome-field" autocomplete="off" aria-label="Active tournament"><option value="" disabled selected>— select a tournament —</option></select>
       <span id="active-info" class="ctx-info"></span>
       <span id="player-search-wrap">
         <input type="search" id="player-search" class="chrome-field" placeholder="Find player or official…" autocomplete="off"
@@ -308,7 +308,7 @@
           <span class="muted">Mutating calls (add/remove player) do not apply until you confirm.</span>
         </div>
         <div class="td-chat-compose">
-          <textarea id="td-chat-input" rows="2" placeholder="e.g. How is this tournament looking? Add Jane Roe USTA 1234567 G16…"></textarea>
+          <textarea id="td-chat-input" rows="2" autocomplete="off" placeholder="e.g. How is this tournament looking? Add Jane Roe USTA 1234567 G16…"></textarea>
           <button type="button" id="td-chat-send" class="btn btn--primary">Send</button>
         </div>
       </div>
@@ -321,7 +321,7 @@
       <div class="master-detail">
         <div class="list-pane">
           <div class="list-toolbar">
-            <input class="filter" type="search" placeholder="Filter tournaments…" aria-label="Filter tournaments" />
+            <input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter tournaments…" aria-label="Filter tournaments" />
             <button type="button" class="new-btn">+ New</button>
           </div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th></th></tr></thead><tbody></tbody></table></div>
@@ -330,7 +330,7 @@
           <h3 class="detail-title"></h3>
           <form id="tournament-form" autocomplete="off">
             <div class="row">
-              <label>Name <input name="name" required /></label>
+              <label>Name <input name="name" autocomplete="off" required /></label>
               <label>Type <select name="type"><option value="junior">Junior</option><option value="adult">Adult</option></select></label>
             </div>
             <div class="row">
@@ -365,15 +365,15 @@
     <section class="panel" id="panel-sites">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter sites…" aria-label="Filter sites" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter sites…" aria-label="Filter sites" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="site-form" autocomplete="off">
-            <div class="row"><label>Code <input name="code" /></label><label>Name <input name="name" required /></label></div>
-            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
-            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+            <div class="row"><label>Code <input name="code" /></label><label>Name <input name="name" autocomplete="off" required /></label></div>
+            <div class="row"><label>Street <input name="street" autocomplete="off" /></label><label>City <input name="city" autocomplete="off" /></label></div>
+            <div class="row"><label>State <input name="state" autocomplete="off" maxlength="2" /></label><label>Zip <input name="zip" autocomplete="off" /></label></div>
             <div class="row"><label>Latitude <input name="lat" type="number" step="any" min="-90" max="90" placeholder="e.g. 33.7490…" /></label><label>Longitude <input name="lng" type="number" step="any" min="-180" max="180" placeholder="e.g. -84.3880…" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="site-msg"></span></div>
           </form>
@@ -385,16 +385,16 @@
     <section class="panel" id="panel-officials">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter officials…" aria-label="Filter officials" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter officials…" aria-label="Filter officials" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City/St</th><th>Phone</th><th>Email</th><th>Dietary</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="official-form" autocomplete="off">
-            <div class="row"><label>First name <input name="first_name" required /></label><label>Last name <input name="last_name" required /></label></div>
-            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
-            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
-            <div class="row"><label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label><label>Email <input name="email" type="email" spellcheck="false" /></label></div>
+            <div class="row"><label>First name <input name="first_name" autocomplete="off" required /></label><label>Last name <input name="last_name" autocomplete="off" required /></label></div>
+            <div class="row"><label>Street <input name="street" autocomplete="off" /></label><label>City <input name="city" autocomplete="off" /></label></div>
+            <div class="row"><label>State <input name="state" autocomplete="off" maxlength="2" /></label><label>Zip <input name="zip" autocomplete="off" /></label></div>
+            <div class="row"><label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label><label>Email <input name="email" type="email" autocomplete="off" spellcheck="false" /></label></div>
             <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
             <div class="row"><label>Latitude <input name="lat" type="number" step="any" min="-90" max="90" placeholder="home, e.g. 33.7490…" /></label><label>Longitude <input name="lng" type="number" step="any" min="-180" max="180" placeholder="home, e.g. -84.3880…" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="official-msg"></span></div>
@@ -427,20 +427,20 @@
         across tournaments. To enter players in a specific event, use that tournament's <strong>Roster</strong> page.</p>
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter players…" aria-label="Filter players" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter players…" aria-label="Filter players" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>USTA #</th><th>Name</th><th>Gender</th><th>City/St</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="player-form" autocomplete="off">
-            <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" required /></label></div>
-            <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
+            <div class="row"><label>USTA # <input name="usta_number" required /></label><label>Birthdate <input type="date" name="birthdate" autocomplete="off" required /></label></div>
+            <div class="row"><label>First name <input name="first_name" autocomplete="off" /></label><label>Last name <input name="last_name" autocomplete="off" /></label></div>
             <div class="row"><label>Gender <span aria-hidden="true">*</span>
-              <select name="gender" required>
+              <select name="gender" autocomplete="off" required>
                 <option value="">— pick one —</option>
                 <option value="male">Male (Boys / Men)</option>
                 <option value="female">Female (Girls / Women)</option>
-              </select></label><label>City <input name="city" /></label><label>State <input name="state" maxlength="2" /></label></div>
+              </select></label><label>City <input name="city" autocomplete="off" /></label><label>State <input name="state" autocomplete="off" maxlength="2" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="player-msg"></span></div>
           </form>
           <div id="player-history" hidden>
@@ -455,7 +455,7 @@
     <section class="panel" id="panel-rates">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter rates…" aria-label="Filter rates" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter rates…" aria-label="Filter rates" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Cert</th><th>Rate/day</th><th>Effective</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -473,15 +473,15 @@
     <section class="panel" id="panel-hotels">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter hotels…" aria-label="Filter hotels" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter hotels…" aria-label="Filter hotels" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>City</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="hotel-form" autocomplete="off">
-            <div class="row"><label>Name <input name="name" required /></label><label>Website <input name="website" /></label></div>
-            <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
-            <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
+            <div class="row"><label>Name <input name="name" autocomplete="off" required /></label><label>Website <input name="website" autocomplete="off" /></label></div>
+            <div class="row"><label>Street <input name="street" autocomplete="off" /></label><label>City <input name="city" autocomplete="off" /></label></div>
+            <div class="row"><label>State <input name="state" autocomplete="off" maxlength="2" /></label><label>Zip <input name="zip" autocomplete="off" /></label></div>
             <div class="row"><label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label></div>
             <div class="actions-row"><button type="submit">Save</button><button type="button" class="delete" hidden>Delete</button><button type="button" class="cancel">Cancel</button><span class="msg" id="hotel-msg"></span></div>
           </form>
@@ -493,7 +493,7 @@
     <section class="panel" id="panel-distances" data-import-type="distances">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter distances…" aria-label="Filter distances" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter distances…" aria-label="Filter distances" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Official</th><th>Site</th><th>1-way mi</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -512,7 +512,7 @@
     <section class="panel" id="panel-divisions">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter divisions…" aria-label="Filter divisions" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter divisions…" aria-label="Filter divisions" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Code</th><th>Label</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
@@ -530,7 +530,7 @@
                 </select>
               </label>
               <label>Gender (blank = any)
-                <select name="gender">
+                <select name="gender" autocomplete="off">
                   <option value="">— any —</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
@@ -548,14 +548,14 @@
     <section class="panel" id="panel-events">
       <div class="master-detail">
         <div class="list-pane">
-          <div class="list-toolbar"><input class="filter" type="search" placeholder="Filter events…" aria-label="Filter events" /><button type="button" class="new-btn">+ New</button></div>
+          <div class="list-toolbar"><input class="filter" type="search" name="list-filter" autocomplete="off" placeholder="Filter events…" aria-label="Filter events" /><button type="button" class="new-btn">+ New</button></div>
           <div class="list-scroll"><table class="list-table"><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Gender</th><th>Sort</th><th></th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="detail-pane">
           <h3 class="detail-title"></h3>
           <form id="event-form" autocomplete="off">
             <div class="row">
-              <label>Name <span aria-hidden="true">*</span> <input name="name" required placeholder="e.g. Singles or Men's Doubles…" /></label>
+              <label>Name <span aria-hidden="true">*</span> <input name="name" autocomplete="off" required placeholder="e.g. Singles or Men's Doubles…" /></label>
               <label>Tournament type <span aria-hidden="true">*</span>
                 <select name="tournament_type" required>
                   <option value="junior">Junior</option>
@@ -565,7 +565,7 @@
             </div>
             <div class="row">
               <label>Gender (blank = any)
-                <select name="gender">
+                <select name="gender" autocomplete="off">
                   <option value="">— any —</option>
                   <option value="male">Male</option>
                   <option value="female">Female</option>
@@ -717,7 +717,7 @@
       <div class="t-content card">
         <h3>Sites used by <span class="t-name"></span></h3>
         <p class="muted">Toggle which sites this tournament uses. Filter the grid to find a site.</p>
-        <input class="filter" id="t-sites-filter" type="search" placeholder="Filter sites…" aria-label="Filter sites" />
+        <input class="filter" id="t-sites-filter" type="search" autocomplete="off" placeholder="Filter sites…" aria-label="Filter sites" />
         <table class="list-table" id="t-sites-table"><thead><tr><th></th><th>Code</th><th>Name</th><th>City</th></tr></thead><tbody></tbody></table>
         <span class="msg" id="t-sites-msg"></span>
         <!-- B1: per-tournament division → site assignment. Each division row
@@ -743,7 +743,7 @@
         <div class="master-detail">
           <div class="list-pane">
             <div class="list-toolbar">
-              <input class="filter" id="roster-filter" type="search" placeholder="Filter roster…" aria-label="Filter roster" />
+              <input class="filter" id="roster-filter" type="search" autocomplete="off" placeholder="Filter roster…" aria-label="Filter roster" />
               <button type="button" id="roster-new" class="new-btn">+ New</button>
               <button type="button" id="roster-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> CSV</button>
               <button type="button" id="roster-signin-csv" class="export-btn no-print" title="Sign-in sheet (status, events, size, hotel, lodging)"><span aria-hidden="true">⬇</span> Sign-in</button>
@@ -771,10 +771,10 @@
               </div>
               <div class="row roster-new-row" id="roster-new-panel" role="tabpanel" aria-labelledby="roster-mode-new" hidden>
                 <label>USTA # <input name="usta_number" placeholder="e.g. 1234567890…" inputmode="numeric" spellcheck="false" /></label>
-                <label>First name <input name="first_name" /></label>
-                <label>Last name <input name="last_name" /></label>
+                <label>First name <input name="first_name" autocomplete="off" /></label>
+                <label>Last name <input name="last_name" autocomplete="off" /></label>
                 <label>Gender <span aria-hidden="true">*</span>
-                  <select name="gender" required>
+                  <select name="gender" autocomplete="off" required>
                     <option value="">— pick one —</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>
@@ -903,7 +903,7 @@
         <h3>Staff — <span class="t-name"></span> <span class="h3-subtitle">(non-official support roles for the staffing plan)</span></h3>
         <form id="staff-form" autocomplete="off" class="inline-form">
           <div class="row">
-            <label>Name <input name="name" required /></label>
+            <label>Name <input name="name" autocomplete="off" required /></label>
             <label>Role
               <select name="role" required>
                 <option value="site_director">Site Director</option>
@@ -917,7 +917,7 @@
           </div>
           <div class="row">
             <label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label>
-            <label>Email <input name="email" type="email" /></label>
+            <label>Email <input name="email" type="email" autocomplete="off" /></label>
             <label>Daily rate <input name="daily_rate" type="number" min="0" step="0.01" placeholder="e.g. 225…" /></label>
             <label>Notes <input name="notes" /></label>
           </div>
@@ -1094,7 +1094,7 @@
         </p>
         <form id="email-form" autocomplete="off" class="inline-form">
           <div class="row">
-            <label>From <input name="from_address" /></label>
+            <label>From <input name="from_address" autocomplete="off" /></label>
             <label>Subject <input name="subject" /></label>
           </div>
           <div class="row">
@@ -1149,7 +1149,7 @@
           <button type="button" id="inbox-bulk-clear" class="btn-link bulk-clear">Clear selection</button>
         </div>
         <div class="row mb-half">
-          <input type="search" id="inbox-search" class="filter filter--narrow"
+          <input type="search" id="inbox-search" class="filter filter--narrow" autocomplete="off"
                  placeholder="Search subject / sender…" aria-label="Search inbox (server-side)" />
           <span class="muted" id="inbox-search-note"></span>
         </div>
@@ -1527,10 +1527,10 @@
       <h2>My profile</h2>
       <p class="muted">Your contact details as the tournament director sees them.</p>
       <form id="me-form" autocomplete="off">
-        <div class="row"><label>First name <input name="first_name" /></label><label>Last name <input name="last_name" /></label></div>
-        <div class="row"><label>Street <input name="street" /></label><label>City <input name="city" /></label></div>
-        <div class="row"><label>State <input name="state" maxlength="2" /></label><label>Zip <input name="zip" /></label></div>
-        <div class="row"><label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label><label>Email <input name="email" type="email" spellcheck="false" /></label></div>
+        <div class="row"><label>First name <input name="first_name" autocomplete="given-name" /></label><label>Last name <input name="last_name" autocomplete="family-name" /></label></div>
+        <div class="row"><label>Street <input name="street" autocomplete="address-line1" /></label><label>City <input name="city" autocomplete="address-level2" /></label></div>
+        <div class="row"><label>State <input name="state" autocomplete="address-level1" maxlength="2" /></label><label>Zip <input name="zip" autocomplete="postal-code" /></label></div>
+        <div class="row"><label>Phone <input name="phone" type="tel" autocomplete="tel" inputmode="tel" /></label><label>Email <input name="email" type="email" autocomplete="email" spellcheck="false" /></label></div>
         <div class="row"><label>Dietary restrictions <input name="dietary_restrictions" /></label></div>
         <div class="actions-row"><button type="submit">Save</button><span class="msg" id="me-msg"></span></div>
       </form>
@@ -1632,6 +1632,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=275"></script>
+  <script type="module" src="/app.js?v=276"></script>
 </body>
 </html>

@@ -1,4 +1,98 @@
 // Form required-field markers + inbox/roster toolbar consolidation — D11.
+// Chrome Issues → Improvements flags two Autofill gaps: a control with no
+// id/name, and a control whose id/name looks like an Autofill token but has
+// no autocomplete attribute. Catalog fields are other people's data, so we
+// mark them autocomplete=off; only login + the official's own profile use
+// real Autofill tokens.
+
+let _fieldSeq = 0;
+
+const AUTOCOMPLETE_BY_NAME = {
+  first_name: "given-name",
+  last_name: "family-name",
+  email: "email",
+  username: "username",
+  password: "current-password",
+  phone: "tel",
+  street: "address-line1",
+  city: "address-level2",
+  state: "address-level1",
+  zip: "postal-code",
+  website: "url",
+  birthdate: "bday",
+};
+
+/** Own-profile / login forms where Autofill should fill the signed-in person. */
+function _isPersonalForm(el) {
+  return !!(el.closest && el.closest("#login-form, #me-form, #change-pw-form"));
+}
+
+export function suggestedAutocomplete(el) {
+  if (!el || el.nodeType !== 1) return "off";
+  const tag = el.tagName;
+  if (tag !== "INPUT" && tag !== "SELECT" && tag !== "TEXTAREA") return "off";
+  const type = String(el.type || "").toLowerCase();
+  if (type === "hidden" || type === "file" || type === "submit" || type === "button"
+      || type === "reset" || type === "image") {
+    return null;
+  }
+  if (type === "checkbox" || type === "radio" || type === "range" || type === "color"
+      || type === "search") {
+    return "off";
+  }
+  if (el.classList.contains("filter") || el.classList.contains("combo-input")
+      || el.classList.contains("ag-input-field-input")
+      || el.classList.contains("ag-floating-filter-input")) {
+    return "off";
+  }
+  const key = String(el.name || el.id || "").toLowerCase().replace(/-/g, "_");
+  if (_isPersonalForm(el) && AUTOCOMPLETE_BY_NAME[key]) {
+    if (key === "password" && type === "password") {
+      const existingHint = (el.getAttribute("autocomplete") || "");
+      if (existingHint === "new-password" || existingHint === "current-password") return existingHint;
+      return el.id && /new|confirm/i.test(el.id) ? "new-password" : "current-password";
+    }
+    return AUTOCOMPLETE_BY_NAME[key];
+  }
+  if (type === "password") return el.getAttribute("autocomplete") || "new-password";
+  return "off";
+}
+
+/** Give a control an id when it has neither id nor name (Chrome Autofill). */
+export function ensureFieldIdentity(el) {
+  if (!el || el.nodeType !== 1) return el;
+  if (el.id || (el.getAttribute && el.getAttribute("name"))) return el;
+  const type = String(el.type || el.tagName || "field").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  el.id = `fc-${type || "field"}-${++_fieldSeq}`;
+  return el;
+}
+
+export function stampFormControls(root = (typeof document !== "undefined" ? document : null)) {
+  if (!root || !root.querySelectorAll) return 0;
+  let n = 0;
+  root.querySelectorAll("input, select, textarea").forEach((el) => {
+    const beforeId = el.id;
+    const beforeName = el.getAttribute("name");
+    ensureFieldIdentity(el);
+    if ((!beforeId && !beforeName) && (el.id || el.getAttribute("name"))) n++;
+    if (!el.hasAttribute("autocomplete")) {
+      const ac = suggestedAutocomplete(el);
+      if (ac) el.setAttribute("autocomplete", ac);
+    }
+  });
+  return n;
+}
+
+export function watchFormControls(root = (typeof document !== "undefined" ? document : null)) {
+  if (!root || typeof MutationObserver === "undefined") return () => {};
+  let t = 0;
+  const mo = new MutationObserver(() => {
+    clearTimeout(t);
+    t = setTimeout(() => stampFormControls(root), 40);
+  });
+  mo.observe(root, { childList: true, subtree: true });
+  return () => { clearTimeout(t); mo.disconnect(); };
+}
 
 export function installFormA11y(ctx) {
   const { makeMenuButton, gotoImport } = ctx;
@@ -109,6 +203,8 @@ export function installFormA11y(ctx) {
     markRequiredFields,
     enhanceDateFields,
     enhanceContactFields,
+    stampFormControls,
+    watchFormControls,
     consolidateInboxToolbar: _consolidateInboxToolbar,
     consolidateRosterToolbar: _consolidateRosterToolbar,
   };

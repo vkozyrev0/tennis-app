@@ -46,6 +46,8 @@ export function createPlayerList(ctx) {
     const filterInput = document.createElement("input");
     filterInput.type = "search";
     filterInput.className = "filter";
+    filterInput.name = "list-search";
+    filterInput.setAttribute("autocomplete", "off");
     filterInput.placeholder = "Search…";
     filterInput.setAttribute("aria-label", "Search this list");
     const pageNote = document.createElement("span");

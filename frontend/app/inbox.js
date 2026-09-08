@@ -325,14 +325,18 @@ export function createInboxPanel(ctx) {
     { title: "", field: "_sel", headerSort: false, width: 40, hozAlign: "center",
       titleFormatter: () => {
         const cb = document.createElement("input");
-        cb.type = "checkbox"; cb.setAttribute("aria-label", "Select all visible");
+        cb.type = "checkbox"; cb.name = "inbox-select-all";
+        cb.setAttribute("autocomplete", "off");
+        cb.setAttribute("aria-label", "Select all visible");
         cb.addEventListener("change", (e) => _inboxBulkToggleAll(e.target.checked));
         return cb;
       },
       formatter: (cell) => {
         const m = cell.getData();
         const cb = document.createElement("input");
-        cb.type = "checkbox"; cb.checked = _inboxSelected.has(m.id);
+        cb.type = "checkbox"; cb.name = "inbox-row"; cb.value = String(m.id);
+        cb.setAttribute("autocomplete", "off");
+        cb.checked = _inboxSelected.has(m.id);
         cb.setAttribute("aria-label", `Select email ${m.subject || m.id}`);
         cb.addEventListener("click", (ev) => ev.stopPropagation());
         cb.addEventListener("change", (e) => _inboxBulkToggle(m.id, e.target.checked));
