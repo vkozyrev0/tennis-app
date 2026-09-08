@@ -10,6 +10,7 @@
 import { makeMenuButton } from "./ui.js";
 import { syncSkipLink } from "./skip_link.js";
 import { syncThemeColor } from "./theme.js";
+import { createInactivityGuard } from "./inactivity.js";
 
 export function createAuth(ctx) {
   const { api, setMsg, toast, onSubmit, onRoleResolved, onLogout } = ctx;
@@ -74,6 +75,48 @@ export function createAuth(ctx) {
   }
   _installAccountMenu();
 
+  const _idleModal = document.getElementById("idle-modal");
+  function _showIdleModal() {
+    if (_idleModal) {
+      _idleModal.hidden = false;
+      document.getElementById("idle-continue")?.focus();
+    }
+  }
+  function _hideIdleModal() {
+    if (_idleModal) _idleModal.hidden = true;
+  }
+  const _idleGuard = createInactivityGuard({
+    ping: () => api("/auth/me"),
+    onWarn: _showIdleModal,
+    onExpire: () => {
+      _hideIdleModal();
+      document.dispatchEvent(new CustomEvent("auth-expired"));
+      api("/auth/logout", { method: "POST" }).catch(() => {});
+    },
+  });
+  const _idleActivity = () => _idleGuard.activity();
+  const _IDLE_EV = ["pointerdown", "keydown", "scroll"];
+  let _idleBound = false;
+  function _bindIdleActivity(on) {
+    if (on) {
+      if (_idleBound) return;
+      _idleBound = true;
+      for (const ev of _IDLE_EV) {
+        document.addEventListener(ev, _idleActivity, { capture: true, passive: true });
+      }
+      return;
+    }
+    if (!_idleBound) return;
+    _idleBound = false;
+    for (const ev of _IDLE_EV) {
+      document.removeEventListener(ev, _idleActivity, { capture: true });
+    }
+  }
+  document.getElementById("idle-continue")?.addEventListener("click", async () => {
+    await _idleGuard.continue();
+    _hideIdleModal();
+  });
+
   // Role-based view switch. The pure DOM show/hide lives here; the app-specific
   // reactions (nav history, breadcrumbs, adminInit/officialInit) run via the
   // injected onRoleResolved so this module stays free of those dependencies.
@@ -131,6 +174,14 @@ export function createAuth(ctx) {
     }
 
     onRoleResolved({ who, logged, isAdmin, isOfficial, mustChange, forced });
+    if (logged) {
+      _bindIdleActivity(true);
+      _idleGuard.start();
+    } else {
+      _hideIdleModal();
+      _idleGuard.stop();
+      _bindIdleActivity(false);
+    }
   }
 
   // Audit F3: one-shot listener so a stray flood of expired-session 401s

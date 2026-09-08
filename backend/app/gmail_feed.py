@@ -40,6 +40,7 @@ _DEFAULTS = {
     "last_duplicates": 0,
 }
 _MAX_BATCH = 50
+_MAX_WINDOW_BATCH = 200
 
 
 def _hdr(msg: Message, name: str) -> str | None:
@@ -238,6 +239,8 @@ def _imap_fetch(
     row: dict,
     *,
     imap_factory: Callable[..., Any] | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> tuple[list[tuple[int, bytes]], int | None, int | None]:
     """Return [(uid, rfc822), ...], new last_uid, uidvalidity."""
     address = (row.get("gmail_address") or "").strip()
@@ -253,6 +256,8 @@ def _imap_fetch(
         typ, _ = imap.login(address, secret)
         if typ != "OK":
             raise RuntimeError("Gmail login failed — check the address and app password")
+        # Read-only: SEARCH/FETCH only. Clear inbox must never be able to
+        # STORE \Deleted or expunge the Gmail mailbox.
         typ, _ = imap.select(mailbox, readonly=True)
         if typ != "OK":
             raise RuntimeError(f"Could not open mailbox {mailbox}")
@@ -268,19 +273,32 @@ def _imap_fetch(
         if uv is not None and stored_uv is not None and int(stored_uv) != uv:
             last_uid = 0  # mailbox rebuilt — start over from lookback
         query = (row.get("gmail_query") or "").strip()
-        if query:
+        date_window = since is not None or until is not None
+        if date_window:
+            # ALL = SEEN and UNSEEN. Get mails must reread already-read mailbox mail.
+            args: list = [None, "ALL"]
+            if since is not None:
+                args += ["SINCE", since.astimezone(timezone.utc).strftime("%d-%b-%Y")]
+            if until is not None:
+                before = (until.astimezone(timezone.utc) + timedelta(days=1)).strftime("%d-%b-%Y")
+                args += ["BEFORE", before]
+            typ, data = imap.uid("SEARCH", *args)
+        elif query:
             typ, data = imap.uid("SEARCH", None, "X-GM-RAW", query)
         elif last_uid:
             typ, data = imap.uid("SEARCH", None, f"{int(last_uid) + 1}:*")
         else:
             days = int(row.get("lookback_days") or 7)
-            since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y")
-            typ, data = imap.uid("SEARCH", None, "SINCE", since)
+            since_s = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%d-%b-%Y")
+            typ, data = imap.uid("SEARCH", None, "SINCE", since_s)
         if typ != "OK":
             raise RuntimeError("Gmail search failed")
-        uids = [u for u in _decode_uids(data) if u > int(last_uid or 0)]
+        uids = _decode_uids(data)
+        if not date_window:
+            uids = [u for u in uids if u > int(last_uid or 0)]
         uids.sort()
-        uids = uids[:_MAX_BATCH]
+        cap = _MAX_WINDOW_BATCH if date_window else _MAX_BATCH
+        uids = uids[:cap]
         messages: list[tuple[int, bytes]] = []
         for uid in uids:
             typ, fetched = imap.uid("FETCH", str(uid), "(RFC822)")
@@ -302,13 +320,17 @@ def _imap_fetch(
             pass
 
 
-def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None) -> dict:
+def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
+                 since: datetime | None = None, until: datetime | None = None,
+                 tournament_id: int | None = None) -> dict:
     """Pull new IMAP messages and ingest them. Updates the UID cursor."""
     row = load_feed(cur)
     if not row.get("enabled"):
-        raise RuntimeError("Gmail feed is disabled — enable it on Setup → Gmail")
+        raise RuntimeError("Gmail feed is disabled — enable it on Inbox → Gmail")
     try:
-        messages, new_last, uv = _imap_fetch(row, imap_factory=imap_factory)
+        messages, new_last, uv = _imap_fetch(
+            row, imap_factory=imap_factory, since=since, until=until,
+        )
     except Exception as exc:
         cur.execute(
             """
@@ -321,7 +343,7 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None) -> dict
     imported = 0
     dupes = 0
     errors = []
-    tid = row.get("tournament_id")
+    tid = tournament_id if tournament_id is not None else row.get("tournament_id")
     for _uid, raw in messages:
         try:
             payload = message_to_payload(raw, tournament_id=tid)

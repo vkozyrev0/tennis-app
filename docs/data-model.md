@@ -34,10 +34,11 @@ The central entity linking both halves of the system.
 | `deleted_at` | timestamptz, NULL = active (migration 0046 soft-delete) |
 
 > **Soft-delete (migration 0046)** is scoped to **Tournament and
-> TournamentIncident only** — *not* players/officials/emails, where delete is a
-> COPPA PII-erasure and stays hard-delete. Lists filter `deleted_at IS NULL`;
-> trashed rows appear in a **Trash** list and can be **restored**. Backed by
-> partial indexes `idx_tournament_active` / `idx_incident_active`.
+> TournamentIncident** for Trash/restore. Players/officials stay hard-delete
+> (COPPA PII-erasure). **Inbox Clear** (migration 0059) sets
+> `email_message.deleted_at` to hide CourtOps copies only — Gmail/Outlook
+> mailboxes are never modified; a single-row `DELETE /api/emails/{id}` stays
+> hard. Lists filter `deleted_at IS NULL`.
 
 > A tournament can be held at **more than one site**, so Site is a
 > **many-to-many** via `tournament_site` (not a single `site_id`).
@@ -320,28 +321,33 @@ avoidances, hotels) augments it.
 
 ### EmailMessage  ✅ *built (migration 0011 + 0050 ingest)*
 Provenance / review inbox (audit §4.3). Messages land here via **Inbox paste**,
-PDF import, or `POST /api/ingest/email` (token-gated webhook; a mail provider
-is still wired outside the repo). A human still **files** each message into a
-list; keyword triage v0 may *suggest* a classification (no LLM — D5).
+PDF import, `POST /api/ingest/email`, **Gmail IMAP** (`ingest_source=gmail`,
+0057), or **Outlook Graph** (`ingest_source=outlook`, 0058). A human still
+**files** each message into a list. Keyword triage runs first; leftover
+`other` may use a **local** tiny-LLM (`EMAIL_LLM=1`, D5 — junior PII stays
+on-box). Inbox **Clear** sets `deleted_at` (0059); it does not delete provider
+mail.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
 | `message_id` | unique dedup key (nullable for manual adds) |
 | `received_at`, `from_address`, `to_address`, `subject`, `body` | `to_address` used to match `tournament.ingest_address` |
-| `ingest_source` | `manual` \| `webhook` \| `form` \| `pdf_import` (how the row arrived) |
-| `tournament_id` | FK (set by the reviewer, or routed from ingest address) |
+| `ingest_source` | `manual` \| `webhook` \| `form` \| `pdf_import` \| `gmail` \| `outlook` |
+| `tournament_id` | FK (set by the reviewer, Get mails, or routed from ingest address) |
 | `classification` | **human-assigned** text: `unclassified` \| `late_entry` \| `withdrawal` \| `doubles` \| `pairing_avoidance` \| `scheduling_avoidance` \| `division_flex` \| `hotel` \| `other` |
 | `status` | `new` \| `filed` \| `needs_followup` (filing a list sets `filed`) |
+| `classified_ms` | last local classify runtime (0056) |
+| `deleted_at` | timestamptz, NULL = visible (0059 Clear-inbox hide) |
 | `amends_email_id` | FK → EmailMessage (nullable), ON DELETE SET NULL — a correction email points at the earlier email it supersedes (migration 0034) |
 
-> **Triage agent v0 (built):** `POST /api/emails/{id}/suggest` returns a
-> rule-based classification (`app/triage.py`) — local keyword matching, **no LLM /
-> no data leaves the building** (D5-safe); the inbox "Suggest" button applies it and
-> a human confirms. Upgrading to an **LLM** that reads email content is the still-
-> open **D5** call (cloud vs local).
+> **Triage:** `POST /api/emails/{id}/suggest` runs `app/triage.py` first
+> (local keywords). When `EMAIL_LLM=1` and the heuristic is leftover `other`,
+> the on-box Qwen 1.5B sidecar may upgrade the intent. Cloud LLM is not used
+> (D5). A human still confirms. See [email-llm-prompt.md](email-llm-prompt.md).
 >
 > Player auto-detection persists onto this row — see **EmailMessage detection
 > columns** (migrations 0030/0031/0039/0041/0042) at the bottom of this doc.
+> Parsed name+USTA pairs also upsert **inbox_person** (0060).
 
 ### DoublesRequest  /  DoublesPair  ✅ *built (migration 0016)*
 Two-sided verification (audit §2.2).
@@ -692,6 +698,30 @@ searchable despite body encryption). New:
 |--------|-----------|-------|
 | `detected_partner_id` | 0041 | INT FK → Player, ON DELETE SET NULL. **Doubles**: the detected partner (second player) — the detector re-runs the layered match with the primary excluded. NULL for other classifications (auto-fill; a manual partner persists). |
 | `detected_member_ids` | 0042 | INT[]. **Pairing-avoidance groups**: ALL detected players, primary first (the detector loops, excluding everyone found so far, cap 6), so the inbox shows the whole group and filing pre-fills every member row. NULL otherwise. |
+| `detected_name_pairs` | 0051 | JSONB list of `{name, usta}` parsed from the email (inbox grid fallback when not on the roster). |
+
+### inbox_person  ✅ *built (migration 0060)*
+Parallel name+USTA list for people named in inbox mail, **not** Setup Players
+and **not** the tournament roster. Stamp/ingest upserts rows from
+`detected_name_pairs`. `POST /api/inbox-people/{id}/promote` copies one onto
+the Players catalog (gender + USTA required; never invented).
+| Field | Notes |
+|-------|-------|
+| `id` | PK |
+| `name`, `first_name`, `last_name` | display + split |
+| `usta_number` | unique when present |
+| `gender` | `male`/`female` when inferred; else null |
+| `source_email_id` | FK → EmailMessage, ON DELETE SET NULL |
+| `promoted_player_id` | FK → Player, ON DELETE SET NULL (set on promote) |
+
+### gmail_feed / outlook_feed  ✅ *built (migrations 0057 / 0058)*
+Singleton mailbox settings (one row `id=1`). Secrets are Fernet-encrypted;
+GET never returns them. Inbox **Get mails** / **Get all** pull through
+`ingest_email`.
+| Table | Cursor / secret |
+|-------|-----------------|
+| `gmail_feed` | IMAP `last_uid` / `uidvalidity`; `secret_enc` = App Password |
+| `outlook_feed` | Graph `last_received_at`; `secret_enc` = Entra client secret; `Mail.Read` GET only |
 
 ### TournamentIncident  ✅ *built (migration 0043)*
 Day-of incident log (P4-3) — the tournament's operational memory. Weather

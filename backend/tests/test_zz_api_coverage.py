@@ -293,6 +293,17 @@ def test_gmail_fetch_oserror_is_502(monkeypatch):
     assert r.status_code in (400, 502)
 
 
+def test_outlook_fetch_oserror_is_502(monkeypatch):
+    def _boom(*_a, **_k):
+        raise OSError("connection reset")
+    monkeypatch.setattr("app.routers.outlook_feed.fetch_latest", _boom)
+    client.put("/api/outlook-feed", json={"enabled": True})
+    r = client.post("/api/outlook-feed/fetch")
+    assert r.status_code in (400, 502)
+    assert "test-outlook-client-secret" not in r.text
+    assert "~I_" not in r.text
+
+
 def test_auto_distance_missing_official(monkeypatch):
     r = client.post("/api/distances/auto", json={"official_id": 9_999_994, "site_id": 1})
     assert r.status_code in (404, 405, 422)

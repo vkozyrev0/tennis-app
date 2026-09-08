@@ -9,6 +9,55 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-08 — Docs/Help match shipped inbox, idle, and mailbox feeds
+
+- README and test-coverage cite **985** tests / **112** files and migrations through **0060**. Data model documents `inbox_person`, Gmail/Outlook feeds, email `deleted_at`, and leftover on-box LLM. Help (`?`) already covers **Add to Players**, **Still there?**, and Get mails for Gmail and Outlook.
+
+## 2026-09-08 — Idle session warn, then auto-logout
+
+- After 13 minutes without pointer/keyboard/scroll activity a **Still there?** modal asks to continue. Continue pings `/api/auth/me` and resets the idle window. No reaction → at 15 minutes the session is signed out (`auth-expired` + `POST /api/auth/logout`).
+- Inbox grid gender control on Add-to-Players no longer opens the player-roster editor (mousedown/click stay on the gender select).
+
+## 2026-09-08 — Inbox people list feeds player dropdowns; Add to Players
+
+- Parsed email name+USTA pairs upsert into a parallel `inbox_person` list (not Setup Players, not the tournament roster). `GET /api/inbox-people` lists them; `POST /api/inbox-people/{id}/promote` copies one onto the Players catalog (gender and USTA required; never invented).
+- Review and inbox grid player dropdowns include unmatched inbox people (`inbox:{id}` · inbox). **Add to Players** on Review and the grid cell promotes a new person to the catalog, then the slot can resolve to that player id.
+
+## 2026-09-08 — Review restamps named players (leftover is leftover-only)
+
+- Heuristic extract already finds intro names (`my son name is` / `His name is`) on partner-swap doubles. Those names were stamped once at ingest; Review then showed Player 1/2 as none because `POST /emails/{id}/suggest` did not restamp, Re-suggest only filled the classification dropdown, and leftover LLM never runs once the heuristic is already `doubles`.
+- Suggest now restamps `detected_name_pairs` and returns them. Inbox GET restamps doubles/pairing rows whose pairs are still NULL. Review Re-suggest PUTs the class, re-renders the From-email hints, and runs detect-player when a tournament is assigned.
+- Leftover players merge only when extract left the pair list empty. Prompt still fills `players[0]` / `players[1]` after intent (intro phrases included); invented few-shots unchanged.
+
+## 2026-09-08 — Leftover prompt fills both doubles players
+
+- Leftover tiny-LLM system prompt now asks three things: is it doubles; first player name + USTA; second player name + USTA. Parser accepts `player1`/`player2` as well as `players`.
+
+## 2026-09-08 — Partner-swap doubles emails stamp both players
+
+- Heuristic classify keeps **doubles** when the body asks to pair/play doubles and only mentions someone else’s partner withdrawing (not a withdraw request).
+- Extract stamps both introduced players (`my son name is …` / `His name is …`) and binds a USTA # in the next sentence (`His USTA # is …`). Leftover prompt rule (2) says the same with invented-name few-shots unchanged.
+
+## 2026-09-08 — Clear inbox is a hide; Get all restores earlier mail
+
+- **Clear inbox** sets `email_message.deleted_at` (soft-delete). Rows stay in the DB; Gmail/Outlook/Hotmail are not touched. The Inbox list hides those copies.
+- **Get all** on Get mails widens the fetch back to the event start (or 90 days), ignores the 7-day default, and un-hides remaining cleared copies for the active tournament. Matching `message_id` ingest also un-hides.
+
+## 2026-09-08 — Datepickers; LastPass off dropdowns
+
+- Date controls stay native calendar datepickers (`type="date"`), including Inbox mail from/to, Setup dates, grid date editors, and Outlook secret expiry. They are no longer converted to MM/DD/YYYY text.
+- Combobox overlays and the Inbox **Reassign to** select set `data-lpignore` so LastPass does not paint an account menu over the dropdown.
+
+## 2026-09-08 — Clear inbox never deletes Gmail or Outlook mail
+
+- **Clear inbox** removes CourtOps copies for the active tournament only. Confirm copy, Help, and Gmail/Outlook pages say the provider mailboxes are unchanged. Gmail IMAP opens read-only (`SEARCH`/`FETCH`); Outlook uses Graph `Mail.Read` `GET` (not `Mail.ReadWrite` / DELETE).
+
+## 2026-09-08 — Inbox desk, Notifications, scoped Get mails
+
+- Inbox controls sit in three labeled rows: **Mailbox** (date range + Get mails), **Add** (paste, Import, CSV), **Queue** (search, unmatched, detect, confirm). Clear inbox is a quiet link on the Queue row, not a second equal button.
+- **Get mails** sends the active tournament. Feed mail with no tournament (survives Clear because Clear is tournament-scoped) is adopted onto that event instead of counting as “already in inbox” while the grid stays empty.
+- Notices moved out of Setup to a new L1 **Notifications** group at the bottom (page heading stays Notices; account menu still opens it).
+
 ## 2026-09-07 — Help matches live nav and triage
 
 - Setup and the account menu now mention Notices. Player lists use the tab names Division flex and Pairing avoidances. Inbox Help says bulk triage skips unmatched mail plus doubles/pairing avoidance (file those individually).
@@ -50,6 +99,10 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 - Every doubles-topic row in `tournament_emails.pdf` is copied with doubles→singles (`backend/tests/singles_from_doubles.py`, gold `tournament_emails_singles_gold.json`).
 - Heuristic `classify()` never labels a singles-only email `doubles`. Add / play / confirm / partner in singles is `late_entry` (no new `singles` inbox class — that files as late entry).
 - Leftover 1.5B gold: add-for-singles → `late_entry`; named pairing copies stay `doubles`; acks `other`; withdrawals `withdrawal`. The leftover prompt is unchanged (extra singles few-shots broke PDF 30/30). Example 1 / 5 already cover singles withdraw and still-enter.
+
+## 2026-09-08 — Outlook / Microsoft Graph mail feed
+
+- Setup → **Outlook** stores the TD mailbox, Directory (tenant) ID, Application (client) ID, encrypted client secret, optional mail search, poll minutes, lookback days, and optional tournament. **Get latest** uses OAuth client credentials and Microsoft Graph `GET /users/{mailbox}/messages` (app-only `Mail.Read`, not `/me`) and files them in Inbox as `outlook`. Step-by-step enablement is on the page.
 
 ## 2026-09-06 — Gmail feed settings (latest-mail cursor)
 

@@ -868,11 +868,18 @@ def _merge_email_pdf(cur, tid, d):
     # Sixth-pass observation: dedup against (tournament, from_address, subject)
     # so re-importing the same PDF doesn't double-stage every thread.
     cur.execute(
-        "SELECT 1 FROM email_message WHERE tournament_id = %s "
+        "SELECT id, deleted_at FROM email_message WHERE tournament_id = %s "
         "AND from_address = %s AND subject = %s",
         (tid, from_addr, subj),
     )
-    if cur.fetchone() is not None:
+    hit = cur.fetchone()
+    if hit is not None:
+        if hit.get("deleted_at"):
+            cur.execute(
+                "UPDATE email_message SET deleted_at = NULL WHERE id = %s",
+                (hit["id"],),
+            )
+            return None
         return "already in inbox — skipped"
     cls, ms = classify_timed(subj, body)  # plaintext, before encrypting at rest
     from .crypto import encrypt as _enc_body  # PII H2
@@ -889,9 +896,9 @@ def _merge_email_pdf(cur, tid, d):
         "  tournament_id, from_address, subject, body, classification,"
         "  detected_usta_text, detected_reason, detected_division, detected_events,"
         "  detected_name_pairs, detected_avoid_day, detected_avoid_time,"
-        "  detected_text_ready"
+        "  detected_text_ready, ingest_source"
         ") VALUES ("
-        "  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE"
+        "  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, TRUE, 'pdf'"
         ") RETURNING id",
         (tid, from_addr, subj, _enc_body(body), cls,
          fields["detected_usta_text"], fields["detected_reason"],

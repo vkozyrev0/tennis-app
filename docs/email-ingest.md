@@ -4,9 +4,14 @@ Dedicated tournament addresses can forward into the **review inbox** without
 manual paste. Classification is still the local keyword suggester (no LLM);
 a human files each message into structured lists.
 
-A **Gmail IMAP feed** (Setup → Gmail) is the other path: the TD stores a
-Gmail address + App Password (encrypted) and a UID cursor. **Get latest**
-pulls only newer messages. See [How to enable](#gmail-imap-feed) below.
+A **Gmail IMAP feed** (Inbox → Gmail) is one mailbox path: the TD stores a
+Gmail address + App Password (encrypted) and a UID cursor. Inbox **Get mails**
+pulls the date window (and **Get latest** on the Gmail page pulls newer
+messages). See [Gmail IMAP feed](#gmail-imap-feed) below.
+
+An **Outlook / Microsoft Graph feed** (Inbox → Outlook) is the Microsoft 365
+path: app-only client credentials + `Mail.Read`, then
+`GET /users/{mailbox}/messages`. See [Outlook / Microsoft Graph feed](#outlook--microsoft-graph-feed).
 
 ## Enable
 
@@ -182,7 +187,38 @@ API (admin session):
 - `POST /api/gmail-feed/fetch` — IMAP pull → `ingest_email` (`ingest_source=gmail`)
 
 Enablement steps (2-Step Verification, App passwords, Get latest) live on the
-Setup → Gmail page.
+Inbox → Gmail page. Inbox **Get mails** passes the active tournament so new
+mail (and previously unscoped duplicates) land in that event's grid.
+**Clear inbox** hides CourtOps `email_message` rows (`deleted_at`) for that
+tournament only — it does not IMAP-delete or Graph-delete the Gmail / Outlook /
+Hotmail mailbox. **Get all** restores those copies and fetches from the event
+start (or 90 days).
+
+## Outlook / Microsoft Graph feed
+
+Setup → **Outlook** stores one feed per deployment:
+
+| Field | Purpose |
+|---|---|
+| Mailbox | User principal to read (`TD@myadllc.com`). Graph path is `/users/{mailbox}/messages`, not `/me`. |
+| Directory (tenant) ID + Application (client) ID | Entra app. Client id may be the GUID or `api://{guid}`; the token call uses the GUID. |
+| Client secret | Fernet-encrypted (`secret_enc`); GET never returns it (`has_secret` only). |
+| Mail search | Optional Graph `$search` query. |
+| Poll minutes | Stored for a future worker; until then use **Get latest**. |
+| Lookback days | First fetch (no cursor yet) keeps messages since that many days. At most 50 messages per fetch. |
+| Tournament | Optional. Blank → route by `To:` vs tournament ingest address. |
+| `last_received_at` | Cursor so the next fetch only asks for newer mail. |
+
+API (admin session):
+
+- `GET /api/outlook-feed` — public settings (no secret)
+- `PUT /api/outlook-feed` — save; omit `client_secret` to keep the stored one
+- `POST /api/outlook-feed/fetch` — token + Graph pull → `ingest_email` (`ingest_source=outlook`)
+
+Enablement steps (app-only `Mail.Read`, admin consent, Get latest) live on the
+Inbox → Outlook page. There is no interactive Microsoft sign-in in CourtOps.
+Inbox **Get mails** passes the active tournament so new mail (and previously
+unscoped duplicates) land in that event's grid.
 
 ## Wiring checklist (next real event)
 
@@ -200,8 +236,11 @@ query-token ban). What is still **outside** the repo:
 | 7. Smoke one message | TD | Confirm Inbox row + classification chip |
 | 8. Human triage | TD | Classify → detect → file (shortcuts `t`/`d`/`f`/`u` on Inbox) |
 
-**Out of scope until approved:** LLM auto-triage, full mailbox IMAP poll, sending
-outbound invite email from CourtOps (mailto / copy-text remain the path).
+**Shipped in-repo:** leftover local tiny-LLM (`EMAIL_LLM=1`, see
+[email-llm-prompt.md](email-llm-prompt.md)); Gmail IMAP and Outlook Graph
+**Get mails** / **Get all** (read-only). **Still out of scope:** sending
+outbound invite email from CourtOps (mailto / copy-text remain the path);
+cloud LLM for inbox triage.
 
 ---
 

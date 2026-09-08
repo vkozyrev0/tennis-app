@@ -38,10 +38,13 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 13c | [mobile-plan.md](mobile-plan.md) | Mobile-friendly phases + menu IA (drawer, Setup split, courtside P1). |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
 
-Backend suite ~**591** tests / **89** files (migrations through **0055**); see
+Backend suite **985** tests / **112** files (migrations through **0060**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
-(`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`, …).
-In the SPA, press <kbd>?</kbd> (or the header chip) for the structured Help guide.
+(`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`,
+`inactivity`, `inbox`, …). Inbox **Get mails** can pull **Gmail** and **Outlook**;
+parsed names live on a parallel **inbox people** list (**Add to Players**);
+idle sessions show **Still there?** then sign out. In the SPA, press <kbd>?</kbd>
+(or the header chip) for the structured Help guide.
 
 ## Quickstart
 

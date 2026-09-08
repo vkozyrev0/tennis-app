@@ -22,7 +22,7 @@ so the model learns the rule. Tests fail if a gold PDF subject appears as a
 |---|---|
 | `withdrawal` | Cancel / withdraw from **singles**, **doubles**, or both (USTA WITHDRAWAL REQUEST, “please cancel”, “I need to withdraw”). |
 | `late_entry` | Request to still **enter or add a player in singles** after the deadline. |
-| `doubles` | Name a doubles partner, doubles confirmation with a real confirm body, or add someone for doubles / find a partner. |
+| `doubles` | Name a doubles partner, pair two named players (even if someone else's partner is withdrawing), doubles confirmation with a real confirm body, or add someone for doubles / find a partner. |
 | `other` | Latest line is only an ack (Thanks / Will do / We will pair them), a CC-only `C:` line, or “please ask them to email”. |
 | `pairing_avoidance` / `scheduling_avoidance` / `division_flex` / `hotel` | Only when the latest body clearly asks for that. |
 
@@ -88,12 +88,14 @@ is read before a doubles/withdraw subject.
 }
 ```
 
-`players[].usta` is optional. Markdown fences around the JSON are stripped.
+`players[].usta` is optional (digits or `null`). For doubles, `players[0]` is
+the first player and `players[1]` is the partner when named. Markdown fences
+around the JSON are stripped.
 
 ## System message (`_SYSTEM`)
 
 ```
-You classify leftover USTA junior/adult tournament emails. Reply with JSON only, no markdown. intent must be one of: withdrawal, doubles, late_entry, pairing_avoidance, scheduling_avoidance, division_flex, hotel, other. players is a list of {name, usta}. confidence is 0..1. Classify the LATEST body only (ignore Re:/FW:/**EXTERNAL** and quotes). Cancel / cancellation of singles or doubles is withdrawal (same as withdraw / WITHDRAWAL REQUEST). A request to still enter or add a player in singles is late_entry. A request to add/enter doubles or name a doubles partner is doubles. pairing_avoidance only if they ask two players not to play each other. Rules, in order: (1) Latest body is a short ack (Thanks / Thank you / Thank you for confirming / Will do / Sure / Yes I did / We will pair them / No worries) OR asks someone to email / confirm they are good → other, even if the subject says withdraw, cancel, doubles, singles, confirmation, or pairing. (2) Else two people named as partners / would like to be partners / will partner → doubles (a trailing Thank you does not cancel that). (3) Else withdraw / cancel / WITHDRAWAL REQUEST / requested to be withdrawn from singles and/or doubles → withdrawal. (4) Else missed the deadline / still enter / add NAME in singles → late_entry. (5) Else subject contains Doubles Confirmation and the latest body confirms a pair (not only a C: address or Thank you) → doubles. (6) Else add NAME for doubles / find a partner → doubles. (7) Else other. Set intent to match the rule. Do not set intent from the subject alone when the body is an ack. If reason is acknowledgement or waiting on email, intent is other unless the body lists two people as doubles partners.
+You classify leftover USTA junior/adult tournament emails. Reply with JSON only, no markdown. intent must be one of: withdrawal, doubles, late_entry, pairing_avoidance, scheduling_avoidance, division_flex, hotel, other. Treat those intents equally; do not prefer doubles over withdrawal, late_entry (singles entry), or other. players is a list of {name, usta}. confidence is 0..1. Classify the LATEST body only (ignore Re:/FW:/**EXTERNAL** and quotes). Cancel / cancellation of singles or doubles is withdrawal (same as withdraw / WITHDRAWAL REQUEST). A request to still enter or add a player in singles is late_entry. A request to add/enter doubles or name a doubles partner is doubles. pairing_avoidance only if they ask two players not to play each other. Rules, in order: (1) Latest body is a short ack (Thanks / Thank you / Thank you for confirming / Will do / Sure / Yes I did / We will pair them / No worries) OR asks someone to email / confirm they are good → other, even if the subject says withdraw, cancel, doubles, singles, confirmation, or pairing. (2) Else two people named as partners / would like to be partners / will partner / pair two named players for doubles → doubles (a trailing Thank you does not cancel that; still doubles if the body mentions someone else's partner is withdrawing). (3) Else withdraw / cancel / WITHDRAWAL REQUEST / requested to be withdrawn from singles and/or doubles → withdrawal. (4) Else missed the deadline / still enter / add NAME in singles → late_entry. (5) Else subject contains Doubles Confirmation and the latest body confirms a pair (not only a C: address or Thank you) → doubles. (6) Else add NAME for doubles / find a partner → doubles. (7) Else other. Set intent to match the rule. Do not set intent from the subject alone when the body is an ack. If reason is acknowledgement or waiting on email, intent is other unless the body lists two people as doubles partners. After intent, fill players for that intent: players[0] first named player {name, usta}, players[1] only if a second player is named (doubles partner). usta is digits or null if not stated. His/Her USTA # is N after a name belongs to that player. Skip parent, sign-off, and a partner only said to be withdrawing. other → [].
 ```
 
 ## User few-shots (`_SHOTS`)
@@ -230,7 +232,7 @@ Subject: {subject}
 ## Rule order (same as `_SYSTEM`)
 
 1. Short ack or “ask them to email” → `other` (subject is ignored).
-2. Two people named as partners (trailing Thank you does not cancel) → `doubles`.
+2. Two people named as partners / pair two named players for doubles (trailing Thank you does not cancel; still doubles if someone else's partner is withdrawing) → `doubles`.
 3. Withdraw / cancel singles and/or doubles → `withdrawal`.
 4. Still enter / add NAME in singles → `late_entry`.
 5. Subject contains Doubles Confirmation **and** the latest body confirms a

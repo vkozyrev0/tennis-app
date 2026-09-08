@@ -69,7 +69,8 @@ def digest(conn=Depends(db_dep)):
         if ids:
             cur.execute(
                 "SELECT tournament_id, count(*) AS n FROM email_message "
-                "WHERE tournament_id = ANY(%s) AND status = 'new' GROUP BY tournament_id",
+                "WHERE tournament_id = ANY(%s) AND status = 'new' "
+                "AND deleted_at IS NULL GROUP BY tournament_id",
                 (ids,),
             )
             unfiled = {r["tournament_id"]: r["n"] for r in cur.fetchall()}
@@ -173,7 +174,7 @@ def nav_counts(tournament_id: int, conn=Depends(db_dep)):
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
             "SELECT "
-            " (SELECT count(*) FROM email_message WHERE tournament_id = %(t)s AND status = 'new') AS inbox_unfiled,"
+            " (SELECT count(*) FROM email_message WHERE tournament_id = %(t)s AND status = 'new' AND deleted_at IS NULL) AS inbox_unfiled,"
             " (SELECT count(*) FROM late_entry WHERE tournament_id = %(t)s) AS late_entries,"
             " (SELECT count(*) FROM withdrawal WHERE tournament_id = %(t)s) AS withdrawals,"
             " (SELECT count(*) FROM scheduling_avoidance WHERE tournament_id = %(t)s) AS scheduling,"
@@ -321,7 +322,8 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
 
         # Inbox: how many emails are still unfiled (new) vs filed / follow-up.
         cur.execute(
-            "SELECT status, count(*) AS n FROM email_message WHERE tournament_id = %s GROUP BY status",
+            "SELECT status, count(*) AS n FROM email_message "
+            "WHERE tournament_id = %s AND deleted_at IS NULL GROUP BY status",
             (tournament_id,),
         )
         ib = {r["status"]: r["n"] for r in cur.fetchall()}

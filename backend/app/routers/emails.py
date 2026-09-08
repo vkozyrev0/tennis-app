@@ -37,7 +37,11 @@ from ..email_extract import (  # noqa: F401 — re-export for importer/tests
     extract_withdrawal_reason,
     usta_candidates,
 )
-from ..email_stamp import _apply_extracted_to_row, _stamp_extracted_fields
+from ..email_stamp import (
+    _apply_extracted_to_row,
+    _stamp_extracted_fields,
+    _stamp_extracted_fields_with_leftover,
+)
 from ..email_targets import (
     FILE_NEEDS_PLAYER,
     FILE_NEEDS_PLAYER_REASON,
@@ -100,12 +104,20 @@ def _finalize_email_row(cur, r: dict) -> dict:
     if isinstance(pairs, str):
         try:
             r["detected_name_pairs"] = json.loads(pairs)
+            pairs = r["detected_name_pairs"]
         except (TypeError, ValueError):
             r["detected_name_pairs"] = None
-    if not ready:
+            pairs = None
+    cls = r.get("classification")
+    # Pre-extract-improvement doubles rows stored NULL pairs with ready=TRUE.
+    # Restamp once; empty doubles persist as [] so this does not loop.
+    restamp = (not ready) or (
+        cls in ("doubles", "pairing_avoidance") and pairs is None
+    )
+    if restamp:
         fields = _stamp_extracted_fields(
             cur, r["id"], r.get("subject"), r.get("body"),
-            r.get("classification"), r.get("detected_player_id"),
+            cls, r.get("detected_player_id"),
         )
         _apply_extracted_to_row(r, fields)
     return r
@@ -125,7 +137,7 @@ def list_emails(response: Response, tournament_id: int | None = None,
     Derived detect fields are **read from columns** (stamped on write/detect).
     Pre-0051 rows get a one-time lazy stamp when `detected_text_ready` is false.
     """
-    clauses, params = [], []
+    clauses, params = ["e.deleted_at IS NULL"], []
     if tournament_id is not None:
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
     if status is not None:
@@ -159,10 +171,10 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
     """Inbox progress at a glance: how many emails are still **new** (unfiled) vs
     **filed** vs **need follow-up**, so the TD sees what's left to process. The
     `new` count is the actionable one."""
-    clauses, params = [], []
+    clauses, params = ["deleted_at IS NULL"], []
     if tournament_id is not None:
         clauses.append("tournament_id = %s"); params.append(tournament_id)
-    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
         cur.execute(
             f"SELECT status, count(*) AS n FROM email_message{where} GROUP BY status",
@@ -190,7 +202,7 @@ def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(
     tournament. Subject/sender only (the body stays encrypted); the inbox opens
     the full email. `oldest_age_days` is the headline number."""
     limit = max(1, min(limit, 100))
-    clauses = ["e.status = 'new'"]
+    clauses = ["e.status = 'new'", "e.deleted_at IS NULL"]
     params: list = []
     if tournament_id is not None:
         clauses.append("e.tournament_id = %s"); params.append(tournament_id)
@@ -254,6 +266,12 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
                 params,
             )
             new_id = cur.fetchone()["id"]
+            from ..email_extract import infer_gender_from_email
+            from ..inbox_person import upsert_inbox_people
+            upsert_inbox_people(
+                cur, new_id, fields.get("detected_name_pairs") or [],
+                infer_gender_from_email(body.subject, body.body),
+            )
             cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (new_id,))
             return _finalize_email_row(cur, cur.fetchone())
     except psycopg.errors.UniqueViolation:
@@ -382,9 +400,18 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
 @router.post("/{email_id}/suggest")
 def suggest_classification(email_id: int, conn=Depends(db_dep)):
     """Triage suggestion: local keyword rules, plus optional local tiny-LLM
-    when EMAIL_LLM=1 and the heuristic is leftover ``other``. No cloud call."""
+    when EMAIL_LLM=1 and the heuristic is leftover ``other``. No cloud call.
+
+    Always restamps parsed name pairs so Review Player 1/2 show who the email
+    named, even when those people are not on the tournament roster yet.
+    Leftover-LLM players fill only when extract left the pair list empty.
+    """
     with conn.cursor() as cur:
-        cur.execute("SELECT subject, body FROM email_message WHERE id = %s", (email_id,))
+        cur.execute(
+            "SELECT subject, body, detected_player_id FROM email_message "
+            "WHERE id = %s",
+            (email_id,),
+        )
         row = cur.fetchone()
         if row is not None:
             row["body"] = _dec_body(row.get("body"))
@@ -396,7 +423,44 @@ def suggest_classification(email_id: int, conn=Depends(db_dep)):
             "UPDATE email_message SET classified_ms = %s WHERE id = %s",
             (ms, email_id),
         )
-    return {"classification": label, "classified_ms": ms}
+        fields = _stamp_extracted_fields_with_leftover(
+            cur, email_id, row["subject"], row["body"], label,
+            row.get("detected_player_id"),
+        )
+    return {
+        "classification": label,
+        "classified_ms": ms,
+        "detected_name_pairs": fields.get("detected_name_pairs") or [],
+        "detected_usta_text": fields.get("detected_usta_text"),
+        "detected_reason": fields.get("detected_reason"),
+    }
+
+
+@router.post("/clear")
+def clear_inbox(tournament_id: int, conn=Depends(db_dep)):
+    """Hide CourtOps copies for one tournament (soft-delete).
+
+    Sets ``deleted_at`` on ``email_message`` rows. Does not DELETE them, and
+    does not call Gmail IMAP or Microsoft Graph — provider mailboxes are
+    never modified. Get mails / Get all un-hide matching copies.
+    Other tournaments are untouched.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (tournament_id,),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
+        # Local inbox rows only — never IMAP STORE/EXPUNGE or Graph DELETE.
+        cur.execute(
+            """
+            UPDATE email_message SET deleted_at = now()
+            WHERE tournament_id = %s AND deleted_at IS NULL
+            """,
+            (tournament_id,),
+        )
+        return {"deleted": cur.rowcount}
 
 
 @router.delete("/{email_id}", status_code=204)
@@ -466,12 +530,13 @@ def detect_one_player(email_id: int, conn=Depends(db_dep)):
         names = cur.fetchone()["member_names"]
         # Re-stamp extracted text (USTA(s), name pairs, division, …) after
         # detection — player presence affects withdrawal name-pair fallback.
-        _stamp_extracted_fields(
+        fields = _stamp_extracted_fields(
             cur, email_id, em["subject"], body_txt, em["classification"],
             d.get("detected_player_id"),
         )
         return {"email_id": email_id, **d, **partner,
-                "detected_member_ids": member_ids, "detected_member_names": names}
+                "detected_member_ids": member_ids, "detected_member_names": names,
+                "detected_name_pairs": fields.get("detected_name_pairs") or []}
 
 @router.get("/targets")
 def list_targets():

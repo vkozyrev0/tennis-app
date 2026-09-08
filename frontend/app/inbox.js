@@ -14,7 +14,15 @@ import {
   inboxRowClickOpensReview,
   fileWithoutPlayerGate,
   inboxConfidence,
+  inboxSourceLabel,
+  mergePlayerDropdownOptions,
+  parseInboxOptionValue,
+  inboxOptionValue,
+  inboxAddPlayerVisible,
+  inboxKnownUsta,
+  INBOX_ADD_TO_PLAYERS,
 } from "./inbox_ui.js";
+import { sessionIsGone } from "./shell.js";
 
 export function createInboxPanel(ctx) {
   const {
@@ -28,7 +36,7 @@ export function createInboxPanel(ctx) {
     // + 422 humanizer that shell.api provides (D11 wiring — was app.js globals).
     progress, humanizeDetail,
     // Roster form prefill lives in createRosterPanel (owns form + modal state).
-    rosterAddFromEmail, rosterAddBothFromEmail,
+    rosterAddFromEmail, rosterAddBothFromEmail, playersCrudRefresh,
   } = ctx;
   const _progress = typeof progress === "function" ? progress : () => {};
   const _humanizeDetail = typeof humanizeDetail === "function"
@@ -189,6 +197,12 @@ export function createInboxPanel(ctx) {
       slots[1] = { name: pairs[1].name,
                    usta: pairs[1].usta || (text[1] !== slots[0].usta ? text[1] : undefined) };
     } else if (text[1] && text[1] !== slots[0].usta) slots[1] = { usta: text[1] };
+    for (const s of slots) {
+      if (!s || s.usta || !s.name) continue;
+      const p = _inboxPeople.find((row) =>
+        String(row.name || "").trim().toLowerCase() === String(s.name).trim().toLowerCase());
+      if (p && p.usta_number) s.usta = String(p.usta_number);
+    }
     return slots;
   }
   const _MAIL_MARK = ' <span class="muted" title="parsed from the email; not matched to the roster yet">✉</span>';
@@ -200,10 +214,35 @@ export function createInboxPanel(ctx) {
   // opens (and rebuilt it) on every cell-edit; invalidated by _invalidatePickCache
   // when getPlayersById() is rebuilt.
   let _pickCache = null;
+  let _inboxPeople = [];
   const _invalidatePickCache = () => { _pickCache = null; };
-  const _playerPickValues = () => (_pickCache ||= Object.values(getPlayersById())
-    .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)))
-    .map((p) => ({ label: playerLabel(p), value: String(p.id) })));
+  async function _loadInboxPeople() {
+    try { _inboxPeople = await api("/inbox-people") || []; }
+    catch (_) { _inboxPeople = []; }
+    _invalidatePickCache();
+  }
+  function _inboxPersonForSlot(slot) {
+    if (!slot) return null;
+    const inboxId = parseInboxOptionValue(slot.id);
+    if (inboxId != null) {
+      return _inboxPeople.find((p) => Number(p.id) === inboxId) || null;
+    }
+    const usta = String(slot.usta || "").replace(/\D/g, "");
+    const name = String(slot.name || "").trim().toLowerCase();
+    if (usta) {
+      const byUsta = _inboxPeople.find((p) =>
+        String(p.usta_number || "").replace(/\D/g, "") === usta);
+      if (byUsta) return byUsta;
+    }
+    if (name) {
+      return _inboxPeople.find((p) =>
+        String(p.name || "").trim().toLowerCase() === name) || null;
+    }
+    return null;
+  }
+  const _playerPickValues = () => (_pickCache ||= mergePlayerDropdownOptions(
+    Object.values(getPlayersById()), _inboxPeople,
+  ).map((o) => ({ label: o.label, value: o.value })));
   const _PLAYER_EDITOR = {
     editor: "list", editorAutocomplete: true, cssClass: "editable-cell",
     editorParams: () => ({ values: _playerPickValues(), autocomplete: true,
@@ -241,6 +280,76 @@ export function createInboxPanel(ctx) {
   // "Add both" for a name-only doubles pair: first player now, second after SAVE.
   function _inboxAddBothToRoster(m, plan0, plan1) {
     _rosterAddBothFromEmail(m, plan0, plan1);
+  }
+  async function _promoteInboxPerson(person, extras = {}) {
+    const gender = extras.gender || person.gender;
+    const usta_number = extras.usta_number || person.usta_number;
+    const res = await api(`/inbox-people/${person.id}/promote`, {
+      method: "POST",
+      body: JSON.stringify({
+        ...(gender ? { gender } : {}),
+        ...(usta_number ? { usta_number } : {}),
+      }),
+    });
+    if (typeof playersCrudRefresh === "function") await playersCrudRefresh();
+    await _loadInboxPeople();
+    return res;
+  }
+  function _appendPromoteControls(wrap, person, onPromoted, slot, opts = {}) {
+    if (!person || !inboxAddPlayerVisible({
+      catalogPlayerId: "",
+      inboxPerson: person,
+      catalogByUsta: getPlayersByUsta(),
+    })) return;
+    const spec = INBOX_ADD_TO_PLAYERS;
+    const knownUsta = inboxKnownUsta(person, slot);
+    const stopGridEdit = (el) => {
+      for (const type of ["mousedown", "pointerdown", "click", "dblclick"]) {
+        el.addEventListener(type, (e) => e.stopPropagation());
+      }
+    };
+    let genderSel = null;
+    if (!person.gender) {
+      genderSel = document.createElement("select");
+      genderSel.className = "inbox-promote-gender";
+      genderSel.setAttribute("aria-label", "Gender for new player");
+      genderSel.setAttribute("data-lpignore", "true");
+      genderSel.innerHTML = "<option value=\"\">gender</option>"
+        + "<option value=\"male\">male</option>"
+        + "<option value=\"female\">female</option>";
+      stopGridEdit(genderSel);
+      wrap.appendChild(genderSel);
+    }
+    let ustaInp = null;
+    if (!knownUsta && opts.ustaInput !== false) {
+      ustaInp = document.createElement("input");
+      ustaInp.type = "text";
+      ustaInp.inputMode = "numeric";
+      ustaInp.placeholder = "USTA #";
+      ustaInp.className = "inbox-promote-usta";
+      ustaInp.setAttribute("aria-label", "USTA number for new player");
+      stopGridEdit(ustaInp);
+      wrap.appendChild(ustaInp);
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-link " + spec.className;
+    btn.textContent = spec.label;
+    btn.title = spec.title;
+    stopGridEdit(btn);
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const gender = person.gender || (genderSel && genderSel.value) || "";
+      const usta = knownUsta || (ustaInp && ustaInp.value.trim()) || "";
+      if (!usta) { toast("USTA number is required to add this person to Players", false); return; }
+      if (!gender) { toast("Pick male or female — gender is required", false); return; }
+      try {
+        const res = await _promoteInboxPerson(person, { gender, usta_number: usta });
+        toast(`Added ${person.name || "player"} to Players`, true);
+        if (onPromoted) await onPromoted(res);
+      } catch (e) { toast(e.message, false); }
+    });
+    wrap.appendChild(btn);
   }
   // Run player detection for one email and fold the result back into the row.
   async function _inboxDetectInto(m, row) {
@@ -287,6 +396,18 @@ export function createInboxPanel(ctx) {
       const nameSpan = document.createElement("span");
       nameSpan.innerHTML = hstr`${s.name}${raw(_MAIL_MARK)}`;
       wrap.append(nameSpan, editBtn());
+      _appendPromoteControls(wrap, _inboxPersonForSlot(s), async (res) => {
+        const pid = res && (res.player_id || res.promoted_player_id);
+        if (pid == null) { await loadInbox(); return; }
+        try {
+          if (slotIdx === 0) await _inboxPut(m, { detected_player_id: pid });
+          else {
+            if (!m.detected_player_id) { await loadInbox(); return; }
+            await _inboxPut(m, { detected_partner_id: pid });
+          }
+        } catch (e) { toast(e.message, false); }
+        await loadInbox();
+      }, s, { ustaInput: false });
       // Pre-fill the roster add-form from THIS cell's name (+ USTA # if present).
       const plan = rosterPrefillFromName(s.name, s.usta, m.detected_division);
       // When BOTH players of a name-only pair are unrostered, collapse the two
@@ -344,6 +465,13 @@ export function createInboxPanel(ctx) {
       } },
     { title: "Received", field: "received_at", width: 110, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
     { title: "From", field: "from_address", minWidth: 140, widthGrow: 1 },
+    { title: "Source", field: "ingest_source", width: 88, minWidth: 80,
+      formatter: (c) => {
+        const label = inboxSourceLabel(c.getData().ingest_source);
+        return hstr`<span class="badge" title="How this email arrived">${label}</span>`;
+      },
+      headerFilter: "list",
+      headerFilterParams: { values: ["", "gmail", "outlook", "pdf", "manual", "webhook"], clearable: true } },
     // Review sits here (early, after From) so the TD can open the message
     // without scrolling past Player / Classification. Row click does the same.
     { title: "Review", field: "_review", headerSort: false, width: 80, minWidth: 80, widthGrow: 0,
@@ -432,6 +560,7 @@ export function createInboxPanel(ctx) {
             m.classification = res.classification;
             // 2) player detection — resolve who the email is about and persist it
             const det = await api(`/emails/${m.id}/detect-player`, { method: "POST" });
+            const pairs = det.detected_name_pairs || res.detected_name_pairs || m.detected_name_pairs || [];
             row.update({
               classification: res.classification,
               detected_player_id: det.detected_player_id,
@@ -442,15 +571,19 @@ export function createInboxPanel(ctx) {
               detected_partner_name: det.detected_partner_name,
               detected_member_ids: det.detected_member_ids,
               detected_member_names: det.detected_member_names,
+              detected_name_pairs: pairs,
             });
             row.reformat();
             const clsLabel = (EMAIL_CLASS_META[res.classification] || {}).label || res.classification;
+            const pairHint = pairs.map((p) => p && p.name).filter(Boolean);
             const who = (det.detected_member_names && det.detected_member_names.length > 1)
               ? ` · players: ${det.detected_member_names.join(" + ")}`
               : det.detected_player_name
                 ? ` · player: ${det.detected_player_name}` +
                   (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
-                : " · no player match";
+                : pairHint.length
+                  ? ` · from email: ${pairHint.join(" + ")}`
+                  : " · no player match";
             toast(`Suggested: ${clsLabel}${who}`, true);
           } catch (e) { toast(e.message, false); }
         };
@@ -650,6 +783,26 @@ export function createInboxPanel(ctx) {
       }
       if (f === "detected_player_name" || f === "detected_partner_name") {
         const v = cell.getValue();
+        const inboxId = parseInboxOptionValue(v);
+        if (inboxId != null) {
+          const person = _inboxPeople.find((p) => Number(p.id) === inboxId);
+          if (!person) { revert(); return; }
+          if (!person.usta_number || !person.gender) {
+            toast("Use Add to Players (USTA + gender) before assigning this inbox person", false);
+            revert(); return;
+          }
+          try {
+            const res = await _promoteInboxPerson(person);
+            const pid = res.player_id || res.promoted_player_id;
+            if (f === "detected_partner_name") {
+              if (!m.detected_player_id) { toast("Pick Player 1 first", false); revert(); return; }
+              await _inboxPut(m, { detected_partner_id: pid });
+            } else {
+              await _inboxPut(m, { detected_player_id: pid });
+            }
+            await loadInbox(); return;
+          } catch (e) { toast(e.message, false); revert(); return; }
+        }
         const pid = (v === "" || v == null) ? null : Number(v);
         if (pid != null && !getPlayersById()[pid]) { revert(); return; }
         if (f === "detected_partner_name") {
@@ -721,15 +874,24 @@ export function createInboxPanel(ctx) {
   }
 
   function _reviewPlayerOptions() {
-    return Object.values(getPlayersById())
-      .sort((a, b) => playerLabel(a).localeCompare(playerLabel(b)));
+    return mergePlayerDropdownOptions(Object.values(getPlayersById()), _inboxPeople);
   }
   function _resolveReviewSlotId(slot) {
     const usta = slot && slot.usta;
     if (usta) {
       const byUsta = getPlayersByUsta();
-      const hit = byUsta && byUsta[usta];
+      const hit = byUsta && (byUsta[usta] || byUsta[String(usta).replace(/\D/g, "")]);
       if (hit && hit.id != null) return String(hit.id);
+    }
+    if (slot && slot.id && parseInboxOptionValue(slot.id) == null && String(slot.id).trim() !== "") {
+      return String(slot.id);
+    }
+    const person = _inboxPersonForSlot(slot);
+    if (person) {
+      if (person.promoted_player_id && getPlayersById()[person.promoted_player_id]) {
+        return String(person.promoted_player_id);
+      }
+      return inboxOptionValue(person);
     }
     return (slot && slot.id) || "";
   }
@@ -755,9 +917,8 @@ export function createInboxPanel(ctx) {
       sel.appendChild(none);
       for (const p of opts) {
         const o = document.createElement("option");
-        o.value = String(p.id);
-        const usta = p.usta_number ? ` (${p.usta_number})` : "";
-        o.textContent = `${p.last_name || ""}, ${p.first_name || ""}${usta}`.trim();
+        o.value = String(p.value);
+        o.textContent = p.label;
         sel.appendChild(o);
       }
       sel.value = _resolveReviewSlotId(slot);
@@ -769,6 +930,13 @@ export function createInboxPanel(ctx) {
         hint.textContent = `From email: ${slot.hint}`;
         wrap.appendChild(hint);
       }
+      const person = _inboxPersonForSlot({ ...slot, id: sel.value || slot.id });
+      _appendPromoteControls(wrap, person, async (res) => {
+        const pid = res && (res.player_id || res.promoted_player_id);
+        if (pid != null) sel.value = String(pid);
+        if (typeof sel._comboSync === "function") sel._comboSync();
+        _renderInboxDetailPlayers(_inboxDetailEmail, classification);
+      }, slot);
       box.appendChild(wrap);
       enhanceSelect(sel);
       if (typeof sel._comboSync === "function") sel._comboSync();
@@ -791,7 +959,7 @@ export function createInboxPanel(ctx) {
     document.getElementById("inbox-detail-from").textContent = m.from_address || "(no sender)";
     document.getElementById("inbox-detail-to").textContent = m.to_address || "—";
     document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
-    document.getElementById("inbox-detail-source").textContent = m.ingest_source || "manual";
+    document.getElementById("inbox-detail-source").textContent = inboxSourceLabel(m.ingest_source);
     document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
     document.getElementById("inbox-detail-classification").value = form.classification;
     document.getElementById("inbox-detail-status").value = form.status;
@@ -914,7 +1082,19 @@ export function createInboxPanel(ctx) {
     const cls = document.getElementById("inbox-detail-classification").value;
     const status = document.getElementById("inbox-detail-status").value;
     const pickers = [...document.querySelectorAll("#inbox-detail-players select")];
-    const ids = pickers.map((s) => (s.value ? Number(s.value) : null));
+    const ids = [];
+    for (const s of pickers) {
+      const inboxId = parseInboxOptionValue(s.value);
+      if (inboxId != null) {
+        setMsg("inbox-detail-msg", "Add to Players first — inbox people are not on Setup Players yet", false);
+        await confirmDialog(
+          "Add this inbox person to Players before saving a player slot.",
+          "OK", "primary",
+        );
+        return;
+      }
+      ids.push(s.value ? Number(s.value) : null);
+    }
     const detected_player_id = ids[0] || null;
     const detected_partner_id = detected_player_id == null ? null : (ids[1] || null);
     if (status === "filed") {
@@ -945,8 +1125,64 @@ export function createInboxPanel(ctx) {
     if (_inboxDetailId == null) return;
     try {
       const res = await api(`/emails/${_inboxDetailId}/suggest`, { method: "POST" });
-      document.getElementById("inbox-detail-classification").value = res.classification;
-      setMsg("inbox-detail-msg", `suggested: ${res.classification}`, true);
+      const m = _inboxDetailEmail || { id: _inboxDetailId };
+      await _inboxPutClass(m, res.classification);
+      m.classification = res.classification;
+      if (res.detected_name_pairs) m.detected_name_pairs = res.detected_name_pairs;
+      if (res.detected_reason != null) m.detected_reason = res.detected_reason;
+      let det = {};
+      if (m.tournament_id) {
+        try {
+          det = await api(`/emails/${_inboxDetailId}/detect-player`, { method: "POST" });
+        } catch (_) { /* unassigned / no roster — keep parsed names */ }
+      }
+      const hasDet = det && det.email_id != null;
+      Object.assign(m, {
+        detected_player_id: hasDet ? det.detected_player_id : m.detected_player_id,
+        detected_usta: hasDet ? det.detected_usta : m.detected_usta,
+        detected_player_name: hasDet ? det.detected_player_name : m.detected_player_name,
+        detected_match_kind: hasDet ? det.match_kind : m.detected_match_kind,
+        detected_partner_id: hasDet ? det.detected_partner_id : m.detected_partner_id,
+        detected_partner_name: hasDet ? det.detected_partner_name : m.detected_partner_name,
+        detected_partner_usta: hasDet ? det.detected_partner_usta : m.detected_partner_usta,
+        detected_member_ids: hasDet ? det.detected_member_ids : m.detected_member_ids,
+        detected_member_names: hasDet ? det.detected_member_names : m.detected_member_names,
+        detected_name_pairs: (hasDet && det.detected_name_pairs)
+          || res.detected_name_pairs || m.detected_name_pairs,
+      });
+      _inboxDetailEmail = m;
+      try {
+        for (const row of inboxGrid.grid.getRows()) {
+          if (row.getData().id !== _inboxDetailId) continue;
+          row.update({
+            classification: m.classification,
+            detected_player_id: m.detected_player_id,
+            detected_usta: m.detected_usta,
+            detected_player_name: m.detected_player_name,
+            detected_match_kind: m.detected_match_kind,
+            detected_partner_id: m.detected_partner_id,
+            detected_partner_name: m.detected_partner_name,
+            detected_member_ids: m.detected_member_ids,
+            detected_member_names: m.detected_member_names,
+            detected_name_pairs: m.detected_name_pairs,
+          });
+          break;
+        }
+      } catch (_) {}
+      const clsSel = document.getElementById("inbox-detail-classification");
+      clsSel.value = res.classification;
+      if (typeof clsSel._comboSync === "function") clsSel._comboSync();
+      _syncInboxReasonRow(res.classification, m.detected_reason);
+      _renderInboxDetailPlayers(m, res.classification);
+      const pairHint = (m.detected_name_pairs || []).map((p) => p && p.name).filter(Boolean);
+      const who = (det.detected_member_names && det.detected_member_names.length > 1)
+        ? det.detected_member_names.join(" + ")
+        : det.detected_player_name
+          ? det.detected_player_name + (det.detected_partner_name ? ` + ${det.detected_partner_name}` : "")
+          : pairHint.join(" + ");
+      setMsg("inbox-detail-msg",
+        who ? `suggested: ${res.classification} · ${who}` : `suggested: ${res.classification}`,
+        true);
     } catch (e) { setMsg("inbox-detail-msg", e.message, false); }
   });
 
@@ -1024,6 +1260,62 @@ export function createInboxPanel(ctx) {
     _inboxSelected.clear();
     inboxGrid.grid.redraw();
     _inboxBulkRefreshUi();
+  });
+  function _defaultMailWindow() {
+    const until = new Date();
+    const since = new Date(until.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const iso = (d) => d.toISOString().slice(0, 10);
+    const sEl = document.getElementById("inbox-mail-since");
+    const uEl = document.getElementById("inbox-mail-until");
+    if (sEl && !sEl.value) sEl.value = iso(since);
+    if (uEl && !uEl.value) uEl.value = iso(until);
+  }
+  document.getElementById("inbox-get-mails")?.addEventListener("click", async () => {
+    const t = getActive();
+    if (!t) { toast("Select a tournament first", false); return; }
+    _defaultMailWindow();
+    const since = document.getElementById("inbox-mail-since")?.value || "";
+    const until = document.getElementById("inbox-mail-until")?.value || "";
+    const q = new URLSearchParams();
+    if (since) q.set("since", since);
+    if (until) q.set("until", until);
+    q.set("tournament_id", String(t.id));
+    if (document.getElementById("inbox-get-all")?.checked) q.set("get_all", "true");
+    const btn = document.getElementById("inbox-get-mails");
+    if (btn) btn.disabled = true;
+    setMsg("inbox-feed-msg", "fetching Gmail and Outlook…", true);
+    try {
+      const r = await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST" });
+      const n = r.imported ?? 0;
+      const d = r.duplicates ?? 0;
+      const skipped = (r.skipped || []).join(", ");
+      const restored = r.restored ?? 0;
+      setMsg("inbox-feed-msg",
+        `imported ${n} new` + (restored ? ` · restored ${restored}` : "") +
+        (d ? ` · ${d} already in inbox` : "") +
+        (skipped ? ` · skipped ${skipped}` : ""), true);
+      await loadInbox();
+    } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
+    finally { if (btn) btn.disabled = false; }
+  });
+  document.getElementById("inbox-clear")?.addEventListener("click", async () => {
+    const t = getActive();
+    if (!t) { toast("Select a tournament first", false); return; }
+    if (!(await confirmDialog(
+      `Hide CourtOps copies of mail for ${t.name}? This does not delete anything in Gmail or Outlook/Hotmail. Get mails (or Get all) can bring them back. Filed list rows stay.`,
+      "Clear inbox",
+    ))) return;
+    const btn = document.getElementById("inbox-clear");
+    if (btn) btn.disabled = true;
+    try {
+      const r = await api(`/emails/clear?tournament_id=${t.id}`, { method: "POST" });
+      _inboxSelected.clear();
+      setMsg("inbox-feed-msg",
+        `cleared ${r.deleted ?? 0} CourtOps copies (Gmail/Outlook unchanged)`, true);
+      await loadInbox();
+      _inboxBulkRefreshUi();
+    } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
+    finally { if (btn) btn.disabled = false; }
   });
   document.getElementById("inbox-bulk-classify").addEventListener("click", async (ev) => {
     if (!_inboxSelected.size) return;
@@ -1350,6 +1642,7 @@ export function createInboxPanel(ctx) {
   const _INBOX_PAGE = 200;  // server-side cap; search to reach older mail
   async function loadInbox() {
     if (!getActive()) return;
+    _defaultMailWindow();
     // Scope to the active tournament so search, paging, and unmatched counts
     // agree with the status summary (and q hits the right rows). Server-side
     // `q` matches subject/sender/classification/division/player/USTA text —
@@ -1365,9 +1658,11 @@ export function createInboxPanel(ctx) {
     _progress(1);
     let rows = [], total = null;
     try {
-      const res = await fetch("/api/emails?" + params.toString());
+      const res = await fetch("/api/emails?" + params.toString(), { credentials: "same-origin" });
       if (res.status === 401) {
-        document.dispatchEvent(new CustomEvent("auth-expired"));
+        if (await sessionIsGone()) {
+          document.dispatchEvent(new CustomEvent("auth-expired"));
+        }
         throw new Error("not authenticated");
       }
       if (!res.ok) {
@@ -1381,6 +1676,7 @@ export function createInboxPanel(ctx) {
     } finally {
       _progress(-1);
     }
+    await _loadInboxPeople();
     inboxGrid.setData(rows);
     // Drop selection ids that are no longer on the page (tournament switch /
     // filter), then refresh bulk bar vs select-hint.

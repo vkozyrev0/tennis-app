@@ -371,6 +371,9 @@ def test_ingest_raw_to_and_unique_raise():
         def fetchone(self):
             return next(seq)
 
+        def fetchall(self):
+            return []
+
     payload = IngestPayload(
         message_id="miss-race-" + uuid.uuid4().hex,
         from_address="a@b.com", to_address="td@x.com",

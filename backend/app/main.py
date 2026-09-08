@@ -28,11 +28,14 @@ from .routers import (
     health,
     hotels,
     imports,
+    inbox_feeds,
+    inbox_people,
     incidents,
     ingest,
     late_entries,
     me,
     officials,
+    outlook_feed,
     pairing_avoidances,
     payroll,
     player_hotels,
@@ -78,9 +81,9 @@ app.include_router(ingest.router)
 _admin = [Depends(require_admin)]
 for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
           distances, divisions, roster, assignments, assignments_bulk, reports, dashboard, certifications, availability,
-          emails, emails_bulk, late_entries, withdrawals, adult_lists, player_hotels,
+          emails, emails_bulk, inbox_people, late_entries, withdrawals, adult_lists, player_hotels,
           pairing_avoidances, doubles, imports, incidents, payroll, staff, trash, retention, users,
-          export_audit, access_audit, coppa, td_chat, gmail_feed):
+          export_audit, access_audit, coppa, td_chat, gmail_feed, outlook_feed, inbox_feeds):
     app.include_router(r.router, dependencies=_admin)
 
 # Disable browser caching of the frontend assets. POC dev loop edits HTML +

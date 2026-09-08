@@ -52,7 +52,11 @@ _STRONG = [
                  r"\bdoubles?\s+confirmation\b",
                  r"\b(?:new|change(?:d)?|switch(?:ed)?)\s+partners?\b",
                  r"\b(?:doubles?\s+)?pairing[- ]change\b",
-                 r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b"]),
+                 r"\breplac(?:e|ing|ed)\s+(?:my\s+)?partners?\b",
+                 r"\bpair(?:ed|ing)?\s+up\s+with\b",
+                 r"\bplay(?:s|ing)?\s+doubles\b",
+                 r"\bcan\s+(?:be\s+)?pair(?:ed)?\s+with\b",
+                 r"\bplay\s+doubles\s+with\b"]),
     ("late_entry", [r"\blate\s+(?:entry|entrant|add)\b", r"\bmissed\s+the\s+deadline\b",
                     r"\b(?:still|can\s+\w+)\s+(?:enter|register)\b",
                     r"\badd\b[\s\S]{0,40}\bfor\s+singles\b",
@@ -77,6 +81,9 @@ _DOUBLES_KEEP_ONE = [
         r"\badd\b.{0,40}\bfor\s+doubles\b",
         r"\benter\b.{0,40}\bdoubles\b",
         r"\bfind\s+a\s+partner\b",
+        r"\bpair(?:ed|ing)?\s+up\s+with\b",
+        r"\bplay(?:s|ing)?\s+doubles\b",
+        r"\bplay\s+doubles\s+with\b",
         # Event-title subjects (Boys 14 Doubles / Southerns Boys 14 Doubles)
         # are doubles even with no extracted pair — not generic "… Doubles" acks.
         r"\b(?:boys?|girls?)\s*\d{1,2}(?:s|'s)?\s+doubles?\b",
@@ -107,6 +114,19 @@ def _kw_match(text: str, kw) -> bool:
 _RANDOM_PAIR_RE = re.compile(r"\brandom\s+pair", re.I)
 _SINGLES_WORD_RE = re.compile(r"\bsingles?\b", re.I)
 _DOUBLES_WORD_RE = re.compile(r"\bdoubles?\b", re.I)
+# Third-party rumor: someone else's partner is withdrawing — not a WD request.
+_PARTNER_WD_RUMOR_RE = re.compile(
+    r"\b(?:his|her|their)\s+(?:double\s+)?partners?\b.{0,90}\b"
+    r"(?:withdraw|withdrawing|withdrawn|going\s+to\s+withdraw)\b"
+    r"|\b(?:[A-Za-z][\w'’.-]*)['’]s\s+partners?\s+is\s+withdrawing\b",
+    re.I | re.S,
+)
+_DOUBLES_REQUEST_RE = re.compile(
+    r"\b(?:pair(?:ed|ing)?\s+up|play(?:s|ing)?\s+doubles|pair\s+with|"
+    r"play\s+doubles\s+with|can\s+(?:be\s+)?pair(?:ed)?\s+with|"
+    r"doubles?\s+partners?)\b",
+    re.I,
+)
 
 
 def _singles_only(text: str) -> bool:
@@ -164,6 +184,10 @@ def _classify_raw(subject: str | None, body: str | None) -> str:
         if label == "doubles" and singles_only:
             continue
         if any(p.search(text) for p in pats):
+            # Partner-is-withdrawing rumor + a pairing request is doubles, not WD.
+            if (label == "withdrawal" and _PARTNER_WD_RUMOR_RE.search(text)
+                    and _DOUBLES_REQUEST_RE.search(text)):
+                continue
             return label
     # 2) The SUBJECT is the deliberate intent line; trust a keyword there over an
     #    incidental mention in the quoted body ("Macon L3 Doubles" → doubles).

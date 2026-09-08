@@ -153,6 +153,26 @@ class EmailDetectResult(BaseModel):
     # Pairing avoidance: the whole detected group (primary first).
     detected_member_ids: Optional[list[int]] = None
     detected_member_names: Optional[list[str]] = None
+    # Parsed (name, usta) pairs from the email text (not roster ids).
+    detected_name_pairs: Optional[list[dict]] = None
+
+
+class InboxPersonOut(BaseModel):
+    id: int
+    name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    usta_number: Optional[str] = None
+    gender: Optional[str] = None
+    source_email_id: Optional[int] = None
+    promoted_player_id: Optional[int] = None
+    player_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+
+class InboxPersonPromote(BaseModel):
+    gender: Optional[Gender] = None
+    usta_number: Optional[str] = None
 
 
 # ---------- Late entry ----------

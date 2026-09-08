@@ -107,6 +107,7 @@ class _FakeImap:
         return ("OK", [b"Logged in"])
 
     def select(self, mailbox, readonly=False):
+        assert readonly is True, "Gmail IMAP must open read-only so CourtOps cannot delete mailbox mail"
         return ("OK", [b"3"])
 
     def response(self, name):
@@ -115,17 +116,17 @@ class _FakeImap:
         return ("OK", [None])
 
     def uid(self, cmd, *args):
+        if cmd not in ("SEARCH", "FETCH"):
+            raise AssertionError(f"Gmail IMAP must not {cmd} (would mutate the mailbox)")
         if cmd == "SEARCH":
             return ("OK", [b"10 11 12"])
-        if cmd == "FETCH":
-            uid = int(args[0])
-            raw = _rfc822(
-                message_id=f"<uid-{uid}@gmail.com>",
-                subject=f"Mail {uid}",
-                body=f"Body of {uid}",
-            )
-            return ("OK", [(b"RFC822", raw)])
-        return ("NO", [])
+        uid = int(args[0])
+        raw = _rfc822(
+            message_id=f"<uid-{uid}@gmail.com>",
+            subject=f"Mail {uid}",
+            body=f"Body of {uid}",
+        )
+        return ("OK", [(b"RFC822", raw)])
 
     def logout(self):
         return ("OK", [])
@@ -255,6 +256,115 @@ def test_fetch_imap_failures_and_query_and_uidvalidity(monkeypatch, _admin):
 
 
 @_needs_db
+def test_gmail_fetch_stamps_source_and_skips_same_rfc_id(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    from app.db import get_conn
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=40)
+    t = client.post("/api/tournaments", json={
+        "name": "GmailSrc " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat(),
+    }).json()
+
+    class _One(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return ("OK", [b"40"])
+            return super().uid(cmd, *args)
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop", "tournament_id": t["id"],
+    })
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _One)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0, uidvalidity = 99 WHERE id = 1")
+        conn.commit()
+    first = client.post("/api/gmail-feed/fetch")
+    assert first.status_code == 200, first.text
+    assert first.json()["imported"] >= 1
+    listed = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    gmail_rows = [e for e in listed if (e.get("message_id") or "").startswith("uid-")
+                  or "uid-40" in (e.get("message_id") or "")]
+    if not gmail_rows:
+        gmail_rows = [e for e in listed if e.get("ingest_source") == "gmail"]
+    assert gmail_rows, listed
+    assert all(e["ingest_source"] == "gmail" for e in gmail_rows)
+    row = gmail_rows[0]
+    orig_id, orig_cls, orig_status = row["id"], row["classification"], row["status"]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0 WHERE id = 1")
+        conn.commit()
+    second = client.post("/api/gmail-feed/fetch")
+    assert second.status_code == 200, second.text
+    assert second.json()["imported"] == 0
+    assert second.json()["duplicates"] >= 1
+    again = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    same = next(e for e in again if e["id"] == orig_id)
+    assert same["classification"] == orig_cls
+    assert same["status"] == orig_status
+    assert len([e for e in again if e["id"] == orig_id]) == 1
+
+
+@_needs_db
+def test_gmail_fetch_skips_pdf_row_without_message_id(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    from datetime import date, timedelta
+
+    start = date.today() + timedelta(days=41)
+    t = client.post("/api/tournaments", json={
+        "name": "GmailPdf " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": start.isoformat(),
+        "play_end_date": (start + timedelta(days=2)).isoformat(),
+    }).json()
+    pasted = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "from_address": "parent@example.com",
+        "subject": "Mail 41",
+        "body": "pdf body",
+    }).json()
+    client.put(f"/api/emails/{pasted['id']}", json={
+        "tournament_id": t["id"], "classification": "other", "status": "filed",
+        "from_address": "parent@example.com", "subject": "Mail 41", "body": "pdf body",
+    })
+    from app.db import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE email_message SET message_id = NULL WHERE id = %s",
+                        (pasted["id"],))
+        conn.commit()
+
+    class _One(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return ("OK", [b"41"])
+            return super().uid(cmd, *args)
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop", "tournament_id": t["id"],
+    })
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _One)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0 WHERE id = 1")
+        conn.commit()
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 200, r.text
+    assert r.json()["imported"] == 0
+    assert r.json()["duplicates"] >= 1
+    row = next(e for e in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if e["id"] == pasted["id"])
+    assert row["status"] == "filed"
+    assert row["body"] == "pdf body"
+    assert row["classification"] == "other"
+
+
+@_needs_db
 def test_fetch_duplicate_and_ingest_error(monkeypatch, _admin):
     from app import gmail_feed as gf
     from app.db import get_conn
@@ -291,3 +401,13 @@ def test_fetch_duplicate_and_ingest_error(monkeypatch, _admin):
     partial = client.post("/api/gmail-feed/fetch")
     assert partial.status_code == 200
     assert partial.json()["last_status"] in {"partial", "ok", "error"}
+
+
+def test_gmail_feed_source_is_readonly():
+    import re
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[1].joinpath("app", "gmail_feed.py").read_text(encoding="utf8")
+    assert "readonly=True" in src
+    cmds = re.findall(r'imap\.uid\(\s*"(\w+)"', src)
+    assert cmds
+    assert set(cmds) <= {"SEARCH", "FETCH"}

@@ -351,6 +351,9 @@ def test_emails_pdf_import_stages_and_merges():
     assert m["merged"] >= 1 and m["failed"] == 0, m
     inbox = client.get(f"/api/emails?tournament_id={t['id']}").json()
     assert len(inbox) >= 1
+    assert any(e.get("ingest_source") == "pdf" for e in inbox)
+    assert all(e.get("ingest_source") != "manual" for e in inbox
+               if e.get("ingest_source") == "pdf")
 
 
 # ============================================================ error handling

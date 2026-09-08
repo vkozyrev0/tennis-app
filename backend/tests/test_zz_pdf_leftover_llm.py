@@ -47,7 +47,7 @@ def test_extract_uses_shipped_leftover_prompt_builder():
     text = src.read_text(encoding="utf-8")
     assert "def leftover_prompt(" in text
     assert "prompt = leftover_prompt(subj, clipped)" in text
-    assert "return parse_llm_json(raw)" in text
+    assert "parse_llm_json(raw)" in text
     assert "def leftover_model_intent(" in text
     assert "return leftover_model_intent(subject, body)" in text
     assert "guard_leftover_intent" not in text

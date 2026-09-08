@@ -51,7 +51,7 @@ export function createNoticeLog({ storage } = {}) {
 }
 
 /**
- * Setup → Notices page. `notices` is the createNoticeLog() instance from shell.
+ * Notifications → Notices page. `notices` is the createNoticeLog() instance from shell.
  */
 export function createNoticesPanel(ctx) {
   const { notices, html, activateGroup } = ctx;
@@ -84,7 +84,7 @@ export function createNoticesPanel(ctx) {
   }
 
   function openNotices() {
-    if (typeof activateGroup === "function") activateGroup("setup");
+    if (typeof activateGroup === "function") activateGroup("notifications");
     const tab = document.querySelector('.tab[data-target="panel-notices"]');
     if (tab) tab.click();
     else loadNotices();

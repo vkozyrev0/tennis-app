@@ -266,6 +266,94 @@ def test_suggest_classification():
     assert out["classification"] == "withdrawal"
 
 
+def test_suggest_restamps_partner_swap_name_pairs():
+    t = _tournament()
+    body = (
+        "Hi my son name is Ernesto Del Valle. He is schedule to play doubles "
+        "this weekend. His double partner is going to withdraw. I talk to "
+        "another player. His name is Ulrich Novakovitch. Please let me know "
+        "if he can be pair with him so can also play doubles. Thanks."
+    )
+    e = _email(t["id"], subject="L5 doubles Macon", body=body,
+               from_address="ernestodv7@gmail.com")
+    out = _ok(client.post(f"/api/emails/{e['id']}/suggest", json={}), 200)
+    assert out["classification"] == "doubles"
+    names = {(p.get("name") or "").casefold()
+             for p in (out.get("detected_name_pairs") or [])}
+    assert "ernesto del valle" in names
+    assert "ulrich novakovitch" in names
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    listed = {(p.get("name") or "").casefold()
+              for p in (row.get("detected_name_pairs") or [])}
+    assert "ernesto del valle" in listed
+    assert "ulrich novakovitch" in listed
+
+
+def test_suggest_leftover_fills_players_when_extract_empty(monkeypatch):
+    monkeypatch.setenv("EMAIL_LLM", "1")
+
+    def fake_leftover(subject, body):
+        return {
+            "intent": "doubles",
+            "players": [
+                {"name": "Jane Roe", "usta": "2018111001"},
+                {"name": "Alex Kim", "usta": "2018111002"},
+            ],
+            "reason": "named pairing",
+            "confidence": 0.9,
+        }
+
+    monkeypatch.setattr("app.email_llm.leftover_model_intent", fake_leftover)
+    monkeypatch.setattr("app.email_llm.llm_enabled", lambda: True)
+    t = _tournament()
+    e = _email(
+        t["id"],
+        subject="Boys 14 Doubles",
+        body="Please add for doubles. We will try to find a partner.",
+    )
+    out = _ok(client.post(f"/api/emails/{e['id']}/suggest", json={}), 200)
+    assert out["classification"] == "doubles"
+    names = {(p.get("name") or "").casefold()
+             for p in (out.get("detected_name_pairs") or [])}
+    assert names == {"jane roe", "alex kim"}
+
+
+def test_suggest_leftover_empty_keeps_extract_pairs(monkeypatch):
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.setattr(
+        "app.email_llm.leftover_model_intent",
+        lambda s, b: {"intent": "doubles", "players": [], "reason": None, "confidence": 0.9},
+    )
+    monkeypatch.setattr("app.email_llm.llm_enabled", lambda: True)
+    t = _tournament()
+    e = _email(
+        t["id"],
+        subject="Boys 14 Doubles",
+        body="Please add for doubles. We will try to find a partner.",
+    )
+    out = _ok(client.post(f"/api/emails/{e['id']}/suggest", json={}), 200)
+    assert out["classification"] == "doubles"
+    assert out.get("detected_name_pairs") == []
+
+    monkeypatch.setattr(
+        "app.email_llm.leftover_model_intent",
+        lambda s, b: {
+            "intent": "doubles",
+            "players": [{"name": None, "usta": None}],
+            "reason": None,
+            "confidence": 0.9,
+        },
+    )
+    e2 = _email(
+        t["id"],
+        subject="Boys 16 Doubles",
+        body="Please add for doubles. We will try to find a partner.",
+    )
+    out2 = _ok(client.post(f"/api/emails/{e2['id']}/suggest", json={}), 200)
+    assert out2.get("detected_name_pairs") == []
+
+
 def test_bulk_detect_and_reassign():
     t1, t2 = _tournament(), _tournament()
     usta = _rostered(t1["id"], "Bulk", "Detect", "male", "B14")
@@ -632,6 +720,95 @@ def test_bulk_populate_carries_avoid_day_and_time():
                if r.get("usta_number") == usta)
     assert row["avoid_day"] == "Sun"
     assert row["avoid_time_range"] == "after 6 pm"
+
+
+def test_clear_inbox_deletes_only_that_tournament():
+    a = _tournament()
+    b = _tournament()
+    ea = _email(a["id"], subject="Keep-out A " + uuid.uuid4().hex[:6])
+    eb = _email(b["id"], subject="Keep B " + uuid.uuid4().hex[:6])
+    missing = client.post("/api/emails/clear?tournament_id=99999991")
+    assert missing.status_code == 404
+    r = client.post(f"/api/emails/clear?tournament_id={a['id']}")
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted"] >= 1
+    left_a = client.get(f"/api/emails?tournament_id={a['id']}").json()
+    left_b = client.get(f"/api/emails?tournament_id={b['id']}").json()
+    assert all(e["id"] != ea["id"] for e in left_a)
+    assert any(e["id"] == eb["id"] for e in left_b)
+
+
+def test_clear_inbox_soft_deletes_and_ingest_restores():
+    """Clear hides the row; ingest of the same message_id un-hides it."""
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, ingest_email
+    t = _tournament()
+    mid = f"<hide-{uuid.uuid4().hex}@mail.test>"
+    row = _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"], "message_id": mid,
+        "from_address": "parent@example.com",
+        "subject": "Boys 14 Withdrawal", "body": "please withdraw",
+    }))
+    client.post(f"/api/emails/clear?tournament_id={t['id']}")
+    listed = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert all(e["id"] != row["id"] for e in listed)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT deleted_at, tournament_id FROM email_message WHERE id = %s",
+                (row["id"],),
+            )
+            hidden = cur.fetchone()
+            assert hidden["deleted_at"] is not None
+            assert hidden["tournament_id"] == t["id"]
+            result = ingest_email(cur, IngestPayload(
+                message_id=mid,
+                from_address="parent@example.com",
+                to_address="td@example.com",
+                subject="Boys 14 Withdrawal",
+                body="please withdraw",
+                tournament_id=t["id"],
+                ingest_source="outlook",
+            ))
+        conn.commit()
+    assert result["duplicate"] is False
+    assert result["id"] == row["id"]
+    shown = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert any(e["id"] == row["id"] for e in shown)
+
+
+def test_get_all_restores_hidden_when_feeds_skipped():
+    t = _tournament()
+    e = _email(t["id"], subject="hidden " + uuid.uuid4().hex[:6], body="please")
+    client.put("/api/gmail-feed", json={"enabled": False})
+    client.put("/api/outlook-feed", json={"enabled": False, "mailbox": "TD@myadllc.com"})
+    client.post(f"/api/emails/clear?tournament_id={t['id']}")
+    empty = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert all(x["id"] != e["id"] for x in empty)
+    skipped = client.post(f"/api/inbox-feeds/fetch?tournament_id={t['id']}")
+    assert skipped.status_code == 200, skipped.text
+    assert (skipped.json().get("restored") or 0) == 0
+    still = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert all(x["id"] != e["id"] for x in still)
+    r = client.post(f"/api/inbox-feeds/fetch?tournament_id={t['id']}&get_all=true")
+    assert r.status_code == 200, r.text
+    assert r.json()["restored"] >= 1
+    assert r.json()["imported"] >= 1
+    listed = client.get(f"/api/emails?tournament_id={t['id']}").json()
+    assert any(x["id"] == e["id"] for x in listed)
+
+
+def test_clear_inbox_is_local_sql_only():
+    """Clear must not call Gmail IMAP or Microsoft Graph — mailbox mail stays."""
+    import inspect
+    from app.routers import emails as emails_mod
+    src = inspect.getsource(emails_mod.clear_inbox)
+    assert "deleted_at" in src
+    assert "DELETE FROM email_message" not in src
+    assert "gmail_feed" not in src
+    assert "outlook_feed" not in src
+    assert "imaplib" not in src
+    assert "graph.microsoft.com" not in src
 
 
 def test_populate_extract_names_have_extractors():
