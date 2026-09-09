@@ -92,6 +92,10 @@ html:has(body:not(.is-signed-out)) { overflow: hidden; }
    a Delete confirm can be raised from inside an open edit overlay while a combo
    is open — at a lower z it would render hidden behind the combo/overlay. */
 #confirm-modal { z-index: 1900; }
+#job-progress-modal { z-index: 1880; }
+#job-progress-modal progress {
+  display: block; width: 100%; height: 0.7rem; margin: 0.4rem 0 0.2rem;
+}
 .modal[hidden] { display: none; }
 .modal-box { background: var(--card); border-radius: var(--radius, 10px); padding: 1.25rem 1.5rem; max-width: 360px; width: min(360px, calc(100vw - 2rem)); box-shadow: 0 8px 30px rgba(0,0,0,0.25); overscroll-behavior: contain; }
 .modal-box p { margin: 0 0 0.5rem; }

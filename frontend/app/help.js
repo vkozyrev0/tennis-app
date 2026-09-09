@@ -197,6 +197,10 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       to file individually (those need a partner or a group, which bulk cannot
       supply). <kbd>d</kbd> is detect only; <kbd>f</kbd> is mark filed; <kbd>u</kbd>
       toggles Unmatched only.</p>
+      <p>Get mails, Detect players, Triage all, Confirm suggestions, bulk classify,
+      and PDF import open a <strong>progress</strong> dialog (phase and n of total
+      when the count is known). <strong>Cancel</strong> stops the in-flight request
+      so the job does not finish as a successful full run.</p>
 
       <h3>Review</h3>
       <p>Click <strong>Review</strong> (or the row) to open the original message.
@@ -208,7 +212,10 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       separate from Setup Players. Those people appear in the player dropdown
       when they are not already in Players. <strong>Add to Players</strong> copies
       a new person onto the permanent Players catalog (not the tournament roster).
-      Save writes Player 1 and Player 2 back onto the email.</p>
+      Save writes Player 1 and Player 2 back onto the email. The
+      <strong>Confidence</strong> column (and Review) shows High / Medium / Low
+      plus a percent from how the player was matched (USTA # is ~95%, surname-only
+      is lower) — not a model probability.</p>
 
       <h3>Status lifecycle</h3>
       <p class="help-flow-line">

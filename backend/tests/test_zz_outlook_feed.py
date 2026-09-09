@@ -172,6 +172,8 @@ def test_public_row_never_includes_secret():
     assert "T" in (row["last_received_at"] or "")
     none = public_row(None)
     assert none["has_secret"] is False
+    assert public_row({"secret_enc": None})["has_secret"] is False
+    assert public_row({"secret_enc": ""})["has_secret"] is False
     assert none["tenant_id"] == TD_TENANT
     assert none["client_id"] == TD_CLIENT
     assert none["mailbox"] == TD_MAILBOX
@@ -214,6 +216,11 @@ def test_helpers_addresses_cutoff_iso_redact():
 
 @_needs_db
 def test_get_put_hides_secret_and_keeps_defaults(_admin):
+    from app.db import get_conn
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE outlook_feed SET secret_enc = NULL WHERE id = 1")
+        conn.commit()
     got = client.get("/api/outlook-feed")
     assert got.status_code == 200, got.text
     body = got.json()

@@ -14,6 +14,7 @@ import {
   inboxRowClickOpensReview,
   fileWithoutPlayerGate,
   inboxConfidence,
+  inboxConfidenceText,
   inboxSourceLabel,
   mergePlayerDropdownOptions,
   parseInboxOptionValue,
@@ -37,8 +38,16 @@ export function createInboxPanel(ctx) {
     progress, humanizeDetail,
     // Roster form prefill lives in createRosterPanel (owns form + modal state).
     rosterAddFromEmail, rosterAddBothFromEmail, playersCrudRefresh,
-    sizeLists,
+    sizeLists, runMailJob,
   } = ctx;
+  const _runMailJob = typeof runMailJob === "function"
+    ? runMailJob
+    : async (_title, _opts, fn) => {
+        const result = await fn({
+          signal: undefined, update() {}, snapshot: () => ({ cancelled: false }),
+        });
+        return { ok: true, cancelled: false, result };
+      };
   const _progress = typeof progress === "function" ? progress : () => {};
   const _humanizeDetail = typeof humanizeDetail === "function"
     ? humanizeDetail
@@ -529,14 +538,14 @@ export function createInboxPanel(ctx) {
       editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
       headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
     // How confident the auto-detection of the player is (see inboxConfidence).
-    { title: "Confidence", field: "_conf", width: 80, minWidth: 72, widthGrow: 0, headerSort: false, hozAlign: "center",
+    { title: "Confidence", field: "_conf", width: 108, minWidth: 96, widthGrow: 0, headerSort: false, hozAlign: "center",
       formatter: (c) => {
         const m = c.getData();
         const k = _inboxConfidence(m);
         const ms = m.classified_ms;
         const msHint = (ms != null && ms !== "") ? ` · classified in ${ms} ms` : "";
         const badge = k
-          ? hstr`<span class="badge badge-${k.cls}" title="${k.title}${msHint}">${k.label}</span>`
+          ? hstr`<span class="badge badge-${k.cls}" title="${k.title}${msHint}">${inboxConfidenceText(k)}</span>`
           : '<span class="muted" title="No player identified yet">—</span>';
         return hstr`${raw(badge)}`;
       } },
@@ -959,6 +968,13 @@ export function createInboxPanel(ctx) {
     document.getElementById("inbox-detail-to").textContent = m.to_address || "—";
     document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
     document.getElementById("inbox-detail-source").textContent = inboxSourceLabel(m.ingest_source);
+    const confEl = document.getElementById("inbox-detail-confidence");
+    if (confEl) {
+      const k = _inboxConfidence(m);
+      confEl.textContent = k ? inboxConfidenceText(k) : "—";
+      confEl.className = k ? `badge badge-${k.cls}` : "";
+      confEl.title = k ? k.title : "No player identified yet";
+    }
     document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
     document.getElementById("inbox-detail-classification").value = form.classification;
     document.getElementById("inbox-detail-status").value = form.status;
@@ -1057,9 +1073,15 @@ export function createInboxPanel(ctx) {
     setMsg("inbox-import-pdf-msg", `uploading ${f.name}…`, true);
     try {
       const fd = new FormData(); fd.append("file", f);
-      const up = await api(`/import/tournaments/${getActive().id}/emails_pdf`, { method: "POST", body: fd });
-      setMsg("inbox-import-pdf-msg", `staged ${up.valid} of ${up.total} — merging…`, true);
-      const m = await api(`/import/batches/${up.batch_id}/merge`, { method: "POST" });
+      const job = await _runMailJob("Processing mail", { phase: "Uploading PDF" }, async ({ signal, update }) => {
+        const up = await api(`/import/tournaments/${getActive().id}/emails_pdf`, { method: "POST", body: fd, signal });
+        update({ phase: "Merging emails", current: 0, total: up.valid || up.total || 0 });
+        const m = await api(`/import/batches/${up.batch_id}/merge`, { method: "POST", signal });
+        update({ current: m.merged || 0 });
+        return { up, m };
+      });
+      if (job.cancelled) { setMsg("inbox-import-pdf-msg", "cancelled", false); return; }
+      const { m } = job.result;
       setMsg("inbox-import-pdf-msg",
         `imported ${m.merged} email${m.merged === 1 ? "" : "s"}` +
           (m.conflicts.length ? ` (+${m.conflicts.length} dupes skipped)` : ""), true);
@@ -1284,7 +1306,10 @@ export function createInboxPanel(ctx) {
     if (btn) btn.disabled = true;
     setMsg("inbox-feed-msg", "fetching Gmail and Outlook…", true);
     try {
-      const r = await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST" });
+      const job = await _runMailJob("Processing mail", { phase: "Fetching Gmail and Outlook" }, ({ signal }) =>
+        api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal }));
+      if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
+      const r = job.result;
       const n = r.imported ?? 0;
       const d = r.duplicates ?? 0;
       const skipped = (r.skipped || []).join(", ");
@@ -1321,9 +1346,13 @@ export function createInboxPanel(ctx) {
     const btn = ev.currentTarget;
     btn.disabled = true;
     try {
-      const res = await api("/emails/bulk/classify", {
-        method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
-      });
+      const ids = [..._inboxSelected];
+      const job = await _runMailJob("Processing mail", { phase: "Classifying", current: 0, total: ids.length }, ({ signal, update }) =>
+        api("/emails/bulk/classify", {
+          method: "POST", body: JSON.stringify({ email_ids: ids }), signal,
+        }).then((res) => { update({ current: ids.length }); return res; }));
+      if (job.cancelled) { setMsg("inbox-bulk-msg", "cancelled", false); return; }
+      const res = job.result;
       if (!res.classified) {
         setMsg("inbox-bulk-msg", "Nothing to classify (already classified, or no rule matched).", false);
       } else {
@@ -1342,9 +1371,13 @@ export function createInboxPanel(ctx) {
     const btn = ev.currentTarget;
     btn.disabled = true;
     try {
-      const res = await api("/emails/bulk/detect-players", {
-        method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
-      });
+      const ids = [..._inboxSelected];
+      const job = await _runMailJob("Processing mail", { phase: "Detecting players", current: 0, total: ids.length }, ({ signal, update }) =>
+        api("/emails/bulk/detect-players", {
+          method: "POST", body: JSON.stringify({ email_ids: ids }), signal,
+        }).then((res) => { update({ current: ids.length }); return res; }));
+      if (job.cancelled) { setMsg("inbox-bulk-msg", "cancelled", false); return; }
+      const res = job.result;
       const hits = res.filter((r) => r.detected_player_id).length;
       const miss = res.length - hits;
       setMsg("inbox-bulk-msg", `detected ${hits} of ${res.length}` + (miss ? ` · ${miss} still unmatched` : ""), true);
@@ -1383,9 +1416,12 @@ export function createInboxPanel(ctx) {
     btn.disabled = true;
     setMsg("inbox-import-pdf-msg", `confirming ${ids.length} suggestion(s)…`, true);
     try {
-      const res = await api("/emails/bulk/confirm-suggestions", {
-        method: "POST", body: JSON.stringify({ email_ids: ids }),
-      });
+      const job = await _runMailJob("Processing mail", { phase: "Confirming suggestions", current: 0, total: ids.length }, ({ signal, update }) =>
+        api("/emails/bulk/confirm-suggestions", {
+          method: "POST", body: JSON.stringify({ email_ids: ids }), signal,
+        }).then((res) => { update({ current: ids.length }); return res; }));
+      if (job.cancelled) { setMsg("inbox-import-pdf-msg", "cancelled", false); return; }
+      const res = job.result;
       const msg = `confirmed ${res.confirmed}`
         + (res.created ? ` · ${res.created} catalog player(s)` : "")
         + (res.still_unmatched ? ` · ${res.still_unmatched} still unmatched` : "");
@@ -1404,9 +1440,12 @@ export function createInboxPanel(ctx) {
     btn.disabled = true;
     setMsg("inbox-import-pdf-msg", `detecting players for ${ids.length} email(s)…`, true);
     try {
-      const res = await api("/emails/bulk/detect-players", {
-        method: "POST", body: JSON.stringify({ email_ids: ids }),
-      });
+      const job = await _runMailJob("Processing mail", { phase: "Detecting players", current: 0, total: ids.length }, ({ signal, update }) =>
+        api("/emails/bulk/detect-players", {
+          method: "POST", body: JSON.stringify({ email_ids: ids }), signal,
+        }).then((res) => { update({ current: ids.length }); return res; }));
+      if (job.cancelled) { setMsg("inbox-import-pdf-msg", "cancelled", false); return; }
+      const res = job.result;
       const hits = res.filter((r) => r.detected_player_id).length;
       const miss = ids.length - hits;
       setMsg("inbox-import-pdf-msg",
@@ -1566,9 +1605,13 @@ export function createInboxPanel(ctx) {
       "Triage all", "primary"))) return;
     if (btn) btn.disabled = true;
     try {
-      const res = await api("/emails/bulk/triage", {
-        method: "POST", body: JSON.stringify({ email_ids: [..._inboxSelected] }),
-      });
+      const ids = [..._inboxSelected];
+      const job = await _runMailJob("Processing mail", { phase: "Triaging", current: 0, total: ids.length }, ({ signal, update }) =>
+        api("/emails/bulk/triage", {
+          method: "POST", body: JSON.stringify({ email_ids: ids }), signal,
+        }).then((res) => { update({ current: ids.length }); return res; }));
+      if (job.cancelled) { setMsg("inbox-bulk-msg", "cancelled", false); return; }
+      const res = job.result;
       const skippedMsg = res.skipped.length
         ? ` · ${res.skipped.length} left for manual filing`
         : "";

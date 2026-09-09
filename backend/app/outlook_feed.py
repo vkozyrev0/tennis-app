@@ -131,12 +131,23 @@ def graph_message_to_payload(msg: dict, *, tournament_id: int | None = None) -> 
     )
 
 
+def _has_stored_secret(row: dict | None) -> bool:
+    """True only when a non-empty client secret is stored (not an empty default)."""
+    if not row:
+        return False
+    enc = row.get("secret_enc")
+    if not enc:
+        return False
+    plain = (_dec(enc) or "").strip()
+    return bool(plain)
+
+
 def public_row(row: dict | None) -> dict:
     """Client-safe settings: never include the encrypted secret."""
     src = dict(_DEFAULTS)
     if row:
         src.update({k: row.get(k, src.get(k)) for k in _DEFAULTS})
-        src["has_secret"] = bool(row.get("secret_enc"))
+        src["has_secret"] = _has_stored_secret(row)
         src["updated_at"] = row.get("updated_at")
     else:
         src["has_secret"] = False

@@ -43,6 +43,7 @@ import { createAvailabilityPanel } from "./app/availability.js";
 import { createDayOfPanel } from "./app/dayof.js";
 import { createAssignmentsPanel } from "./app/assignments_ui.js";
 import { createInboxPanel } from "./app/inbox.js";
+import { createProgressModal } from "./app/progress_job.js";
 import { createReportsPanel } from "./app/reports.js";
 import { createStaffPanel } from "./app/staff.js";
 import { createDashboardPanel } from "./app/dashboard.js";
@@ -673,10 +674,12 @@ function _importRefresh() {
     distancesCrud.refresh().catch(() => {});
   }
 }
+const { run: runMailJob } = createProgressModal();
 const { gotoImport, buildImportPage } = createImportPage({
   api, setMsg, toast, confirmDialog, html, hstr, raw, esc,
   makeMenuButton, makeGrid, scheduleComboSync, activateGroup,
   getActive: () => active, importRefresh: _importRefresh,
+  runMailJob,
 });
 
 
@@ -738,6 +741,7 @@ const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel(
   rosterAddBothFromEmail: inboxAddBothToRoster,
   playersCrudRefresh: () => _rosterRefs.playersCrudRefresh(),
   sizeLists,
+  runMailJob,
 });
 _rosterRefs.loadInbox = loadInbox;
 

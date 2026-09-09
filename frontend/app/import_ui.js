@@ -16,7 +16,8 @@ export function createImportPage(ctx) {
     scheduleComboSync,
     activateGroup,
     getActive,
-    importRefresh
+    importRefresh,
+    runMailJob,
   } = ctx;
 
   // --- Setup → Import page: per-type upload → staging → merge (built from /api/import/types) ---
@@ -262,8 +263,19 @@ export function createImportPage(ctx) {
           );
           if (!ok) { merge.disabled = false; return; }
         }
-        const r = await api(`/import/batches/${bid}/merge`,
-          { method: "POST", body: JSON.stringify({ row_ids: readyIds }) });
+        let r;
+        if (meta.key === "emails_pdf" && typeof runMailJob === "function") {
+          const job = await runMailJob("Processing mail", {
+            phase: "Merging emails", current: 0, total: readyIds.length,
+          }, ({ signal, update }) => api(`/import/batches/${bid}/merge`, {
+            method: "POST", body: JSON.stringify({ row_ids: readyIds }), signal,
+          }).then((res) => { update({ current: res.merged || readyIds.length }); return res; }));
+          if (job.cancelled) { merge.disabled = false; return; }
+          r = job.result;
+        } else {
+          r = await api(`/import/batches/${bid}/merge`,
+            { method: "POST", body: JSON.stringify({ row_ids: readyIds }) });
+        }
         // Merged the ready rows; flagged ones stay staged for fixing.
         const remaining = await reloadGrid();
         if (remaining === 0) {

@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=3" />
   <link rel="stylesheet" href="/tokens.css?v=9" />
-  <link rel="stylesheet" href="/styles.css?v=129" />
+  <link rel="stylesheet" href="/styles.css?v=130" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -1277,6 +1277,8 @@
             <span class="muted" style="margin-left:1rem">To:</span> <strong id="inbox-detail-to"></strong>
             <span class="muted" style="margin-left:1rem">Received:</span> <strong id="inbox-detail-received"></strong>
             <span class="muted" style="margin-left:1rem">Source:</span> <strong id="inbox-detail-source"></strong>
+            <span class="muted" style="margin-left:1rem">Confidence:</span>
+            <span id="inbox-detail-confidence">—</span>
           </div>
           <div class="inbox-detail-body-label">
             <span class="muted">Body</span>
@@ -1684,6 +1686,17 @@
       </div>
     </div>
   </div>
+  <div id="job-progress-modal" class="modal" hidden role="dialog" aria-modal="true"
+       aria-labelledby="job-progress-title" aria-describedby="job-progress-label">
+    <div class="modal-box">
+      <h3 id="job-progress-title">Processing mail</h3>
+      <p id="job-progress-label" class="muted">Working…</p>
+      <progress id="job-progress-bar" max="1" value="0"></progress>
+      <div class="modal-actions">
+        <button type="button" id="job-progress-cancel" class="cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
   <div id="idle-modal" class="modal" hidden role="dialog" aria-modal="true"
        aria-labelledby="idle-title" aria-describedby="idle-text">
     <div class="modal-box">
@@ -1750,6 +1763,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=280"></script>
+  <script type="module" src="/app.js?v=281"></script>
 </body>
 </html>

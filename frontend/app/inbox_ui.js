@@ -168,11 +168,17 @@ const _CONF_TIER = {
   lastname_subject: 1, lastname: 1, firstname: 1,
 };
 const _CONF_LABEL = { 3: ["High", "ok"], 2: ["Medium", "warn"], 1: ["Low", "bad"] };
+const _CONF_PCT = {
+  usta: 95, withdraw_template: 95, usta_subject: 90, fullname_subject: 90, manual: 99,
+  fullname_body: 75, fuzzy_name: 70, usta_offroster: 80,
+  lastname_subject: 45, lastname: 45, firstname: 40,
+};
+const _CONF_TIER_PCT = { 3: 90, 2: 70, 1: 40 };
 
 /**
  * Inbox confidence from match_kind + classification.
  * A correctly labeled withdrawal/doubles with a player match or name suggestion
- * is not forced to Low.
+ * is not forced to Low. `pct` is the same scale (not a model softmax).
  */
 export function inboxConfidence(m) {
   if (!m) return null;
@@ -185,15 +191,20 @@ export function inboxConfidence(m) {
     || !!(m.detected_usta_text)
     || !!(m.detected_player_name);
   if (hasMatch) {
-    let tier = _CONF_TIER[m.detected_match_kind] || 2;
+    const rawTier = _CONF_TIER[m.detected_match_kind] || 2;
+    let tier = rawTier;
     if (fileIntent && tier < 2) tier = 2;
     const [label, badge] = _CONF_LABEL[tier];
-    return { label, cls: badge, title: "Matched to a roster player" };
+    let pct = _CONF_PCT[m.detected_match_kind];
+    if (pct == null) pct = _CONF_TIER_PCT[tier];
+    if (fileIntent && rawTier < 2) pct = 60;
+    return { label, cls: badge, pct, title: "Matched to a roster player" };
   }
   if (fileIntent && hasSuggestion) {
     return {
       label: "Medium",
       cls: "warn",
+      pct: 60,
       title: "Classified with a player suggestion — confirm the match; not auto-filed",
     };
   }
@@ -201,10 +212,17 @@ export function inboxConfidence(m) {
     return {
       label: "Low",
       cls: "bad",
+      pct: 35,
       title: "Parsed from the email but not matched to the roster — confirm or add the player",
     };
   }
   return null;
+}
+
+/** Badge text: "Medium 70%". Empty when there is no confidence. */
+export function inboxConfidenceText(k) {
+  if (!k || !k.label) return "";
+  return k.pct != null ? `${k.label} ${k.pct}%` : k.label;
 }
 
 export function inboxShortcutGate(key, selectedCount) {

@@ -21,6 +21,7 @@ import {
   fileWithoutPlayerGate,
   FILE_NEEDS_PLAYER_REASON,
   inboxConfidence,
+  inboxConfidenceText,
   inboxSourceLabel,
   INBOX_OPTION_PREFIX,
   inboxOptionValue,
@@ -190,6 +191,7 @@ test("confidence formatter does not nest hstr strings (escaped markup)", () => {
   const src = readFileSync(join(here, "inbox.js"), "utf8");
   assert.match(src, /hstr`\$\{raw\(badge\)\}`/);
   assert.match(src, /classified in \$\{ms\} ms/);
+  assert.match(src, /inbox-detail-confidence/);
   assert.doesNotMatch(src, /classified-ms/);
 });
 
@@ -228,24 +230,31 @@ test("classified withdrawal with a player suggestion is not Low", () => {
     detected_name_pairs: [{ name: "Stella Johansson" }],
   });
   assert.equal(unmatched.label, "Medium");
+  assert.equal(unmatched.pct, 60);
+  assert.equal(inboxConfidenceText(unmatched), "Medium 60%");
   const lastname = inboxConfidence({
     classification: "withdrawal",
     detected_player_id: 4,
     detected_match_kind: "lastname",
   });
   assert.equal(lastname.label, "Medium");
+  assert.equal(lastname.pct, 60);
   const usta = inboxConfidence({
     classification: "withdrawal",
     detected_player_id: 4,
     detected_match_kind: "usta",
   });
   assert.equal(usta.label, "High");
+  assert.equal(usta.pct, 95);
+  assert.equal(inboxConfidenceText(usta), "High 95%");
   const otherUnmatched = inboxConfidence({
     classification: "other",
     detected_player_id: null,
     detected_usta_text: "1234567890",
   });
   assert.equal(otherUnmatched.label, "Low");
+  assert.equal(otherUnmatched.pct, 35);
+  assert.equal(inboxConfidenceText(null), "");
 });
 
 test("inbox Review control and non-editor row click open the review modal", () => {
@@ -286,7 +295,8 @@ test("inbox From and Subject columns have a width floor so headers do not collap
 
 test("inbox columns fit a ~998px work surface; Source/USTA collapse under 1400px", () => {
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
-  assert.match(src, /title:\s*"Confidence"[\s\S]{0,80}width:\s*80/);
+  assert.match(src, /title:\s*"Confidence"[\s\S]{0,80}width:\s*108/);
+  assert.match(src, /inboxConfidenceText\(k\)/);
   assert.match(src, /title:\s*"Source"[\s\S]{0,120}responsive:\s*2/);
   assert.match(src, /title:\s*"USTA #1"[\s\S]{0,80}responsive:\s*1/);
   assert.match(src, /title:\s*"USTA #2"[\s\S]{0,80}responsive:\s*1/);
@@ -294,7 +304,7 @@ test("inbox columns fit a ~998px work surface; Source/USTA collapse under 1400px
   assert.doesNotMatch(src, /width:\s*168/);
   const grids = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "grids.js"), "utf8");
   assert.match(grids, /opts\.collapseAt \? \{ collapseAt: opts\.collapseAt \}/);
-  const mins = [36, 78, 96, 56, 110, 120, 120, 88, 72, 64, 36];
+  const mins = [36, 78, 96, 56, 110, 120, 120, 88, 96, 64, 36];
   assert.ok(mins.reduce((a, b) => a + b, 0) <= 998, "always-visible minWidths must fit 998px");
 });
 
@@ -306,6 +316,8 @@ test("Help describes inbox people, Add to Players, Get all, and Outlook", () => 
   assert.match(help, /Get all/);
   assert.match(help, /Outlook \/ Microsoft feed/);
   assert.match(help, /Still there\?/);
+  assert.match(help, /Confidence/);
+  assert.match(help, /95%/);
   assert.match(help, /sections do not stack/);
   assert.match(help, /Clear<\/strong> hides the bar/);
 });
