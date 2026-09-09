@@ -354,8 +354,10 @@ def test_graph_fetch_parses_string_cursor():
 
 
 @_needs_db
-def test_reprocess_window_restamps_existing_email_not_duplicate(_admin):
+def test_reprocess_window_restamps_existing_email_not_duplicate(monkeypatch, _admin):
     """Date-range reprocess re-classifies stored mail; it does not insert a row."""
+    monkeypatch.setattr("app.inbox_feeds.gmail_ready", lambda *_a, **_k: False)
+    monkeypatch.setattr("app.inbox_feeds.outlook_ready", lambda *_a, **_k: False)
     t = client.post("/api/tournaments", json={
         "name": "Reprocess " + uuid.uuid4().hex[:6], "type": "junior",
         "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
@@ -409,7 +411,8 @@ def test_bulk_reprocess_calls_leftover_even_when_heuristic_matches(monkeypatch, 
 
     monkeypatch.setattr("app.email_llm.leftover_model_intent", fake_leftover)
     monkeypatch.setattr("app.email_llm.llm_enabled", lambda: True)
-    monkeypatch.setattr("app.email_llm.probe_llm", lambda timeout=1.5: "ok")
+    monkeypatch.setattr("app.routers.inbox_feeds.probe_llm", lambda timeout=1.5: "ok")
+    monkeypatch.setattr("app.routers.emails_bulk.probe_llm", lambda timeout=1.5: "ok")
     t = client.post("/api/tournaments", json={
         "name": "LeftoverRp " + uuid.uuid4().hex[:6], "type": "junior",
         "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
