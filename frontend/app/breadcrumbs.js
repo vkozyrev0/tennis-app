@@ -1,7 +1,25 @@
 // Breadcrumb / navigation history strip (D11 slice from app.js).
-// Tracks the last N (group, panel) locations; chip click + Alt+Left go back.
+// Tracks the last N (group, panel) locations *within the current L1 section*;
+// chip click + Alt+Left go back. Switching Home / Inbox / Setup starts a new
+// trail so sections do not stack. Clear hides the bar.
 
-const CRUMB_MAX = 8;
+export const CRUMB_MAX = 8;
+
+/** Next trail after a nav to (group, panel). Cross-section jumps replace. */
+export function nextNavHistory(history, group, panel, { max = CRUMB_MAX } = {}) {
+  if (!group || !panel) return (history || []).slice();
+  const prev = Array.isArray(history) ? history : [];
+  const last = prev[prev.length - 1];
+  if (last && last.group === group && last.panel === panel) return prev.slice();
+  if (last && last.group !== group) return [{ group, panel }];
+  const next = prev.concat({ group, panel });
+  return next.length > max ? next.slice(-max) : next;
+}
+
+/** Hide the strip until there is somewhere to step back to. */
+export function crumbsBarHidden(historyLength) {
+  return !(Number(historyLength) >= 2);
+}
 
 /**
  * @param {{ activateGroup: (key: string) => void }} ctx
@@ -33,11 +51,7 @@ export function createBreadcrumbs(ctx) {
 
   function pushCrumb(group, panel) {
     if (_crumbJumping) return;
-    if (!group || !panel) return;
-    const last = _navHistory[_navHistory.length - 1];
-    if (last && last.group === group && last.panel === panel) return;
-    _navHistory.push({ group, panel });
-    if (_navHistory.length > CRUMB_MAX) _navHistory = _navHistory.slice(-CRUMB_MAX);
+    _navHistory = nextNavHistory(_navHistory, group, panel);
     _renderCrumbs();
   }
 
@@ -58,7 +72,7 @@ export function createBreadcrumbs(ctx) {
 
   function _renderCrumbs() {
     if (!_crumbsBar) return;
-    if (_navHistory.length === 0) { _crumbsBar.hidden = true; return; }
+    if (crumbsBarHidden(_navHistory.length)) { _crumbsBar.hidden = true; return; }
     _crumbsBar.hidden = false;
     _crumbList.innerHTML = "";
     const CRUMB_VISIBLE = 4;
@@ -109,8 +123,7 @@ export function createBreadcrumbs(ctx) {
   }
   if (_crumbClear) {
     _crumbClear.addEventListener("click", () => {
-      const cur = _navHistory[_navHistory.length - 1];
-      _navHistory = cur ? [cur] : [];
+      _navHistory = [];
       _renderCrumbs();
     });
   }

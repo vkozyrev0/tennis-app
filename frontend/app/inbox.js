@@ -37,6 +37,7 @@ export function createInboxPanel(ctx) {
     progress, humanizeDetail,
     // Roster form prefill lives in createRosterPanel (owns form + modal state).
     rosterAddFromEmail, rosterAddBothFromEmail, playersCrudRefresh,
+    sizeLists,
   } = ctx;
   const _progress = typeof progress === "function" ? progress : () => {};
   const _humanizeDetail = typeof humanizeDetail === "function"
@@ -443,7 +444,7 @@ export function createInboxPanel(ctx) {
   const inboxGrid = makeReadGrid("inbox-table", [
     // Mass-select column: master checkbox in header + per-row toggle. Drives
     // the bulk-action toolbar shown above the grid.
-    { title: "", field: "_sel", headerSort: false, width: 40, hozAlign: "center",
+    { title: "", field: "_sel", headerSort: false, width: 36, minWidth: 36, widthGrow: 0, hozAlign: "center",
       titleFormatter: () => {
         const cb = document.createElement("input");
         cb.type = "checkbox"; cb.name = "inbox-select-all";
@@ -463,9 +464,9 @@ export function createInboxPanel(ctx) {
         cb.addEventListener("change", (e) => _inboxBulkToggle(m.id, e.target.checked));
         return cb;
       } },
-    { title: "Received", field: "received_at", width: 110, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
-    { title: "From", field: "from_address", minWidth: 140, widthGrow: 1 },
-    { title: "Source", field: "ingest_source", width: 88, minWidth: 80,
+    { title: "Received", field: "received_at", width: 84, minWidth: 78, widthGrow: 0, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
+    { title: "From", field: "from_address", minWidth: 96, widthGrow: 1 },
+    { title: "Source", field: "ingest_source", width: 72, minWidth: 64, widthGrow: 0, responsive: 2,
       formatter: (c) => {
         const label = inboxSourceLabel(c.getData().ingest_source);
         return hstr`<span class="badge" title="How this email arrived">${label}</span>`;
@@ -474,7 +475,7 @@ export function createInboxPanel(ctx) {
       headerFilterParams: { values: ["", "gmail", "outlook", "pdf", "manual", "webhook"], clearable: true } },
     // Review sits here (early, after From) so the TD can open the message
     // without scrolling past Player / Classification. Row click does the same.
-    { title: "Review", field: "_review", headerSort: false, width: 80, minWidth: 80, widthGrow: 0,
+    { title: "Review", field: "_review", headerSort: false, width: 64, minWidth: 56, widthGrow: 0,
       formatter: (cell) => {
         const m = cell.getData();
         const btn = document.createElement("button");
@@ -485,7 +486,7 @@ export function createInboxPanel(ctx) {
         btn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
         return btn;
       } },
-    { title: "Subject", field: "subject", minWidth: 180, widthGrow: 2, formatter: (c) => {
+    { title: "Subject", field: "subject", minWidth: 110, widthGrow: 2, formatter: (c) => {
         const m = c.getData();
         const corr = m.amends_email_id ? ' <span class="badge badge-info" title="corrects an earlier email">↻ correction</span>' : "";
         const sup = m.superseded ? ' <span class="badge badge-warn" title="a later email corrects this — revisit its filed row">⤺ superseded</span>' : "";
@@ -493,13 +494,13 @@ export function createInboxPanel(ctx) {
       } },
     // Leaf columns (not groups) so Player 1 / Player 2 stay one 20px header
     // row instead of a group row + "Player" child row.
-    { title: "Player 1", field: "detected_player_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
+    { title: "Player 1", field: "detected_player_name", minWidth: 120, width: 140, widthGrow: 1, ..._PLAYER_EDITOR,
       formatter: (cell) => _inboxNameCell(cell, 0),
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) =>
         ((e.detected_player_name || "") + " " + (e.detected_usta || ""))
           .toLowerCase().includes(String(term).toLowerCase()) },
-    { title: "USTA #1", field: "detected_usta", width: 115, ..._USTA_EDITOR,
+    { title: "USTA #1", field: "detected_usta", width: 88, minWidth: 72, widthGrow: 0, responsive: 1, ..._USTA_EDITOR,
       formatter: (c) => {
         const s = _inboxSlots(c.getData())[0];
         if (!s.usta) return '<span class="muted">—</span>';
@@ -509,13 +510,13 @@ export function createInboxPanel(ctx) {
       headerFilterFunc: (term, _v, e) =>
         ((e.detected_usta || "") + " " + (e.detected_usta_text || ""))
           .includes(String(term).trim()) },
-    { title: "Player 2", field: "detected_partner_name", minWidth: 150, width: 190, ..._PLAYER_EDITOR,
+    { title: "Player 2", field: "detected_partner_name", minWidth: 120, width: 140, widthGrow: 1, ..._PLAYER_EDITOR,
       formatter: (cell) => _inboxNameCell(cell, 1),
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) =>
         ((e.detected_partner_name || "") + " " + ((e.detected_member_names || []).slice(1).join(" ")) + " " +
          (e.detected_partner_usta || "")).toLowerCase().includes(String(term).toLowerCase()) },
-    { title: "USTA #2", field: "detected_partner_usta", width: 115, ..._USTA_EDITOR,
+    { title: "USTA #2", field: "detected_partner_usta", width: 88, minWidth: 72, widthGrow: 0, responsive: 1, ..._USTA_EDITOR,
       formatter: (c) => {
         const s = _inboxSlots(c.getData())[1];
         if (!s.usta) return '<span class="muted">—</span>';
@@ -523,27 +524,25 @@ export function createInboxPanel(ctx) {
       },
       headerFilter: "input",
       headerFilterFunc: (term, _v, e) => (e.detected_partner_usta || "").includes(String(term).trim()) },
-    { title: "Classification", field: "classification", width: 150, cssClass: "editable-cell",
+    { title: "Classification", field: "classification", width: 110, minWidth: 88, widthGrow: 0, cssClass: "editable-cell",
       formatter: (c) => classChip(c.getValue()),
       editor: "list", editorParams: { values: EMAIL_CLASS_VALUES },
       headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
     // How confident the auto-detection of the player is (see inboxConfidence).
-    { title: "Confidence", field: "_conf", width: 168, headerSort: false, hozAlign: "center",
+    { title: "Confidence", field: "_conf", width: 80, minWidth: 72, widthGrow: 0, headerSort: false, hozAlign: "center",
       formatter: (c) => {
         const m = c.getData();
         const k = _inboxConfidence(m);
-        const badge = k
-          ? hstr`<span class="badge badge-${k.cls}" title="${k.title}">${k.label}</span>`
-          : '<span class="muted" title="No player identified yet">—</span>';
         const ms = m.classified_ms;
-        const stamp = (ms != null && ms !== "")
-          ? hstr`<span class="classified-ms muted" title="Local classifier runtime">classified in ${ms} ms</span>`
-          : "";
-        return hstr`${raw(badge)}${raw(stamp)}`;
+        const msHint = (ms != null && ms !== "") ? ` · classified in ${ms} ms` : "";
+        const badge = k
+          ? hstr`<span class="badge badge-${k.cls}" title="${k.title}${msHint}">${k.label}</span>`
+          : '<span class="muted" title="No player identified yet">—</span>';
+        return hstr`${raw(badge)}`;
       } },
-    { title: "Status", field: "status", width: 110, formatter: (c) => chip(c.getData().status),
+    { title: "Status", field: "status", width: 80, minWidth: 64, widthGrow: 0, formatter: (c) => chip(c.getData().status),
       headerFilter: "list", headerFilterParams: { values: ["", "new", "filed", "needs_followup"], clearable: true } },
-    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 48, cssClass: "grid-actions-cell",
+    { title: "", field: "_act", headerSort: false, widthGrow: 0, width: 40, minWidth: 36, cssClass: "grid-actions-cell",
       formatter: (cell) => {
         // Suggest / File / Delete fold into a ⋯ overflow menu (design-crit I-2).
         // Review lives in its own early column. The menu is body-anchored so it
@@ -767,7 +766,7 @@ export function createInboxPanel(ctx) {
   "Inbox empty — paste a forwarded email above, or use Import → PDF. "
   + "Once you have rows: tick checkboxes for bulk triage (Triage all), "
   + "or press t (triage) · d (detect) · f (filed) · u (unmatched). Press ? for all shortcuts.",
-  { index: "id", editable: "click", persist: false, responsive: false });
+  { index: "id", editable: "click", persist: false, collapseAt: "(max-width: 1400px)" });
   // Persist inline edits (single click a cell): classification, manual player /
   // partner picks (the list editor's value is a player id), and typed USTA #s
   // (resolved against the roster cache; unknown numbers revert with a toast).
@@ -1707,6 +1706,10 @@ export function createInboxPanel(ctx) {
       try { inboxGrid.grid.setHeaderFilterValue("status", "new"); } catch (_) {}
     }
     _loadInboxStatusSummary();
+    if (typeof sizeLists === "function") {
+      sizeLists();
+      requestAnimationFrame(() => sizeLists());
+    }
   }
   // Inbox progress summary: counts of unfiled (new) / filed / need-follow-up for
   // the active tournament, so the TD sees what's left to process at a glance.

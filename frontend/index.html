@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=3" />
   <link rel="stylesheet" href="/tokens.css?v=9" />
-  <link rel="stylesheet" href="/styles.css?v=128" />
+  <link rel="stylesheet" href="/styles.css?v=129" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -1153,6 +1153,7 @@
     <section class="panel tpanel" id="panel-t-inbox">
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
+        <div class="inbox-chrome">
         <h3>Review inbox — <span class="t-name"></span></h3>
         <div class="muted">Classify, match a player, file into a list.
           <details class="inline-help"><summary>How this page works</summary>
@@ -1261,6 +1262,7 @@
         </div>
         <div id="inbox-status-summary" class="inbox-summary" hidden></div>
         <div id="inbox-aging" class="inbox-aging" hidden></div>
+        </div>
         <table id="inbox-table" class="list-table">
           <thead><tr><th></th><th>Received</th><th>From</th><th>Source</th><th>Review</th><th>Subject</th><th>Player</th><th>Classification</th><th>Status</th><th></th></tr></thead>
           <tbody></tbody>

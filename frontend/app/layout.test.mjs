@@ -24,10 +24,10 @@ test("list min height is enough for AG header + scrollbar + body rows", () => {
   assert.ok(listBodyMinFromMount(LIST_MIN_HEIGHT) >= 64, "need ~2 data rows of body");
 });
 
-test("mount height is 0 when top is already past the usable viewport", () => {
+test("mount height keeps a usable strip when top is already past the viewport", () => {
   const h = listMountHeight({ viewportHeight: 800, top: 900 });
-  assert.equal(h, 0);
-  assert.equal(listFitsViewport({ top: 900, height: h, viewportHeight: 800 }), true);
+  assert.equal(h, LIST_KEEP_MIN);
+  assert.ok(h >= listFitMin(), h);
 });
 
 test("representative inbox viewport fills remaining space without crossing the bottom", () => {
@@ -109,6 +109,10 @@ test("inbox grid is a sized grid-mount; action cells keep pointer-events", () =>
   assert.doesNotMatch(roster, /["']50vh["']/);
   assert.match(layout, /measureListBelowPx/);
   assert.match(layout, /belowPx/);
+  assert.match(layout, /if \(remaining <= 0\) return LIST_KEEP_MIN/);
+  assert.match(css, /#panel-t-inbox\.panel\.active/);
+  assert.match(css, /#panel-t-inbox \.grid-mount:not\(\.grid-mount--compact\)[\s\S]{0,80}min-height:\s*12rem/);
+  assert.match(css, /#panel-t-inbox \.inbox-chrome/);
 });
 
 test("grid headers stay 8pt in a 20px Quartz header row", () => {

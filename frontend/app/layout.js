@@ -83,7 +83,10 @@ export function listMountHeight({
   const nBelow = Math.max(0, Number(mountsBelow) || 0);
   const below = Math.max(0, Number(belowPx) || 0);
   const remaining = Math.floor(vh - t - pad);
-  if (remaining <= 0) return 0;
+  // Never collapse a work surface to 0px — Inbox chrome (desk + summary)
+  // can push `top` to the fold on a 1280×720 laptop. Keep a usable strip
+  // and let #main-app scroll rather than painting an invisible grid.
+  if (remaining <= 0) return LIST_KEEP_MIN;
   const leaveWanted = below + nBelow * (listFitMin() + LIST_STACK_GAP);
   if (leaveWanted <= 0) return remaining;
   const keepMin = Math.min(

@@ -188,7 +188,9 @@ test("review open resyncs combo overlays so classification/status are this email
 test("confidence formatter does not nest hstr strings (escaped markup)", () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(join(here, "inbox.js"), "utf8");
-  assert.match(src, /hstr`\$\{raw\(badge\)\}\$\{raw\(stamp\)\}`/);
+  assert.match(src, /hstr`\$\{raw\(badge\)\}`/);
+  assert.match(src, /classified in \$\{ms\} ms/);
+  assert.doesNotMatch(src, /classified-ms/);
 });
 
 test("inbox File, review Save-as-filed, and bulk populate use the hard gate", () => {
@@ -276,10 +278,24 @@ test("inbox Review column sits after From; Email and Tournament columns are gone
 
 test("inbox From and Subject columns have a width floor so headers do not collapse", () => {
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
-  assert.match(src, /title:\s*"From"[\s\S]{0,80}minWidth:\s*1[4-9]\d/);
-  assert.match(src, /title:\s*"Subject"[\s\S]{0,80}minWidth:\s*1[6-9]\d/);
+  assert.match(src, /title:\s*"From"[\s\S]{0,80}minWidth:\s*96/);
+  assert.match(src, /title:\s*"Subject"[\s\S]{0,80}minWidth:\s*110/);
   const grids = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "grids.js"), "utf8");
   assert.match(grids, /else if \(!col\.width\) cd\.minWidth = 96/);
+});
+
+test("inbox columns fit a ~998px work surface; Source/USTA collapse under 1400px", () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
+  assert.match(src, /title:\s*"Confidence"[\s\S]{0,80}width:\s*80/);
+  assert.match(src, /title:\s*"Source"[\s\S]{0,120}responsive:\s*2/);
+  assert.match(src, /title:\s*"USTA #1"[\s\S]{0,80}responsive:\s*1/);
+  assert.match(src, /title:\s*"USTA #2"[\s\S]{0,80}responsive:\s*1/);
+  assert.match(src, /collapseAt:\s*"\(max-width:\s*1400px\)"/);
+  assert.doesNotMatch(src, /width:\s*168/);
+  const grids = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "grids.js"), "utf8");
+  assert.match(grids, /opts\.collapseAt \? \{ collapseAt: opts\.collapseAt \}/);
+  const mins = [36, 78, 96, 56, 110, 120, 120, 88, 72, 64, 36];
+  assert.ok(mins.reduce((a, b) => a + b, 0) <= 998, "always-visible minWidths must fit 998px");
 });
 
 test("Help describes inbox people, Add to Players, Get all, and Outlook", () => {
@@ -290,6 +306,8 @@ test("Help describes inbox people, Add to Players, Get all, and Outlook", () => 
   assert.match(help, /Get all/);
   assert.match(help, /Outlook \/ Microsoft feed/);
   assert.match(help, /Still there\?/);
+  assert.match(help, /sections do not stack/);
+  assert.match(help, /Clear<\/strong> hides the bar/);
 });
 
 test("inbox source labels map gmail, outlook, and pdf", () => {

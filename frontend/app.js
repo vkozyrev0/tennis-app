@@ -737,6 +737,7 @@ const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel(
   rosterAddFromEmail: inboxAddToRoster,
   rosterAddBothFromEmail: inboxAddBothToRoster,
   playersCrudRefresh: () => _rosterRefs.playersCrudRefresh(),
+  sizeLists,
 });
 _rosterRefs.loadInbox = loadInbox;
 

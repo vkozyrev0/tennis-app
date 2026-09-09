@@ -261,9 +261,14 @@ export function createGridFactories(ctx) {
     if (col.width) cd.width = col.width;
     if (col.minWidth) cd.minWidth = col.minWidth;
     else if (!col.width) cd.minWidth = 96;
-    // widthGrow 0 / fixed width → no flex; else share leftover space (fitColumns).
+    // widthGrow 0 → fixed. Explicit widthGrow > 0 flexes even when `width` is a
+    // preferred size (inbox columns that must shrink under ~1000px). Bare
+    // `width` without widthGrow stays fixed. No width → flex 1 (fitColumns).
     // Flex columns without a floor were collapsing to a few pixels (From / Subject).
-    if (col.width || col.widthGrow === 0) cd.flex = 0; else cd.flex = col.widthGrow || 1;
+    if (col.widthGrow === 0) cd.flex = 0;
+    else if (col.widthGrow) cd.flex = col.widthGrow;
+    else if (col.width) cd.flex = 0;
+    else cd.flex = 1;
     if (col.headerSort === false) cd.sortable = false;
     // initial sort: AG with getRowId set does delta updates and doesn't preserve
     // the rowData array order, so grids that want a deterministic default order
@@ -489,7 +494,7 @@ export function createGridFactories(ctx) {
     // columns + show the ▸ expander on narrow screens, reverse on wide.
     if (_collapseMeta.length) {
       const ids = _collapseMeta.map((m) => m.colId);
-      const mq = window.matchMedia("(max-width: 760px)");
+      const mq = window.matchMedia(tabOpts.collapseAt || "(max-width: 760px)");
       const applyCollapse = () => {
         if (!api) return;
         api.setColumnsVisible(ids, !mq.matches);
@@ -679,6 +684,8 @@ export function createGridFactories(ctx) {
       // rowClassRules replaces Tabulator's rowFormatter for row-level styling
       // (e.g. multi-select tint by set membership); re-applied via grid.redraw().
       ...(opts.rowClassRules ? { rowClassRules: opts.rowClassRules } : {}),
+      ...(opts.collapseAt ? { collapseAt: opts.collapseAt } : {}),
+      ...(opts.responsive === false ? { responsive: false } : {}),
     });
     if (exportName) {
       const csv = document.createElement("button");

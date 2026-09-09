@@ -74,9 +74,10 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       </ul>
 
       <h3>Breadcrumbs</h3>
-      <p>Recent places you visited appear under the menus. Use ← or clear history
-      when the trail gets long. <kbd>Alt</kbd>+<kbd>←</kbd> steps back one crumb
-      when the bar is visible.</p>
+      <p>Tabs you opened in the <em>current</em> section appear under the menus
+      (Setup › Players › Officials). Switching Home, Inbox, or Day-of starts a
+      new trail — sections do not stack. <strong>Clear</strong> hides the bar.
+      <kbd>Alt</kbd>+<kbd>←</kbd> steps back one crumb when the bar is visible.</p>
 
       <p>The address bar tracks the current screen (<code>#panel-t-inbox</code>,
       <code>#panel-t-dayof</code>, …) so you can bookmark or share a page.</p>
