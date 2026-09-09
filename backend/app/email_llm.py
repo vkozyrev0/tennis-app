@@ -420,14 +420,20 @@ def leftover_prompt(subject: str | None, body: str | None) -> str:
 _LEFTOVER_LAST: tuple | None = None
 
 
-def leftover_model_intent(subject: str | None, body: str | None) -> dict | None:
-    """Clip + shared leftover_prompt + sidecar + parse_llm_json. No intent rewrite."""
+def leftover_model_intent(
+    subject: str | None, body: str | None, *, bypass_cache: bool = False,
+) -> dict | None:
+    """Clip + shared leftover_prompt + sidecar + parse_llm_json. No intent rewrite.
+
+    ``bypass_cache`` (date-range reprocess after a leftover-prompt change)
+    always hits the sidecar even if this process already parsed the same clip.
+    """
     global _LEFTOVER_LAST
     if not llm_enabled():
         return None
     subj, clipped = clip_email_text(subject, body)
     key = (subj, clipped)
-    if _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
+    if not bypass_cache and _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
         return _LEFTOVER_LAST[1]
     prompt = leftover_prompt(subj, clipped)
     try:

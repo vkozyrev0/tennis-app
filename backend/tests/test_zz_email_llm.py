@@ -246,6 +246,9 @@ def test_leftover_model_intent_caches_same_clip(monkeypatch):
     llm.leftover_model_intent("S", "Body two")
     assert n["calls"] == 2
     n["calls"] = 0
+    llm.leftover_model_intent("S", "Body one", bypass_cache=True)
+    assert n["calls"] == 1
+    n["calls"] = 0
 
     def boom(prompt):
         n["calls"] += 1

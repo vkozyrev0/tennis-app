@@ -96,6 +96,34 @@ html:has(body:not(.is-signed-out)) { overflow: hidden; }
 #job-progress-modal progress {
   display: block; width: 100%; height: 0.7rem; margin: 0.4rem 0 0.2rem;
 }
+#job-progress-modal progress[data-busy] {
+  appearance: none; -webkit-appearance: none;
+  background: color-mix(in srgb, var(--accent, #2e6f40) 18%, var(--border, #ccc));
+  border: 0; overflow: hidden;
+}
+#job-progress-modal progress[data-busy]::-webkit-progress-bar {
+  background: color-mix(in srgb, var(--accent, #2e6f40) 18%, var(--border, #ccc));
+}
+#job-progress-modal progress[data-busy]::-webkit-progress-value {
+  background: transparent;
+}
+#job-progress-modal progress[data-busy]::after,
+#job-progress-modal .job-progress-indeterminate {
+  display: block;
+}
+@keyframes job-progress-slide {
+  from { background-position: 0 0; }
+  to { background-position: 48px 0; }
+}
+#job-progress-modal progress[data-busy] {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--accent, #2e6f40) 0 12px,
+    color-mix(in srgb, var(--accent, #2e6f40) 35%, #fff) 12px 24px
+  );
+  background-size: 48px 48px;
+  animation: job-progress-slide 0.7s linear infinite;
+}
 .modal[hidden] { display: none; }
 .modal-box { background: var(--card); border-radius: var(--radius, 10px); padding: 1.25rem 1.5rem; max-width: 360px; width: min(360px, calc(100vw - 2rem)); box-shadow: 0 8px 30px rgba(0,0,0,0.25); overscroll-behavior: contain; }
 .modal-box p { margin: 0 0 0.5rem; }
@@ -221,36 +249,84 @@ header h1 {
   max-height: calc(100vh - 4rem);
   overflow-y: auto;
 }
-/* Inbox detail pane — opens below the grid on row click. The body textarea
-   is monospaced + larger so threaded quote markers ("From: …") read cleanly. */
+/* Inbox Review reading pane — proportional type on a paper surface.
+   Latest ask is the first block; quoted thread sits in a collapsed
+   disclosure with a quote rail. */
 .inbox-detail-subject { margin: 0 0 0.4rem 0; }
 .inbox-detail-meta { font-size: 0.85rem; margin-bottom: 0.6rem; }
 .inbox-email-body,
 #inbox-detail-body {
-  width: 100%; margin: 0.25rem 0 0.6rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.82rem; line-height: 1.5;
-  white-space: pre-wrap; word-wrap: break-word;
-  min-height: 14rem; max-height: 32rem; overflow: auto;
-  background: var(--field-bg); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 5px; padding: 0.6rem 0.7rem;
+  width: 100%; margin: 0.25rem 0 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem; line-height: 1.55;
+  letter-spacing: -0.01em;
+  white-space: pre-wrap; overflow-wrap: break-word; word-wrap: break-word;
+  min-height: 12rem; max-height: 32rem; overflow: auto;
+  background: var(--zebra); color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.15rem 1.05rem;
+  scrollbar-color: var(--line) transparent;
 }
 .inbox-email-body:focus-visible,
 #inbox-detail-body:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-/* Header-line highlight: "From:" / "To:" / "Subject:" / "Sent:" / "Date:".
-   Key in accent (the strong color we already use for links etc.); value in
-   normal ink. Quoted-thread boundary ("On <date>, X wrote:") muted italic
-   so the eye can find each new reply quickly. */
-.inbox-email-body .email-hdr-key,
-#inbox-detail-body .email-hdr-key { color: var(--link); font-weight: 600; }
-.inbox-email-body .email-hdr-val,
-#inbox-detail-body .email-hdr-val { color: var(--ink); }
-.inbox-email-body .email-quote-marker,
-#inbox-detail-body .email-quote-marker { color: var(--muted); font-style: italic; }
-.inbox-email-body .email-meta,
-#inbox-detail-body .email-meta { color: var(--muted); font-style: italic; }
-.inbox-email-body .email-meta .email-hdr-key,
-#inbox-detail-body .email-meta .email-hdr-key { color: var(--link); font-style: normal; }
+.inbox-email-body .email-latest,
+.inbox-email-body .email-quoted-body { max-width: 72ch; }
+.inbox-email-body .email-hdr-key { color: var(--link); font-weight: 600; }
+.inbox-email-body .email-hdr-val { color: var(--ink); }
+.inbox-email-body .email-quote-marker { color: var(--muted); font-style: italic; }
+.inbox-email-body .email-meta { color: var(--muted); font-style: italic; }
+.inbox-email-body .email-meta .email-hdr-key { color: var(--link); font-style: normal; }
+.inbox-email-body .email-link {
+  color: var(--link);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+}
+.inbox-email-body .email-link:hover { text-decoration-thickness: 2px; }
+.inbox-email-body .email-quote {
+  margin: 0.45rem 0 0.35rem;
+  padding: 0.15rem 0 0.15rem 0.85rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.inbox-email-body .email-quoted {
+  margin: 0.9rem 0 0;
+  padding: 0;
+  border: 0;
+  max-width: 72ch;
+}
+.inbox-email-body .email-quoted > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  padding: 0.15rem 0;
+}
+.inbox-email-body .email-quoted > summary::-webkit-details-marker { display: none; }
+.inbox-email-body .email-quoted > summary::before {
+  content: "";
+  width: 0.4rem; height: 0.4rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  translate: 0 -0.05rem;
+}
+.inbox-email-body .email-quoted[open] > summary::before { transform: rotate(45deg); }
+.inbox-email-body .email-quoted > summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+.inbox-email-body .email-quoted-body {
+  margin: 0.45rem 0 0;
+  padding: 0.35rem 0 0.15rem 0.9rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.inbox-email-body .email-quoted-body .email-hdr-val { color: var(--muted); }
 .inbox-detail-body-label { display: block; }
 .inbox-detail-players {
   margin: 0 0 0.7rem;

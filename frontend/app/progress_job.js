@@ -1,14 +1,19 @@
 // Cancellable batch-mail progress dialog. Tracker is DOM-free so node tests
 // can drive open / label / Cancel / abort without AG Grid or a mailbox.
 
-export function jobLabel({ phase, current, total } = {}) {
+export function jobLabel({ phase, current, total, elapsedSec } = {}) {
   const p = String(phase || "Working").trim() || "Working";
   const c = Number(current);
   const t = Number(total);
+  let base = p;
   if (Number.isFinite(c) && Number.isFinite(t) && t > 0) {
-    return `${p} — ${Math.max(0, c)} of ${t}`;
+    base = `${p} — ${Math.max(0, c)} of ${t}`;
   }
-  return p;
+  const sec = Number(elapsedSec);
+  if (Number.isFinite(sec) && sec >= 1) {
+    base += ` · ${Math.floor(sec)}s`;
+  }
+  return base;
 }
 
 export function isAbortError(err) {
@@ -19,12 +24,18 @@ export function isAbortError(err) {
 
 export function createJobTracker() {
   let state = {
-    open: false, cancelled: false, phase: "", current: 0, total: 0, label: "",
+    open: false, cancelled: false, phase: "", current: 0, total: 0,
+    elapsedSec: 0, label: "",
   };
   let ac = null;
 
   function snapshot() {
-    return { ...state, label: state.cancelled ? "Cancelled" : jobLabel(state) };
+    const indeterminate = !(Number(state.total) > 0);
+    return {
+      ...state,
+      indeterminate,
+      label: state.cancelled ? "Cancelled" : jobLabel(state),
+    };
   }
 
   function open(phase, { total = 0, current = 0 } = {}) {
@@ -35,6 +46,7 @@ export function createJobTracker() {
       phase: phase || "Working",
       current: Number(current) || 0,
       total: Number(total) || 0,
+      elapsedSec: 0,
       label: "",
     };
     state.label = jobLabel(state);
@@ -46,6 +58,7 @@ export function createJobTracker() {
     if (patch.phase != null) state.phase = patch.phase;
     if (patch.current != null) state.current = Number(patch.current) || 0;
     if (patch.total != null) state.total = Number(patch.total) || 0;
+    if (patch.elapsedSec != null) state.elapsedSec = Number(patch.elapsedSec) || 0;
     state.label = jobLabel(state);
     return snapshot();
   }
@@ -72,6 +85,28 @@ export function createJobTracker() {
   return { open, update, cancel, finish, signal, snapshot };
 }
 
+/** Tick elapsed time (and optional rotating phases) while a job is open. */
+export function startJobPulse(tracker, { intervalMs = 400, phases = null, onTick } = {}) {
+  const t0 = Date.now();
+  let i = 0;
+  const list = Array.isArray(phases) && phases.length ? phases : null;
+  const id = setInterval(() => {
+    const s = tracker.snapshot();
+    if (!s.open || s.cancelled) {
+      clearInterval(id);
+      return;
+    }
+    const patch = { elapsedSec: (Date.now() - t0) / 1000 };
+    if (list) {
+      patch.phase = list[i % list.length];
+      i += 1;
+    }
+    const next = tracker.update(patch);
+    if (typeof onTick === "function") onTick(next);
+  }, intervalMs);
+  return () => clearInterval(id);
+}
+
 /**
  * Run `fn` while the tracker is open. Cancel / AbortError complete as
  * `{ cancelled: true }` instead of a successful full run.
@@ -79,6 +114,11 @@ export function createJobTracker() {
 export async function runTrackedJob(tracker, opts, fn) {
   const phase = (opts && (opts.phase || opts.title)) || "Working";
   tracker.open(phase, opts || {});
+  const stopPulse = startJobPulse(tracker, {
+    intervalMs: (opts && opts.pulseMs) || 400,
+    phases: (opts && opts.phases) || null,
+    onTick: (s) => { if (opts && typeof opts.onPulse === "function") opts.onPulse(s); },
+  });
   try {
     const result = await fn({
       signal: tracker.signal(),
@@ -95,6 +135,8 @@ export async function runTrackedJob(tracker, opts, fn) {
     tracker.finish();
     if (cancelled) return { ok: false, cancelled: true, error: err };
     throw err;
+  } finally {
+    stopPulse();
   }
 }
 
@@ -114,9 +156,15 @@ export function createProgressModal() {
     if (titleEl && s.phase && s.open) titleEl.textContent = s.phase;
     if (labelEl) labelEl.textContent = s.open ? s.label : (s.cancelled ? "Cancelled" : "");
     if (barEl) {
-      const max = s.total > 0 ? s.total : 1;
-      barEl.max = max;
-      barEl.value = s.total > 0 ? s.current : (s.open ? 0 : 1);
+      if (s.open && s.indeterminate) {
+        barEl.removeAttribute("value");
+        barEl.max = 1;
+        barEl.setAttribute("data-busy", "1");
+      } else {
+        barEl.removeAttribute("data-busy");
+        barEl.max = s.total > 0 ? s.total : 1;
+        barEl.value = s.total > 0 ? s.current : 1;
+      }
     }
     if (modal) modal.hidden = !s.open;
   }
@@ -136,7 +184,11 @@ export function createProgressModal() {
   });
 
   async function run(title, opts, fn) {
-    const o = { ...(opts || {}), phase: (opts && opts.phase) || title || "Working" };
+    const o = {
+      ...(opts || {}),
+      phase: (opts && opts.phase) || title || "Working",
+      onPulse: render,
+    };
     if (titleEl) titleEl.textContent = title || o.phase;
     const out = await runTrackedJob(tracker, o, async (job) => {
       render();

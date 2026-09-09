@@ -20,7 +20,8 @@ from ..email_extract import (
     infer_gender_from_email,
 )
 from ..playerops import upsert_player
-from ..email_stamp import _stamp_extracted_fields
+from ..email_llm import probe_llm
+from ..email_stamp import _stamp_extracted_fields, reprocess_email
 from ..email_targets import (
     FILE_NEEDS_PLAYER,
     FILE_NEEDS_PLAYER_REASON,
@@ -191,6 +192,37 @@ def bulk_confirm_suggestions(body: EmailBulkDetect, conn=Depends(db_dep)):
             else:
                 still += 1
     return {"confirmed": confirmed, "created": created, "still_unmatched": still}
+
+
+@router.post("/bulk/reprocess")
+def bulk_reprocess(body: EmailBulkDetect, conn=Depends(db_dep)):
+    """Re-run leftover LLM (when on) + extract stamp on stored emails.
+
+    Used by Inbox Reprocess range in small chunks so the overlay can show
+    n of total. Does not insert duplicate rows.
+    """
+    leftover = probe_llm()
+    use_leftover = leftover == "ok"
+    changed: list[dict] = []
+    leftover_calls = 0
+    leftover_hits = 0
+    with conn.cursor() as cur:
+        for eid in body.email_ids or []:
+            rec = reprocess_email(cur, eid, use_leftover=use_leftover)
+            if not rec:
+                continue
+            if rec.get("leftover_called"):
+                leftover_calls += 1
+            if rec.get("leftover_hit"):
+                leftover_hits += 1
+            changed.append(rec)
+    return {
+        "reprocessed": len(changed),
+        "leftover": leftover,
+        "leftover_calls": leftover_calls,
+        "leftover_hits": leftover_hits,
+        "changed": changed,
+    }
 
 
 @router.post("/bulk/classify")

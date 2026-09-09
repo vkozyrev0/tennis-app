@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  jobLabel, isAbortError, createJobTracker, runTrackedJob,
+  jobLabel, isAbortError, createJobTracker, runTrackedJob, startJobPulse,
 } from "./progress_job.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +35,35 @@ await test("progress text includes a count when total is known", () => {
   const s = t.update({ current: 4 });
   assert.equal(s.label, "Classifying — 4 of 12");
   assert.equal(s.open, true);
+  assert.equal(s.indeterminate, false);
+});
+
+await test("overlay label and bar change after update (not stuck at empty 0)", () => {
+  const t = createJobTracker();
+  const opened = t.open("Fetching Gmail and Outlook");
+  assert.equal(opened.indeterminate, true);
+  assert.equal(opened.label, "Fetching Gmail and Outlook");
+  const pulsed = t.update({ elapsedSec: 2 });
+  assert.notEqual(pulsed.label, opened.label);
+  assert.match(pulsed.label, /2s/);
+  const counted = t.update({ phase: "Classifying", current: 3, total: 10 });
+  assert.equal(counted.indeterminate, false);
+  assert.match(counted.label, /Classifying — 3 of 10/);
+});
+
+await test("startJobPulse advances elapsed until stopped", async () => {
+  const t = createJobTracker();
+  t.open("Fetching mailbox");
+  const labels = [];
+  const stop = startJobPulse(t, {
+    intervalMs: 25,
+    phases: ["Connecting mailbox", "Fetching Gmail", "Fetching Outlook"],
+    onTick: (s) => labels.push(s.label),
+  });
+  await new Promise((r) => setTimeout(r, 90));
+  stop();
+  assert.ok(labels.length >= 2, labels.length);
+  assert.notEqual(labels[0], labels[labels.length - 1]);
 });
 
 await test("Cancel marks the job cancelled and aborts the signal", () => {
@@ -86,16 +115,30 @@ await test("inbox batch actions and Help wire the progress modal + Cancel", () =
   assert.match(inbox, /emails\/bulk\/triage/);
   assert.match(inbox, /emails\/bulk\/confirm-suggestions/);
   assert.match(inbox, /cancelled/);
+  assert.match(inbox, /inbox-reprocess/);
+  assert.match(inbox, /emails\/bulk\/reprocess/);
+  assert.match(inbox, /inbox-feeds\/reprocess-ids/);
+  assert.match(inbox, /Analyzing\.\.\./);
+  assert.match(inbox, /leftoverCalls/);
+  assert.match(inbox, /phase: phases\[0\], phases/);
+  assert.match(inbox, /getFullYear/);
+  assert.match(inbox, /fallback === "tournament"/);
+  assert.match(inbox, /No stored copies/);
+  assert.match(inbox, /tournament copies/);
+  assert.doesNotMatch(inbox, /toISOString\(\)\.slice\(0, 10\)/);
   const app = readFileSync(join(here, "../app.js"), "utf8");
   assert.match(app, /createProgressModal/);
   assert.match(app, /runMailJob/);
   const html = readFileSync(join(here, "../index.html"), "utf8");
   assert.match(html, /id="job-progress-modal"/);
   assert.match(html, /id="job-progress-cancel"/);
+  assert.match(html, /id="inbox-reprocess"/);
   assert.match(html, />Cancel</);
   const help = readFileSync(join(here, "help.js"), "utf8");
   assert.match(help, /Cancel/);
   assert.match(help, /progress/i);
+  assert.match(help, /Reprocess range/);
+  assert.match(help, /falls back/i);
   const shell = readFileSync(join(here, "shell.js"), "utf8");
   assert.match(shell, /\.\.\.options/);
   const imp = readFileSync(join(here, "import_ui.js"), "utf8");

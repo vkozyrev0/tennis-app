@@ -22,6 +22,7 @@ import {
   inboxAddPlayerVisible,
   inboxKnownUsta,
   INBOX_ADD_TO_PLAYERS,
+  formatEmailBody,
 } from "./inbox_ui.js";
 import { sessionIsGone } from "./shell.js";
 
@@ -853,34 +854,6 @@ export function createInboxPanel(ctx) {
       o.textContent = (EMAIL_CLASS_META[v] || {}).label || v; sel.appendChild(o);
     }
   }
-  // Format the email body for syntax-highlighted display. Escapes the raw
-  // text first (XSS-safe), then wraps known email-header markers in spans
-  // the CSS colors. Recognizes both forwarding styles:
-  //   Outlook: From: / Sent: / To: / Cc: / Bcc: / Subject: / Date:
-  //   Apple Mail: "On <date>, <name> wrote:"
-  //   Wrapper-injected: [Date: ...] / [To: ...] (added by emails_pdf importer)
-  function _formatEmailBody(raw) {
-    if (!raw) return "";
-    return raw.split("\n").map((line) => {
-      const e = esc(line);
-      // Wrapper-injected metadata at the very top: [Date: …] or [To: …]
-      const meta = e.match(/^\[(Date|To|From|Subject):\s*(.+)\]$/);
-      if (meta) {
-        return `<span class="email-meta">[<span class="email-hdr-key">${meta[1]}:</span> ${meta[2]}]</span>`;
-      }
-      // Standard email-thread header line: From: / Sent: / To: / etc.
-      const hdr = e.match(/^(\s*)(From|To|Cc|Bcc|Subject|Sent|Date|Reply-To):\s*(.*)$/i);
-      if (hdr) {
-        return `${hdr[1]}<span class="email-hdr-key">${hdr[2]}:</span> <span class="email-hdr-val">${hdr[3]}</span>`;
-      }
-      // Quote boundary marker ("On <date>, X wrote:")
-      if (/^On .+ wrote:\s*$/.test(line)) {
-        return `<span class="email-quote-marker">${e}</span>`;
-      }
-      return e;
-    }).join("\n");
-  }
-
   function _reviewPlayerOptions() {
     return mergePlayerDropdownOptions(Object.values(getPlayersById()), _inboxPeople);
   }
@@ -975,7 +948,7 @@ export function createInboxPanel(ctx) {
       confEl.className = k ? `badge badge-${k.cls}` : "";
       confEl.title = k ? k.title : "No player identified yet";
     }
-    document.getElementById("inbox-detail-body").innerHTML = _formatEmailBody(m.body || "");
+    document.getElementById("inbox-detail-body").innerHTML = formatEmailBody(m.body || "");
     document.getElementById("inbox-detail-classification").value = form.classification;
     document.getElementById("inbox-detail-status").value = form.status;
     // Combo overlay does not watch .value — resync so the visible labels match
@@ -1282,16 +1255,21 @@ export function createInboxPanel(ctx) {
     inboxGrid.grid.redraw();
     _inboxBulkRefreshUi();
   });
+  function _isoDateLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
   function _defaultMailWindow() {
     const until = new Date();
-    const since = new Date(until.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const iso = (d) => d.toISOString().slice(0, 10);
+    const since = new Date(until.getFullYear(), until.getMonth(), until.getDate() - 7);
     const sEl = document.getElementById("inbox-mail-since");
     const uEl = document.getElementById("inbox-mail-until");
-    if (sEl && !sEl.value) sEl.value = iso(since);
-    if (uEl && !uEl.value) uEl.value = iso(until);
+    if (sEl && !sEl.value) sEl.value = _isoDateLocal(since);
+    if (uEl && !uEl.value) uEl.value = _isoDateLocal(until);
   }
-  document.getElementById("inbox-get-mails")?.addEventListener("click", async () => {
+  async function _inboxFetchMails({ reprocess = false } = {}) {
     const t = getActive();
     if (!t) { toast("Select a tournament first", false); return; }
     _defaultMailWindow();
@@ -1302,11 +1280,17 @@ export function createInboxPanel(ctx) {
     if (until) q.set("until", until);
     q.set("tournament_id", String(t.id));
     if (document.getElementById("inbox-get-all")?.checked) q.set("get_all", "true");
-    const btn = document.getElementById("inbox-get-mails");
-    if (btn) btn.disabled = true;
-    setMsg("inbox-feed-msg", "fetching Gmail and Outlook…", true);
+    if (reprocess) q.set("reprocess", "true");
+    const getBtn = document.getElementById("inbox-get-mails");
+    const rpBtn = document.getElementById("inbox-reprocess");
+    if (getBtn) getBtn.disabled = true;
+    if (rpBtn) rpBtn.disabled = true;
+    setMsg("inbox-feed-msg", reprocess ? "reprocessing date range…" : "fetching Gmail and Outlook…", true);
+    const phases = reprocess
+      ? ["Connecting mailbox", "Fetching mailbox", "Reprocessing stored mail"]
+      : ["Connecting mailbox", "Fetching Gmail", "Fetching Outlook", "Classifying leftover mail"];
     try {
-      const job = await _runMailJob("Processing mail", { phase: "Fetching Gmail and Outlook" }, ({ signal }) =>
+      const job = await _runMailJob("Processing mail", { phase: phases[0], phases }, ({ signal }) =>
         api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal }));
       if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
       const r = job.result;
@@ -1314,14 +1298,109 @@ export function createInboxPanel(ctx) {
       const d = r.duplicates ?? 0;
       const skipped = (r.skipped || []).join(", ");
       const restored = r.restored ?? 0;
+      const rp = r.reprocessed ?? 0;
       setMsg("inbox-feed-msg",
         `imported ${n} new` + (restored ? ` · restored ${restored}` : "") +
         (d ? ` · ${d} already in inbox` : "") +
+        (rp ? ` · reprocessed ${rp}` : "") +
         (skipped ? ` · skipped ${skipped}` : ""), true);
       await loadInbox();
     } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
-    finally { if (btn) btn.disabled = false; }
+    finally {
+      if (getBtn) getBtn.disabled = false;
+      if (rpBtn) rpBtn.disabled = false;
+    }
+  }
+  document.getElementById("inbox-get-mails")?.addEventListener("click", () => _inboxFetchMails());
+  document.getElementById("inbox-reprocess")?.addEventListener("click", async () => {
+    if (!getActive()) { toast("Select a tournament first", false); return; }
+    if (!(await confirmDialog(
+      "Re-read mailbox mail in this date range and run leftover LLM + classify again on copies already in CourtOps? This does not create duplicate rows.",
+      "Reprocess range", "primary",
+    ))) return;
+    await _inboxReprocessRange();
   });
+  async function _inboxReprocessRange() {
+    const t = getActive();
+    if (!t) { toast("Select a tournament first", false); return; }
+    _defaultMailWindow();
+    const since = document.getElementById("inbox-mail-since")?.value || "";
+    const until = document.getElementById("inbox-mail-until")?.value || "";
+    const q = new URLSearchParams();
+    if (since) q.set("since", since);
+    if (until) q.set("until", until);
+    q.set("tournament_id", String(t.id));
+    if (document.getElementById("inbox-get-all")?.checked) q.set("get_all", "true");
+    const getBtn = document.getElementById("inbox-get-mails");
+    const rpBtn = document.getElementById("inbox-reprocess");
+    if (getBtn) getBtn.disabled = true;
+    if (rpBtn) rpBtn.disabled = true;
+    setMsg("inbox-feed-msg", "reprocessing date range…", true);
+    try {
+      const job = await _runMailJob("Processing mail", { phase: "Fetching mailbox" }, async ({ signal, update }) => {
+        await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal });
+        update({ phase: "Listing stored mail" });
+        const listed = await api("/inbox-feeds/reprocess-ids?" + q.toString(), { signal });
+        const ids = listed.ids || [];
+        const leftover = listed.leftover || "off";
+        const fallback = listed.fallback || null;
+        const rangeLabel = [since, until].filter(Boolean).join(" … ") || "this range";
+        if (!ids.length) {
+          update({ phase: "No stored copies", current: 0, total: 0 });
+          return { ids, leftover, leftoverCalls: 0, fallback, rangeLabel };
+        }
+        const phase = "Analyzing...";
+        update({ phase, current: 0, total: ids.length });
+        if (fallback === "tournament") {
+          toast(`No stored copies in ${rangeLabel} — reprocessing ${ids.length} from this tournament`, true);
+        }
+        if (leftover !== "ok") {
+          toast(leftover === "off"
+            ? "Intelligence is off — leftover LLM will not run (heuristic only)"
+            : "Intelligence sidecar is down — leftover LLM will not run (heuristic only)", false);
+        }
+        let leftoverCalls = 0;
+        for (let i = 0; i < ids.length; i++) {
+          if (signal && signal.aborted) {
+            const err = new Error("cancelled");
+            err.name = "AbortError";
+            throw err;
+          }
+          update({ phase, current: i, total: ids.length });
+          const chunk = await api("/emails/bulk/reprocess", {
+            method: "POST",
+            body: JSON.stringify({ email_ids: [ids[i]] }),
+            signal,
+          });
+          leftoverCalls += chunk.leftover_calls || 0;
+        }
+        update({ phase, current: ids.length, total: ids.length });
+        return { ids, leftover, leftoverCalls, fallback, rangeLabel };
+      });
+      if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
+      const r = job.result || {};
+      const n = (r.ids || []).length;
+      const calls = r.leftoverCalls || 0;
+      const rangeLabel = r.rangeLabel || "this range";
+      if (!n) {
+        setMsg("inbox-feed-msg", `no stored copies in ${rangeLabel}`, false);
+      } else if (r.fallback === "tournament") {
+        setMsg("inbox-feed-msg",
+          `reprocessed ${n} tournament copies (none in ${rangeLabel})` +
+          (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0"),
+          calls > 0);
+      } else {
+        setMsg("inbox-feed-msg",
+          `reprocessed ${n}` + (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0"),
+          calls > 0);
+      }
+      await loadInbox();
+    } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
+    finally {
+      if (getBtn) getBtn.disabled = false;
+      if (rpBtn) rpBtn.disabled = false;
+    }
+  }
   document.getElementById("inbox-clear")?.addEventListener("click", async () => {
     const t = getActive();
     if (!t) { toast("Select a tournament first", false); return; }

@@ -79,6 +79,7 @@ def fetch_inbox_mails(
     until=None,
     tournament_id: int | None = None,
     get_all: bool = False,
+    reprocess: bool = False,
     imap_factory: Callable[..., Any] | None = None,
     http: HttpFn | None = None,
 ) -> dict:
@@ -87,6 +88,8 @@ def fetch_inbox_mails(
     ``get_all`` widens ``since`` back to the event start (or 90 days) so mail
     older than the default 7-day window is requested, then un-hides any
     remaining soft-deleted CourtOps copies for the tournament.
+    ``reprocess`` re-runs classify + leftover stamp on CourtOps copies in the
+    window after the mailbox fetch (no duplicate rows).
     """
     start, end = as_window(since, until)
     if get_all:
@@ -123,6 +126,10 @@ def fetch_inbox_mails(
         + restored
     )
     duplicates = (gmail_out or {}).get("duplicates", 0) + (outlook_out or {}).get("duplicates", 0)
+    reprocessed = 0
+    if reprocess and tournament_id is not None and (start is not None or end is not None):
+        from .email_stamp import reprocess_window
+        reprocessed = reprocess_window(cur, tournament_id, start, end).get("reprocessed", 0)
     return {
         "gmail": gmail_out,
         "outlook": outlook_out,
@@ -130,4 +137,5 @@ def fetch_inbox_mails(
         "imported": imported,
         "duplicates": duplicates,
         "restored": restored,
+        "reprocessed": reprocessed,
     }

@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=3" />
   <link rel="stylesheet" href="/tokens.css?v=9" />
-  <link rel="stylesheet" href="/styles.css?v=130" />
+  <link rel="stylesheet" href="/styles.css?v=132" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -1189,6 +1189,7 @@
                 <input type="checkbox" id="inbox-get-all" /> Get all
               </label>
               <button type="button" id="inbox-get-mails" class="export-btn primary" title="Pull mailbox mail in this date range, including already-read messages. Mail already in CourtOps is not duplicated. Turn on Get all for earlier event mail and to restore a cleared inbox.">Get mails</button>
+              <button type="button" id="inbox-reprocess" class="export-btn" title="Re-read mailbox mail in this date range and run classify + leftover LLM again on copies already in CourtOps. If the range has no stored copies, uses every visible copy for this tournament. Does not create duplicate rows.">Reprocess range</button>
               <span class="msg" id="inbox-feed-msg"></span>
             </div>
           </div>
@@ -1282,10 +1283,9 @@
           </div>
           <div class="inbox-detail-body-label">
             <span class="muted">Body</span>
-            <!-- Styled pre with header-aware highlighting. Body text is
-                 inserted as innerHTML by _formatEmailBody() — escaped first,
-                 then the email-header lines get colored spans. -->
-            <pre id="inbox-detail-body" class="inbox-email-body" tabindex="0" aria-label="Email body"></pre>
+            <!-- Reading pane. Body HTML comes from formatEmailBody()
+                 (escaped text, quote collapse, linkified http(s)). -->
+            <div id="inbox-detail-body" class="inbox-email-body" tabindex="0" aria-label="Email body"></div>
           </div>
           <div class="row">
             <label>Classification
@@ -1763,6 +1763,6 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=281"></script>
+  <script type="module" src="/app.js?v=286"></script>
 </body>
 </html>

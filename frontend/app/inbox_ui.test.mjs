@@ -30,6 +30,7 @@ import {
   inboxAddPlayerVisible,
   inboxKnownUsta,
   INBOX_ADD_TO_PLAYERS,
+  formatEmailBody,
 } from "./inbox_ui.js";
 
 let passed = 0;
@@ -320,6 +321,7 @@ test("Help describes inbox people, Add to Players, Get all, and Outlook", () => 
   assert.match(help, /95%/);
   assert.match(help, /sections do not stack/);
   assert.match(help, /Clear<\/strong> hides the bar/);
+  assert.match(help, /Earlier messages/);
 });
 
 test("inbox source labels map gmail, outlook, and pdf", () => {
@@ -476,6 +478,41 @@ test("inboxKnownUsta uses slot usta when the inbox person has none", () => {
 test("INBOX_ADD_TO_PLAYERS label / className are the shipped strings", () => {
   assert.equal(INBOX_ADD_TO_PLAYERS.label, "Add to Players");
   assert.equal(INBOX_ADD_TO_PLAYERS.className, "inbox-add-to-players");
+});
+
+test("formatEmailBody escapes HTML and linkifies https", () => {
+  const html = formatEmailBody('See <script>x</script> at https://usta.com/x.');
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /class="email-link"/);
+  assert.match(html, /href="https:\/\/usta\.com\/x"/);
+  assert.match(html, /rel="noopener noreferrer"/);
+});
+
+test("formatEmailBody keeps the latest ask and collapses the quoted thread", () => {
+  const html = formatEmailBody(
+    "Please withdraw Jane Smith.\n\nOn Mon, Jane wrote:\nCan we play Saturday?",
+  );
+  assert.match(html, /class="email-latest"/);
+  assert.match(html, /Please withdraw Jane Smith/);
+  assert.match(html, /<details class="email-quoted">/);
+  assert.match(html, /<summary>Earlier messages<\/summary>/);
+  assert.match(html, /email-quote-marker/);
+  assert.equal(html.includes("<details"), true);
+});
+
+test("formatEmailBody does not collapse a forward that is the whole message", () => {
+  const html = formatEmailBody("From: dad@example.com\nSent: Monday\nPlease withdraw Jane.");
+  assert.doesNotMatch(html, /<details/);
+  assert.match(html, /email-hdr-key/);
+});
+
+test("formatEmailBody wraps > quotes and Original Message as a thread", () => {
+  const html = formatEmailBody(
+    "Jane cannot play.\n\n-----Original Message-----\nFrom: parent@example.com\n> old line",
+  );
+  assert.match(html, /Earlier messages/);
+  assert.match(html, /email-quote/);
 });
 
 test("Review and grid markup builders use Add to Players", () => {

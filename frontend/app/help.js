@@ -198,12 +198,23 @@ const SECTIONS = /** @type {HelpSection[]} */ ([
       supply). <kbd>d</kbd> is detect only; <kbd>f</kbd> is mark filed; <kbd>u</kbd>
       toggles Unmatched only.</p>
       <p>Get mails, Detect players, Triage all, Confirm suggestions, bulk classify,
-      and PDF import open a <strong>progress</strong> dialog (phase and n of total
-      when the count is known). <strong>Cancel</strong> stops the in-flight request
-      so the job does not finish as a successful full run.</p>
+      and PDF import open a <strong>progress</strong> dialog that updates while the
+      job runs (phase, elapsed seconds, and n of total when the count is known).
+      <strong>Cancel</strong> stops the in-flight request so the job does not finish
+      as a successful full run.</p>
+      <p><strong>Reprocess range</strong> re-reads mailbox mail in the Mailbox date
+      range, then asks leftover LLM for <em>each</em> stored copy in that window
+      (not only heuristic-other). The overlay shows how many stored copies were
+      selected, then n of total. Inbox lists the whole tournament, not just those
+      dates — if the range has no stored copies, it falls back to every visible
+      copy for this tournament and says so. Turn on <strong>Get all</strong> to
+      skip the date filter. Intelligence must be on and answering; otherwise the
+      dialog reports leftover LLM 0. It does not create duplicate rows.</p>
 
       <h3>Review</h3>
       <p>Click <strong>Review</strong> (or the row) to open the original message.
+      The body reads as a letter; quoted earlier thread is collapsed under
+      <strong>Earlier messages</strong>.
       Classification, status, and <strong>Players detected</strong> are on that
       dialog. Doubles and pairing emails show every named player (one picker each);
       a singles-style email shows one. USTA #s parsed from the body win over a

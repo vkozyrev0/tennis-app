@@ -1,6 +1,7 @@
 // Pure inbox UI helpers (progressive bulk bar + shortcuts map).
 // DOM-free so unit tests can pin the empty/select/bulk visibility contract
 // without AG Grid. Wired from inbox.js.
+import { esc } from "./util.js";
 
 /**
  * Four inbox axes the TD kept mixing up. Queue vs player-match vs
@@ -386,10 +387,6 @@ export function mergePlayerDropdownOptions(catalogPlayers, inboxPeople) {
   return catalogOpts.concat(inboxOpts);
 }
 
-/**
- * Show “Add to Players” when the slot is an unmatched inbox person (or a
- * parsed name/USTA) rather than a real Setup Players catalog id.
- */
 /** USTA digits from the inbox person or the email slot — slot wins gaps. */
 export function inboxKnownUsta(person, slot) {
   const fromPerson = _ustaDigits(person && (person.usta_number || person.usta));
@@ -397,6 +394,97 @@ export function inboxKnownUsta(person, slot) {
   return fromPerson || fromSlot || "";
 }
 
+const _EMAIL_META = /^\[(Date|To|From|Subject):\s*(.+)\]$/;
+const _EMAIL_HDR = /^(\s*)(From|To|Cc|Bcc|Subject|Sent|Date|Reply-To):\s*(.*)$/i;
+const _ON_WROTE = /^On .+ wrote:\s*$/;
+const _ORIG_MSG = /^-----Original Message-----$/i;
+const _FWD_MSG = /^Begin forwarded message:?$/i;
+const _HTTP_URL = /https?:\/\/[^\s<]+/gi;
+
+function _linkifyEscaped(escaped) {
+  return escaped.replace(_HTTP_URL, (url) => {
+    const trail = (url.match(/[),.;!?]+$/) || [""])[0];
+    const href = trail ? url.slice(0, -trail.length) : url;
+    if (!/^https?:\/\//i.test(href)) return url;
+    return `<a class="email-link" href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>${trail}`;
+  });
+}
+
+function _formatEmailLine(line) {
+  const meta = line.match(_EMAIL_META);
+  if (meta) {
+    return `<span class="email-meta">[<span class="email-hdr-key">${esc(meta[1])}:</span> ${_linkifyEscaped(esc(meta[2]))}]</span>`;
+  }
+  const hdr = line.match(_EMAIL_HDR);
+  if (hdr) {
+    return `${esc(hdr[1])}<span class="email-hdr-key">${esc(hdr[2])}:</span> <span class="email-hdr-val">${_linkifyEscaped(esc(hdr[3]))}</span>`;
+  }
+  const e = _linkifyEscaped(esc(line));
+  if (_ON_WROTE.test(line) || _ORIG_MSG.test(line.trim()) || _FWD_MSG.test(line.trim())) {
+    return `<span class="email-quote-marker">${e}</span>`;
+  }
+  return e;
+}
+
+function _formatEmailBlock(lines) {
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (/^\s*>/.test(lines[i])) {
+      const chunk = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) chunk.push(lines[i++]);
+      out.push(`<blockquote class="email-quote">${chunk.map(_formatEmailLine).join("\n")}</blockquote>`);
+      continue;
+    }
+    out.push(_formatEmailLine(lines[i++]));
+  }
+  return out.join("\n");
+}
+
+function _quoteStartIndex(lines) {
+  let body = 0;
+  while (
+    body < lines.length &&
+    (lines[body].trim() === "" || _EMAIL_META.test(lines[body].trim()))
+  ) {
+    body += 1;
+  }
+  for (let i = body; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (_ON_WROTE.test(t) || _ORIG_MSG.test(t) || _FWD_MSG.test(t)) return i;
+    if (/^From:\s+\S/i.test(t) && i > body) {
+      const next = (lines[i + 1] || "").trim();
+      if (/^(Sent|To|Subject|Date):/i.test(next)) return i;
+    }
+    if (t.startsWith(">") && i > body) return i;
+  }
+  return -1;
+}
+
+/** XSS-safe HTML for the Review body: latest ask, then a collapsed thread. */
+export function formatEmailBody(raw) {
+  if (!raw) return "";
+  const lines = String(raw).split(/\r?\n/);
+  const q = _quoteStartIndex(lines);
+  const latest = q > 0 ? lines.slice(0, q) : lines;
+  const quoted = q > 0 ? lines.slice(q) : [];
+  const latestHasText = latest.some((l) => l.trim() && !_EMAIL_META.test(l.trim()));
+  if (q <= 0 || !latestHasText || !quoted.length) {
+    return `<div class="email-latest">${_formatEmailBlock(lines)}</div>`;
+  }
+  return (
+    `<div class="email-latest">${_formatEmailBlock(latest)}</div>` +
+    `<details class="email-quoted">` +
+    `<summary>Earlier messages</summary>` +
+    `<div class="email-quoted-body">${_formatEmailBlock(quoted)}</div>` +
+    `</details>`
+  );
+}
+
+/**
+ * Show “Add to Players” when the slot is an unmatched inbox person (or a
+ * parsed name/USTA) rather than a real Setup Players catalog id.
+ */
 export function inboxAddPlayerVisible({ catalogPlayerId, inboxPerson, catalogByUsta } = {}) {
   const pid = catalogPlayerId == null ? "" : String(catalogPlayerId).trim();
   if (pid && parseInboxOptionValue(pid) == null) return false;

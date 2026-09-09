@@ -103,6 +103,7 @@ def test_fetch_inbox_mails_forwards_tournament_id(monkeypatch):
     assert seen == {"g": 42, "o": 42}
     assert out["imported"] == 3
     assert out["duplicates"] == 3
+    assert out["reprocessed"] == 0
 
 
 def test_ready_helpers_require_enabled_and_credentials():
@@ -350,6 +351,177 @@ def test_graph_fetch_parses_string_cursor():
     kept, cursor = _graph_fetch(row, http=_FakeGraph([]), since=since, until=until)
     assert kept == []
     assert cursor is not None
+
+
+@_needs_db
+def test_reprocess_window_restamps_existing_email_not_duplicate(_admin):
+    """Date-range reprocess re-classifies stored mail; it does not insert a row."""
+    t = client.post("/api/tournaments", json={
+        "name": "Reprocess " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Withdrawal request for my daughter",
+        "body": "Please withdraw Anna Brown from the tournament due to injury.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    stale = client.put(f"/api/emails/{email['id']}", json={
+        "tournament_id": t["id"], "classification": "other", "status": "new",
+        "detected_player_id": None,
+    })
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["classification"] == "other"
+    before = client.get(f"/api/emails?tournament_id={t['id']}")
+    assert before.status_code == 200
+    n_before = len(before.json())
+    r = client.post(
+        f"/api/inbox-feeds/fetch?since=2026-08-01&until=2026-12-31"
+        f"&tournament_id={t['id']}&reprocess=true"
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["reprocessed"] >= 1
+    after = client.get(f"/api/emails?tournament_id={t['id']}")
+    assert after.status_code == 200
+    rows = after.json()
+    assert len(rows) == n_before
+    got = next(m for m in rows if m["id"] == email["id"])
+    assert got["classification"] == "withdrawal"
+
+
+@_needs_db
+def test_bulk_reprocess_calls_leftover_even_when_heuristic_matches(monkeypatch, _admin):
+    """Reprocess range must hit leftover LLM, not only heuristic-other."""
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    n = {"calls": 0}
+
+    def fake_leftover(subject, body, bypass_cache=False):
+        n["calls"] += 1
+        assert bypass_cache is True
+        return {
+            "intent": "withdrawal",
+            "players": [{"name": "Anna Brown", "usta": None}],
+            "confidence": 0.9,
+        }
+
+    monkeypatch.setattr("app.email_llm.leftover_model_intent", fake_leftover)
+    monkeypatch.setattr("app.email_llm.llm_enabled", lambda: True)
+    monkeypatch.setattr("app.email_llm.probe_llm", lambda timeout=1.5: "ok")
+    t = client.post("/api/tournaments", json={
+        "name": "LeftoverRp " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Withdrawal request for my daughter",
+        "body": "Please withdraw Anna Brown from the tournament due to injury.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    listed = client.get(
+        f"/api/inbox-feeds/reprocess-ids?since=2026-08-01&until=2026-12-31"
+        f"&tournament_id={t['id']}"
+    )
+    assert listed.status_code == 200, listed.text
+    assert email["id"] in listed.json()["ids"]
+    assert listed.json()["leftover"] == "ok"
+    r = client.post("/api/emails/bulk/reprocess", json={"email_ids": [email["id"]]})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["reprocessed"] == 1
+    assert body["leftover"] == "ok"
+    assert body["leftover_calls"] == 1
+    assert n["calls"] >= 1
+    row = next(
+        m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+        if m["id"] == email["id"]
+    )
+    names = {(p.get("name") or "").casefold() for p in (row.get("detected_name_pairs") or [])}
+    assert "anna brown" in names
+
+
+@_needs_db
+def test_reprocess_ids_date_until_includes_next_utc_morning(_admin):
+    """US-local until-day still lists mail whose UTC received_at is next morning."""
+    from app.db import get_conn
+
+    t = client.post("/api/tournaments", json={
+        "name": "TzSlack " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Withdrawal request for my daughter",
+        "body": "Please withdraw Anna Brown from the tournament due to injury.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_message SET received_at = %s WHERE id = %s",
+                (datetime(2026, 9, 9, 1, 40, 48, tzinfo=timezone.utc), email["id"]),
+            )
+        conn.commit()
+    listed = client.get(
+        f"/api/inbox-feeds/reprocess-ids?since=2026-09-02&until=2026-09-08"
+        f"&tournament_id={t['id']}"
+    )
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert email["id"] in body["ids"]
+    assert body["fallback"] is None
+    assert body["window_count"] >= 1
+
+
+@_needs_db
+def test_reprocess_ids_empty_window_falls_back_to_tournament(_admin):
+    """Grid is tournament-wide; an empty picker window must not reprocess 0."""
+    from app.db import get_conn
+
+    t = client.post("/api/tournaments", json={
+        "name": "EmptyWin " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-05-01", "play_end_date": "2026-05-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Withdrawal request for my daughter",
+        "body": "Please withdraw Anna Brown from the tournament due to injury.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE email_message SET received_at = %s WHERE id = %s",
+                (datetime(2026, 5, 21, 16, 42, 56, tzinfo=timezone.utc), email["id"]),
+            )
+        conn.commit()
+    listed = client.get(
+        f"/api/inbox-feeds/reprocess-ids?since=2026-09-01&until=2026-09-08"
+        f"&tournament_id={t['id']}"
+    )
+    assert listed.status_code == 200, listed.text
+    body = listed.json()
+    assert body["window_count"] == 0
+    assert body["fallback"] == "tournament"
+    assert email["id"] in body["ids"]
+    assert body["tournament_count"] >= 1
+    all_listed = client.get(
+        f"/api/inbox-feeds/reprocess-ids?since=2026-09-01&until=2026-09-08"
+        f"&tournament_id={t['id']}&get_all=true"
+    )
+    assert all_listed.status_code == 200, all_listed.text
+    got = all_listed.json()
+    assert got["fallback"] is None
+    assert email["id"] in got["ids"]
+    assert got["count"] == got["tournament_count"]
 
 
 def test_inbox_feeds_fetch_errors(monkeypatch, _admin):
