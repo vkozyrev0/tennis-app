@@ -86,6 +86,43 @@ export function inboxRowClickOpensReview(target) {
   );
 }
 
+function _nonEmpty(v) {
+  return v != null && String(v).trim() !== "";
+}
+
+function _isBlank(v) {
+  if (v == null) return true;
+  if (typeof v === "string" && v.trim() === "") return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
+/** Parsed (name, usta) pairs from the email, whatever shape the row stored. */
+export function inboxDetectedPairs(m) {
+  let p = m && m.detected_name_pairs;
+  if (typeof p === "string") {
+    try { p = JSON.parse(p); } catch { return []; }
+  }
+  if (Array.isArray(p)) return p.filter(Boolean);
+  if (p && typeof p === "object" && (_nonEmpty(p.name) || _nonEmpty(p.usta))) return [p];
+  return [];
+}
+
+/**
+ * Grid cell clicks can pass a sparse row (column fields only). Fill blanks
+ * from the last full inbox payload so Review sees the same detect fields
+ * the Confidence column used.
+ */
+export function mergeInboxReviewRow(partial, live) {
+  if (!live) return partial || {};
+  if (!partial) return { ...live };
+  const out = { ...live, ...partial };
+  for (const [k, v] of Object.entries(live)) {
+    if (_isBlank(out[k]) && !_isBlank(v)) out[k] = v;
+  }
+  return out;
+}
+
 /**
  * Detected-player slots for the review modal. One row for a single-player
  * email; two (or more) for doubles / pairing / parsed name pairs.
@@ -93,8 +130,7 @@ export function inboxRowClickOpensReview(target) {
 export function reviewDetectedPlayers(m) {
   if (!m) return [{ role: "player", id: "", name: "", usta: "", hint: "" }];
   const cls = String(m.classification || "");
-  const pairs = Array.isArray(m.detected_name_pairs)
-    ? m.detected_name_pairs.filter(Boolean) : [];
+  const pairs = inboxDetectedPairs(m);
   const memberIds = Array.isArray(m.detected_member_ids)
     ? m.detected_member_ids.filter((id) => id != null && id !== "") : [];
   const memberNames = Array.isArray(m.detected_member_names) ? m.detected_member_names : [];
@@ -102,6 +138,7 @@ export function reviewDetectedPlayers(m) {
     ? String(m.detected_player_id) : "";
   const partner = m.detected_partner_id != null && m.detected_partner_id !== ""
     ? String(m.detected_partner_id) : "";
+  const textUsta = String(m.detected_usta_text || "").split(",")[0].trim();
   const hintAt = (i, fallbackName, fallbackUsta) => {
     const p = pairs[i] || {};
     const name = String(p.name || fallbackName || "").trim();
@@ -126,7 +163,7 @@ export function reviewDetectedPlayers(m) {
     const h = hintAt(
       i,
       i === 0 ? m.detected_player_name : m.detected_partner_name,
-      i === 0 ? m.detected_usta : m.detected_partner_usta,
+      i === 0 ? (m.detected_usta || textUsta) : m.detected_partner_usta,
     );
     slots.push({ role: i === 0 ? "player" : "partner", id, ...h });
   }
@@ -185,12 +222,17 @@ export function inboxConfidence(m) {
   if (!m) return null;
   const cls = String(m.classification || "");
   const fileIntent = FILE_NEEDS_PLAYER.includes(cls);
-  const hasMatch = m.detected_player_id != null && String(m.detected_player_id).trim() !== "";
-  const pairs = m.detected_name_pairs;
+  const hasMatch = _nonEmpty(m.detected_player_id);
+  const pairs = inboxDetectedPairs(m);
   const hasSuggestion = hasMatch
-    || (Array.isArray(pairs) && pairs.length > 0)
-    || !!(m.detected_usta_text)
-    || !!(m.detected_player_name);
+    || pairs.length > 0
+    || _nonEmpty(m.detected_usta_text)
+    || _nonEmpty(m.detected_player_name)
+    || _nonEmpty(m.detected_partner_name)
+    || _nonEmpty(m.detected_usta)
+    || _nonEmpty(m.detected_partner_usta)
+    || (Array.isArray(m.detected_member_names) && m.detected_member_names.some(_nonEmpty))
+    || (Array.isArray(m.detected_member_ids) && m.detected_member_ids.length > 0);
   if (hasMatch) {
     const rawTier = _CONF_TIER[m.detected_match_kind] || 2;
     let tier = rawTier;

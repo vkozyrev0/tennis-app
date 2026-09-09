@@ -22,6 +22,8 @@ import {
   FILE_NEEDS_PLAYER_REASON,
   inboxConfidence,
   inboxConfidenceText,
+  mergeInboxReviewRow,
+  inboxDetectedPairs,
   inboxSourceLabel,
   INBOX_OPTION_PREFIX,
   inboxOptionValue,
@@ -193,6 +195,10 @@ test("confidence formatter does not nest hstr strings (escaped markup)", () => {
   assert.match(src, /hstr`\$\{raw\(badge\)\}`/);
   assert.match(src, /classified in \$\{ms\} ms/);
   assert.match(src, /inbox-detail-confidence/);
+  assert.match(src, /function _paintInboxDetailConfidence/);
+  assert.match(src, /_inboxRowsById/);
+  assert.match(src, /mergeInboxReviewRow/);
+  assert.match(src, /_paintInboxDetailConfidence\(m\)/);
   assert.doesNotMatch(src, /classified-ms/);
 });
 
@@ -258,12 +264,55 @@ test("classified withdrawal with a player suggestion is not Low", () => {
   assert.equal(inboxConfidenceText(null), "");
 });
 
+test("empty player name still yields grid-style Low/Medium from usta_text", () => {
+  const low = inboxConfidence({
+    classification: "other",
+    detected_player_id: null,
+    detected_player_name: "",
+    detected_usta_text: "1788908477",
+  });
+  assert.equal(inboxConfidenceText(low), "Low 35%");
+  const med = inboxConfidence({
+    classification: "withdrawal",
+    detected_player_id: null,
+    detected_player_name: "",
+    detected_usta_text: "2019424126",
+  });
+  assert.equal(inboxConfidenceText(med), "Medium 60%");
+  const doubles = inboxConfidence({
+    classification: "doubles",
+    detected_player_id: null,
+    detected_name_pairs: [{ name: "Katalina Rout", usta: "2018745038" }],
+  });
+  assert.equal(inboxConfidenceText(doubles), "Medium 60%");
+  assert.equal(inboxDetectedPairs({ detected_name_pairs: '{"name":"A","usta":"1"}' }).length, 1);
+});
+
+test("review modal merges a sparse grid row with the live inbox payload", () => {
+  const live = {
+    id: 26, classification: "other", subject: "USTA",
+    detected_player_id: null, detected_player_name: "",
+    detected_usta_text: "1788908477", body: "please see attached",
+  };
+  const partial = { id: 26, classification: "other", subject: "USTA", from_address: "td@usta.net" };
+  assert.equal(inboxConfidence(partial), null);
+  const merged = mergeInboxReviewRow(partial, live);
+  assert.equal(inboxConfidenceText(inboxConfidence(merged)), "Low 35%");
+  assert.equal(merged.body, "please see attached");
+  const wd = mergeInboxReviewRow(
+    { id: 22, classification: "withdrawal", subject: "Withdraw" },
+    { id: 22, classification: "withdrawal", detected_usta_text: "2019424126" },
+  );
+  assert.equal(inboxConfidenceText(inboxConfidence(wd)), "Medium 60%");
+});
+
 test("inbox Review control and non-editor row click open the review modal", () => {
   const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "inbox.js"), "utf8");
-  assert.match(src, /stopPropagation\(\);\s*_openInboxDetail\(m\)/);
+  assert.match(src, /stopPropagation\(\);/);
+  assert.match(src, /_openInboxDetail\(_reviewEmail\(m, cell\)\)/);
   assert.match(src, /inboxGrid\.grid\.on\("rowClick"/);
   assert.match(src, /inboxRowClickOpensReview/);
-  assert.match(src, /_openInboxDetail\(data\)/);
+  assert.match(src, /_openInboxDetail\(_reviewEmail\(data\)\)/);
   const fake = (sel) => ({ closest: (q) => (sel.split(",").some((s) => q.includes(s.trim())) ? {} : null) });
   assert.equal(inboxRowClickOpensReview(null), true);
   assert.equal(inboxRowClickOpensReview({ closest: () => null }), true);

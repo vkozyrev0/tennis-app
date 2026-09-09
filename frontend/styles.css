@@ -253,7 +253,13 @@ header h1 {
    Latest ask is the first block; quoted thread sits in a collapsed
    disclosure with a quote rail. */
 .inbox-detail-subject { margin: 0 0 0.4rem 0; }
-.inbox-detail-meta { font-size: 0.85rem; margin-bottom: 0.6rem; }
+.inbox-detail-meta {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; align-items: center;
+  font-size: 0.85rem; margin-bottom: 0.6rem;
+}
+.inbox-detail-confidence-wrap {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+}
 .inbox-email-body,
 #inbox-detail-body {
   width: 100%; margin: 0.25rem 0 0.75rem;

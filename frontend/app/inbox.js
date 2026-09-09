@@ -15,6 +15,7 @@ import {
   fileWithoutPlayerGate,
   inboxConfidence,
   inboxConfidenceText,
+  mergeInboxReviewRow,
   inboxSourceLabel,
   mergePlayerDropdownOptions,
   parseInboxOptionValue,
@@ -493,7 +494,10 @@ export function createInboxPanel(ctx) {
         btn.textContent = "Review";
         btn.title = "Open the full email in a modal";
         btn.setAttribute("aria-label", "Review email");
-        btn.addEventListener("click", (ev) => { ev.stopPropagation(); _openInboxDetail(m); });
+        btn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          _openInboxDetail(_reviewEmail(m, cell));
+        });
         return btn;
       } },
     { title: "Subject", field: "subject", minWidth: 110, widthGrow: 2, formatter: (c) => {
@@ -926,7 +930,33 @@ export function createInboxPanel(ctx) {
 
   let _inboxDetailOpenGen = 0;
   let _inboxDetailEmail = null;
+  const _inboxRowsById = new Map();
+  function _rememberInboxRow(m) {
+    if (!m || m.id == null) return;
+    _inboxRowsById.set(m.id, mergeInboxReviewRow(m, _inboxRowsById.get(m.id)));
+  }
+  function _reviewEmail(m, cell) {
+    const id = m && m.id;
+    let gridRow = null;
+    try { gridRow = cell && cell.getRow && cell.getRow().getData(); } catch (_) {}
+    const live = (id != null ? _inboxRowsById.get(id) : null) || gridRow;
+    return mergeInboxReviewRow(m, live);
+  }
+  function _paintInboxDetailConfidence(m) {
+    const confEl = document.getElementById("inbox-detail-confidence");
+    if (!confEl) return;
+    const clsSel = document.getElementById("inbox-detail-classification");
+    const row = {
+      ...(m || {}),
+      classification: (clsSel && clsSel.value) || (m && m.classification) || "",
+    };
+    const k = _inboxConfidence(row);
+    confEl.textContent = k ? inboxConfidenceText(k) : "—";
+    confEl.className = k ? `badge badge-${k.cls}` : "muted";
+    confEl.title = k ? k.title : "No player identified yet";
+  }
   function _openInboxDetail(m) {
+    m = _reviewEmail(m);
     const form = reviewFormState(m);
     const gen = ++_inboxDetailOpenGen;
     _populateInboxClassSelect();
@@ -941,13 +971,6 @@ export function createInboxPanel(ctx) {
     document.getElementById("inbox-detail-to").textContent = m.to_address || "—";
     document.getElementById("inbox-detail-received").textContent = (m.received_at || "").slice(0, 16).replace("T", " ");
     document.getElementById("inbox-detail-source").textContent = inboxSourceLabel(m.ingest_source);
-    const confEl = document.getElementById("inbox-detail-confidence");
-    if (confEl) {
-      const k = _inboxConfidence(m);
-      confEl.textContent = k ? inboxConfidenceText(k) : "—";
-      confEl.className = k ? `badge badge-${k.cls}` : "";
-      confEl.title = k ? k.title : "No player identified yet";
-    }
     document.getElementById("inbox-detail-body").innerHTML = formatEmailBody(m.body || "");
     document.getElementById("inbox-detail-classification").value = form.classification;
     document.getElementById("inbox-detail-status").value = form.status;
@@ -961,6 +984,7 @@ export function createInboxPanel(ctx) {
     // previous email's Withdrawal/filed values cannot leak into the next open.
     _syncInboxReasonRow(form.classification, form.reason);
     _renderInboxDetailPlayers(m, form.classification);
+    _paintInboxDetailConfidence(m);
     // Amendment picker: the earlier email this one corrects + the superseded flag.
     _populateInboxAmendsSelect(m, gen);
     setMsg("inbox-detail-msg", "", true);
@@ -981,7 +1005,11 @@ export function createInboxPanel(ctx) {
   document.getElementById("inbox-detail-classification")
     ?.addEventListener("change", (e) => {
       _syncInboxReasonRow(e.target.value);
-      if (_inboxDetailEmail) _renderInboxDetailPlayers(_inboxDetailEmail, e.target.value);
+      if (_inboxDetailEmail) {
+        _inboxDetailEmail = { ..._inboxDetailEmail, classification: e.target.value };
+        _renderInboxDetailPlayers(_inboxDetailEmail, e.target.value);
+        _paintInboxDetailConfidence(_inboxDetailEmail);
+      }
     });
   // Fill the "corrects earlier email" picker with the other emails in this
   // email's tournament, select the current link, and show the superseded flag.
@@ -1068,7 +1096,7 @@ export function createInboxPanel(ctx) {
   inboxGrid.grid.on("rowClick", (ev, row) => {
     if (!inboxRowClickOpensReview(ev && ev.target)) return;
     const data = row && row.getData && row.getData();
-    if (data) _openInboxDetail(data);
+    if (data) _openInboxDetail(_reviewEmail(data));
   });
   document.getElementById("inbox-detail-close").addEventListener("click", _closeInboxDetail);
   document.getElementById("inbox-detail-save").addEventListener("click", async () => {
@@ -1145,6 +1173,7 @@ export function createInboxPanel(ctx) {
           || res.detected_name_pairs || m.detected_name_pairs,
       });
       _inboxDetailEmail = m;
+      _rememberInboxRow(m);
       try {
         for (const row of inboxGrid.grid.getRows()) {
           if (row.getData().id !== _inboxDetailId) continue;
@@ -1168,6 +1197,7 @@ export function createInboxPanel(ctx) {
       if (typeof clsSel._comboSync === "function") clsSel._comboSync();
       _syncInboxReasonRow(res.classification, m.detected_reason);
       _renderInboxDetailPlayers(m, res.classification);
+      _paintInboxDetailConfidence(m);
       const pairHint = (m.detected_name_pairs || []).map((p) => p && p.name).filter(Boolean);
       const who = (det.detected_member_names && det.detected_member_names.length > 1)
         ? det.detected_member_names.join(" + ")
@@ -1798,6 +1828,8 @@ export function createInboxPanel(ctx) {
       _progress(-1);
     }
     await _loadInboxPeople();
+    _inboxRowsById.clear();
+    for (const r of rows) _rememberInboxRow(r);
     inboxGrid.setData(rows);
     // Drop selection ids that are no longer on the page (tournament switch /
     // filter), then refresh bulk bar vs select-hint.
