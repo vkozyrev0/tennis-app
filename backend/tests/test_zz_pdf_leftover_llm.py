@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 from app.email_llm import (
-    INTENTS, extract_email, leftover_model_intent, leftover_prompt, probe_llm,
+    INTENTS,
+    leftover_model_intent,
+    leftover_prompt,
+    probe_llm,
 )
 from app.importer import _parse_pdf_emails
 

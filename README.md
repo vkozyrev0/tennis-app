@@ -134,6 +134,41 @@ backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py [--write-findings]
 
 Run them **one at a time** (parallel logins can trip the process-local throttle).
 
+## Lint (required before every check-in)
+
+**Every code change — backend or frontend — must run both linters and fix every
+finding before it is committed.** CI enforces the same two commands
+(`.github/workflows/docker.yml`, job `lint`, which the image build depends on),
+so a lint-dirty change fails the build. Fix the finding; do not widen the
+config, add a blanket ignore, or silence the rule.
+
+```bash
+# Python — ruff, configured in ruff.toml (repo root; covers backend/ + scripts/)
+python -m ruff check .            # must print "All checks passed!"
+python -m ruff check . --fix      # apply the safe autofixes first, then re-run
+
+# Frontend JS — ESLint flat config in eslint.config.mjs (repo root)
+npm ci                            # once: installs the pinned eslint dev-tooling
+npx eslint frontend               # must exit 0 and print nothing
+npx eslint frontend --fix         # apply the autofixes first, then re-run
+```
+
+Both configs state their rule selection explicitly: `ruff.toml` selects the
+pycodestyle/pyflakes/isort families (target Python 3.12), and
+`eslint.config.mjs` starts from `@eslint/js` recommended plus `eqeqeq`,
+`no-var`, `prefer-const`, `no-throw-literal`, with the documented
+`allowEmptyCatch` / `_`-prefix options for the codebase's existing idioms.
+
+`ruff` is pinned in CI (`pip install ruff==0.16.8`; any 0.16.x locally). ESLint
+is pinned in `package.json` and installed by `npm ci`. The frontend still has
+**no build step**: npm supplies the linter only, `node_modules/` sits at the
+repo root (outside the served `frontend/` tree), and nothing in `frontend/`
+changes shape because of it.
+
+The DOM-free frontend checks (`frontend/app/*.test.mjs`, including
+`modules.test.mjs`, which verifies every module import resolves) run with
+`node frontend/app/<name>.test.mjs`.
+
 ## Docs
 
 Start at **[docs/README.md](docs/README.md)**. For how it's built — architecture,

@@ -128,10 +128,10 @@ def _detect_player_for(cur, tournament_id: int, subject: str, body: str,
         best, best_at = None, None
         for r in rows:
             f = (r["first_name"] or "").strip().lower()
-            l = (r["last_name"] or "").strip().lower()
-            if not f or not l:
+            ln = (r["last_name"] or "").strip().lower()
+            if not f or not ln:
                 continue
-            for form in (f"{f} {l}", f"{l}, {f}"):
+            for form in (f"{f} {ln}", f"{ln}, {f}"):
                 at = hay_low.find(form)
                 if at >= 0 and (best_at is None or at < best_at):
                     best, best_at = r, at

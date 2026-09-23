@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app import email_extract, security
-from app.db import db_dep, get_conn
+from app.db import get_conn
 from app.main import app
 from app.routers import auth as auth_mod
 from app.triage import classify
@@ -129,6 +129,7 @@ def test_merge_conflict_note_and_http_bk_fail(monkeypatch):
                           files={"file": ("o.csv", f"first_name,last_name\nBo,{uuid.uuid4().hex[:5]}\n", "text/csv")}))
     bid3 = up3["batch_id"]
     from fastapi import HTTPException as HE
+
     from app import importer
 
     def _http(*_a, **_k):

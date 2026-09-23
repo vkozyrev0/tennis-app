@@ -1,0 +1,15 @@
+{
+  "name": "courtops-lint",
+  "private": true,
+  "type": "module",
+  "description": "Node dev-tooling for the CourtOps linters. The app itself has no build step: the browser loads frontend/ straight from disk.",
+  "scripts": {
+    "lint": "eslint frontend",
+    "lint:fix": "eslint frontend --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "globals": "17.12.0"
+  }
+}

@@ -70,7 +70,7 @@ export function createPrintDoc(ctx) {
     <div class="noprint"><button onclick="window.print()">${esc(printLabel)}</button>${csvBtn} <button onclick="window.close()">Close</button></div>
     <script>${csvScript}
       window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 250); });
-    <\/script>
+    </script>
   </body></html>`);
     win.document.close();
     return true;

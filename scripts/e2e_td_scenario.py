@@ -28,6 +28,7 @@ import http.cookiejar
 import io
 import json
 import os
+import random
 import sys
 import urllib.error
 import urllib.request
@@ -47,8 +48,6 @@ try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass
-
-import random
 
 RUN = uuid.uuid4().hex[:6]          # internal run id (logins/USTA base; not shown in names)
 TODAY = date.today()
@@ -362,7 +361,10 @@ def run(base_url: str):
 
     def girl():
         return next(_girl), next(_surname)
-    pc = girl(); pi = girl(); pw = girl(); pa = girl()   # (first, last) per girls'-division player
+    pc = girl()
+    pi = girl()
+    pw = girl()
+    pa = girl()   # (first, last) per girls'-division player
     csv = (
         "usta_number,first_name,last_name,gender,age_division,t_shirt_size,selection_status\n"
         f"{p_complete},{pc[0]},{pc[1]},female,G16,YM,selected\n"

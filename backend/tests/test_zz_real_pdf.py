@@ -3,11 +3,10 @@
 It exercises the full PDF email path — pdfplumber parse → triage → pair
 detection — against the messy shapes real parents write (quoted reply chains,
 names only / no USTA numbers, glyph-quadrupled labels)."""
+import uuid
 from pathlib import Path
 
 import pytest
-import uuid
-
 from fastapi.testclient import TestClient
 
 from app.db import get_conn

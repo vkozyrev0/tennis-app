@@ -5,8 +5,7 @@ import {
   humanizeDetail as _humanizeDetail,
 } from "./app/util.js";
 import {
-  SHIRT_CODES as _SHIRT_CODES, SHIRT_LABEL as _SHIRT_LABEL,
-  SHIRT_LABELS, SIZE_TOKEN as _SIZE_TOKEN,
+  SHIRT_LABELS,
 } from "./app/shirts.js";
 import { rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId } from "./app/roster_prefill.js";
 import { createGridFactories } from "./app/grids.js";
@@ -32,7 +31,7 @@ import {
   officialLabel, siteLabel, playerLabel, typeLabel, createCertCatalog, DEFAULT_CERTS,
 } from "./app/labels.js";
 import { createSelectRefresh } from "./app/selects.js";
-import { labelHeaderFilters as _labelHeaderFilters, reflectAriaSort as _reflectAriaSort } from "./app/grid_a11y.js";
+import { reflectAriaSort as _reflectAriaSort } from "./app/grid_a11y.js";
 import { createPrereqCallout } from "./app/prereq.js";
 import { createNavCounts, NAV_COUNT_TABS } from "./app/nav_counts.js";
 import {
@@ -45,7 +44,7 @@ import { createAssignmentsPanel } from "./app/assignments_ui.js";
 import { createInboxPanel } from "./app/inbox.js";
 import { createProgressModal } from "./app/progress_job.js";
 import { createReportsPanel } from "./app/reports.js";
-import { createStaffPanel } from "./app/staff.js";
+import { createStaffPanel, STAFF_ROLES as _STAFF_ROLES } from "./app/staff.js";
 import { createDashboardPanel } from "./app/dashboard.js";
 import { createPlayer360 } from "./app/player360.js";
 import { createIncidentsPanel } from "./app/incidents.js";
@@ -142,7 +141,7 @@ const certLabel = (v) => _certs.certLabel(v);
 
 // D11: shared select refresh + player-ref helpers
 const {
-  refreshAllSelects, fillPlayerRef, fillPlayerRefs, expandPlayerRef,
+  refreshAllSelects, fillPlayerRef, expandPlayerRef,
 } = createSelectRefresh({
   getOfficialsById: () => officialsById,
   getSitesById: () => sitesById,
@@ -387,7 +386,6 @@ window.addEventListener("hashchange", () => { restorePanelFromUrl(); });
 
 // =================== Active tournament state ===================
 let active = null;
-let lastSelectedTournamentId = null;
 const activeSelect = document.getElementById("active-tournament");
 // Active-tournament-changed event (P2 #11c). `active` stays a module-global
 // (read by hundreds of guards); this owns only the CHANGE event so the cascade
@@ -618,7 +616,7 @@ async function refreshHealth() {
       dash.textContent = intelStatusLine(h.llm);
       dash.className = h.llm === "down" ? "warn dash-intel" : "muted dash-intel";
     }
-  } catch (e) {
+  } catch {
     fail();
   }
 }
@@ -684,7 +682,9 @@ const { gotoImport, buildImportPage } = createImportPage({
 
 
 // D11: assignments panel
-const { loadAssignments, respChip: _respChip, filterByResponse: _filterAsgByResponse } = createAssignmentsPanel({
+const {
+  loadAssignments, respChip: _respChip, filterByResponse: _filterAsgByResponse, loadRoomBlocks,
+} = createAssignmentsPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, openForm,
   html, hstr, raw, esc, money, fmtDOW, fillSelect, officialLabel, siteLabel,
   certLabel, chip, makeMenuButton, scheduleComboSync, syncCombos, prereqCallout,
@@ -727,6 +727,9 @@ const { loadAvailability } = createAvailabilityPanel({
 });
 
 // D11: review inbox panel
+// The pairing-avoidance member rows live in createPairingDoublesPanel (created
+// below, after the inbox); same lazy-refs pattern as _rosterRefs.
+const _pairingRefs = {};
 const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
   html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel, officialLabel,
@@ -740,6 +743,8 @@ const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel(
   rosterAddFromEmail: inboxAddToRoster,
   rosterAddBothFromEmail: inboxAddBothToRoster,
   playersCrudRefresh: () => _rosterRefs.playersCrudRefresh(),
+  getPairingMembersBox: () => _pairingRefs.pairingMembersBox,
+  getPairingMemberRow: () => _pairingRefs.pairingMemberRow,
   sizeLists,
   runMailJob,
 });
@@ -747,7 +752,7 @@ _rosterRefs.loadInbox = loadInbox;
 
 // D11: Part B lists (late, withdrawals, sched/divflex, player hotels)
 const {
-  loadLate, loadWithdrawals, loadCvb, loadHotelSummary, loadLodgingSummary,
+  loadLate, loadWithdrawals,
   schedList, divflexList, photelList,
 } = createPartBPanels({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
@@ -767,16 +772,20 @@ const { loadTshirts, loadTshirtOrder, loadTshirtsBySite } = createTshirtsPanel({
 
 
 // D11: pairing avoidances + doubles
-const { loadPairing, loadDoubles } = createPairingDoublesPanel({
+const {
+  loadPairing, loadDoubles, pairingMembersBox: _pairingMembersBox, pairingMemberRow: _pairingMemberRow,
+} = createPairingDoublesPanel({
   api, setMsg, confirmDialog, markInvalid, formObj, onSubmit,
   hstr, chip, makeListGrid, fillPlayerRef, enhanceSelect,
   divisionListParams: _divisionListParams, rowGender: _rowGender, playerCell: _playerCell,
   getActive: () => active, getPlayersById: () => playersById, loadInbox: () => loadInbox(),
 });
+_pairingRefs.pairingMembersBox = _pairingMembersBox;
+_pairingRefs.pairingMemberRow = _pairingMemberRow;
 
 
 // D11: player/official 360 drawer (before dashboard — workload links open 360)
-const { openPlayer360, openOfficial360, exportP360, exportPayStatement } = createPlayer360({
+const { openPlayer360, openOfficial360 } = createPlayer360({
   api, toast, html, hstr, raw, esc, money, fmtDOW, fmtMDY: _fmtMDY, certLabel, respChip: _respChip, chip,
   printDoc, getActive: () => active,
 });
@@ -796,14 +805,14 @@ installGlobalSearch({
 
 // D11: reports panel
 const {
-  loadReports, reportCsvExport, reportTemplateExport, exportReportPdf,
-  exportPayStatementsBatch, exportRoomingList, exportSchedule,
+  loadReports, reportCsvExport, reportTemplateExport,
   getCoverageMin, setCoverageMin, renderCoverage,
 } = createReportsPanel({
   api, setMsg, toast, confirmDialog, markInvalid,
   html, hstr, raw, esc, money, fmtDOW, fmtMDY: _fmtMDY, dowLong: _dowLong, certLabel, officialLabel,
   printDoc, csvDownload: _csvDownload, getActive: () => active,
   getOfficialsById: () => officialsById, getSitesById: () => sitesById,
+  getCertPairs: () => _certs.pairs, respChip: _respChip, STAFF_ROLES: _STAFF_ROLES,
   datesInRange: _datesInRange,
 });
 
@@ -819,7 +828,6 @@ const {
   tournamentsById, sitesById, officialsById, playersById, playersByUsta, hotelsById,
   getActive: () => active,
   setActiveRef: (t) => { active = t; },
-  setLastSelectedTournamentId: (id) => { lastSelectedTournamentId = id; },
   renderTSites: () => renderTSites(),
   invalidatePickCache: () => invalidatePickCache(),
 });
@@ -913,8 +921,8 @@ const { loadOutlookFeed } = installOutlookFeed({
   bindTdChat();
   // Do not await health: a hung sidecar/DB must not hide Sign in.
   refreshHealth();
-  let who = null;
-  try { who = await api("/auth/me"); } catch (e) { who = null; }
+  let who;
+  try { who = await api("/auth/me"); } catch { who = null; }
   applyAuth(who);
   if (who && who.role === "admin") verifyEmailTargets();
 })();

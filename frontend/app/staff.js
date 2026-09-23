@@ -1,6 +1,14 @@
 // Staff (non-official support roles) panel — D11.
 import { datesInRange as datesInRangeUtil } from "./util.js";
 
+// Canonical support-role labels, shared with the reports panel (which renders
+// the same roles in the staffing plan). Keys must match the backend's
+// `staff.role` values.
+export const STAFF_ROLES = {
+  site_director: "Site Director", player_amenities: "Player Amenities",
+  trainer: "Trainer", operations: "Operations", stringer: "Stringer", other: "Other",
+};
+
 /**
  * @param {{
  *   api: Function,
@@ -27,10 +35,6 @@ export function createStaffPanel(ctx) {
   const datesInRange = datesInRangeFn || datesInRangeUtil;
 
   // --- Staff (non-official support roles, tournament-scoped) ---
-  const STAFF_ROLES = {
-    site_director: "Site Director", player_amenities: "Player Amenities",
-    trainer: "Trainer", operations: "Operations", stringer: "Stringer", other: "Other",
-  };
   const staffForm = document.getElementById("staff-form");
   let staffEditId = null;
 

@@ -102,8 +102,8 @@ def test_fill_adds_day_to_existing_assignment():
     t = _tournament()
     site = attach_venue_site(client, _ok, t["id"])
     o = _official("chair_umpire")
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
-                       json={"official_id": o["id"], "site_id": site["id"]}))
+    _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                    json={"official_id": o["id"], "site_id": site["id"]}))
     _ok(_fill(t["id"], o["id"], DAY, "chair_umpire", site["id"]))
     # candidate now flagged assigned_here for a DIFFERENT day
     cands = _candidates(t["id"], "chair_umpire", "2026-06-04")

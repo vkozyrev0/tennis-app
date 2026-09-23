@@ -289,7 +289,7 @@ def test_td_full_workflow():
         "usta_number": late_usta, "first_name": "Lee", "last_name": "Tardy-" + _u(),
         "gender": "male", "birthdate": "2012-06-06",
     }))
-    le = _ok(client.post(f"/api/tournaments/{tid}/late-entries", json={
+    _ok(client.post(f"/api/tournaments/{tid}/late-entries", json={
         "usta_number": late_usta, "first_name": late_player["first_name"],
         "last_name": late_player["last_name"],
         "age_division": "B14", "events": "Singles",
@@ -315,7 +315,7 @@ def test_td_full_workflow():
         "source_email_id": em2["id"],
     })
     assert needs_reason.status_code == 400, needs_reason.text  # missing reason
-    wd = _ok(client.post(f"/api/tournaments/{tid}/withdrawals", json={
+    _ok(client.post(f"/api/tournaments/{tid}/withdrawals", json={
         "usta_number": p4["usta_number"], "first_name": p4["first_name"],
         "last_name": p4["last_name"], "events": "Singles",
         "reason": "Illness — fever", "notes": "Doctor's note pending",
@@ -410,7 +410,7 @@ def test_td_full_workflow():
     assert any(h["hotel_name"].lower() == hotel["name"].lower() and h["players"] == 1
                for h in hsum)
     lsum = client.get(f"/api/tournaments/{tid}/lodging-summary").json()
-    assert any(l["lodging_plan"] == "Hotel" and l["players"] == 1 for l in lsum)
+    assert any(row["lodging_plan"] == "Hotel" and row["players"] == 1 for row in lsum)
     # CVB analytics — cross-tournament stays count.
     cvb = client.get("/api/hotel-analytics").json()
     assert any(h["hotel_name"].lower() == hotel["name"].lower() and h["stays"] >= 1

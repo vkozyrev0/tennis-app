@@ -12,8 +12,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import assignment_ops, email_ingest, email_llm, gmail_feed, importer, playerops
-from app import td_chat
+from app import assignment_ops, email_ingest, email_llm, importer, playerops
 from app.db import get_conn
 from app.email_ingest import IngestPayload, ingest_email
 from app.gmail_feed import _hdr, _plain_body, load_feed, message_to_payload
@@ -276,7 +275,7 @@ def test_td_chat_remove_soft_and_handlers(monkeypatch):
 
 def test_pairing_errors_and_404():
     t = _t()
-    missing = client.post(f"/api/tournaments/9999998/pairing-avoidances", json={
+    missing = client.post("/api/tournaments/9999998/pairing-avoidances", json={
         "members": [
             {"usta_number": "1", "first_name": "A", "last_name": "A", "gender": "female"},
             {"usta_number": "2", "first_name": "B", "last_name": "B", "gender": "female"},
@@ -322,7 +321,7 @@ def test_roster_import_and_404s():
         "usta_number": "8" + uuid.uuid4().hex[:9], "first_name": "R", "last_name": "Two",
         "gender": "female",
     }))
-    e1 = _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
+    _ok(client.post(f"/api/tournaments/{t['id']}/players", json={
         "player_id": p["id"], "selection_status": "selected",
     }))
     again = client.post(f"/api/tournaments/{t['id']}/players", json={
@@ -479,7 +478,7 @@ def test_email_put_404_and_status_filter():
         "tournament_id": 1, "classification": "other", "status": "new",
     }).status_code == 404
     t = _t()
-    e = _ok(client.post("/api/emails", json={
+    _ok(client.post("/api/emails", json={
         "tournament_id": t["id"], "subject": "s", "body": "b", "from_address": "a@b.c",
     }))
     listed = client.get(f"/api/emails?tournament_id={t['id']}&status=new")
@@ -500,7 +499,7 @@ def test_email_put_404_and_status_filter():
 
 
 def test_models_self_partner_and_roster_usta():
-    from app._models_inbox import DoublesRequestCreate, DoublesPairCreate
+    from app._models_inbox import DoublesPairCreate, DoublesRequestCreate
     from app._models_workspace import RosterEntryCreate
     with pytest.raises(Exception):
         DoublesRequestCreate(
@@ -530,7 +529,7 @@ def test_auth_lock_expired_and_missing_account(monkeypatch):
     auth_mod._attempts[key] = [0.0]
     auth_mod._check_lock(key)
     # GC missing key
-    auth_mod._attempts[("gone", "x")] = [time_val := 0.0]
+    auth_mod._attempts[("gone", "x")] = [0.0]
     # pop during GC: simulate key disappearing
     auth_mod._gc_attempts(1e18)
 

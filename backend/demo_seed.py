@@ -66,7 +66,9 @@ def main():
     conn = get_conn()
     try:
         with conn.cursor() as cur:
-            ins = lambda sql, args=(): (cur.execute(sql, args), cur.fetchone())[1]
+            def ins(sql, args=()):
+                cur.execute(sql, args)
+                return cur.fetchone()
 
             # Drop the lean baseline's empty placeholder tournament so the demo
             # shows only fully-populated events (no sparse shell).
@@ -192,7 +194,7 @@ def main():
             assign("Brooks", merc, "roving_official", [1, 2, 3], "declined")        # → declined alert
             assign("Okonkwo", jds, "chair_umpire", [1, 2, 3], "accepted", room=True)
             assign("Park", jds, "roving_official", [0], "pending", room=True)       # no distance, no login
-            a_carr = assign("Carrington", jds, "chair_umpire", [0], "pending")      # day-1 chair at JDS
+            assign("Carrington", jds, "chair_umpire", [0], "pending")      # day-1 chair at JDS
 
             # cross-tournament double-booking: Carrington also works Rome on the
             # SAME day → a hard conflict (different venue) for the TD to catch.

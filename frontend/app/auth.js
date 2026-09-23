@@ -208,7 +208,7 @@ export function createAuth(ctx) {
     } catch (err) { setMsg("login-msg", err.message, false); }
   });
   _logoutBtn.addEventListener("click", async () => {
-    try { await api("/auth/logout", { method: "POST" }); } catch (e) { /* ignore */ }
+    try { await api("/auth/logout", { method: "POST" }); } catch { /* ignore */ }
     onLogout();
     applyAuth(null);
   });

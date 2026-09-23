@@ -23,7 +23,7 @@ export function createAdminBoot(ctx) {
       }
     } catch (_) {}
     for (const c of Object.values(getCruds())) {
-      try { await c.refresh(); } catch (e) { /* health pill surfaces DB issues */ }
+      try { await c.refresh(); } catch { /* health pill surfaces DB issues */ }
     }
     const saved = localStorage.getItem("activeTid");
     if (saved && tournamentsById[saved]) setActive(saved);

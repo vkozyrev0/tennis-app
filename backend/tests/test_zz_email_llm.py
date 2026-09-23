@@ -1,11 +1,12 @@
 """Local tiny-LLM leftover parser (D5). Pure + monkeypatched HTTP — no GGUF."""
 import json
-import os
 from pathlib import Path
 
 import pytest
 
 from app.email_llm import (
+    _SYSTEM,
+    _assert_local_url,
     clip_email_text,
     extract_email,
     leftover_prompt,
@@ -15,8 +16,6 @@ from app.email_llm import (
     maybe_intent,
     parse_llm_json,
     probe_llm,
-    _SYSTEM,
-    _assert_local_url,
 )
 from app.triage import classify
 
@@ -24,6 +23,7 @@ from app.triage import classify
 def test_health_llm_endpoint_off(monkeypatch):
     monkeypatch.delenv("EMAIL_LLM", raising=False)
     from fastapi.testclient import TestClient
+
     from app.main import app
     c = TestClient(app)
     r = c.get("/api/health/llm")

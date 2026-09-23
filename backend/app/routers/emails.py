@@ -139,9 +139,11 @@ def list_emails(response: Response, tournament_id: int | None = None,
     """
     clauses, params = ["e.deleted_at IS NULL"], []
     if tournament_id is not None:
-        clauses.append("e.tournament_id = %s"); params.append(tournament_id)
+        clauses.append("e.tournament_id = %s")
+        params.append(tournament_id)
     if status is not None:
-        clauses.append("e.status = %s"); params.append(status)
+        clauses.append("e.status = %s")
+        params.append(status)
     if unmatched:
         # Detection gap: no roster player matched. Feeds the unmatched drilldown.
         clauses.append("e.detected_player_id IS NULL")
@@ -173,7 +175,8 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
     `new` count is the actionable one."""
     clauses, params = ["deleted_at IS NULL"], []
     if tournament_id is not None:
-        clauses.append("tournament_id = %s"); params.append(tournament_id)
+        clauses.append("tournament_id = %s")
+        params.append(tournament_id)
     where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
         cur.execute(
@@ -205,7 +208,8 @@ def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(
     clauses = ["e.status = 'new'", "e.deleted_at IS NULL"]
     params: list = []
     if tournament_id is not None:
-        clauses.append("e.tournament_id = %s"); params.append(tournament_id)
+        clauses.append("e.tournament_id = %s")
+        params.append(tournament_id)
     where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
         cur.execute(

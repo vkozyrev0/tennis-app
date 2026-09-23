@@ -43,6 +43,8 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
+The names in that `test_zz_*.py` cell are examples, not the full tree. There are **112** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
+
 **Frontend unit checks (JS):** pure frontend logic factored out and asserted by
 DOM-free node test files (independent of AG Grid):
 
@@ -55,8 +57,25 @@ DOM-free node test files (independent of AG Grid):
 - `frontend/app/inactivity.test.mjs` — idle warn → Continue vs expire/logout; Still there? modal markup.
 - `frontend/app/session_expired.test.mjs` — `sessionIsGone` 401 vs offline.
 - `frontend/app/gmail_feed.test.mjs` / `outlook_feed.test.mjs` — mailbox feed UI contracts.
+- `frontend/app/breadcrumbs.test.mjs` — nav history does not append the same place twice.
+- `frontend/app/cell_edit.test.mjs` — in-grid save applies the returned row.
+- `frontend/app/form_a11y.test.mjs` — autofill identity and autocomplete tokens.
+- `frontend/app/grid_a11y.test.mjs` — header vs floating-filter labels and sort ARIA.
+- `frontend/app/layout.test.mjs` — list grids keep a non-zero viewport height.
+- `frontend/app/list_page.test.mjs` — list paths send `limit` and forward `q`.
+- `frontend/app/notices.test.mjs` — session notice log (toast archive).
+- `frontend/app/official_empty.test.mjs` — official portal empty state.
+- `frontend/app/progress_job.test.mjs` — job phase labels, cancel, and abort.
+- `frontend/app/skip_link.test.mjs` — skip-to-content target follows the role.
+- `frontend/app/td_chat_ui.test.mjs` — proposed calls, confirm, and the pending label.
+- `frontend/app/td_helpers.test.mjs` — blank-email guard, menu clamp, locale dates.
+- `frontend/app/modules.test.mjs` — the ESM graph itself: every relative import resolves, every named import is a real export, and every `create*` factory wired in `app.js` is passed the context keys it destructures.
 
-Run: `node frontend/app/<name>.test.mjs`.
+That is **21** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
+
+**Lint (required before every check-in):** `python -m ruff check .` (config in
+`ruff.toml`) and `npx eslint frontend` (config in `eslint.config.mjs`). CI runs
+both in the `lint` job; see README.md.
 
 **Live server scripts** (server must already be up, e.g. uvicorn on `:8000`):
 
@@ -74,17 +93,22 @@ backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url http://12
 
 Run them **sequentially** (not in parallel) so login throttle does not 401 mid-suite.
 
-**Test client:** every test module instantiates a FastAPI `TestClient` and
-logs in as `admin/admin` at start (lazy login inside the function for the
+**Test client:** API integration modules instantiate a FastAPI `TestClient` and
+log in as `admin/admin` at start (lazy login inside the function for the
 E2E module — the auth router rotates sessions on every login per audit C3,
-so module-load logins would invalidate sibling modules' sessions).
+so module-load logins would invalidate sibling modules' sessions). These
+modules do not construct a `TestClient`; they call the function under test
+directly: `test_config_guard`, `test_zz_assignment_calc`, `test_zz_db_errors`,
+`test_zz_doubles_corpus`, `test_zz_email_extract`, `test_zz_extract_robustness`,
+`test_zz_h2_rotation`, `test_zz_pdf_leftover_llm`, `test_zz_singles_corpus`,
+`test_zz_td_chat_prompt`.
 
 **Test types in use:**
 
 | Type | Definition | Where used |
 |------|------------|------------|
-| **API integration** | Black-box HTTP call → assert status + body + DB-visible side-effects. | The vast majority of tests. The suite mostly stays at the HTTP boundary; the deliberate exceptions are the pure-unit modules (`test_zz_assignment_calc`, `test_zz_email_extract`, `test_config_guard`) and a handful of internal-helper tests (`test_zz_bulk_savepoint`, `test_zz_rate_fallback`, `test_zz_real_pdf`'s importer calls). |
-| **Unit (no HTTP)** | Imports a pure function and pins its contract directly — no DB or test client needed (or a rolled-back transaction where a cursor is required). | `test_zz_assignment_calc` (pay/mileage formula), `test_zz_email_extract` (extractor regexes), `test_config_guard`, `test_zz_rate_fallback`, `test_zz_bulk_savepoint`. |
+| **API integration** | Black-box HTTP call → assert status + body + DB-visible side-effects. | The vast majority of tests. Modules that never construct a `TestClient` are named in the Test client paragraph above. |
+| **Unit (no HTTP)** | Imports a function and pins its contract directly. | The no-`TestClient` modules named above. `test_zz_rate_fallback` and `test_zz_bulk_savepoint` also pin helpers and do construct a client for the HTTP cases in the same file. |
 | **Smoke** | Confirms a feature exists and returns 200/201 with a plausible shape. | `test_health_ok`, `test_site_crud`, etc. |
 | **Contract** | Asserts the exact shape, status code, and side-effects a router promises. | `test_player_put_optimistic_concurrency`, `test_assignment_pay_and_mileage`. |
 | **Regression** | Reproduces a closed bug + asserts the fix holds. | `test_player_hotels_analytics_and_tshirts` (audit F1), `test_import_doubles_new_player_with_gender` (sixth-pass), `test_roster_import_requires_gender_for_new_players` (audit C1). |
@@ -233,7 +257,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | **None at runtime** (except the node unit checks listed above: `roster_prefill`, `html`, `ui`, `inbox_ui`). | No headless-browser test harness. Manual + preview-driven QA covers UI; backend tests cover all API contracts the UI calls. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | **No headless-browser run.** Node checks cover the 20 `frontend/app/*.test.mjs` files listed under Frontend unit checks. | No headless-browser test harness. Manual + preview-driven QA covers the shell; backend tests cover the API contracts the UI calls. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -245,7 +269,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (~591)
+python -m pytest -q                                    # the whole suite (985 tests / 112 files)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v

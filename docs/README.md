@@ -37,6 +37,7 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 13b | [email-llm-prompt.md](email-llm-prompt.md) | Final leftover-email tiny-LLM prompt (one shared template + few-shots). |
 | 13c | [mobile-plan.md](mobile-plan.md) | Mobile-friendly phases + menu IA (drawer, Setup split, courtside P1). |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
+| 15 | [review-2026-09-21.md](review-2026-09-21.md) | Four-part review (app, code, tests, docs) and which corrections shipped. |
 
 Backend suite **985** tests / **112** files (migrations through **0060**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
@@ -76,6 +77,25 @@ For a believable **live** demo to click around (staffed event, full roster,
 active inbox, problems to resolve), run `python demo_seed.py` from `backend/`.
 `reset_demo.py` restores just the lean baseline (both preserve the
 migration-seeded division/event/rate catalogs).
+
+## Lint (required before every check-in)
+
+**Every change must run both linters and fix all findings before check-in.**
+CI runs the identical commands (`.github/workflows/docker.yml`, job `lint`, on
+every pull request and push to `main`, and the image build depends on it), so a
+lint-dirty change cannot check in. Fix the finding rather than relaxing the
+config.
+
+```bash
+python -m ruff check .        # Python: config in ruff.toml (repo root), covers backend/ + scripts/
+npm ci && npx eslint frontend # Frontend JS: flat config in eslint.config.mjs (repo root)
+```
+
+Add `--fix` to either command to apply the safe autofixes, then re-run without
+it to confirm zero findings. The rule selection is explicit in both config files
+(no ambient defaults, no blanket ignores). `ruff` is pinned in CI
+(`pip install ruff==0.16.8`); ESLint is pinned in `package.json`. npm is lint
+tooling only — the frontend keeps its no-build-step shape.
 
 ## Tests
 

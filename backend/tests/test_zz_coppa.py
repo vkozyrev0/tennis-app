@@ -82,7 +82,6 @@ def test_api_policy_and_under13_create_blocked(monkeypatch):
 
     from fastapi.testclient import TestClient
 
-    from app.config import settings
     from app.main import app
 
     client = TestClient(app)

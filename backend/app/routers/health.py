@@ -27,10 +27,11 @@ def enums():
 
 @router.get("/api/health")
 def health():
-    from ..email_llm import probe_llm
-    from ..config import settings
     import psycopg
     from psycopg.rows import dict_row
+
+    from ..config import settings
+    from ..email_llm import probe_llm
     info = {"status": "ok", "db": "down", "llm": "off"}
     try:
         info["llm"] = probe_llm(timeout=1.0)

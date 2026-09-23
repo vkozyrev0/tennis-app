@@ -2,12 +2,12 @@
 
 export function createSetupCrud(ctx) {
   const {
-    api, setMsg, toast, wireEntity, makeGrid, makeReadGrid, hstr, playerCell,
+    api, setMsg, toast, wireEntity, makeReadGrid, hstr, playerCell,
     officialLabel, siteLabel, syncCombos,
     fillActiveSelect, setActive, activateGroup, updateActiveUI, refreshAllSelects,
     refreshDivisionLists, divCatalog,
     tournamentsById, sitesById, officialsById, playersById, playersByUsta, hotelsById,
-    getActive, setActiveRef, setLastSelectedTournamentId, renderTSites, invalidatePickCache,
+    getActive, setActiveRef, renderTSites, invalidatePickCache,
   } = ctx;
 
   // =================== Setup entity configs ===================
@@ -33,8 +33,6 @@ export function createSetupCrud(ctx) {
       fillActiveSelect(rows);
       if (getActive() && tournamentsById[getActive().id]) { setActiveRef(tournamentsById[getActive().id]); updateActiveUI(); }
     },
-    onSelect: (t) => { setLastSelectedTournamentId(t.id); },
-    onNew: () => { setLastSelectedTournamentId(null); },
     // "Open ▸" right on the row: jump straight into the workspace for that tournament.
     rowAction: (t) => {
       const b = document.createElement("button");

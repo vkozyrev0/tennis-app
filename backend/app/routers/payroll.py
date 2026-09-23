@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..export_audit import log_export
-from ..models import PayrollMarkPaid, PaymentBatchCreate
+from ..models import PaymentBatchCreate, PayrollMarkPaid
 from ..security import require_admin
 from .assignments import _ASG_SELECT, _audit, _summaries, _summary
 
@@ -165,7 +165,9 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(_CSV_HEADERS)
-    money = lambda v: "" if v is None else f"{float(v):.2f}"
+    def money(v):
+        return "" if v is None else f"{float(v):.2f}"
+
     for r in recs:
         w.writerow([
             r["official_name"], r["days_worked"], r["no_show_days"],

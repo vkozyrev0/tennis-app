@@ -608,7 +608,7 @@ def test_target_registry_is_internally_consistent():
     emit (except 'other') must be a known fileable target, every bulk key must
     be a fileable key, and the public /targets endpoint must match the registry.
     This test fails fast if anyone re-introduces a mismatched key."""
-    from app.email_targets import FILEABLE_KEYS, POPULATE_TARGETS, public_targets
+    from app.email_targets import FILEABLE_KEYS, POPULATE_TARGETS
     from app.triage import _RULES
 
     triage_keys = {label for label, _ in _RULES}
@@ -678,7 +678,8 @@ def test_bulk_populate_carries_division_and_events_into_late_entry():
 
 
 def test_extract_avoid_day_and_time():
-    from app.routers.emails import extract_avoid_day as day, extract_avoid_time as tm
+    from app.routers.emails import extract_avoid_day as day
+    from app.routers.emails import extract_avoid_time as tm
     assert day("can't play Saturday", "") == "Sat"
     assert day("avoid Sat and Sun please", "") == "Sat, Sun"
     assert day("no day mentioned", "") is None
@@ -801,6 +802,7 @@ def test_get_all_restores_hidden_when_feeds_skipped():
 def test_clear_inbox_is_local_sql_only():
     """Clear must not call Gmail IMAP or Microsoft Graph — mailbox mail stays."""
     import inspect
+
     from app.routers import emails as emails_mod
     src = inspect.getsource(emails_mod.clear_inbox)
     assert "deleted_at" in src

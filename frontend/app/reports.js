@@ -4,8 +4,9 @@ import { datesInRange as datesInRangeUtil } from "./util.js";
 export function createReportsPanel(ctx) {
   const {
     api, setMsg, toast, confirmDialog, markInvalid,
-    html, hstr, raw, esc, money, fmtDOW, fmtMDY, dowLong, certLabel, officialLabel,
+    html, hstr, raw, esc, money, fmtDOW, fmtMDY, dowLong, certLabel,
     printDoc, csvDownload, getActive, getOfficialsById, getSitesById,
+    getCertPairs, respChip, STAFF_ROLES,
     datesInRange: datesInRangeFn,
   } = ctx;
   const datesInRange = datesInRangeFn || datesInRangeUtil;

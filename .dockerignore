@@ -6,6 +6,12 @@ models/
 .github/
 .archive/
 .claude/
+# Node dev-tooling for the linters only - never part of the served app.
+node_modules/
+package.json
+package-lock.json
+eslint.config.mjs
+ruff.toml
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/

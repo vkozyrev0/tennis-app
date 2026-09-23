@@ -1,10 +1,10 @@
 """Player-reported hotel stays + CVB room-night analytics (audit §1.2).
 Also the cumulative cross-tournament t-shirt list (derived from tournament_entry)."""
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..query_helpers import like_escape, paged_select, person_like_sql
-import json
 from ..models import (
     PlayerHotelCreate,
     PlayerHotelOut,
@@ -14,6 +14,7 @@ from ..models import (
     TShirtRow,
 )
 from ..playerops import mark_email_filed, upsert_hotel, upsert_player
+from ..query_helpers import like_escape, paged_select, person_like_sql
 
 router = APIRouter(tags=["player-ops"])
 
@@ -309,8 +310,11 @@ def get_tshirt_order(tournament_id: int, conn=Depends(db_dep)):
             snap_val = int(snap.get(code, 0)) if snap else None
             rows.append({"size": code, "label": label, "requested": req,
                           "on_hand": oh, "to_order": to, "snapshot": snap_val})
-            tot["requested"] += req; tot["on_hand"] += oh; tot["to_order"] += to
-            if snap is not None: tot["snapshot"] = (tot["snapshot"] or 0) + (snap_val or 0)
+            tot["requested"] += req
+            tot["on_hand"] += oh
+            tot["to_order"] += to
+            if snap is not None:
+                tot["snapshot"] = (tot["snapshot"] or 0) + (snap_val or 0)
         return {"tournament_id": tournament_id, "ordered_at": order["ordered_at"],
                 "rows": rows, "totals": tot}
 

@@ -145,14 +145,18 @@ def roster_completeness(tournament_id: int, conn=Depends(db_dep)):
     for r in rows:
         issues = []
         if _blank(r["age_division"]):
-            issues.append("missing_division"); counts["missing_division"] += 1
+            issues.append("missing_division")
+            counts["missing_division"] += 1
         if _blank(r["gender"]):
-            issues.append("missing_gender"); counts["missing_gender"] += 1
+            issues.append("missing_gender")
+            counts["missing_gender"] += 1
         if _blank(r["t_shirt_size"]):
-            issues.append("missing_shirt"); counts["missing_shirt"] += 1
+            issues.append("missing_shirt")
+            counts["missing_shirt"] += 1
         out = r["amount_outstanding"]
         if out is not None and out > 0:
-            issues.append("outstanding_balance"); counts["outstanding_balance"] += 1
+            issues.append("outstanding_balance")
+            counts["outstanding_balance"] += 1
         if not issues:
             continue
         counts["incomplete_entries"] += 1

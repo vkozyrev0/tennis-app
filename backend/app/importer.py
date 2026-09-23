@@ -12,8 +12,8 @@ from openpyxl import Workbook, load_workbook
 
 from .coppa import refuse_under13_birthdate  # D16 under-13 gate
 from .crypto import encrypt as _enc_pii  # PII H2: player contact fields
-
 from .playerops import upsert_hotel, upsert_player
+from .shirtops import norm_shirt as _norm_shirt  # audit A51, shared with roster.py
 
 _VALID_STATUS = {"selected", "alternate", "withdrawn"}
 
@@ -27,10 +27,6 @@ def _s(v):
         return None
     s = str(v).strip()
     return s or None
-
-
-# Shirt-size normalization (audit A51) shared with roster.py via shirtops.py.
-from .shirtops import norm_shirt as _norm_shirt
 
 
 # ---- column model -----------------------------------------------------------
@@ -882,10 +878,12 @@ def _merge_email_pdf(cur, tid, d):
             return None
         return "already in inbox — skipped"
     cls, ms = classify_timed(subj, body)  # plaintext, before encrypting at rest
+    import json as _json
+
     from .crypto import encrypt as _enc_body  # PII H2
+
     # Stamp extracted text fields (D9) so inbox list never re-parses the body.
     from .email_extract import compute_extracted_fields
-    import json as _json
     fields = compute_extracted_fields(subj, body, cls, has_detected_player=False)
     pairs_json = (
         _json.dumps(fields["detected_name_pairs"])

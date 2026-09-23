@@ -5,8 +5,8 @@ Flow: download a template (CSV/XLSX) -> upload a filled file -> rows land in
 rows into the real tables. See app/importer.py for the per-type registry.
 """
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from pydantic import BaseModel
 from psycopg.types.json import Json
+from pydantic import BaseModel
 
 from .. import importer
 from ..db import db_dep

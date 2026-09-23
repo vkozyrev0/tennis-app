@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..ical import build_schedule_ics
-from ..query_helpers import like_escape, paged_select
 from ..models import AccountCreate, OfficialCreate, OfficialOut
+from ..query_helpers import like_escape, paged_select
 from ..security import hash_pw
 
 router = APIRouter(prefix="/api/officials", tags=["officials"])

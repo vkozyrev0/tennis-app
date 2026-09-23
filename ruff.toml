@@ -1,0 +1,35 @@
+# Ruff configuration for the Python half of CourtOps (backend/ + scripts/).
+#
+# Run from the repo root:
+#   python -m ruff check .            # lint (must report zero findings)
+#   python -m ruff check . --fix      # apply the safe autofixes
+#
+# The rule selection is explicit on purpose. Ruff's *ambient* default in this
+# environment is `ALL`, which is not the bar for this repo: it demands broad
+# rewrites (every annotation modernised, every `zip()` given `strict=`, blind
+# `except` narrowed) that go far past correctness findings. The selection below
+# is the conventional correctness set: pycodestyle errors + warnings, pyflakes,
+# and import sorting.
+target-version = "py312"
+
+# 88 would rewrap existing long import lines; the code is written to ~100.
+line-length = 100
+
+# `app` and `tests` live under backend/, so isort needs that as a source root to
+# classify them as first-party instead of merging them into the third-party block.
+src = ["backend"]
+
+extend-exclude = ["node_modules"]
+
+[lint]
+select = [
+    "E4",  # pycodestyle: imports, module-level dunder, semicolons/colons (E401-E402, E701-E702)
+    "E7",  # pycodestyle: statement-level errors (E711-E713, E721, E731, E741)
+    "E9",  # pycodestyle: runtime errors (E901-E902) - syntax/IO problems
+    "F",   # pyflakes: unused imports/variables, undefined names, f-string mistakes
+    "W",   # pycodestyle warnings: trailing whitespace, blank-line hygiene
+    "I",   # isort: import ordering and grouping
+]
+
+[lint.isort]
+known-first-party = ["app", "tests"]

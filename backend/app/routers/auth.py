@@ -1,5 +1,6 @@
 """Login / logout / me — cookie-session auth (POC)."""
 import os
+import random
 import secrets
 import time
 from collections import defaultdict
@@ -33,9 +34,6 @@ _lock = Lock()
 
 
 _MAX_TRACKED_KEYS = 10_000  # bound the dict so a sprayer can't exhaust memory
-
-
-import random  # imported lazily; module scope keeps it cheap
 
 
 def _gc_attempts(now: float) -> None:

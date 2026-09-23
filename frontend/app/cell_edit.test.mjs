@@ -39,7 +39,7 @@ test("saveInGridCell applies the PUT response and does not reload the grid", asy
   const data = { id: 7, first_name: "Ann2", last_name: "Lee", updated_at: "t0" };
   const cell = makeCell(data);
   let putPath = null;
-  let reloadCalled = false;
+  const reloadCalled = false;
   const saved = { id: 7, first_name: "Ann2", last_name: "Lee", updated_at: "t1" };
   const api = async (path, opts) => {
     putPath = path;

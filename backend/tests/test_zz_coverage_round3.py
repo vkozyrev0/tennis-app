@@ -1,11 +1,9 @@
 """Third pass: remaining uncovered branches after 98%."""
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from datetime import date, timedelta
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
@@ -367,13 +365,13 @@ def test_td_chat_remove_prepend_and_fake_resp(monkeypatch):
 
 def test_availability_and_me_and_hotels_404():
     t = _t()
-    assert client.put(f"/api/tournaments/9777030/availability", json={
+    assert client.put("/api/tournaments/9777030/availability", json={
         "official_id": 1, "dates": [],
     }).status_code == 404
     assert client.put(f"/api/tournaments/{t['id']}/availability", json={
         "official_id": 9777031, "dates": [],
     }).status_code == 400
-    assert client.post(f"/api/tournaments/9777032/player-hotels", json={
+    assert client.post("/api/tournaments/9777032/player-hotels", json={
         "usta_number": "1", "first_name": "A", "last_name": "B", "gender": "female",
         "hotel_name": "X",
     }).status_code == 404
@@ -537,7 +535,7 @@ def test_staff_delete_after_create():
 def test_doubles_delete_request_twice():
     t = _t()
     u = "m" + uuid.uuid4().hex[:9]
-    p = _ok(client.post("/api/players", json={
+    _ok(client.post("/api/players", json={
         "usta_number": u, "first_name": "Dr", "last_name": "Req", "gender": "female",
     }))
     r = client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={

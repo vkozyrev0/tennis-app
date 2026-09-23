@@ -36,9 +36,6 @@ export function createPartBPanels(ctx) {
   const _ORIGIN_COL = makeOriginCol({ hstr });
   const lateForm = document.getElementById('late-form');
   const wdForm = document.getElementById('withdrawal-form');
-  // csvDownload alias used by wirePlayerList factory below
-  const _csvDownload = csvDownload;
-  const _autoHeaderFilters = autoHeaderFilters;
 
   const lateGrid = makeListGrid("late-table", [
     { title: "Date", field: "request_date", editor: "date", cssClass: "editable-cell",
@@ -88,7 +85,7 @@ export function createPartBPanels(ctx) {
     lateGrid.setPageNote(rows.length, LIST_PAGE_SIZE, q);
   }
   function lateReset() { lateForm.reset(); lateForm.source_email_id.value = ""; }
-  onSubmit(lateForm, async (e) => {
+  onSubmit(lateForm, async () => {
     if (!getActive()) return;
     const b = expandPlayerRef(formObj(lateForm));
     b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
@@ -143,7 +140,7 @@ export function createPartBPanels(ctx) {
     wdGrid.setPageNote(rows.length, LIST_PAGE_SIZE, q);
   }
   function wdReset() { wdForm.reset(); wdForm.source_email_id.value = ""; }
-  onSubmit(wdForm, async (e) => {
+  onSubmit(wdForm, async () => {
     if (!getActive()) return;
     const b = expandPlayerRef(formObj(wdForm));
     b.source_email_id = b.source_email_id ? Number(b.source_email_id) : null;
@@ -168,7 +165,7 @@ export function createPartBPanels(ctx) {
     const box = document.getElementById("wd-suggest");
     if (!box || !getActive()) return;
     const div = wd && wd.age_division;
-    let sameDiv = [], others = [];
+    let sameDiv, others;
     try {
       if (div) sameDiv = await api(`/tournaments/${getActive().id}/alternates?age_division=${encodeURIComponent(div)}`);
       const all = await api(`/tournaments/${getActive().id}/alternates`);

@@ -8,7 +8,6 @@ export function createPairingDoublesPanel(ctx) {
     setMsg,
     confirmDialog,
     markInvalid,
-    formObj,
     onSubmit,
     hstr,
     chip,
@@ -78,7 +77,7 @@ export function createPairingDoublesPanel(ctx) {
     if (!getActive()) return;
     pairingGrid.setData(await api(`/tournaments/${getActive().id}/pairing-avoidances`));
   }
-  onSubmit(pairingForm, async (e) => {
+  onSubmit(pairingForm, async () => {
     if (!getActive()) return;
     const members = [...pairingMembersBox.querySelectorAll(".pmember")].map((r) => {
       const p = getPlayersById()[r.querySelector(".pm-player").value];
@@ -176,7 +175,7 @@ export function createPairingDoublesPanel(ctx) {
     doublesReqGrid.setPageNote((data.requests || []).length, LIST_PAGE_SIZE, q);
     doublesPairGrid.setData(data.pairs);
   }
-  onSubmit(doublesForm, async (e) => {
+  onSubmit(doublesForm, async () => {
     if (!getActive()) return;
     const me = getPlayersById()[doublesForm.player_ref.value];
     if (!me) { setMsg("doubles-msg", "select a player", false); return; }
@@ -198,5 +197,5 @@ export function createPairingDoublesPanel(ctx) {
   });
   doublesForm.querySelector(".cancel").addEventListener("click", doublesReset);
 
-  return { loadPairing, loadDoubles };
+  return { loadPairing, loadDoubles, pairingMembersBox, pairingMemberRow };
 }

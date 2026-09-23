@@ -7,7 +7,6 @@ pipeline can never drift in spelling.
 """
 import re
 
-
 # Canonical t-shirt size labels (must match the roster form dropdown).
 SHIRT_LABELS = [
     "Youth Small", "Youth Medium", "Youth Large",

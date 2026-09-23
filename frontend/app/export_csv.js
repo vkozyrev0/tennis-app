@@ -37,7 +37,7 @@ export function createCsvExport(ctx) {
   async function csvDownload(matrix, filename, opts = {}) {
     const resource = opts.resource || filename || "csv";
     const minors = opts.pii === true || (opts.pii !== false && isMinorsPiiResource(resource));
-    let redacted = !!opts.redacted;
+    const redacted = !!opts.redacted;
     let data = matrix;
     const authUser = getAuthUser();
 

@@ -2,8 +2,8 @@
 
 export function createPlayer360(ctx) {
   const {
-    api, toast, html, hstr, raw, esc, money, fmtDOW, fmtMDY, certLabel, respChip, chip,
-    printDoc, getActive,
+    api, toast, html, hstr, raw, esc, money, fmtMDY, certLabel, respChip, chip,
+    printDoc,
   } = ctx;
   void chip; void esc;
 

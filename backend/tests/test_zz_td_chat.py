@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.td_chat import (
-    ALLOWED_TOOLS,
     DEFAULT_CHAT_TIMEOUT_SEC,
     PLANNER_SYSTEM,
     TD_CHAT_VERDICT,
@@ -102,8 +101,6 @@ def test_executor_get_does_not_write_and_writes_need_confirm():
     hit = next(p for p in roster if p["usta_number"] == usta)
     assert hit["first_name"] == "Ada"
 
-    bogus = {"tool": "drop_all", "method": "DELETE", "path": "/api/nope",
-             "json": None, "mutating": True}
     with pytest.raises(Exception):
         resolve_tool("drop_all", {})
     # Unknown tool never reaches HTTP — live table unchanged.

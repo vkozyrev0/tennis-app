@@ -13,7 +13,6 @@ export function createRosterPanel(ctx) {
     onSubmit,
     html,
     hstr,
-    raw,
     money,
     chip,
     makeMenuButton,
@@ -37,8 +36,6 @@ export function createRosterPanel(ctx) {
     loadInbox,
     playersCrudRefresh,
   } = ctx;
-  const _csvDownload = csvDownload;
-  const _detailBackdrop = detailBackdrop;
   void openForm;
 
   // --- Roster (master/detail, like the Setup entities) ---
@@ -89,7 +86,7 @@ export function createRosterPanel(ctx) {
     if (!box || !getActive()) return;
     let c;
     try { c = await api(`/tournaments/${getActive().id}/roster-completeness`); }
-    catch (e) { box.innerHTML = ""; return; }
+    catch { box.innerHTML = ""; return; }
     if (!c.counts.incomplete_entries) {
       box.innerHTML = c.counts.total_active
         ? hstr`<p class="rc-clean">✓ All ${c.counts.total_active} active roster entries are complete.</p>` : "";
@@ -293,17 +290,6 @@ export function createRosterPanel(ctx) {
       try { cell.restoreOldValue(); } catch (_) {}
     }
   });
-  function rosterMatches(data) {
-    const q = document.getElementById("roster-filter").value.trim().toLowerCase();
-    if (!q) return true;
-    // Match only the fields a TD can see in the grid — not internal ids
-    // (audit C6: typing "1" used to match player_id:1 et al.).
-    const hay = [data.first_name, data.last_name, data.usta_number,
-      data.age_division, data.events, data.selection_status,
-      data.t_shirt_size, data.dietary_preference]
-      .filter(Boolean).join(" ").toLowerCase();
-    return hay.includes(q);
-  }
   function rosterActiveData() { return rosterBuilt ? rosterGrid.getRows("active").map((r) => r.getData()) : rosterRows; }
   function rosterMarkRows() {
     if (!rosterBuilt) return;
@@ -518,12 +504,12 @@ export function createRosterPanel(ctx) {
   function rosterSignInTemplate() { csvDownload([SIGNIN_HEADERS], "sign-in-sheet-template"); }
   async function rosterSignInExport() {
     if (!getActive()) { toast("Select a tournament first", false); return; }
-    let hotelByPlayer = {};
+    const hotelByPlayer = {};
     try {
       for (const r of await api(`/tournaments/${getActive().id}/player-hotels`)) {
         hotelByPlayer[r.player_id] = { hotel: r.hotel_name || "", lodging: r.lodging_plan || "" };
       }
-    } catch (e) { /* hotels optional — sheet still useful without them */ }
+    } catch { /* hotels optional — sheet still useful without them */ }
     const rows = [SIGNIN_HEADERS.slice()];
     for (const e of [...rosterRows].sort((a, b) =>
       (a.last_name || "").localeCompare(b.last_name || "") || (a.first_name || "").localeCompare(b.first_name || ""))) {

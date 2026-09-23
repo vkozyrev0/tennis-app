@@ -54,6 +54,14 @@ From the repo root, start the site with Docker Compose (Postgres lives in the
 session, so a run is hermetic and never touches the working DB. (Skips/fails fast
 if Postgres is unreachable.)
 
+## Lint (required before check-in)
+```powershell
+python -m ruff check .        # from the repo root; config in ruff.toml, covers backend/ + scripts/
+python -m ruff check . --fix  # apply the safe autofixes, then re-run
+```
+Must report `All checks passed!`. CI runs the same command in the `lint` job, so a
+finding fails the build — fix it rather than relaxing the config. See README.md.
+
 ## All-in-one Docker image
 The shipped artifact bundles **Postgres + the API + the frontend in one
 container** (DB baked at build time). Live POC:

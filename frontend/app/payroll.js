@@ -20,7 +20,7 @@
  */
 export function createPayrollPanel(ctx) {
   const {
-    api, setMsg, confirmDialog, markInvalid, money, html, hstr, raw,
+    api, setMsg, confirmDialog, markInvalid, money, hstr, raw,
     makeReadGrid, printDoc, fmtMDY: _fmtMDY, getActive,
   } = ctx;
 

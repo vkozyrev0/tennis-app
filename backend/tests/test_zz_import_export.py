@@ -208,7 +208,8 @@ def test_distances_csv_by_ids_upserts_catalog():
 def test_pairing_avoidances_wide_csv_needs_existing_players():
     t = _tournament()
     a, b = _u(), _u()
-    _player(a); _player(b)
+    _player(a)
+    _player(b)
     csv = f"usta_1,usta_2,relationship\n{a},{b},siblings\n"
     up = _stage(t["id"], "pairing_avoidances", "pair.csv", csv)
     assert up["valid"] == 1, up
@@ -221,7 +222,8 @@ def test_pairing_avoidances_wide_csv_needs_existing_players():
 def test_doubles_requests_csv_mutual_pair():
     t = _tournament()
     a, b = _u(), _u()
-    _player(a, first="Ann"); _player(b, first="Bea")
+    _player(a, first="Ann")
+    _player(b, first="Bea")
     csv = ("usta_number,first_name,last_name,gender,age_division,wants_random,partner_usta\n"
            f"{a},Ann,X,female,G16,,{b}\n"
            f"{b},Bea,Y,female,G16,,{a}\n")
@@ -329,7 +331,8 @@ def test_roster_xlsx_import_end_to_end():
     ws = wb.active
     ws.append(["usta_number", "first_name", "last_name", "gender", "age_division", "selection_status"])
     ws.append([u, "Excel", "Import", "female", "G14", "selected"])
-    buf = io.BytesIO(); wb.save(buf)
+    buf = io.BytesIO()
+    wb.save(buf)
     up = _stage(t["id"], "roster", "roster.xlsx", buf.getvalue(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     assert up["total"] == 1 and up["valid"] == 1, up

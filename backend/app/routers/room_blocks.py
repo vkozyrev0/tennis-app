@@ -47,9 +47,11 @@ def list_room_blocks(tournament_id: int | None = None, kind: str | None = None,
                      conn=Depends(db_dep)):
     clauses, params = [], []
     if tournament_id is not None:
-        clauses.append("tournament_id = %s"); params.append(tournament_id)
+        clauses.append("tournament_id = %s")
+        params.append(tournament_id)
     if kind is not None:
-        clauses.append("kind = %s"); params.append(kind)
+        clauses.append("kind = %s")
+        params.append(kind)
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_LIST_COLS} FROM room_block{where} ORDER BY id", params)

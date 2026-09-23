@@ -1,8 +1,8 @@
 """Inbox Get mails: date-window fetch of enabled Gmail + Outlook feeds."""
 from __future__ import annotations
 
-import uuid
 import urllib.parse
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -120,9 +120,15 @@ def test_ready_helpers_require_enabled_and_credentials():
 def test_get_mails_skips_disabled_gmail_runs_outlook(monkeypatch, _admin):
     from app import gmail_feed as gf
     from app import outlook_feed as of
-    from app.db import get_conn
-    from tests.test_zz_gmail_feed import _FakeImap, _rfc822
-    from tests.test_zz_outlook_feed import TD_CLIENT, TD_MAILBOX, TD_SECRET, TD_TENANT, _FakeGraph, _graph_msg
+    from tests.test_zz_gmail_feed import _FakeImap
+    from tests.test_zz_outlook_feed import (
+        TD_CLIENT,
+        TD_MAILBOX,
+        TD_SECRET,
+        TD_TENANT,
+        _FakeGraph,
+        _graph_msg,
+    )
 
     imap_calls = []
 
@@ -172,7 +178,7 @@ def test_get_mails_skips_disabled_gmail_runs_outlook(monkeypatch, _admin):
 def test_get_mails_date_window_on_gmail_and_skips_duplicate(monkeypatch, _admin):
     from app import gmail_feed as gf
     from app.db import get_conn
-    from tests.test_zz_gmail_feed import _FakeImap, _rfc822
+    from tests.test_zz_gmail_feed import _FakeImap
 
     seen = {}
 
@@ -240,7 +246,14 @@ def test_get_mails_skips_unset_outlook(monkeypatch, _admin):
 @_needs_db
 def test_outlook_date_window_keeps_in_range_only(monkeypatch, _admin):
     from app import outlook_feed as of
-    from tests.test_zz_outlook_feed import TD_CLIENT, TD_MAILBOX, TD_SECRET, TD_TENANT, _FakeGraph, _graph_msg
+    from tests.test_zz_outlook_feed import (
+        TD_CLIENT,
+        TD_MAILBOX,
+        TD_SECRET,
+        TD_TENANT,
+        _FakeGraph,
+        _graph_msg,
+    )
 
     now = datetime.now(timezone.utc)
     msgs = [
@@ -272,7 +285,14 @@ def test_outlook_date_window_keeps_in_range_only(monkeypatch, _admin):
 @_needs_db
 def test_outlook_date_window_includes_read_and_follows_nextlink(monkeypatch, _admin):
     from app import outlook_feed as of
-    from tests.test_zz_outlook_feed import TD_CLIENT, TD_MAILBOX, TD_SECRET, TD_TENANT, _FakeGraph, _graph_msg
+    from tests.test_zz_outlook_feed import (
+        TD_CLIENT,
+        TD_MAILBOX,
+        TD_SECRET,
+        TD_TENANT,
+        _FakeGraph,
+        _graph_msg,
+    )
 
     now = datetime.now(timezone.utc)
     page1 = _graph_msg(message_id=f"<p1-{uuid.uuid4().hex}@o.test>", subject="read page1",

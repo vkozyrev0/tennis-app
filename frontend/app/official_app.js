@@ -11,7 +11,7 @@ export function officialEmptyState({ message, actionLabel, actionHref } = {}) {
 
 export function createOfficialApp(ctx) {
   const {
-    api, setMsg, toast, onSubmit, html, hstr, raw, money, esc,
+    api, setMsg, toast, onSubmit, html, hstr, raw, money,
     fmtDOW, certLabel, respChip, datesInRange,
   } = ctx;
 
@@ -73,7 +73,7 @@ export function createOfficialApp(ctx) {
   async function loadMyAssignments() {
     const box = document.getElementById("me-assignments");
     if (!box) return;
-    let rows = [];
+    let rows;
     try { rows = await api("/me/assignments"); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }
     if (!rows.length) {

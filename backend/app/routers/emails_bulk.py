@@ -19,7 +19,6 @@ from ..email_extract import (
     extract_withdrawal_reason,
     infer_gender_from_email,
 )
-from ..playerops import upsert_player
 from ..email_llm import probe_llm
 from ..email_stamp import _stamp_extracted_fields, reprocess_email
 from ..email_targets import (
@@ -36,7 +35,7 @@ from ..models import (
     EmailBulkStatus,
     EmailDetectResult,
 )
-from ..playerops import mark_email_filed
+from ..playerops import mark_email_filed, upsert_player
 from ..triage import classify_timed
 
 router = APIRouter(prefix="/api/emails", tags=["emails"])

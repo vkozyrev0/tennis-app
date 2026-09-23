@@ -70,7 +70,8 @@ def test_counts_empty_tournament_is_all_zero():
 
 def test_counts_scoped_to_tournament():
     t1, t2 = _tournament(), _tournament()
-    _email(t1["id"]); _email(t1["id"])
+    _email(t1["id"])
+    _email(t1["id"])
     _email(t2["id"])
     assert _counts(t1["id"])["new"] == 2
     assert _counts(t2["id"])["new"] == 1

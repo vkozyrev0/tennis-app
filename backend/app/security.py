@@ -82,6 +82,7 @@ def password_change_required(user: dict) -> bool:
     if not user.get("must_change_password"):
         return False
     import os
+
     from .config import settings
     raw = os.getenv("COURTOPS_FORCE_PASSWORD_CHANGE", "").strip().lower()
     if raw in ("0", "false", "no", "off"):

@@ -7,7 +7,6 @@ catch gets a readable 409/400 instead of a bare 500."""
 import asyncio
 
 import psycopg
-import pytest
 
 from app import db_errors
 from app.main import app

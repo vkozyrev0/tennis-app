@@ -77,6 +77,7 @@ def test_my_official_id_dep_and_change_password_missing():
 
 def test_auth_gc_vanished_and_empty_bucket():
     from collections import defaultdict
+
     from app.routers import auth as auth_mod
 
     class Vanish(dict):
@@ -280,9 +281,9 @@ def test_me_respond_404_and_profile_after_delete():
 
 
 def test_availability_fk_and_event_put_404():
-    t = _t()
-    o = _ok(client.post("/api/officials", json={"first_name": "Av", "last_name": uuid.uuid4().hex[:5]}))
-    # invalid date type won't get to FK; use a real official then drop tournament? 
+    _t()
+    _ok(client.post("/api/officials", json={"first_name": "Av", "last_name": uuid.uuid4().hex[:5]}))
+    # invalid date type won't get to FK; use a real official then drop tournament?
     # ForeignKey on insert: use hotel_needed with official that we delete first — skip
     ev = _ok(client.post("/api/events", json={
         "name": "R4e " + uuid.uuid4().hex[:4], "tournament_type": "junior",
@@ -338,7 +339,6 @@ def test_bulk_populate_already_exists_reason():
 
 
 def test_import_merged_row_409_and_merge_notes(monkeypatch):
-    from app import importer
     t = _t()
     csv = "first_name,last_name\nImp,Off\n"
     # officials import
@@ -449,7 +449,7 @@ def test_detect_empty_first_last_on_roster():
 
 
 def test_email_ingest_to_address_fallback():
-    from app.email_ingest import extract_addresses, local_part, resolve_tournament_id
+    from app.email_ingest import extract_addresses, resolve_tournament_id
     assert extract_addresses("not-an-email")  # raw used
     with get_conn() as conn:
         with conn.cursor() as cur:

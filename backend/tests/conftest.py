@@ -27,10 +27,9 @@ if str(_BACKEND) not in sys.path:
 import psycopg  # noqa: E402
 import pytest  # noqa: E402
 
-from app.config import settings  # noqa: E402
-
 import migrate  # noqa: E402  (import after env is set)
 import seed  # noqa: E402
+from app.config import settings  # noqa: E402
 
 
 def _reset_test_database() -> None:

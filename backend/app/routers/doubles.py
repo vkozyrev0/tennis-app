@@ -7,7 +7,6 @@ the next random request pairs with the longest-waiting one; binding once made.
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..query_helpers import like_escape, paged_select, person_like_sql
 from ..models import (
     DoublesPairCreate,
     DoublesPairUpdate,
@@ -15,6 +14,7 @@ from ..models import (
     DoublesRequestUpdate,
 )
 from ..playerops import mark_email_filed, upsert_player
+from ..query_helpers import like_escape, paged_select, person_like_sql
 
 router = APIRouter(tags=["doubles"])
 

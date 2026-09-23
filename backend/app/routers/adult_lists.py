@@ -2,7 +2,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
-from ..query_helpers import like_escape, paged_select, person_like_sql
 from ..models import (
     DivFlexCreate,
     DivFlexOut,
@@ -12,6 +11,7 @@ from ..models import (
     SchedAvoidUpdate,
 )
 from ..playerops import mark_email_filed, upsert_player
+from ..query_helpers import like_escape, paged_select, person_like_sql
 
 router = APIRouter(tags=["adult-lists"])
 

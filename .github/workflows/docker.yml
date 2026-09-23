@@ -26,6 +26,41 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  # Lint gate. Runs the same two commands the docs tell every contributor to run
+  # before check-in (README.md "Lint" + docs/README.md), so a lint-dirty change
+  # cannot reach main. Neither step is `continue-on-error`: a finding fails CI.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pinned: ruff's rule set grows between releases and this gate must not
+      # move on its own. Config + selection live in ruff.toml at the repo root.
+      - name: Install ruff
+        run: pip install ruff==0.16.8
+
+      - name: Lint Python (backend + scripts)
+        run: python -m ruff check .
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      # Tooling only — the SPA itself has no build step and never runs npm.
+      - name: Install frontend lint tooling
+        run: npm ci
+
+      - name: Lint frontend JS
+        run: npx eslint frontend
+
   # Run the backend suite first; the image build/push is gated on it (needs: test).
   test:
     runs-on: ubuntu-latest
@@ -69,7 +104,7 @@ jobs:
         run: python -m pytest -q
 
   build:
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

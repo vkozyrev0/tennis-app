@@ -45,12 +45,12 @@ from ..assignment_ops import (  # noqa: F401 — re-export for me/payroll/report
     pay_summary,
 )
 from ..db import db_dep
-from ..security import require_admin
 from ..models import (
     AssignmentCreate,
     AssignmentDayCreate,
     AssignmentDayStatus,
 )
+from ..security import require_admin
 
 router = APIRouter(tags=["assignments"])
 

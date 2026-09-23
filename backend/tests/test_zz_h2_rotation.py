@@ -2,7 +2,6 @@
 
 Pure unit tests — no DB required for crypto; one integration check when DB is up.
 """
-import os
 
 import pytest
 from cryptography.fernet import Fernet

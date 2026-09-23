@@ -237,7 +237,7 @@ def test_bulk_email_empty_and_no_tournament():
 
 
 def test_users_export_flag_and_self_delete():
-    me = client.get("/api/auth/me").json()
+    client.get("/api/auth/me").json()
     # last-export-admin 409
     users = client.get("/api/admin/users")
     if users.status_code != 200:
@@ -329,7 +329,7 @@ def test_email_suggest_404_and_lazy_stamp():
     assert listed.status_code == 200
     row = next(x for x in listed.json() if x["id"] == e["id"])
     assert "subject" in row
-    assert client.delete(f"/api/emails/9999999").status_code == 404
+    assert client.delete("/api/emails/9999999").status_code == 404
 
 
 def test_cert_and_room_block_404():
@@ -338,8 +338,8 @@ def test_cert_and_room_block_404():
         "first_name": "C", "last_name": uuid.uuid4().hex[:6],
     }))
     assert client.delete(f"/api/certifications/{missing}").status_code == 404
-    c1 = _ok(client.post(f"/api/officials/{o['id']}/certifications",
-                         json={"cert_type": "roving_official"}))
+    _ok(client.post(f"/api/officials/{o['id']}/certifications",
+                    json={"cert_type": "roving_official"}))
     dup = client.post(f"/api/officials/{o['id']}/certifications",
                       json={"cert_type": "roving_official"})
     assert dup.status_code == 409

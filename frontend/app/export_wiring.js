@@ -4,7 +4,7 @@ export function installExportWiring(ctx) {
   const {
     csvDownload, rosterGrid, rosterSignInExport, rosterSignInTemplate,
     reportCsvExport, reportTemplateExport,
-    getCoverageMin, setCoverageMin, renderCoverage,
+    getCoverageMin, setCoverageMin,
   } = ctx;
 
   // =================== Generic CSV export for list tables ===================

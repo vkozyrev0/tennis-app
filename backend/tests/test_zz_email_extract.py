@@ -256,7 +256,8 @@ def test_name_usta_pairs_permissive_separators_both_directions():
     """The doubles fix: a name and its USTA # bind across whatever 'skip' glue a
     PDF/roster puts between them — double dashes + label, parens, a line break,
     em-dash + colon — in EITHER order, and both players come back in order."""
-    from app.email_extract import extract_name_usta_pairs as P, usta_candidates as C
+    from app.email_extract import extract_name_usta_pairs as P
+    from app.email_extract import usta_candidates as C
     samples = [
         "Kate Hampton -- USTA#:  2018840232 / Mia Lopez | 2018389707",
         "Doubles: 2018840232 Kate Hampton with 2018389707 Mia Lopez",
@@ -301,7 +302,7 @@ def _pair_names(pairs):
 
 def test_partner_swap_ernesto_stamps_both_players():
     from app.email_extract import compute_extracted_fields, extract_doubles_pair
-    from app.triage import classify, _classify_raw
+    from app.triage import _classify_raw, classify
     assert _classify_raw("", _ERNESTO_BODY) == "doubles"
     assert classify("", _ERNESTO_BODY) == "doubles"
     pair = extract_doubles_pair("", _ERNESTO_BODY)
@@ -315,9 +316,11 @@ def test_partner_swap_ernesto_stamps_both_players():
 
 def test_partner_swap_ulrich_stamps_both_and_usta():
     from app.email_extract import (
-        compute_extracted_fields, extract_doubles_pair, extract_name_usta_pairs,
+        compute_extracted_fields,
+        extract_doubles_pair,
+        extract_name_usta_pairs,
     )
-    from app.triage import classify, _classify_raw
+    from app.triage import _classify_raw, classify
     assert _classify_raw("", _ULRICH_BODY) == "doubles"
     assert classify("", _ULRICH_BODY) == "doubles"
     pair = extract_doubles_pair("", _ULRICH_BODY)

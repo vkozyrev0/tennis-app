@@ -6,9 +6,8 @@ dashboard. No FastAPI routes here — only cursor-level helpers + SELECT shape.
 import json
 from collections import defaultdict
 
-from fastapi import HTTPException
-
 import psycopg
+from fastapi import HTTPException
 
 from .assignment_calc import (
     FREE_MILES,
@@ -17,6 +16,7 @@ from .assignment_calc import (
     RULE_VERSION,
     compute_summary,
 )
+
 
 def _rate_for(cur, cert_type, work_date) -> float:
     cur.execute(

@@ -257,9 +257,10 @@ def test_fetch_imap_failures_and_query_and_uidvalidity(monkeypatch, _admin):
 
 @_needs_db
 def test_gmail_fetch_stamps_source_and_skips_same_rfc_id(monkeypatch, _admin):
+    from datetime import date, timedelta
+
     from app import gmail_feed as gf
     from app.db import get_conn
-    from datetime import date, timedelta
 
     start = date.today() + timedelta(days=40)
     t = client.post("/api/tournaments", json={
@@ -312,8 +313,9 @@ def test_gmail_fetch_stamps_source_and_skips_same_rfc_id(monkeypatch, _admin):
 
 @_needs_db
 def test_gmail_fetch_skips_pdf_row_without_message_id(monkeypatch, _admin):
-    from app import gmail_feed as gf
     from datetime import date, timedelta
+
+    from app import gmail_feed as gf
 
     start = date.today() + timedelta(days=41)
     t = client.post("/api/tournaments", json={

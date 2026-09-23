@@ -16,7 +16,7 @@ export function syncThemeColor() {
 export function applyTheme(t) {
   const dark = t === "dark";
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch (e) { /* ignore */ }
+  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch { /* ignore */ }
   syncThemeColor();
   const btn = document.getElementById("theme-toggle");
   if (!btn) return;
@@ -34,7 +34,7 @@ export function applyTheme(t) {
 
 export function installTheme() {
   applyTheme((() => {
-    try { return localStorage.getItem("theme"); } catch (e) { return null; }
+    try { return localStorage.getItem("theme"); } catch { return null; }
   })() || "light");
 
   document.addEventListener("DOMContentLoaded", () => {

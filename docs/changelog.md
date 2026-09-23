@@ -9,6 +9,23 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-23 — Linting across the whole tree, and a mandatory pre-check-in policy
+
+- Added `ruff.toml` (repo root): explicit `E4/E7/E9/F/W/I` selection, `target-version = "py312"`, `src = ["backend"]` so isort classifies `app`/`tests` as first-party. Covers `backend/` and `scripts/`. No per-rule or global ignores.
+- Added `eslint.config.mjs` (repo root) + `package.json`/`package-lock.json` with pinned `eslint` 10.11.0, `@eslint/js` 10.0.1, `globals` 17.12.0. Selection: `@eslint/js` recommended plus `eqeqeq`, `no-var`, `prefer-const`, `no-throw-literal`; the documented `allowEmptyCatch` and `_`-prefix options cover the existing `catch (_) {}` idiom without disabling either rule. `frontend/vendor/**` (the vendored AG Grid bundle) is ignored.
+- Both trees now report **zero** findings. Python: 138 findings fixed (82 by safe autofix, 56 by hand — semicolon statements, unused imports/locals, three late imports moved to the top of their module, two `lambda` assignments turned into `def`s, ambiguous `l` renamed). Frontend: 213 findings fixed (unused imports/ctx params, empty-catch conversions to optional catch binding, `prefer-const`, useless assignments, plus 18 genuine `no-undef` references — `loadRoomBlocks`, `getCertPairs`, `respChip`, `STAFF_ROLES`, `hotelsById`, `pairingMembersBox`/`pairingMemberRow` — that were never wired when the monolith split into ESM modules and would have thrown at runtime on those paths).
+- `frontend/app/modules.test.mjs` added: asserts every relative import resolves, every named import is really exported, and every `create*` factory wired in `app.js` receives the context keys it destructures. This is the structural check for the no-undef class above; it fails on an injected bad specifier or a dropped ctx key.
+- CI: new `lint` job in `.github/workflows/docker.yml` (PR + push to main) runs `python -m ruff check .` (ruff pinned to 0.16.8) and `npx eslint frontend`; neither is `continue-on-error`, and `build` now `needs: [lint, test]`.
+- Docs: README and docs/README.md state the mandatory policy — every change must run both linters and fix all findings before check-in — with the exact commands and where the config lives. `node_modules/` is git- and docker-ignored; npm stays lint tooling, so the frontend keeps its no-build-step shape and nothing served from `frontend/` changes.
+- Backend behavior re-verified, not just linted: `python -m pytest -q` against a real Postgres 16 (throwaway `postgres:16` container + `backend/.venv` from `requirements.txt`) reports **990 passed**. The edits are lint fixes only (import order, statement splitting, unused bindings); `models.py`'s 95 re-exported names were diffed before/after and are unchanged.
+- The served app was exercised end to end against the compose stack (`tennis-app-web-1`, which mounts this working tree): `scripts/live_feature_smoke.py` **66/66** and `scripts/ux_walkthrough.py` **45/45** pass, including the SPA assets for every module this change touched (`app.js`, `staff.js`, `setup_crud.js`, `pairing_doubles.js`, `partb.js`, `roster.js`, `assignments_ui.js`, `inbox.js`, `official_app.js`, `import_ui.js`). No browser was available, so click-through UI behavior was not driven; the module-graph test plus these checks are the substitute.
+
+## 2026-09-21 — Review: current-status docs match the tree
+
+- Recorded in [review-2026-09-21.md](review-2026-09-21.md). No runtime behavior change.
+- Current-status suite and migration lines that still said ~591 / 89 / 0055 now say **985** tests / **112** files / **0060** (roadmap status, design tree, test-coverage Running). The 985 count is the 2026-09-08 collection; this pass rechecked the file count and the migration head and could not re-run pytest (no venv, no Postgres on 5432).
+- Design router map names inbox people, Gmail/Outlook feeds, and TD chat. Inbox Clear is documented as `email_message.deleted_at`, separate from Trash. `app.js` is 920 lines and `frontend/app/` has 61 modules. The AG Grid comment matches the vendored 32.3.5 bundle. Roadmap no longer describes column encryption or the on-box leftover LLM as unbuilt. Historical changelog counts are unchanged.
+
 ## 2026-09-08 — Docs/Help match shipped inbox, idle, and mailbox feeds
 
 - README and test-coverage cite **985** tests / **112** files and migrations through **0060**. Data model documents `inbox_person`, Gmail/Outlook feeds, email `deleted_at`, and leftover on-box LLM. Help (`?`) already covers **Add to Players**, **Still there?**, and Get mails for Gmail and Outlook.

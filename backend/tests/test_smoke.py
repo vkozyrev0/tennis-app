@@ -902,6 +902,7 @@ def test_b3_combined_tshirt_hotel_dietary_import():
     # Need to query roster row with lodging_plan column visible. The roster
     # API doesn't surface it yet so probe via DB.
     import psycopg
+
     from app.config import settings
     with psycopg.connect(settings.dsn) as conn, conn.cursor() as cur:
         cur.execute(
@@ -940,7 +941,7 @@ def test_b3_unmappable_hotel_answer_stored_raw():
     client.post(f"/api/import/tournaments/{t['id']}/roster_initial",
                 files={"file": ("i.csv", init, "text/csv")})
     # Apply
-    bid = client.get(f"/api/import/batches?tournament_id={t['id']}").json()
+    client.get(f"/api/import/batches?tournament_id={t['id']}").json()
     # (no list endpoint — just re-fetch the response we discarded; easier to
     # parse from the staging post)
     re_up = _ok(client.post(f"/api/import/tournaments/{t['id']}/roster_initial",
@@ -959,6 +960,7 @@ def test_b3_unmappable_hotel_answer_stored_raw():
     assert m["merged"] == 1 and m["failed"] == 0
 
     import psycopg
+
     from app.config import settings
     with psycopg.connect(settings.dsn) as conn, conn.cursor() as cur:
         cur.execute(

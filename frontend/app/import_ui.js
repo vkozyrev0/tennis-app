@@ -4,17 +4,13 @@ import { looksLikeAgeDivision } from "./td_helpers.js";
 export function createImportPage(ctx) {
   const {
     api,
-    setMsg,
     toast,
     confirmDialog,
-    html,
     hstr,
     raw,
     esc,
     makeMenuButton,
     makeGrid,
-    scheduleComboSync,
-    activateGroup,
     getActive,
     importRefresh,
     runMailJob,
@@ -125,7 +121,7 @@ export function createImportPage(ctx) {
     const after = document.createElement("div"); after.className = "import-result-after";
     el.append(head, mount, after);
 
-    let grid, dupUstas = new Set();
+    let dupUstas = new Set();
     // cellErr = the standard rules PLUS the cross-row "duplicate USTA # in file"
     // check (which needs the whole dataset, so it lives here as a closure).
     const cellErr = (col, val) => {
@@ -193,7 +189,7 @@ export function createImportPage(ctx) {
     ];
 
     mount.style.height = "52vh";
-    grid = makeGrid(mount, {
+    const grid = makeGrid(mount, {
       index: "_id", editTriggerEvent: "click",
       placeholder: "No rows in this file.", columns: colDefs,
     });

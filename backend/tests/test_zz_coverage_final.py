@@ -12,11 +12,10 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import email_extract, email_ingest, email_llm, gmail_feed, importer, td_chat
+from app import email_extract, email_llm, gmail_feed, importer, td_chat
 from app.db import get_conn
 from app.email_ingest import IngestPayload, ingest_email, resolve_tournament_id
 from app.main import app
-from app.playerops import upsert_player
 from app.routers import auth as auth_mod
 from app.triage import classify
 
@@ -53,7 +52,7 @@ def test_importer_cut_quote_and_looks_like_db_division():
     assert "quoted thread" not in cut
     on = importer._cut_at_footer("intro\nOn Monday Jane wrote:\nquoted")
     assert "quoted" not in on or on.startswith("intro")
-    d = _ok(client.post("/api/divisions", json={
+    _ok(client.post("/api/divisions", json={
         "code": "ZZFLEX", "label": "Flex Z", "tournament_type": "junior",
         "gender": "female", "sort_order": 90,
     }))
@@ -76,11 +75,11 @@ def test_importer_roster_status_pairing_rel_distance_errors():
         "usta_number": u2, "first_name": "Ros", "last_name": "Two", "gender": "female",
     }))
     off = _ok(client.post("/api/officials", json={"first_name": "Dist", "last_name": "Same"}))
-    off2 = _ok(client.post("/api/officials", json={"first_name": "Other", "last_name": "Same"}))
+    _ok(client.post("/api/officials", json={"first_name": "Other", "last_name": "Same"}))
     site = _ok(client.post("/api/sites", json={
         "name": "DupSite", "code": "DS" + uuid.uuid4().hex[:3],
     }))
-    site2 = _ok(client.post("/api/sites", json={"name": "DupSite", "code": "DT" + uuid.uuid4().hex[:3]}))
+    _ok(client.post("/api/sites", json={"name": "DupSite", "code": "DT" + uuid.uuid4().hex[:3]}))
     with get_conn() as conn:
         with conn.cursor() as cur:
             importer._merge_roster(cur, t["id"], {
@@ -351,7 +350,6 @@ def test_ingest_raw_to_and_unique_raise():
         with conn.cursor() as cur:
             resolve_tournament_id(cur, explicit_id=None, to_address="   ")
     cur = type("C", (), {})()
-    calls = {"n": 0}
 
     def execute(sql, params=None):
         s = str(sql)

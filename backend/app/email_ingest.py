@@ -11,6 +11,7 @@ etc.) all map into :func:`ingest_email` after field normalization.
 from __future__ import annotations
 
 import html as html_lib
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -25,7 +26,6 @@ from .crypto import encrypt as _enc_body
 from .email_extract import compute_extracted_fields, infer_gender_from_email
 from .inbox_person import upsert_inbox_people
 from .triage import classify_timed
-import json
 
 _MSG_ID_RE = re.compile(r"<([^>]+)>")
 _TAG_RE = re.compile(r"<[^>]+>")

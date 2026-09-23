@@ -169,10 +169,11 @@ def _summarize_result(row: dict) -> str:
 
 
 def _run_handlers(conn, resolved: list[dict], *, confirm: bool) -> list[dict]:
+    from fastapi import Response as _Resp
+
     from .._models_workspace import RosterEntryCreate
     from .dashboard import dashboard
     from .roster import add_roster_entry, delete_roster_entry, list_roster
-    from fastapi import Response as _Resp
 
     out = []
     for c in resolved:

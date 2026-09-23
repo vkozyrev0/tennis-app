@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.crypto import decrypt
+from app.main import app
 from app.outlook_feed import (
     _DEFAULT_SECRET,
     _call_http,
@@ -27,7 +28,6 @@ from app.outlook_feed import (
     public_row,
     save_feed,
 )
-from app.main import app
 
 client = TestClient(app)
 
@@ -464,9 +464,10 @@ def test_fetch_mail_query_missing_fields_and_partial(monkeypatch, _admin):
 
 @_needs_db
 def test_outlook_fetch_stamps_source_and_skips_same_internet_message_id(monkeypatch, _admin):
+    from datetime import date, timedelta
+
     from app import outlook_feed as of
     from app.db import get_conn
-    from datetime import date, timedelta
 
     start = date.today() + timedelta(days=42)
     t = client.post("/api/tournaments", json={
@@ -510,9 +511,10 @@ def test_outlook_fetch_stamps_source_and_skips_same_internet_message_id(monkeypa
 
 @_needs_db
 def test_outlook_fetch_skips_pdf_row_without_message_id(monkeypatch, _admin):
+    from datetime import date, timedelta
+
     from app import outlook_feed as of
     from app.db import get_conn
-    from datetime import date, timedelta
 
     start = date.today() + timedelta(days=43)
     t = client.post("/api/tournaments", json={
@@ -804,6 +806,7 @@ def test_http_json_success_and_errors(monkeypatch):
 
 def test_connect_host_prefers_ipv4_then_falls_back(monkeypatch):
     import socket as sockmod
+
     from app import outlook_feed as of
 
     class Sock:

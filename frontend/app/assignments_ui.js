@@ -1,17 +1,15 @@
 // Assignments panel — load, render cards, bulk invite (D11).
-import { datesInRange as datesInRangeUtil } from "./util.js";
 import { isVenueRole } from "./td_helpers.js";
 
 export function createAssignmentsPanel(ctx) {
   const {
     api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, openForm,
-    html, hstr, raw, esc, money, fmtDOW, fillSelect, officialLabel, siteLabel,
-    certLabel, chip, makeMenuButton, scheduleComboSync, syncCombos, prereqCallout,
+    html, hstr, raw, esc, fmtDOW, fillSelect, officialLabel, siteLabel,
+    certLabel, makeMenuButton, syncCombos, prereqCallout,
     makeListGrid, getActive, getOfficialsById, getSitesById, getHotelsById,
-    getCertPairs, datesInRange: datesInRangeFn, activateGroup,
+    getCertPairs, activateGroup,
   } = ctx;
-  const datesInRange = datesInRangeFn || datesInRangeUtil;
-  void makeListGrid; void getHotelsById; void getSitesById; void esc;
+  void makeListGrid; void getSitesById; void esc;
 
   // =================== Assignment change history (P4-5) ===================
   const _AUDIT_LABEL = {
@@ -637,7 +635,7 @@ export function createAssignmentsPanel(ctx) {
 
     const addBtn = document.createElement("button"); addBtn.type = "button"; addBtn.className = "btn-link"; addBtn.textContent = "Add day(s)";
     addBtn.addEventListener("click", async () => {
-      let dates = manualIn
+      const dates = manualIn
         ? (manualIn.value ? [manualIn.value] : [])
         : [...pickWrap.querySelectorAll("input.dpick:checked")].map((c) => c.value);
       if (!dates.length) { setMsg("asg-msg", "pick day(s)", false); return; }
@@ -685,7 +683,7 @@ export function createAssignmentsPanel(ctx) {
     asgEditId = null; _reassignDays = null;
     asgForm.reset(); asgForm.querySelector('button[type="submit"]').textContent = "Add official";
   }
-  onSubmit(asgForm, async (e) => {
+  onSubmit(asgForm, async () => {
     const b = formObj(asgForm);
     b.official_id = Number(b.official_id);
     b.site_id = b.site_id ? Number(b.site_id) : null;
@@ -752,13 +750,13 @@ export function createAssignmentsPanel(ctx) {
     });
   async function loadRoomBlocks() {
     if (!getActive()) return;
-    prereqCallout("panel-t-roomblocks", !Object.keys(hotelsById).length,
+    prereqCallout("panel-t-roomblocks", !Object.keys(getHotelsById()).length,
       "No hotels in the catalog yet — add them before creating room blocks.",
       "tab-panel-hotels");
     trbGrid.setData(await api(`/room-blocks?tournament_id=${getActive().id}`));
   }
   function trbReset() { trbEditId = null; trbForm.reset(); trbForm.querySelector('button[type="submit"]').textContent = "Add block"; }
-  onSubmit(trbForm, async (e) => {
+  onSubmit(trbForm, async () => {
     const b = formObj(trbForm);
     b.hotel_id = Number(b.hotel_id);
     b.tournament_id = getActive().id;
@@ -778,5 +776,5 @@ export function createAssignmentsPanel(ctx) {
     _renderAsgList();
   }
 
-  return { loadAssignments, respChip, filterByResponse };
+  return { loadAssignments, respChip, filterByResponse, loadRoomBlocks };
 }

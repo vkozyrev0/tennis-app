@@ -2,7 +2,6 @@
 
 Named test_zz_* so logins sort after other modules (suite convention).
 """
-import os
 import uuid
 
 import pytest

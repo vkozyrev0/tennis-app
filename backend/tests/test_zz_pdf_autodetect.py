@@ -15,9 +15,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.db import get_conn
 from app.importer import _merge_email_pdf
+from app.main import app
 
 client = TestClient(app)
 

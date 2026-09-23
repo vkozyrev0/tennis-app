@@ -315,7 +315,6 @@ def test_dissolve_batch_walks_members_back_to_unpaid():
 
 def test_batch_lifecycle_audits():
     t, recs = _two_finalized()
-    a_id = None
     # find an assignment id for one record via its audit trail existence
     ids = [r["record_id"] for r in recs]
     b = _ok(client.post(f"/api/tournaments/{t['id']}/payroll/batches", json={

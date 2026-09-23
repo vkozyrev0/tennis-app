@@ -6,7 +6,6 @@ import {
   selectionCountLabel,
   pruneSelection,
   inboxShortcutGate,
-  inboxAxesLegend,
   emailCreateGuard,
   EMAIL_MSG_ID,
   reviewFormState,
@@ -30,7 +29,7 @@ import { sessionIsGone } from "./shell.js";
 export function createInboxPanel(ctx) {
   const {
     api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
-    html, hstr, raw, esc, money, fmtDOW, chip, fillSelect, playerLabel,
+    html, hstr, raw, money, chip, fillSelect, playerLabel,
     officialLabel, makeReadGrid, makeListGrid, makeMenuButton, scheduleComboSync,
     openForm, getActive, setActive, getPlayersById, getPlayersByUsta, getTournamentsById,
     rosterPrefillFromEmail, rosterPrefillFromName, resolveFilePlayerId,
@@ -40,6 +39,9 @@ export function createInboxPanel(ctx) {
     progress, humanizeDetail,
     // Roster form prefill lives in createRosterPanel (owns form + modal state).
     rosterAddFromEmail, rosterAddBothFromEmail, playersCrudRefresh,
+    // Pairing-avoidance member rows live in createPairingDoublesPanel (owns that
+    // form); the inbox prefills them when a pairing email is opened.
+    getPairingMembersBox, getPairingMemberRow,
     sizeLists, runMailJob,
   } = ctx;
   const _runMailJob = typeof runMailJob === "function"
@@ -651,16 +653,20 @@ export function createInboxPanel(ctx) {
           // player (still editable; the TD can add/remove rows before saving).
           if (m.classification === "pairing_avoidance"
               && (m.detected_member_ids || []).length >= 2 && t.form.id === "pairing-form") {
-            pairingMembersBox.innerHTML = "";
-            for (const pid of m.detected_member_ids) {
-              pairingMemberRow();
-              const sel = pairingMembersBox.lastElementChild.querySelector(".pm-player");
-              if (sel && getPlayersById()[pid]) {
-                sel.value = String(pid);
-                if (typeof sel._comboSync === "function") sel._comboSync();
+            const box = typeof getPairingMembersBox === "function" ? getPairingMembersBox() : null;
+            const addRow = typeof getPairingMemberRow === "function" ? getPairingMemberRow() : null;
+            if (box && addRow) {
+              box.innerHTML = "";
+              for (const pid of m.detected_member_ids) {
+                addRow();
+                const sel = box.lastElementChild.querySelector(".pm-player");
+                if (sel && getPlayersById()[pid]) {
+                  sel.value = String(pid);
+                  if (typeof sel._comboSync === "function") sel._comboSync();
+                }
               }
+              while (box.children.length < 2) addRow();
             }
-            while (pairingMembersBox.children.length < 2) pairingMemberRow();
           }
           // Carry the auto-detected withdrawal reason into the form so the TD
           // doesn't retype it (still editable before saving).
@@ -849,7 +855,6 @@ export function createInboxPanel(ctx) {
   // full email body and override the classification or status.
   let _inboxDetailId = null;
   let _inboxDetailTid = null;  // the open email's own tournament_id (preserved on save)
-  let _inboxDetailPartnerId = null;  // detected partner — preserved on save (the pane has no partner picker)
   function _populateInboxClassSelect() {
     const sel = document.getElementById("inbox-detail-classification");
     if (!sel || sel.options.length) return;
@@ -962,7 +967,6 @@ export function createInboxPanel(ctx) {
     _populateInboxClassSelect();
     _inboxDetailId = m.id;
     _inboxDetailTid = m.tournament_id ?? null;  // preserve on save (don't re-home to active)
-    _inboxDetailPartnerId = m.detected_partner_id ?? null;
     _inboxDetailEmail = m;
     const box = document.getElementById("inbox-detail");
     box.hidden = false;
@@ -1807,7 +1811,7 @@ export function createInboxPanel(ctx) {
     if (_inboxUnmatchedOnly) params.set("unmatched", "true");
     // Need X-Total-Count for the "showing N of M" note — fetch directly.
     _progress(1);
-    let rows = [], total = null;
+    let rows, total;
     try {
       const res = await fetch("/api/emails?" + params.toString(), { credentials: "same-origin" });
       if (res.status === 401) {
@@ -1957,18 +1961,6 @@ export function createInboxPanel(ctx) {
   // substring against the column's field value (works through formatters since the
   // underlying value is what's filtered).
   // makeListGrid / makeReadGrid / _autoHeaderFilters live in ./app/grids.js (P2 #11a).
-  // Origin cell: did this list row come from a filed email (✉, tooltip = the
-  // email's subject) or was it entered manually? Read-only badge.
-  function _originCell(c) {
-    const r = c.getData();
-    if (r.source_email_id) {
-      const subj = r.source_subject || `email #${r.source_email_id}`;
-      return hstr`<span class="origin-email" title="${"Filed from email: " + subj}">Email</span>`;
-    }
-    return '<span class="muted">Manual</span>';
-  }
-  const _ORIGIN_COL = { title: "Origin", field: "source_email_id", headerSort: false,
-    width: 100, formatter: _originCell };
 
   return {
     loadInbox,

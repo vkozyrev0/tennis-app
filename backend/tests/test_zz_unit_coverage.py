@@ -6,11 +6,10 @@ existing gmail/geocode/llm tests already do.
 """
 from __future__ import annotations
 
-import io
 import json
 import time
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from email.message import EmailMessage
 from unittest.mock import MagicMock
 
@@ -18,11 +17,22 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import coppa, crypto, email_ingest, email_llm, email_stamp, export_gate
-from app import inbox_person
-from app import geocode, gmail_feed, importer, playerops, retention, security
-from app import shirtops, td_chat
-from app.config import Settings, settings
+from app import (
+    coppa,
+    crypto,
+    email_llm,
+    email_stamp,
+    export_gate,
+    geocode,
+    importer,
+    inbox_person,
+    playerops,
+    retention,
+    security,
+    shirtops,
+    td_chat,
+)
+from app.config import settings
 from app.email_detect import _fuzzy_name_match
 from app.email_extract import (
     extract_doubles_pair,
@@ -80,6 +90,7 @@ def test_settings_ingest_flags_empty(monkeypatch):
 
 def test_dotenv_load_failure_is_swallowed(monkeypatch):
     import importlib
+
     import app.config as cfg
 
     def _boom(*_a, **_k):
@@ -171,8 +182,8 @@ def test_retention_rejects_negative_days():
 
 def test_access_and_export_audit_coerce_client_kind():
     from app.access_audit import log_access
-    from app.export_audit import log_export
     from app.db import get_conn
+    from app.export_audit import log_export
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -637,7 +648,7 @@ def test_merge_functions_error_and_overwrite_paths():
         "play_start_date": "2026-06-01", "play_end_date": "2026-06-04",
     }).json()["id"]
     usta = "3" + uuid.uuid4().hex[:9]
-    p = client.post("/api/players", json={
+    client.post("/api/players", json={
         "usta_number": usta, "first_name": "Imp", "last_name": "One",
         "gender": "female",
     }).json()
@@ -692,7 +703,6 @@ def test_fuzzy_name_too_short_and_empty_names():
     ]
     assert _fuzzy_name_match(roster, "Ann") is None
     # earliest_fullname skips empty names; unique surname still works
-    from app.db import get_conn
     # detect_player needs a real tournament roster via HTTP is easier
 
 

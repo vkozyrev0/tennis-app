@@ -19,7 +19,7 @@ export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
 export function createGridFactories(ctx) {
   const {
     api, esc, setMsg, confirmDialog, markInvalid, scheduleComboSync, formObj,
-    _csvDownload, _reflectAriaSort, GRIDS, _detailBackdrop, setCloseOpenDetail,
+    _csvDownload, GRIDS, _detailBackdrop, setCloseOpenDetail,
   } = ctx;
 
   function _autoHeaderFilters(cols) {
@@ -38,13 +38,13 @@ export function createGridFactories(ctx) {
   // time. These helpers translate the app's existing Tabulator-shaped column
   // defs to AG Grid colDefs and emulate the small Tabulator cell/row surface the
   // formatters + edit handlers call, so the per-grid configs don't have to change.
-  /* global agGrid */
   const _AG_THEME = "ag-theme-quartz";
 
   // v33.2+ accepts theme:"legacy" so CSS-file Quartz (ag-theme-courtops) wins
-  // over the JS Theming API. This repo still vendors AG Grid 32.2, which has
-  // handleThemeGridOptionChange but treats the value as a Theme object — the
-  // string "legacy" then throws (startUse is not a function) and no grid mounts.
+  // over the JS Theming API. This repo vendors AG Grid Community 32.3.5, which
+  // has handleThemeGridOptionChange but treats theme:"legacy" as a Theme object
+  // (that string is v33.2+). Passing it throws (startUse is not a function)
+  // and no grid mounts.
   function _agLegacyCssTheme() {
     const g = typeof agGrid === "undefined" ? null : agGrid;
     if (!g) return undefined;

@@ -18,6 +18,10 @@ venv/
 .coverage.*
 htmlcov/
 
+# Node dev-tooling (ESLint for the frontend; the app itself has no build step)
+node_modules/
+npm-debug.log*
+
 # Env / secrets
 .env
 backend/.env

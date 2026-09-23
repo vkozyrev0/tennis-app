@@ -8,6 +8,8 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 
+from .config import settings
+from .db_errors import install as install_db_error_handlers
 from .routers import (
     access_audit,
     adult_lists,
@@ -47,14 +49,12 @@ from .routers import (
     roster,
     sites,
     staff,
-    tournaments,
     td_chat,
+    tournaments,
     trash,
     users,
     withdrawals,
 )
-from .config import settings
-from .db_errors import install as install_db_error_handlers
 from .security import require_admin
 from .security_headers import build_security_headers, security_headers_enabled
 
