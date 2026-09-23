@@ -165,6 +165,13 @@ is pinned in `package.json` and installed by `npm ci`. The frontend still has
 repo root (outside the served `frontend/` tree), and nothing in `frontend/`
 changes shape because of it.
 
+The gate itself is guarded: `node scripts/ci_gate.test.mjs` reads
+`.github/workflows/docker.yml` and asserts the `lint` job exists on the PR/push
+path, runs exactly the two commands above, carries no `continue-on-error`, and
+is listed in the image build's `needs` — then re-runs those checks against
+deliberately broken copies of the file, so a silently removed gate fails the
+test rather than passing unnoticed.
+
 The DOM-free frontend checks (`frontend/app/*.test.mjs`, including
 `modules.test.mjs`, which verifies every module import resolves) run with
 `node frontend/app/<name>.test.mjs`.

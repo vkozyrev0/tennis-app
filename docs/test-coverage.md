@@ -77,6 +77,12 @@ That is **21** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.t
 `ruff.toml`) and `npx eslint .` (config in `eslint.config.mjs`). CI runs
 both in the `lint` job; see README.md.
 
+**CI-gate guard:** `scripts/ci_gate.test.mjs` (run: `node scripts/ci_gate.test.mjs`)
+reads `.github/workflows/docker.yml` and asserts the `lint` job, its two commands,
+the PR/push triggers, the absence of `continue-on-error`, and the build's
+`needs: [lint, test]` — then proves those assertions bite by re-running them
+against broken copies of the workflow.
+
 **Live server scripts** (server must already be up, e.g. uvicorn on `:8000`):
 
 | Script | Purpose |
