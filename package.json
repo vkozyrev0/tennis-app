@@ -1,15 +1,17 @@
 {
-  "name": "courtops-lint",
+  "name": "courtops-dev-tooling",
   "private": true,
   "type": "module",
-  "description": "Node dev-tooling for the CourtOps linters. The app itself has no build step: the browser loads frontend/ straight from disk.",
+  "description": "Node dev-tooling for CourtOps: the linters and the browser UI smoke. The app itself has no build step - the browser loads frontend/ straight from disk.",
   "scripts": {
-    "lint": "eslint frontend",
-    "lint:fix": "eslint frontend --fix"
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "ui-smoke": "node scripts/ui_smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "eslint": "10.11.0",
-    "globals": "17.12.0"
+    "globals": "17.12.0",
+    "playwright": "1.63.0"
   }
 }

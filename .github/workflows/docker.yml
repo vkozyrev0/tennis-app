@@ -58,8 +58,8 @@ jobs:
       - name: Install frontend lint tooling
         run: npm ci
 
-      - name: Lint frontend JS
-        run: npx eslint frontend
+      - name: Lint frontend JS + node tooling
+        run: npx eslint .
 
   # Run the backend suite first; the image build/push is gated on it (needs: test).
   test:

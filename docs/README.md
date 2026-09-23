@@ -88,7 +88,7 @@ config.
 
 ```bash
 python -m ruff check .        # Python: config in ruff.toml (repo root), covers backend/ + scripts/
-npm ci && npx eslint frontend # Frontend JS: flat config in eslint.config.mjs (repo root)
+npm ci && npx eslint .        # Frontend JS + node tooling: flat config in eslint.config.mjs (repo root)
 ```
 
 Add `--fix` to either command to apply the safe autofixes, then re-run without

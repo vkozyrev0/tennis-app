@@ -22,6 +22,9 @@ htmlcov/
 node_modules/
 npm-debug.log*
 
+# Browser-verification screenshots from scripts/ui_smoke.mjs
+.ui-smoke/
+
 # Env / secrets
 .env
 backend/.env

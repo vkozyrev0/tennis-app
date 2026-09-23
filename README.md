@@ -149,8 +149,8 @@ python -m ruff check . --fix      # apply the safe autofixes first, then re-run
 
 # Frontend JS — ESLint flat config in eslint.config.mjs (repo root)
 npm ci                            # once: installs the pinned eslint dev-tooling
-npx eslint frontend               # must exit 0 and print nothing
-npx eslint frontend --fix         # apply the autofixes first, then re-run
+npx eslint .                      # must exit 0 and print nothing
+npx eslint . --fix                # apply the autofixes first, then re-run
 ```
 
 Both configs state their rule selection explicitly: `ruff.toml` selects the
@@ -168,6 +168,19 @@ changes shape because of it.
 The DOM-free frontend checks (`frontend/app/*.test.mjs`, including
 `modules.test.mjs`, which verifies every module import resolves) run with
 `node frontend/app/<name>.test.mjs`.
+
+### Browser UI smoke (Playwright)
+
+`scripts/ui_smoke.mjs` drives the running app in Chromium: sign-in, every
+section and tab, the reports cert-pool/staffing tables, room blocks, the
+pairing form and the inbox "File as …" prefill, at desktop and mobile
+viewports. It fails on an uncaught page or console error, on an HTTP error after
+sign-in, and on a tab that renders nothing; screenshots land in `.ui-smoke/`.
+
+```bash
+npx playwright install chromium     # once, ~150 MB
+npm run ui-smoke                    # or: node scripts/ui_smoke.mjs [base-url]
+```
 
 ## Docs
 

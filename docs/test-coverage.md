@@ -74,7 +74,7 @@ DOM-free node test files (independent of AG Grid):
 That is **21** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
 
 **Lint (required before every check-in):** `python -m ruff check .` (config in
-`ruff.toml`) and `npx eslint frontend` (config in `eslint.config.mjs`). CI runs
+`ruff.toml`) and `npx eslint .` (config in `eslint.config.mjs`). CI runs
 both in the `lint` job; see README.md.
 
 **Live server scripts** (server must already be up, e.g. uvicorn on `:8000`):
