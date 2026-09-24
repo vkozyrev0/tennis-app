@@ -405,6 +405,123 @@ def test_fetch_duplicate_and_ingest_error(monkeypatch, _admin):
     assert partial.json()["last_status"] in {"partial", "ok", "error"}
 
 
+def _install_window_imap(monkeypatch, gf, *, events, uids=(10, 11, 12)):
+    """Fake Gmail IMAP serving ``uids`` with unique message-ids.
+
+    Records one ``("fetch", uid)`` event per message download so a test can
+    see whether downloads and classification interleave.
+    """
+    tag = uuid.uuid4().hex
+
+    class _WindowImap(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return ("OK", [" ".join(str(u) for u in uids).encode()])
+            if cmd == "FETCH":
+                uid = int(args[0])
+                events.append(("fetch", uid))
+                return ("OK", [(b"RFC822", _rfc822(
+                    message_id=f"<window-{tag}-{uid}@gmail.com>",
+                    subject=f"Window {tag} {uid}",
+                    body=f"Body {uid}",
+                ))])
+            raise AssertionError(f"Gmail IMAP must not {cmd} (would mutate the mailbox)")
+
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _WindowImap)
+
+
+def _record_phases(monkeypatch, gf, events):
+    """Wrap the shipped decode + ingest steps so tests see the phase order."""
+    real_payload = gf.message_to_payload
+    real_ingest = gf.ingest_email
+
+    def _payload(raw, *, tournament_id=None):
+        payload = real_payload(raw, tournament_id=tournament_id)
+        events.append(("decode", payload.message_id))
+        return payload
+
+    def _ingest(cur, payload, *, auto_classify=True):
+        events.append(("classify", payload.message_id))
+        return real_ingest(cur, payload, auto_classify=auto_classify)
+
+    monkeypatch.setattr(gf, "message_to_payload", _payload)
+    monkeypatch.setattr(gf, "ingest_email", _ingest)
+
+
+def _arm_window(monkeypatch, events, *, uids=(10, 11, 12)):
+    """Point the shipped fetch at a 3-message window and record the phases."""
+    from app import gmail_feed as gf
+    from app.db import get_conn
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True,
+        "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+    })
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 9, uidvalidity = 99 WHERE id = 1")
+        conn.commit()
+    _install_window_imap(monkeypatch, gf, events=events, uids=uids)
+    _record_phases(monkeypatch, gf, events)
+    return gf
+
+
+@_needs_db
+def test_fetch_downloads_whole_window_before_any_classify(monkeypatch, _admin):
+    events: list[tuple[str, object]] = []
+    _arm_window(monkeypatch, events)
+
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 200, r.text
+
+    kinds = [k for k, _ in events]
+    last_download = max(i for i, k in enumerate(kinds) if k in {"fetch", "decode"})
+    first_classify = kinds.index("classify")
+    assert last_download < first_classify, f"classify interleaved with download: {events}"
+    assert kinds == ["fetch"] * 3 + ["decode"] * 3 + ["classify"] * 3, events
+
+
+@_needs_db
+def test_fetch_classifies_full_batch_in_one_pass(monkeypatch, _admin):
+    from app.db import get_conn
+
+    events: list[tuple[str, object]] = []
+    _arm_window(monkeypatch, events)
+
+    first = client.post("/api/gmail-feed/fetch")
+    assert first.status_code == 200, first.text
+    body = first.json()
+    assert body["fetched"] == 3
+    assert body["imported"] == 3
+    assert body["duplicates"] == 0
+
+    classified = [mid for kind, mid in events if kind == "classify"]
+    assert len(classified) == 3 and len(set(classified)) == 3, events
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT message_id, classification, status FROM email_message "
+                "WHERE message_id = ANY(%s)",
+                (classified,),
+            )
+            rows = cur.fetchall()
+    assert len(rows) == 3, rows
+    assert all(row["classification"] for row in rows), rows
+
+    # Rewind the cursor: the same three mails come back, all duplicates.
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 0 WHERE id = 1")
+        conn.commit()
+    events.clear()
+    second = client.post("/api/gmail-feed/fetch")
+    assert second.status_code == 200, second.text
+    assert second.json()["imported"] == 0
+    assert second.json()["duplicates"] == 3
+    assert [k for k, _ in events] == ["fetch"] * 3 + ["decode"] * 3 + ["classify"] * 3
+
+
 def test_gmail_feed_source_is_readonly():
     import re
     from pathlib import Path

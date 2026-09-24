@@ -321,8 +321,12 @@ def test_outlook_date_window_includes_read_and_follows_nextlink(monkeypatch, _ad
     })
     fake = _Paged([])
     monkeypatch.setattr(of, "_http_json", fake)
-    since = (date.today() - timedelta(days=1)).isoformat()
-    until = date.today().isoformat()
+    # Derive the window from the same UTC `now` the messages use: a local
+    # `date.today()` bound excludes `now - 2h` whenever UTC has already rolled
+    # over to the next day (local evening), which made this test time-of-day
+    # dependent.
+    since = (now - timedelta(days=1)).date().isoformat()
+    until = now.date().isoformat()
     r = client.post(f"/api/outlook-feed/fetch?since={since}&until={until}")
     assert r.status_code == 200, r.text
     assert r.json()["fetched"] == 2

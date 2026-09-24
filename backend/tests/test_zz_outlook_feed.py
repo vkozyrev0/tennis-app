@@ -110,6 +110,49 @@ class _FakeGraph:
         raise AssertionError(url)
 
 
+NEXT_PAGE = "https://graph.microsoft.com/v1.0/users/TD%40myadllc.com/messages?$skiptoken=next"
+
+
+class _PagingGraph:
+    """Fake Graph transport replaying fixed mail pages.
+
+    ``pages`` is a list of ``(messages, next_link)`` pairs; once exhausted the
+    last page repeats forever. ``max_mail_calls`` turns a runaway paging loop
+    into a fast assertion failure instead of a hung suite.
+    """
+
+    def __init__(self, pages, token="fake-token", max_mail_calls=12):
+        self.pages = [(list(msgs), nxt) for msgs, nxt in pages]
+        self.token = token
+        self.max_mail_calls = max_mail_calls
+        self.token_urls: list[str] = []
+        self.mail_urls: list[str] = []
+
+    def __call__(self, method, url, *, headers=None, data=None, timeout=30):
+        method = (method or "").upper()
+        if "oauth2/v2.0/token" in url:
+            assert method == "POST"
+            self.token_urls.append(url)
+            return 200, {"access_token": self.token}
+        if "/messages" in url:
+            assert method == "GET", (
+                "Graph mail calls must be GET — never DELETE/PATCH mailbox messages"
+            )
+            self.mail_urls.append(url)
+            assert len(self.mail_urls) <= self.max_mail_calls, (
+                f"paging did not stop after {self.max_mail_calls} mailbox calls"
+            )
+            assert (headers or {}).get("Authorization") == f"Bearer {self.token}"
+            if not self.pages:
+                return 200, {"value": []}
+            msgs, nxt = self.pages[min(len(self.mail_urls), len(self.pages)) - 1]
+            payload = {"value": msgs}
+            if nxt:
+                payload["@odata.nextLink"] = nxt
+            return 200, payload
+        raise AssertionError(url)
+
+
 def test_graph_message_to_payload_maps_fields():
     msg = _graph_msg(
         subject="Boys 14 Doubles",
@@ -673,6 +716,123 @@ def test_fetch_token_payload_edges_and_batch_cap(monkeypatch, _admin):
     boom = client.post("/api/outlook-feed/fetch")
     assert boom.status_code == 502
     _assert_no_secret(boom.text)
+
+
+def _configure_window_feed() -> None:
+    """Enable the feed and ask for a date window, so @odata.nextLink is followed."""
+    client.put("/api/outlook-feed", json={
+        "enabled": True, "mailbox": TD_MAILBOX, "client_secret": TD_SECRET,
+        "tenant_id": TD_TENANT, "client_id": TD_CLIENT, "mail_query": "",
+    })
+
+
+@_needs_db
+def test_graph_paging_stops_when_a_page_adds_no_messages(monkeypatch, _admin):
+    """A page with no messages that still carries a nextLink must not page forever."""
+    from app import outlook_feed as of
+    now = datetime.now(timezone.utc)
+    msgs = [
+        _graph_msg(message_id=f"<np-{i}-{uuid.uuid4().hex}@outlook.test>",
+                   subject=f"No progress {i}", received=now - timedelta(minutes=30 - i))
+        for i in (1, 2)
+    ]
+    # Page 2 and every later page: empty, yet always the same nextLink.
+    fake = _PagingGraph([(msgs, NEXT_PAGE), ([], NEXT_PAGE)])
+    _configure_window_feed()
+    monkeypatch.setattr(of, "_http_json", fake)
+    r = client.post("/api/outlook-feed/fetch?since=2026-09-01")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["fetched"] == 2, body
+    assert body["imported"] == 2, body
+    assert len(fake.token_urls) == 1
+    assert len(fake.mail_urls) <= 3, fake.mail_urls
+
+
+@_needs_db
+def test_graph_paging_stops_on_a_repeated_next_link(monkeypatch, _admin):
+    """A nextLink already visited ends the walk instead of looping."""
+    from app import outlook_feed as of
+    now = datetime.now(timezone.utc)
+    page1 = [_graph_msg(message_id=f"<rl1-{uuid.uuid4().hex}@outlook.test>",
+                        subject="Repeat link 1", received=now - timedelta(minutes=20))]
+    page2 = [
+        _graph_msg(message_id=f"<rl2-{i}-{uuid.uuid4().hex}@outlook.test>",
+                   subject=f"Repeat link 2.{i}", received=now - timedelta(minutes=10 - i))
+        for i in (1, 2)
+    ]
+    fake = _PagingGraph([(page1, NEXT_PAGE), (page2, NEXT_PAGE)])
+    _configure_window_feed()
+    monkeypatch.setattr(of, "_http_json", fake)
+    r = client.post("/api/outlook-feed/fetch?since=2026-09-01")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["fetched"] == 3, body
+    assert body["imported"] == 3, body
+    assert fake.mail_urls[1] == NEXT_PAGE
+    assert len(fake.mail_urls) <= 3, fake.mail_urls
+
+
+@_needs_db
+def test_graph_paging_follows_next_link_and_keeps_every_message(monkeypatch, _admin):
+    """The paging bound must not truncate a legitimate multi-page fetch."""
+    from app import outlook_feed as of
+    now = datetime.now(timezone.utc)
+    page1 = [
+        _graph_msg(message_id=f"<mp1-{i}-{uuid.uuid4().hex}@outlook.test>",
+                   subject=f"Multi 1.{i}", received=now - timedelta(minutes=30 - i))
+        for i in (1, 2)
+    ]
+    page2 = [
+        _graph_msg(message_id=f"<mp2-{i}-{uuid.uuid4().hex}@outlook.test>",
+                   subject=f"Multi 2.{i}", received=now - timedelta(minutes=20 - i))
+        for i in (1, 2)
+    ]
+    fake = _PagingGraph([(page1, NEXT_PAGE), (page2, None)])
+    _configure_window_feed()
+    monkeypatch.setattr(of, "_http_json", fake)
+    r = client.post("/api/outlook-feed/fetch?since=2026-09-01")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["fetched"] == 4, body
+    assert body["imported"] == 4, body
+    assert len(fake.mail_urls) == 2, fake.mail_urls
+    assert fake.mail_urls[1] == NEXT_PAGE
+
+
+@_needs_db
+def test_fetch_latest_downloads_every_page_before_the_first_classify(monkeypatch, _admin):
+    """fetch_latest: all Graph pages are downloaded before the first ingest_email."""
+    from app import outlook_feed as of
+    now = datetime.now(timezone.utc)
+    events: list[str] = []
+    page1 = [_graph_msg(message_id=f"<ord1-{uuid.uuid4().hex}@outlook.test>",
+                        subject="Order 1", received=now - timedelta(minutes=30))]
+    page2 = [_graph_msg(message_id=f"<ord2-{uuid.uuid4().hex}@outlook.test>",
+                        subject="Order 2", received=now - timedelta(minutes=20))]
+
+    class _Recording(_PagingGraph):
+        def __call__(self, method, url, **kw):
+            payload = super().__call__(method, url, **kw)
+            if "/messages" in url:
+                events.append("mail")
+            return payload
+
+    def _fake_ingest(cur, payload, auto_classify=False):
+        events.append("classify")
+        return {"duplicate": False, "id": 1}
+
+    fake = _Recording([(page1, NEXT_PAGE), (page2, None)])
+    _configure_window_feed()
+    monkeypatch.setattr(of, "ingest_email", _fake_ingest)
+    monkeypatch.setattr(of, "_http_json", fake)
+    r = client.post("/api/outlook-feed/fetch?since=2026-09-01")
+    assert r.status_code == 200, r.text
+    assert events.count("mail") == 2, events
+    assert events.count("classify") == 2, events
+    last_mail = max(i for i, e in enumerate(events) if e == "mail")
+    assert events.index("classify") > last_mail, events
+    assert events[:2] == ["mail", "mail"], events
 
 
 @_needs_db

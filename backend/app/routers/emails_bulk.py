@@ -197,8 +197,10 @@ def bulk_confirm_suggestions(body: EmailBulkDetect, conn=Depends(db_dep)):
 def bulk_reprocess(body: EmailBulkDetect, conn=Depends(db_dep)):
     """Re-run leftover LLM (when on) + extract stamp on stored emails.
 
-    Used by Inbox Reprocess range in small chunks so the overlay can show
-    n of total. Does not insert duplicate rows.
+    Inbox Reprocess range sends the whole window in ONE request (chunked only
+    when the list is very long) and drives the overlay from this result, so the
+    pass is a single batch instead of one request per email. Does not insert
+    duplicate rows.
     """
     leftover = probe_llm()
     use_leftover = leftover == "ok"

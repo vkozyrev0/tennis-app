@@ -1,4 +1,5 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
+import { classifyChunks, progressAfter } from "./classify_batch.js";
 import { enhanceSelect } from "./combobox.js";
 import {
   bulkBarHidden,
@@ -1393,20 +1394,24 @@ export function createInboxPanel(ctx) {
             ? "Intelligence is off — leftover LLM will not run (heuristic only)"
             : "Intelligence sidecar is down — leftover LLM will not run (heuristic only)", false);
         }
+        // One request per chunk (a normal range is a single request), so the
+        // overlay's n of total stays honest without one call per email.
+        const chunks = classifyChunks(ids);
         let leftoverCalls = 0;
-        for (let i = 0; i < ids.length; i++) {
+        for (let i = 0; i < chunks.length; i++) {
           if (signal && signal.aborted) {
             const err = new Error("cancelled");
             err.name = "AbortError";
             throw err;
           }
-          update({ phase, current: i, total: ids.length });
           const chunk = await api("/emails/bulk/reprocess", {
             method: "POST",
-            body: JSON.stringify({ email_ids: [ids[i]] }),
+            body: JSON.stringify({ email_ids: chunks[i] }),
             signal,
           });
           leftoverCalls += chunk.leftover_calls || 0;
+          const p = progressAfter(chunks, i);
+          update({ phase, current: p.current, total: p.total });
         }
         update({ phase, current: ids.length, total: ids.length });
         return { ids, leftover, leftoverCalls, fallback, rangeLabel };
