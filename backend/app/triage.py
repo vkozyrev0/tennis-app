@@ -162,7 +162,8 @@ def classify(subject: str | None, body: str | None) -> str:
             label = "other"
     if label != "other":
         return label
-    # Optional local tiny-LLM second pass for leftovers only (EMAIL_LLM=1).
+    # Optional small-LLM second pass for leftovers only (EMAIL_LLM=1;
+    # DeepSeek by default, the on-box sidecar under EMAIL_LLM_PROVIDER=local).
     from .email_llm import maybe_intent
     return maybe_intent(subject, body, label)
 

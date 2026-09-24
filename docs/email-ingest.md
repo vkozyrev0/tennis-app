@@ -27,9 +27,11 @@ export INGEST_DEFAULT_TOURNAMENT_ID=12
 
 Restart the API. Check:
 
-Optional **local** tiny-LLM for leftover `other` emails (heuristic first): set
-`EMAIL_LLM=1` and run llama.cpp `llama-server` on loopback. Junior PII stays
-on-box (D5). Off by default. See `.env.example`. The leftover prompt (one
+Optional **small LLM** for leftover `other` emails (heuristic first): set
+`EMAIL_LLM=1`. The default provider is the **DeepSeek API**
+(`DEEPSEEK_API_KEY`; the clipped leftover text leaves the machine), or run
+llama.cpp `llama-server` on loopback and set `EMAIL_LLM_PROVIDER=local` to keep
+the text on-box. Off by default. See `.env.example`. The leftover prompt (one
 shared template, not per-email) is documented in
 [email-llm-prompt.md](email-llm-prompt.md).
 
@@ -236,11 +238,12 @@ query-token ban). What is still **outside** the repo:
 | 7. Smoke one message | TD | Confirm Inbox row + classification chip |
 | 8. Human triage | TD | Classify → detect → file (shortcuts `t`/`d`/`f`/`u` on Inbox) |
 
-**Shipped in-repo:** leftover local tiny-LLM (`EMAIL_LLM=1`, see
+**Shipped in-repo:** leftover small-LLM pass (`EMAIL_LLM=1` — DeepSeek API by
+default, on-box sidecar with `EMAIL_LLM_PROVIDER=local`, see
 [email-llm-prompt.md](email-llm-prompt.md)); Gmail IMAP and Outlook Graph
 **Get mails** / **Get all** (read-only). **Still out of scope:** sending
 outbound invite email from CourtOps (mailto / copy-text remain the path);
-cloud LLM for inbox triage.
+a full cloud agent for inbox triage.
 
 ---
 

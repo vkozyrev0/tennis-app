@@ -447,13 +447,27 @@ def _graph_fetch(
     if not isinstance(mail_payload, dict):
         raise RuntimeError("Microsoft Graph returned unexpected payload")
     raw_msgs: list = []
+    # Progress-aware paging. The walk ends on a page that adds no new message
+    # (the mailbox advertised more but had nothing), on a repeated nextLink, or
+    # on the cap. A progressing page always adds >= 1 message, so `cap + 1`
+    # pages is a hard ceiling that cannot truncate a legitimate fetch.
+    seen_links: set[str] = {mail_url}
+    pages_left = cap + 1
     while True:
+        before = len(raw_msgs)
         chunk = mail_payload.get("value") or []
         if isinstance(chunk, list):
             raw_msgs.extend(chunk)
-        nxt = mail_payload.get("@odata.nextLink") if date_window else None
-        if not nxt or not isinstance(nxt, str) or len(raw_msgs) >= cap:
+        pages_left -= 1
+        if len(raw_msgs) <= before:
             break
+        nxt = mail_payload.get("@odata.nextLink") if date_window else None
+        if (not nxt or not isinstance(nxt, str)
+                or len(raw_msgs) >= cap or pages_left <= 0):
+            break
+        if nxt in seen_links:
+            break
+        seen_links.add(nxt)
         mail_payload = _call_http(http, "GET", nxt, headers=headers, secret=secret)
         if not isinstance(mail_payload, dict):
             break
@@ -496,6 +510,9 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
     if not row.get("enabled"):
         raise RuntimeError("Outlook feed is disabled — enable it on Inbox → Outlook")
     http_fn = http or _http_json
+    # Contract: download first, classify second. _graph_fetch walks every page
+    # and returns the whole in-memory batch before the first ingest_email call
+    # below — no per-message classification happens inside the download loop.
     try:
         messages, new_cursor = _graph_fetch(
             row, http=http_fn, since=since, until=until,

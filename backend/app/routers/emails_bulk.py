@@ -197,26 +197,41 @@ def bulk_confirm_suggestions(body: EmailBulkDetect, conn=Depends(db_dep)):
 def bulk_reprocess(body: EmailBulkDetect, conn=Depends(db_dep)):
     """Re-run leftover LLM (when on) + extract stamp on stored emails.
 
-    Used by Inbox Reprocess range in small chunks so the overlay can show
-    n of total. Does not insert duplicate rows.
+    One synchronous pass with an explicit model budget: it stops when the
+    budget is spent and reports what is left, so a range of hundreds of copies
+    answers in bounded time instead of one model round trip per copy. The
+    caller presses again for the remainder. Does not insert duplicate rows.
     """
+    from ..email_llm import pass_budget
+
     leftover = probe_llm()
     use_leftover = leftover == "ok"
+    ids = list(body.email_ids or [])
     changed: list[dict] = []
+    processed_ids: list[int] = []
     leftover_calls = 0
     leftover_hits = 0
-    with conn.cursor() as cur:
-        for eid in body.email_ids or []:
-            rec = reprocess_email(cur, eid, use_leftover=use_leftover)
-            if not rec:
-                continue
-            if rec.get("leftover_called"):
-                leftover_calls += 1
-            if rec.get("leftover_hit"):
-                leftover_hits += 1
-            changed.append(rec)
+    with pass_budget() as budget:
+        with conn.cursor() as cur:
+            for eid in ids:
+                # With the model on, each copy costs one round trip; stop at the
+                # budget and report the tail instead of running for minutes.
+                if use_leftover and not budget.allow():
+                    break
+                rec = reprocess_email(cur, eid, use_leftover=use_leftover)
+                if not rec:
+                    continue
+                if rec.get("leftover_called"):
+                    leftover_calls += 1
+                if rec.get("leftover_hit"):
+                    leftover_hits += 1
+                changed.append(rec)
+                processed_ids.append(eid)
     return {
         "reprocessed": len(changed),
+        "processed_ids": processed_ids,
+        "remaining": max(0, len(ids) - len(processed_ids)),
+        "budget": budget.as_dict(),
         "leftover": leftover,
         "leftover_calls": leftover_calls,
         "leftover_hits": leftover_hits,

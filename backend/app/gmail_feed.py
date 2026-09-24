@@ -1,20 +1,23 @@
 """Gmail IMAP feed: stored settings + latest-mail cursor (UID).
 
 The TD saves a Gmail address and an App Password (Fernet-encrypted). Fetch
-walks IMAP UIDs newer than ``last_uid`` and hands each message to
-``ingest_email`` (``ingest_source='gmail'``). No password is ever returned
-on GET — only ``has_secret``.
+runs in two phases: ``_download_window`` searches IMAP and pulls the whole
+window into memory as payloads (no classification), then ``fetch_latest``
+classifies that batch in one pass through ``ingest_email``
+(``ingest_source='gmail'``). No password is ever returned on GET — only
+``has_secret``.
 """
 from __future__ import annotations
 
 import email as email_lib
 import imaplib
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from .crypto import decrypt as _dec
 from .crypto import encrypt as _enc
@@ -41,6 +44,20 @@ _DEFAULTS = {
 }
 _MAX_BATCH = 50
 _MAX_WINDOW_BATCH = 200
+
+# Socket timeout for the IMAP session, in seconds. Applies to connect, login,
+# SEARCH and FETCH, so a silent mailbox fails instead of hanging the request.
+DEFAULT_IMAP_TIMEOUT = 20.0
+
+
+def _imap_timeout_sec() -> float:
+    """Finite, positive socket timeout for the IMAP session."""
+    raw = os.getenv("EMAIL_IMAP_TIMEOUT", "")
+    try:
+        value = float(raw) if str(raw).strip() else DEFAULT_IMAP_TIMEOUT
+    except (TypeError, ValueError):
+        value = DEFAULT_IMAP_TIMEOUT
+    return value if value > 0 else DEFAULT_IMAP_TIMEOUT
 
 
 def _hdr(msg: Message, name: str) -> str | None:
@@ -251,7 +268,11 @@ def _imap_fetch(
     port = int(row.get("imap_port") or 993)
     mailbox = row.get("mailbox") or "INBOX"
     factory = imap_factory or imaplib.IMAP4_SSL
-    imap = factory(host, port)
+    # A mailbox that accepts the connection and then stops answering must not
+    # block the fetch forever: imaplib's default timeout is None. The bound is
+    # per socket operation (connect, login, SEARCH, FETCH) and surfaces as the
+    # usual OSError path, which the router redacts and reports as 502.
+    imap = factory(host, port, timeout=_imap_timeout_sec())
     try:
         typ, _ = imap.login(address, secret)
         if typ != "OK":
@@ -320,6 +341,42 @@ def _imap_fetch(
             pass
 
 
+class _Window(NamedTuple):
+    """Download-phase result: the whole window in memory, unclassified."""
+
+    payloads: list[IngestPayload]
+    errors: list[str]
+    fetched: int
+    last_uid: int | None
+    uidvalidity: int | None
+
+
+def _download_window(
+    row: dict,
+    *,
+    imap_factory: Callable[..., Any] | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    tournament_id: int | None = None,
+) -> _Window:
+    """Download phase: search + fetch the whole window, decode to payloads.
+
+    Runs to completion before any classification happens — the returned
+    ``payloads`` are the in-memory batch ``fetch_latest`` classifies once.
+    """
+    messages, new_last, uv = _imap_fetch(
+        row, imap_factory=imap_factory, since=since, until=until,
+    )
+    payloads: list[IngestPayload] = []
+    errors: list[str] = []
+    for _uid, raw in messages:
+        try:
+            payloads.append(message_to_payload(raw, tournament_id=tournament_id))
+        except Exception as exc:
+            errors.append(str(exc)[:200])
+    return _Window(payloads, errors, len(messages), new_last, uv)
+
+
 def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
                  since: datetime | None = None, until: datetime | None = None,
                  tournament_id: int | None = None) -> dict:
@@ -327,9 +384,11 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
     row = load_feed(cur)
     if not row.get("enabled"):
         raise RuntimeError("Gmail feed is disabled — enable it on Inbox → Gmail")
+    tid = tournament_id if tournament_id is not None else row.get("tournament_id")
     try:
-        messages, new_last, uv = _imap_fetch(
+        window = _download_window(
             row, imap_factory=imap_factory, since=since, until=until,
+            tournament_id=tid,
         )
     except Exception as exc:
         cur.execute(
@@ -340,13 +399,12 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
             (str(exc)[:500], _FEED_ID),
         )
         raise
+    # Classify phase: one pass over the downloaded batch.
     imported = 0
     dupes = 0
-    errors = []
-    tid = tournament_id if tournament_id is not None else row.get("tournament_id")
-    for _uid, raw in messages:
+    errors = window.errors
+    for payload in window.payloads:
         try:
-            payload = message_to_payload(raw, tournament_id=tid)
             result = ingest_email(cur, payload, auto_classify=True)
             if result.get("duplicate"):
                 dupes += 1
@@ -365,10 +423,10 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
         WHERE id = %s
         RETURNING *
         """,
-        (new_last, uv, status, err, imported, dupes, _FEED_ID),
+        (window.last_uid, window.uidvalidity, status, err, imported, dupes, _FEED_ID),
     )
     out = public_row(dict(cur.fetchone()))
-    out["fetched"] = len(messages)
+    out["fetched"] = window.fetched
     out["imported"] = imported
     out["duplicates"] = dupes
     return out

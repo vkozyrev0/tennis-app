@@ -1,14 +1,26 @@
 #!/usr/bin/env python3
-"""Smoke the llama.cpp sidecar the same way CourtOps does on Fly.
+"""Smoke the configured small-LLM endpoint the same way CourtOps does.
 
-Hits GET /health then drives the shipped ``app.email_llm.extract_email``
-against /v1/chat/completions (Bearer EMAIL_LLM_TOKEN). Works locally
-(127.0.0.1:8080) or, from a Fly Machine, against courtops-llm.internal.
+Probes the provider's health URL, then drives the shipped
+``app.email_llm.extract_email`` against ``/chat/completions`` with the
+provider's own credential.
+
+Providers (``EMAIL_LLM_PROVIDER``):
+  deepseek (default) - the DeepSeek API. Needs DEEPSEEK_API_KEY in the
+    environment; sends the leftover email text off this machine.
+  local - the llama.cpp sidecar (127.0.0.1:8080 locally, or
+    courtops-llm.internal from a Fly Machine) with EMAIL_LLM_TOKEN.
 
 Usage (PowerShell):
+  # DeepSeek (default)
+  $env:EMAIL_LLM=1
+  $env:DEEPSEEK_API_KEY='...'
+  backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
+
+  # Local sidecar
   docker compose -f docker-compose.llm.yml up --build
   $env:EMAIL_LLM=1
-  $env:EMAIL_LLM_BASE_URL='http://127.0.0.1:8080/v1'
+  $env:EMAIL_LLM_PROVIDER='local'
   $env:EMAIL_LLM_TOKEN='dev-local-llm'
   $env:EMAIL_LLM_TIMEOUT='60'
   backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
@@ -25,14 +37,15 @@ import urllib.request
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 os.environ.setdefault("EMAIL_LLM", "1")
-os.environ.setdefault("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
-os.environ.setdefault("EMAIL_LLM_TOKEN", "dev-local-llm")
 os.environ.setdefault("EMAIL_LLM_TIMEOUT", "60")
 
 from app.email_llm import (  # noqa: E402
     extract_email,
+    llm_api_key,
     llm_base_url,
     llm_health_url,
+    llm_model,
+    llm_provider,
     probe_llm,
 )
 
@@ -40,19 +53,27 @@ from app.email_llm import (  # noqa: E402
 def main() -> int:
     base = llm_base_url()
     health = llm_health_url()
+    print("provider", llm_provider())
     print("base", base)
+    print("model", llm_model())
     print("health_url", health)
-    status = probe_llm(timeout=5)
+    print("key_present", bool(llm_api_key()))          # never the value itself
+    status = probe_llm(timeout=15)
     print("probe", status)
     if status != "ok":
-        # Show the raw HTTP error so a missing GGUF / wrong token is obvious.
+        # Show the raw HTTP error so a missing key / wrong URL is obvious.
+        req = urllib.request.Request(health)
+        token = llm_api_key()
+        if token:
+            req.add_header("Authorization", "Bearer " + token)
         try:
-            urllib.request.urlopen(health, timeout=5).read()
+            urllib.request.urlopen(req, timeout=15).read()
         except urllib.error.HTTPError as e:
             print("health HTTP", e.code, e.reason, file=sys.stderr)
         except Exception as e:
             print("health error", type(e).__name__, e, file=sys.stderr)
-        print("FAIL: sidecar not reachable — start docker-compose.llm.yml", file=sys.stderr)
+        print("FAIL: endpoint not reachable — check EMAIL_LLM_PROVIDER / key",
+              file=sys.stderr)
         return 1
     parsed = extract_email(
         "Re: L3 Doubles",

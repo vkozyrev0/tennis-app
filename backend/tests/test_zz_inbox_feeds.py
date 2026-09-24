@@ -321,8 +321,12 @@ def test_outlook_date_window_includes_read_and_follows_nextlink(monkeypatch, _ad
     })
     fake = _Paged([])
     monkeypatch.setattr(of, "_http_json", fake)
-    since = (date.today() - timedelta(days=1)).isoformat()
-    until = date.today().isoformat()
+    # Derive the window from the same UTC `now` the messages use: a local
+    # `date.today()` bound excludes `now - 2h` whenever UTC has already rolled
+    # over to the next day (local evening), which made this test time-of-day
+    # dependent.
+    since = (now - timedelta(days=1)).date().isoformat()
+    until = now.date().isoformat()
     r = client.post(f"/api/outlook-feed/fetch?since={since}&until={until}")
     assert r.status_code == 200, r.text
     assert r.json()["fetched"] == 2
@@ -555,3 +559,117 @@ def test_inbox_feeds_fetch_errors(monkeypatch, _admin):
     monkeypatch.setattr(ir, "fetch_inbox_mails", lambda *_a, **_k: (_ for _ in ()).throw(OSError("down")))
     r = client.post("/api/inbox-feeds/fetch")
     assert r.status_code == 502
+
+@_needs_db
+def test_bulk_reprocess_stops_at_the_model_budget(monkeypatch, _admin):
+    """200 stored copies with the model on: bounded model work, honest counts.
+
+    The budget is the fix for the pass that used to make one round trip per copy
+    inside a single request (200 copies x a slow endpoint = minutes, which reads
+    as a hang). The seam faked here is the transport (`_complete`), not the
+    budgeting function, so the shipped budget logic is what runs.
+    """
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, ingest_email
+
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.setenv("EMAIL_LLM_MAX_CALLS", "5")
+    monkeypatch.setenv("EMAIL_LLM_PASS_SECONDS", "120")
+    calls = {"n": 0}
+
+    def fake_complete(prompt):
+        calls["n"] += 1
+        return '{"intent":"other","players":[],"confidence":0.5}'
+
+    monkeypatch.setattr("app.email_llm._complete", fake_complete)
+    monkeypatch.setattr("app.email_llm.llm_enabled", lambda: True)
+    monkeypatch.setattr("app.routers.emails_bulk.probe_llm", lambda timeout=1.5: "ok")
+
+    t = client.post("/api/tournaments", json={
+        "name": "Budget " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    tag = uuid.uuid4().hex[:8]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for i in range(200):
+                ingest_email(cur, IngestPayload(
+                    message_id=f"<budget-{tag}-{i}@example.com>",
+                    from_address="load@example.com",
+                    to_address="inbox@example.com",
+                    subject=f"Budget probe {i}",
+                    body="Nothing to change here.",
+                    tournament_id=t["id"],
+                ), auto_classify=False)
+        conn.commit()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM email_message WHERE tournament_id = %s ORDER BY id",
+                (t["id"],),
+            )
+            ids = [row["id"] for row in cur.fetchall()]
+    assert len(ids) == 200, len(ids)
+
+    r = client.post("/api/emails/bulk/reprocess", json={"email_ids": ids})
+    assert r.status_code == 200, r.text
+    body = r.json()
+
+    # Bounded: the budget caps the round trips, it is not one call per copy.
+    assert calls["n"] == 5, f"expected the 5-call budget to bound the pass, got {calls['n']}"
+    assert body["reprocessed"] == 5, body["reprocessed"]
+    assert body["remaining"] == 195, body["remaining"]
+    assert len(body["processed_ids"]) == 5
+    # Nothing is dropped from the report.
+    assert len(body["processed_ids"]) + body["remaining"] == len(ids)
+    assert body["budget"]["calls"] == 5
+    assert body["budget"]["max_calls"] == 5
+
+    # Every id the response claims to have processed really was classified.
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, classification FROM email_message WHERE id = ANY(%s)",
+                (body["processed_ids"],),
+            )
+            rows = cur.fetchall()
+    assert len(rows) == 5
+    assert all(row["classification"] for row in rows)
+
+    # Pressing again makes progress on the remainder.
+    again = client.post("/api/emails/bulk/reprocess",
+                        json={"email_ids": ids[5:]}).json()
+    assert again["reprocessed"] == 5
+    assert again["remaining"] == 190
+
+
+@_needs_db
+def test_bulk_reprocess_without_a_model_is_unbounded_work_but_no_calls(monkeypatch, _admin):
+    """With the model off there is nothing to budget: the whole list is stamped."""
+    from app.db import get_conn
+
+    monkeypatch.delenv("EMAIL_LLM", raising=False)
+    monkeypatch.setattr("app.routers.emails_bulk.probe_llm", lambda timeout=1.5: "off")
+    t = client.post("/api/tournaments", json={
+        "name": "NoBudget " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    made = []
+    for i in range(3):
+        created = client.post("/api/emails", json={
+            "tournament_id": t["id"],
+            "subject": f"No model {i}",
+            "body": "Nothing to change.",
+            "from_address": "load@example.com",
+        })
+        assert created.status_code == 201, created.text
+        made.append(created.json()["id"])
+    r = client.post("/api/emails/bulk/reprocess", json={"email_ids": made})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["reprocessed"] == 3
+    assert body["remaining"] == 0
+    assert body["leftover_calls"] == 0
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM email_message WHERE id = ANY(%s) AND classification IS NOT NULL", (made,))
+            assert cur.fetchone()["n"] == 3

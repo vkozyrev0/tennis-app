@@ -403,8 +403,9 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
 
 @router.post("/{email_id}/suggest")
 def suggest_classification(email_id: int, conn=Depends(db_dep)):
-    """Triage suggestion: local keyword rules, plus optional local tiny-LLM
-    when EMAIL_LLM=1 and the heuristic is leftover ``other``. No cloud call.
+    """Triage suggestion: keyword rules, plus the optional small-LLM pass
+    when EMAIL_LLM=1 and the heuristic is leftover ``other`` (DeepSeek API by
+    default, the on-box sidecar under EMAIL_LLM_PROVIDER=local).
 
     Always restamps parsed name pairs so Review Player 1/2 show who the email
     named, even when those people are not on the tournament roster yet.

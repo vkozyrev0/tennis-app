@@ -43,7 +43,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (~760 LOC, ES module) + **~50** ESM modules under `frontend/app/`; **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (920 LOC, ES module) + **61** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -63,7 +63,8 @@ backend/
     security.py        # hash_pw/verify_pw, get_current_user, require_admin
     crypto.py          # Fernet encrypt/decrypt for PII-at-rest (H2)
     triage.py          # local keyword email classifier (heuristic first)
-    email_llm.py       # optional leftover tiny-LLM when heuristic is other (EMAIL_LLM=1)
+    email_llm.py       # leftover small-LLM pass when heuristic is other (EMAIL_LLM=1;
+                       # DeepSeek API by default, local sidecar under EMAIL_LLM_PROVIDER=local)
     email_extract.py   # pure regex extraction from email text: USTA #s, (name, USTA#) pairs,
                        # withdrawal reason, division, events, avoid day/time
     assignment_calc.py # pure pay/mileage/flag math (rates, free band, cap, RULE_VERSION)
@@ -87,21 +88,22 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0055_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0060_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (~591 tests / 89 files)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (985 tests / 112 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # ~760 LOC composition root (D11 complete 2026-07-21)
-  app/                 # ~50 ESM modules (createX / installX + helpers), including:
+  app.js               # 920 LOC composition root (D11; counted 2026-09-21)
+  app/                 # 61 ESM modules (*.js; createX / installX + helpers), including:
     util.js, shirts.js, roster_prefill.js, origin_col.js
     html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
     grids.js, auth.js, state.js, player_list.js, catalog.js, labels.js
-    help.js, shortcuts.js, inbox_ui.js
+    help.js, shortcuts.js, inbox_ui.js, inactivity.js
+    gmail_feed.js, outlook_feed.js, td_chat_ui.js
     roster.js, import_ui.js, assignments_ui.js, inbox.js, reports.js,
     dayof.js, payroll.js, availability.js, staff.js, dashboard.js,
     player360.js, setup_crud.js, official_app.js, …
@@ -189,7 +191,7 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0055`), each tracked in
+**Migrations are forward-only, filename-ordered** (`0001…0060`), each tracked in
 `schema_migrations`. `migrate.py` creates the DB if absent then applies pending
 files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
@@ -227,7 +229,10 @@ workspace vs Part B vs reporting:
   detection/stamp in `email_detect`/`email_stamp`), and the per-classification list
   routers `late_entries`, `withdrawals`, `doubles`, `pairing_avoidances`,
   `player_hotels`, `adult_lists` (scheduling avoidance + division flex),
-  `imports` (staged spreadsheet import for every type).
+  `imports` (staged spreadsheet import for every type),
+  `inbox_people` (parsed name+USTA list; promote copies one onto Players),
+  `gmail_feed`, `outlook_feed`, `inbox_feeds` (Get mails; provider mailboxes
+  are read, not deleted).
 - **Email auto-ingest (D4):** `ingest` — token-authenticated open endpoints
   (`POST /api/ingest/email` JSON + `/email/form` multipart) that land in
   `email_message` with body encryption, `message_id` dedup, optional keyword
@@ -236,7 +241,8 @@ workspace vs Part B vs reporting:
   [email-ingest.md](email-ingest.md). Not admin-cookie gated (providers cannot
   hold a session); `INGEST_TOKEN` is required or the endpoint returns 503.
 - **Other:** `health`, `retention` (PII purge sweep), `trash` (Trash list +
-  restore for soft-deleted tournaments + incidents; migration 0046).
+  restore for soft-deleted tournaments + incidents; migration 0046),
+  `td_chat` (TD chat over the same admin API).
 
 **Shared domain helpers** (not routers): `playerops.upsert_player` (the single
 player-identity path, keyed by USTA #), `playerops.mark_email_filed`,
@@ -244,7 +250,9 @@ player-identity path, keyed by USTA #), `playerops.mark_email_filed`,
 and bulk populate so they can't drift), `shirtops.norm_shirt`, `crypto`,
 `triage.classify`, `email_extract` (pure regex extraction from email text),
 `assignment_calc` (pure pay/mileage math), `bulk_ops.savepoint`, `db_errors`,
-`query_helpers`, `ical`, `importer`.
+`query_helpers`, `ical`, `importer`, `email_llm` (leftover pass when
+`EMAIL_LLM=1`: DeepSeek by default, the local sidecar under
+`EMAIL_LLM_PROVIDER=local`), `inbox_person` (upsert of parsed name+USTA pairs).
 
 ---
 
@@ -295,10 +303,13 @@ the app's mailto-only email model (no send infrastructure).
 **Local keyword rules** first: ordered patterns map an email's subject+body to
 a classification (withdrawal, late_entry, doubles, pairing_avoidance,
 scheduling_avoidance, division_flex, hotel, else `other`). When
-`EMAIL_LLM=1` and the heuristic is `other`, a local llama.cpp sidecar
-(Qwen2.5-1.5B, loopback / Fly-private only — D5) runs one shared leftover
-prompt; see [email-llm-prompt.md](email-llm-prompt.md). Cloud LLMs are not
-used. Filing stays human.
+`EMAIL_LLM=1` and the heuristic is `other`, one shared leftover prompt goes to a
+small model; see [email-llm-prompt.md](email-llm-prompt.md). The endpoint is the
+**DeepSeek API** by default (`DEEPSEEK_API_KEY`, so the clipped leftover text
+leaves the machine), or the local llama.cpp sidecar (Qwen2.5-1.5B, loopback /
+Fly-private) under `EMAIL_LLM_PROVIDER=local`. Both go through
+`email_llm._post_chat`, which `td_chat.chat_complete` also uses. Filing stays
+human.
 The text-extraction regexes live in `email_extract.py`: **layered USTA-number
 patterns** — labeled (`USTA # 1234…`), bare 9–11 digit, number-before-name, and
 name-before-number — behind `extract_usta` / `extract_ustas` /
@@ -343,23 +354,28 @@ The assignment-change audit-action enum gains `finalized` / `unfinalized` / `pai
 / `unpaid`, and the whole tournament trail exports as CSV
 (`GET …/assignment-audit.csv`, in `assignments.py`).
 
-**Soft-delete (`trash.py`, migration 0046).** `tournament` and
-`tournament_incident` carry a `deleted_at` column (NULL = active); list queries
-filter `deleted_at IS NULL` (partial indexes back the common path), and the Trash
-view restores a soft-deleted row. This is **deliberately scoped to tournaments +
-incidents only** — players, officials, and emails are *not* soft-deleted: minors'
-PII is hard-erased on delete (COPPA), so a recoverable trash there would defeat
-the erasure guarantee.
+**Soft-delete is two different `deleted_at` columns.**
+
+- **Trash** (`trash.py`, migration 0046). `tournament` and `tournament_incident`
+  carry `deleted_at` (NULL = active). List queries filter `deleted_at IS NULL`,
+  and the Trash view restores those rows. Players and officials are not in
+  Trash: minors' PII is hard-erased on delete (COPPA), so a recoverable trash
+  there would defeat the erasure guarantee.
+- **Inbox Clear** (migration 0059). `email_message.deleted_at` hides CourtOps
+  copies for that tournament. It does not delete Gmail or Outlook mail, and
+  those rows do not appear in Trash. Get all, and a later ingest of the same
+  `message_id`, set `deleted_at` back to NULL.
 
 ---
 
 ## 8. Frontend design
 
 **No build, one page, composition root.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (~760 LOC,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (920 LOC,
 loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
-`setActive`, factory wiring, and `init()`. Behaviour lives in `frontend/app/*.js`
-ESM factories (`createXPanel(ctx)` / `installX(ctx)`). Shared primitives:
+`setActive`, factory wiring, and `init()`. Behaviour lives in 61
+`frontend/app/*.js` modules (`createXPanel(ctx)` / `installX(ctx)` and
+helpers; the `*.test.mjs` files are not part of that count). Shared primitives:
 `util.js`, `html.js` (`html``/`hstr`), `ui.js`, `shell.js` (`api`/toast/confirm),
 `grids.js`, `auth.js`, `state.js`, `help.js` (in-app Help center, press `?`).
 AG Grid Community is vendored.

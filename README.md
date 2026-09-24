@@ -31,6 +31,29 @@ HTML/CSS/JS** frontend (no build step; **AG Grid Community 32.3.5** vendored —
 only third-party frontend lib). POC auth defaults to `admin / admin` — harden
 before any shared deployment.
 
+### Small LLM (leftover email triage)
+
+Keyword triage runs first; when it lands on `other` and `EMAIL_LLM=1`, a small
+model gets one shared prompt (`backend/app/email_llm.py`). Two backends,
+selected with `EMAIL_LLM_PROVIDER`:
+
+| `EMAIL_LLM_PROVIDER` | Endpoint | Model | Credential |
+|---|---|---|---|
+| `deepseek` (**default**) | `https://api.deepseek.com/v1` | `deepseek-flash` | `DEEPSEEK_API_KEY` |
+| `local` | `EMAIL_LLM_BASE_URL` (llama.cpp sidecar, loopback / Fly 6PN) | `qwen2.5-1.5b-instruct` | `EMAIL_LLM_TOKEN` |
+
+`EMAIL_LLM_BASE_URL` / `EMAIL_LLM_MODEL` still override the endpoint outright.
+**The key is never committed**: it comes from the environment (`DEEPSEEK_API_KEY`,
+or a Fly secret on a deployed instance), and `backend/.env.example` holds the
+name with an empty placeholder. `backend/tests/test_secret_guard.py` fails if the
+value — or anything shaped like a key — appears in a tracked file.
+
+> **PII:** on the default DeepSeek path the leftover email text (which can carry
+> junior names and USTA numbers) leaves this machine and goes to a third-party
+> API. The `local` provider keeps it on-box. See
+> [docs/email-llm-prompt.md](docs/email-llm-prompt.md) and
+> [docs/coppa-policy.md](docs/coppa-policy.md).
+
 ## Run it in one container (Postgres + server + website)
 
 The whole POC — database, API, and frontend — runs from a single image. Pull the

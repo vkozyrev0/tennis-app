@@ -1,4 +1,5 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
+import { runReprocessPass } from "./classify_batch.js";
 import { enhanceSelect } from "./combobox.js";
 import {
   bulkBarHidden,
@@ -1333,10 +1334,14 @@ export function createInboxPanel(ctx) {
       const skipped = (r.skipped || []).join(", ");
       const restored = r.restored ?? 0;
       const rp = r.reprocessed ?? 0;
+      const rpLeft = r.reprocess_remaining ?? 0;
+      const llmSkipped = r.leftover_skipped ?? 0;
       setMsg("inbox-feed-msg",
         `imported ${n} new` + (restored ? ` · restored ${restored}` : "") +
         (d ? ` · ${d} already in inbox` : "") +
         (rp ? ` · reprocessed ${rp}` : "") +
+        (rpLeft ? ` · ${rpLeft} left for the leftover pass — press Reprocess range` : "") +
+        (llmSkipped ? ` · ${llmSkipped} classified by rules only (model budget)` : "") +
         (skipped ? ` · skipped ${skipped}` : ""), true);
       await loadInbox();
     } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
@@ -1393,40 +1398,47 @@ export function createInboxPanel(ctx) {
             ? "Intelligence is off — leftover LLM will not run (heuristic only)"
             : "Intelligence sidecar is down — leftover LLM will not run (heuristic only)", false);
         }
-        let leftoverCalls = 0;
-        for (let i = 0; i < ids.length; i++) {
-          if (signal && signal.aborted) {
-            const err = new Error("cancelled");
-            err.name = "AbortError";
-            throw err;
-          }
-          update({ phase, current: i, total: ids.length });
-          const chunk = await api("/emails/bulk/reprocess", {
-            method: "POST",
-            body: JSON.stringify({ email_ids: [ids[i]] }),
-            signal,
-          });
-          leftoverCalls += chunk.leftover_calls || 0;
-        }
-        update({ phase, current: ids.length, total: ids.length });
-        return { ids, leftover, leftoverCalls, fallback, rangeLabel };
+        // Download is done; parsing runs as its own pass, one copy at a time
+        // inside the endpoint. The server stops at a model budget and reports
+        // the ids it processed, so runReprocessPass keeps asking for the
+        // remainder and advances the bar by COPIES PARSED — it only reaches
+        // the total when nothing is left, and it stops instead of spinning if
+        // a request makes no progress.
+        update({ phase, current: 0, total: ids.length });
+        const pass = await runReprocessPass(ids, (batch, sig) => api("/emails/bulk/reprocess", {
+          method: "POST",
+          body: JSON.stringify({ email_ids: batch }),
+          signal: sig,
+        }), {
+          onProgress: ({ parsed: done, total }) => update({ phase, current: done, total }),
+          isCancelled: () => Boolean(signal && signal.aborted),
+          signal,
+        });
+        return {
+          ids, leftover, fallback, rangeLabel,
+          leftoverCalls: pass.leftoverCalls,
+          parsed: pass.parsed,
+          remaining: pass.remaining,
+          stopped: pass.stopped,
+          reason: pass.reason,
+        };
       });
       if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
       const r = job.result || {};
       const n = (r.ids || []).length;
       const calls = r.leftoverCalls || 0;
+      const left = r.remaining || 0;
       const rangeLabel = r.rangeLabel || "this range";
+      const tail = (left ? ` · ${left} left — press again for the rest` : "")
+        + (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0");
       if (!n) {
         setMsg("inbox-feed-msg", `no stored copies in ${rangeLabel}`, false);
       } else if (r.fallback === "tournament") {
         setMsg("inbox-feed-msg",
-          `reprocessed ${n} tournament copies (none in ${rangeLabel})` +
-          (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0"),
+          `reprocessed ${r.parsed || 0} of ${n} tournament copies (none in ${rangeLabel})` + tail,
           calls > 0);
       } else {
-        setMsg("inbox-feed-msg",
-          `reprocessed ${n}` + (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0"),
-          calls > 0);
+        setMsg("inbox-feed-msg", `reprocessed ${r.parsed || 0} of ${n}` + tail, calls > 0);
       }
       await loadInbox();
     } catch (e) { setMsg("inbox-feed-msg", e.message, false); }
