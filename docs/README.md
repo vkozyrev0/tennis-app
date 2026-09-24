@@ -34,7 +34,7 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 11 | [e2e-findings.md](e2e-findings.md) | Standalone end-to-end scenario driver (`scripts/e2e_td_scenario.py`): coverage, findings, run log. |
 | 12 | [audit.md](audit.md) | Historical register from the original TD audit (D1–D8). Archived — all items resolved. |
 | 13 | [email-ingest.md](email-ingest.md) | Auto-ingest webhook (D4): token auth, routing, provider sketches. |
-| 13b | [email-llm-prompt.md](email-llm-prompt.md) | Final leftover-email tiny-LLM prompt (one shared template + few-shots). |
+| 13b | [email-llm-prompt.md](email-llm-prompt.md) | Leftover-email small-LLM prompt (one shared template + few-shots) and its provider (DeepSeek default / local sidecar). |
 | 13c | [mobile-plan.md](mobile-plan.md) | Mobile-friendly phases + menu IA (drawer, Setup split, courtside P1). |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
 | 15 | [review-2026-09-21.md](review-2026-09-21.md) | Four-part review (app, code, tests, docs) and which corrections shipped. |

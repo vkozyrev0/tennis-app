@@ -7,10 +7,12 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 
 > **Status (2026-07-29):** Phases 0–4 are functionally shipped; Phase 5 is polish
 > and deploy-time hardening (see *On hold* for externally blocked items: Maps
-> key, mail provider, LLM privacy, PII H2 at deploy). Later rounds — **D11**
+> key, mail provider, cloud-LLM privacy, prod PII/DB role). Later rounds — **D11**
 > frontend split, security/COPPA/export audit, email auto-ingest app side, Fly
 > persistent volume + inbox triage UX — are in [changelog.md](changelog.md).
-> Suite: **~591** green and deterministic; CI (`.github/workflows/docker.yml`)
+> Suite: **985** tests / **112** files, the figure in [test-coverage.md](test-coverage.md)
+> (collected 2026-09-08; file count and migration head **0060** rechecked
+> 2026-09-21). CI (`.github/workflows/docker.yml`)
 > gates the image build and publishes `ghcr.io/vkozyrev0/tennis-app:latest` on
 > green `main` pushes. Live POC: `https://courtops-poc.fly.dev` (see
 > [deploy.md](deploy.md)).
@@ -34,6 +36,13 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 The proof-of-concept (POC) is a small, conventional 3-tier app. **No agent/LLM in
 scope** (D5/§5.1: email is human-reviewed, not parsed).
 
+> *Note (2026-09-23):* a person still files every message. `app/triage.py`
+> suggests a label from keywords, and leftovers can take a second pass
+> (`app/email_llm.py`, only when `EMAIL_LLM=1`). That pass now runs on the
+> **DeepSeek API** by default, so the clipped leftover text does leave the
+> machine; `EMAIL_LLM_PROVIDER=local` keeps it on the on-box llama.cpp sidecar.
+> Either way the model only suggests - the TD files.
+
 - **Database:** **PostgreSQL**, running on **localhost** with the **default admin
   credentials** for the POC. *(POC convenience only — see the security note below.)*
 - **Frontend:** **pure HTML/CSS** (no JS framework). Plain pages that call the API
@@ -46,11 +55,12 @@ scope** (D5/§5.1: email is human-reviewed, not parsed).
   call (e.g., FastAPI or Flask — pick one at Phase 0), talking to Postgres.
 - **Part A (officials):** these pages + API — CRUD, calculations, reports.
 - **Part B (player ops):** the same app — forwarded email lands in a **review
-  inbox**; the TD/staff file each message into the right list. **No automated
-  parsing.**
-- **Future enhancement:** an **email-triage agent** (Claude Agent SDK or Google
-  ADK) that auto-classifies/extracts into the same tables — added only if/when
-  automated parsing is approved (revisits D5 cloud-vs-local then).
+  inbox**; the TD/staff file each message into the right list. Suggest and
+  extract stamp hints; they do not file the row (see the 2026-09-21 note above).
+- **Future enhancement:** a **cloud email-triage agent** (Claude Agent SDK or Google
+  ADK) that classifies and extracts into the same tables. The leftover pass is
+  not that agent: it only labels, and it runs on the DeepSeek API (default) or
+  the on-box sidecar.
 
 > ⚠️ **Security (post-POC):** localhost Postgres on default admin credentials is
 > acceptable *only* for a local POC. Before any shared/hosted deployment, move to a
@@ -250,18 +260,23 @@ a review inbox; a person files each message into the right list.
       a public HTTPS host + mail domain — see [email-ingest.md](email-ingest.md).
 - [x] `EmailMessage` provenance + dedup by `message_id`.
 - [x] **Review inbox UI** (Inbox tab): add a message, set `classification`, **file**
-      it into a list (no auto-extract); filing sets the email `status='filed'`.
-- [ ] Minors' data encryption at rest + access control (Phase 5; access-control via
-      admin auth is in place).
+      it into a list. Filing is still a human action (`status='filed'`). Suggest
+      and extract stamp hints; they do not file by themselves.
+- [~] Minors' data encryption at rest + access control. Admin auth is in place.
+      Column encryption (H2.2) and MultiFernet rotation (H2.3) ship. Disk
+      encryption, a least-privilege DB role, and app TLS remain deploy-time
+      (see On hold).
 
 **Done when:** a forwarded email reliably appears in the review inbox and a person
 can file it into a structured, provenance-linked row.
 
-> **Triage agent — v0 built (local, D5-safe):** a rule-based suggester
+> **Triage — rules first, small model second:** a rule-based suggester
 > (`app/triage.py`, `POST /api/emails/{id}/suggest`) proposes a classification from
-> keywords — **no LLM, no data leaves the building**; the inbox "Suggest" button
-> sets it and a human confirms. **Still open (D5):** upgrading to an **LLM** that
-> reads email content needs the explicit cloud-vs-local privacy call first.
+> keywords. Leftovers (`other`) may take a small-LLM pass
+> (`app/email_llm.py`, only when `EMAIL_LLM=1`) — the DeepSeek API by default
+> (clipped leftover text leaves the machine), or the on-box llama.cpp sidecar
+> under `EMAIL_LLM_PROVIDER=local`. Suggest sets the label and a human confirms.
+> **Still open (D5):** a full cloud agent that reads minors' email end to end.
 
 ---
 
@@ -333,8 +348,8 @@ buildable without them is done; revisit when the prerequisite is available.
 |------|------------------|------------|
 | **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), and the **driving-distance Distance Matrix call is now scaffolded** (migration 0047, `road_one_way_miles()` behind `GOOGLE_MAPS_API_KEY`, source=`maps`) — still **key-blocked**. | Provide an API key + confirm cost + egress; the driving-distance path is wired (the estimate stays the fallback). |
 | **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side + Fly webhook live** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md); `courtops-poc` has `INGEST_TOKEN`). Still needs a **mail provider** (Mailgun / SendGrid Inbound / CF Email Worker) to forward real mail. Manual paste + `scripts/smoke_ingest.py` remain the day-to-day paths until then. | Point the chosen provider at the live webhook; keep `INGEST_TOKEN` secret. |
-| **LLM triage upgrade** (reads email content) — D5 | Open **cloud-vs-local privacy** call for minors' PII; current suggester is a local keyword heuristic (no data leaves the building). | Make the D5 decision; if approved, swap `triage.py` for an LLM behind the same `/suggest` API. |
-| **PII-at-rest encryption + DB hardening** — Phase 5 / audit §5.1, §5.3 | Needs a non-localhost deploy target, a secrets store, and a least-privilege DB role/TLS for the *encryption* piece. **Partly shipped** (see `docs/pii-hardening-plan.md`): **H1** ENV-gated boot guard refusing default creds / non-TLS in prod + `sslmode`; **H3** PII erased from `player_history` on delete + an email-body retention-purge endpoint. | At deploy time: dedicated DB user + secret from env, TLS, column/disk encryption (H2), retention schedule + purge job (H3.1/H3.3). |
+| **Cloud LLM triage** (off-box model reads email content) — D5 | Keyword suggest plus the DeepSeek-API leftover pass ship (`triage.py`, `email_llm.py`, `EMAIL_LLM=1`); `EMAIL_LLM_PROVIDER=local` keeps it on the on-box sidecar. A full cloud agent that reads minors' email end to end is still open. | Decide D5 for the agent. The heuristic and the leftover pass stay. |
+| **Prod PII / DB-role deploy work** — Phase 5 / audit §5.1, §5.3 | Column encryption (**H2.2**) and MultiFernet rotation (**H2.3**, `reencrypt_pii.py`) ship, as do the **H1** boot guard and the **H3** retention sweep (`GET /api/retention/policy`, `POST /api/retention/sweep`). Still deploy-time: least-privilege DB role, app TLS, disk encryption (H2.1), secret-manager hosting for keys, retention cron (H3.3). | At deploy time: dedicated DB user, TLS, disk encryption, secret manager, cron. Column encryption is already in the app. |
 | ~~**Non-official staff in the Staffing Plan**~~ — ✅ **SHIPPED** (migration 0032): a per-tournament `tournament_staff` roster (name + `staff_role` ∈ Site Director / Player Amenities / Trainer / Operations / Stringer / Other + contact), a **Staffing → Staff** tab (CRUD), and an **"Other staff"** section in the officials report (+ `staff_count`). Per-day staff scheduling now ships (staff_day, day-column report grid); flat daily-rate pay now ships (report totals staff pay); per-day-varying rates remain a possible refinement. |
 
 > Session expiry/invalidation (migration `0017`) and admin/official access control
@@ -349,8 +364,10 @@ Phase 0 ─┬─→ Phase 1 ──→ Phase 2          (Officials track — shi
                          (Player track = email forwarding + human review)
 ```
 Part A (Phases 1–2) and Part B (Phases 3–4) can proceed in **parallel** after
-Phase 0 if there's capacity, since they only share the core schema. No agent/LLM
-is in scope; an automated triage agent is a possible follow-on after Phase 5.
+Phase 0 if there's capacity, since they only share the core schema. The original
+POC decision kept a full cloud triage agent out of scope. Keyword suggest and the
+leftover small-LLM pass (DeepSeek API by default, on-box sidecar with
+`EMAIL_LLM_PROVIDER=local`) now ship; the agent is still deferred (D5).
 
 ---
 
@@ -511,7 +528,7 @@ driving-distance scaffold, the auth/state/player_list extractions, and the
 html`` helper sweep. The improvement-plan item-by-item record is in
 [improvement-plan.md](improvement-plan.md).
 
-## Open work (as of 2026-07-29)
+## Open work (as of 2026-09-21)
 - **Google Maps *driving* distance** (Phase 2) — ⚙️ **scaffolded** (2026-06-13):
   `road_one_way_miles()` calls the Distance Matrix API behind
   `GOOGLE_MAPS_API_KEY` (source `maps`) and `/distances/auto` stamps it; still
@@ -521,14 +538,16 @@ html`` helper sweep. The improvement-plan item-by-item record is in
   needs a provider (Mailgun / SendGrid / CF Email Worker) to deliver real
   mail. Until then: paste into Inbox, or `scripts/smoke_ingest.py`. Recipes in
   [email-ingest.md](email-ingest.md).
-- **LLM triage upgrade** (D5) — local rule-based suggester ships; an LLM
-  that reads minors' email content requires the **cloud-vs-local privacy
-  call first**.
-- **PII H2 (encryption at rest)** + **least-priv DB role** + **scheduler wiring**
-  for the retention sweep — tied to the post-POC deployment switch (see
-  `docs/pii-hardening-plan.md` and the key-management/rotation design in
-  `docs/pii-h2-key-management.md`). *(H3 retention **policy + sweep job** with
-  dry-run now ship — `GET /api/retention/policy`, `POST /api/retention/sweep`.)*
+- **Cloud LLM triage** (D5) — keyword suggest plus the leftover small-LLM pass
+  ship (`EMAIL_LLM=1`; DeepSeek API by default, `EMAIL_LLM_PROVIDER=local` for
+  the on-box sidecar). A full off-box agent that reads minors' email still needs
+  the privacy decision.
+- **Prod PII / DB role** — column encryption (H2.2) and MultiFernet rotation
+  (H2.3) ship. Still tied to the post-POC deploy switch: least-priv DB role,
+  app TLS, disk encryption (H2.1), secret-manager hosting, retention cron
+  (see `docs/pii-hardening-plan.md` and `docs/pii-h2-key-management.md`).
+  H3 policy + sweep already ship (`GET /api/retention/policy`,
+  `POST /api/retention/sweep`).
 - ~~**Payroll CSV batch export**~~ — ✅ **shipped** (2026-06-13):
   `GET /tournaments/{id}/payroll/export.csv` + an Export CSV button on the
   Payroll tab. P4-4 is now complete end to end.

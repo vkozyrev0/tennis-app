@@ -1,16 +1,21 @@
-"""Optional local tiny-LLM assist for leftover inbox emails (D5).
+"""Optional small-LLM assist for leftover inbox emails (D5).
 
 Heuristic triage in ``triage.classify`` stays the default. When ``EMAIL_LLM=1``
-and the heuristic returns ``other``, this module asks a llama.cpp
-(OpenAI-compatible) server for a JSON intent.
+and the heuristic returns ``other``, this module asks an OpenAI-compatible
+endpoint for a JSON intent.
 
-Allowed destinations (COPPA / D5 — junior PII stays on our network):
-  * loopback (same Machine)
+Default provider: the **DeepSeek API** (``https://api.deepseek.com/v1``, model
+``deepseek-flash``), key from ``DEEPSEEK_API_KEY`` — see ``llm_api_key``.
+
+PII: leftover email text (junior names, USTA numbers) leaves this machine on
+that path. It is the same text the TD already forwards by email, but it is no
+longer on-box — see docs/email-llm-prompt.md and docs/coppa-policy.md.
+
+Other allowed destinations (set ``EMAIL_LLM_BASE_URL``):
+  * loopback / a private IP — the optional local llama.cpp sidecar
   * Fly 6PN: ``*.internal``, ``*.flycast``, unique-local IPv6 (``fd00::/8``)
-Public hosts (``*.fly.dev``, ``api.x.ai``, …) need ``EMAIL_LLM_ALLOW_REMOTE=1``.
-
-Two Fly Machines are cheaper than one 4gb box (see ``fly.toml`` + ``fly.llm.toml``).
-Skip cloud SpaceXAI/OpenAI for this path.
+Any *other* public host (``*.fly.dev``, ``api.x.ai``, …) needs
+``EMAIL_LLM_ALLOW_REMOTE=1``.
 """
 from __future__ import annotations
 
@@ -26,6 +31,23 @@ INTENTS = frozenset({
     "withdrawal", "doubles", "late_entry", "pairing_avoidance",
     "scheduling_avoidance", "division_flex", "hotel", "other",
 })
+
+# Small-LLM provider. ``GET https://api.deepseek.com/v1/models`` lists
+# deepseek-flash and deepseek-v4-pro; ``deepseek-chat`` is accepted as an alias.
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+DEEPSEEK_HOST = "api.deepseek.com"
+DEEPSEEK_MODEL = "deepseek-flash"
+# The optional local llama.cpp sidecar (see fly.llm.toml).
+LOCAL_BASE_URL = "http://127.0.0.1:8080/v1"
+SIDECAR_MODEL = "qwen2.5-1.5b-instruct"
+DEEPSEEK_KEY_ENV = "DEEPSEEK_API_KEY"
+
+# EMAIL_LLM_PROVIDER selects the default endpoint; EMAIL_LLM_BASE_URL still
+# overrides it outright. DeepSeek is the default.
+PROVIDER_ENV = "EMAIL_LLM_PROVIDER"
+DEEPSEEK_PROVIDER = "deepseek"
+LOCAL_PROVIDER = "local"
+_LOCAL_ALIASES = frozenset({"local", "sidecar", "llama", "llamacpp", "onbox", "on-box"})
 
 # One shared leftover prompt for every email (not a per-message template).
 # Few-shots use invented names so the model learns the rule, not the corpus.
@@ -300,6 +322,13 @@ def parse_llm_json(raw: str | None) -> dict | None:
 
 _DEV_COMPOSE_HOSTS = frozenset({"llm", "host.docker.internal"})
 
+# Hosts we ship support for, allowed without the remote opt-in.
+_ALLOWED_API_HOSTS = frozenset({DEEPSEEK_HOST})
+
+# Local convenience only — a deployed box cannot read a user's home directory,
+# so production must supply DEEPSEEK_API_KEY through its own secret store.
+_GROK_CONFIG = os.path.join(os.path.expanduser("~"), ".grok", "config.toml")
+
 
 def _dev_env() -> bool:
     return os.getenv("ENV", "dev").strip().lower() in {
@@ -308,10 +337,14 @@ def _dev_env() -> bool:
 
 
 def llm_url_allowed(url: str, *, allow_remote: bool = False) -> bool:
-    """True if EMAIL_LLM_BASE_URL is loopback or Fly-private (not the public net)."""
+    """True if the endpoint is the configured provider, loopback, or Fly-private."""
     host = (urlparse(url).hostname or "").lower()
     if not host:
         return False
+    # The small-LLM provider this app ships support for (DeepSeek). Any OTHER
+    # public host still needs the explicit EMAIL_LLM_ALLOW_REMOTE opt-in.
+    if host in _ALLOWED_API_HOSTS:
+        return True
     if host in {"127.0.0.1", "localhost", "::1"}:
         return True
     # Local docker-compose service names — only in ENV=dev (not a public TLD).
@@ -336,38 +369,120 @@ def _assert_local_url(url: str) -> None:
     if llm_url_allowed(url, allow_remote=allow_remote):
         return
     raise RuntimeError(
-        "EMAIL_LLM_BASE_URL must be loopback or Fly private DNS "
-        "(*.internal / *.flycast), not a public host. "
+        "EMAIL_LLM_BASE_URL must be the DeepSeek API, loopback, or Fly private "
+        "DNS (*.internal / *.flycast), not another public host. "
         "Set EMAIL_LLM_ALLOW_REMOTE=1 only after a D5 review."
     )
 
 
+def llm_provider() -> str:
+    """Which small-LLM backend the defaults point at:
+    ``deepseek`` (the API, default) or ``local`` (the llama.cpp sidecar).
+
+    Reads ``EMAIL_LLM_PROVIDER``; the local aliases are ``local``, ``sidecar``,
+    ``llama``, ``llamacpp``, ``onbox``. Anything else — including an unset or
+    mistyped value — keeps the documented default, DeepSeek.
+    """
+    value = os.getenv(PROVIDER_ENV, "").strip().lower()
+    return LOCAL_PROVIDER if value in _LOCAL_ALIASES else DEEPSEEK_PROVIDER
+
+
 def llm_base_url() -> str:
-    return os.getenv("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1").rstrip("/")
+    """Configured endpoint: ``EMAIL_LLM_BASE_URL`` when set (the local sidecar,
+    a Fly-private sidecar, …), otherwise the provider default — the DeepSeek API
+    unless ``EMAIL_LLM_PROVIDER=local``."""
+    explicit = os.getenv("EMAIL_LLM_BASE_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    return LOCAL_BASE_URL if llm_provider() == LOCAL_PROVIDER else DEEPSEEK_BASE_URL
+
+
+def is_deepseek_url(url: str) -> bool:
+    """True when the endpoint is the DeepSeek API (not the local sidecar)."""
+    return (urlparse(url).hostname or "").lower() == DEEPSEEK_HOST
+
+
+def llm_model(base: str | None = None) -> str:
+    """EMAIL_LLM_MODEL wins; otherwise the provider's own default id."""
+    explicit = os.getenv("EMAIL_LLM_MODEL", "").strip()
+    if explicit:
+        return explicit
+    return DEEPSEEK_MODEL if is_deepseek_url(base or llm_base_url()) else SIDECAR_MODEL
+
+
+def _grok_config_key(env_name: str) -> str:
+    """The Grok config's DeepSeek block names the variable that holds the key
+    (``env_key = "DEEPSEEK_API_KEY"``) and may carry the value itself. Read it
+    as a local fallback; return "" when the file or the entry is absent."""
+    try:
+        import tomllib
+        with open(os.getenv("GROK_CONFIG", _GROK_CONFIG), "rb") as fh:
+            cfg = tomllib.load(fh)
+    except (OSError, ValueError):
+        return ""
+    blocks = cfg.get("model")
+    if not isinstance(blocks, dict):
+        return ""
+    for block in blocks.values():
+        if not isinstance(block, dict):
+            continue
+        host = (urlparse(str(block.get("base_url") or "")).hostname or "").lower()
+        if str(block.get("env_key") or "").strip() != env_name and host != DEEPSEEK_HOST:
+            continue
+        value = str(block.get("api_key") or "").strip()
+        if value:
+            return value
+        return os.getenv(str(block.get("env_key") or env_name).strip(), "").strip()
+    return ""
+
+
+def llm_api_key(base: str | None = None) -> str:
+    """Bearer token for the configured endpoint.
+
+    DeepSeek: ``DEEPSEEK_API_KEY``, then the Grok config's declaration. The
+    sidecar (or any other endpoint): ``EMAIL_LLM_TOKEN``. The credential is
+    never crossed over — the sidecar's token is not sent to the public API.
+    The value is never logged, echoed in an error, or returned by an API.
+    """
+    base = base or llm_base_url()
+    if not is_deepseek_url(base):
+        return os.getenv("EMAIL_LLM_TOKEN", "").strip()
+    return os.getenv(DEEPSEEK_KEY_ENV, "").strip() or _grok_config_key(DEEPSEEK_KEY_ENV)
 
 
 def llm_health_url(base: str | None = None) -> str:
-    """llama-server ``GET /health`` (same host as EMAIL_LLM_BASE_URL, no /v1)."""
+    """A URL the configured endpoint really answers: the OpenAI-compatible
+    ``GET /models`` for DeepSeek (it serves no ``/health``), llama-server's
+    ``GET /health`` for the sidecar (same host, no ``/v1``)."""
     u = (base or llm_base_url()).rstrip("/")
+    if is_deepseek_url(u):
+        return u + "/models"
     if u.endswith("/v1"):
         u = u[:-3]
     return u.rstrip("/") + "/health"
 
 
 def probe_llm(timeout: float = 1.5) -> str:
-    """Sidecar status: ``off`` (flag down), ``ok`` (HTTP 2xx), or ``down``.
+    """Endpoint status: ``off`` (flag down), ``ok`` (HTTP 2xx), or ``down``.
 
-    Never raises. Does not send email text. Site health stays ``ok`` if this
-    is ``down`` — leftover triage falls back to heuristics.
+    Never raises, never sends email text, never reports the key. A provider that
+    needs a key reports ``down`` without making a request when none is
+    configured. Site health stays ``ok`` if this is ``down`` — leftover triage
+    falls back to heuristics.
     """
     if not llm_enabled():
         return "off"
+    base = llm_base_url()
     try:
-        _assert_local_url(llm_base_url())
+        _assert_local_url(base)
     except RuntimeError:
         return "down"
+    token = llm_api_key(base)
+    if is_deepseek_url(base) and not token:
+        return "down"          # inert: no key, so no request
+    headers = {"Authorization": "Bearer " + token} if token else {}
     try:
-        req = urllib.request.Request(llm_health_url(), method="GET")
+        req = urllib.request.Request(llm_health_url(base), headers=headers, method="GET")
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if 200 <= getattr(resp, "status", 200) < 300:
                 return "ok"
@@ -376,24 +491,29 @@ def probe_llm(timeout: float = 1.5) -> str:
     return "down"
 
 
-def _complete(prompt: str) -> str:
-    """POST /chat/completions on the local llama.cpp server. Overridable in tests."""
-    base = llm_base_url()
+def _post_chat(
+    messages: list[dict],
+    *,
+    timeout: float,
+    max_tokens: int,
+    base: str | None = None,
+    model: str | None = None,
+) -> str:
+    """POST an OpenAI-compatible ``/chat/completions``; return the first
+    choice's content. THE single transport for both the leftover classifier
+    (``_complete``) and the TD-chat planner (``td_chat.chat_complete``), so both
+    reach whatever ``EMAIL_LLM_BASE_URL`` points at — DeepSeek by default.
+    The key travels only in the Authorization header."""
+    base = (base or llm_base_url()).rstrip("/")
     _assert_local_url(base)
-    timeout = float(os.getenv("EMAIL_LLM_TIMEOUT", "8"))
-    max_tokens = int(os.getenv("EMAIL_LLM_MAX_TOKENS", "192"))
-    model = os.getenv("EMAIL_LLM_MODEL", "qwen2.5-1.5b-instruct")
     payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
+        "model": model or llm_model(base),
+        "messages": messages,
         "temperature": 0,
         "max_tokens": max_tokens,
     }
     headers = {"Content-Type": "application/json"}
-    token = os.getenv("EMAIL_LLM_TOKEN", "").strip()
+    token = llm_api_key(base)
     if token:
         headers["Authorization"] = "Bearer " + token
     req = urllib.request.Request(
@@ -405,6 +525,19 @@ def _complete(prompt: str) -> str:
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
+
+
+def _complete(prompt: str) -> str:
+    """Leftover classifier: one shared system prompt + the clipped email.
+    Overridable in tests."""
+    return _post_chat(
+        [
+            {"role": "system", "content": _SYSTEM},
+            {"role": "user", "content": prompt},
+        ],
+        timeout=float(os.getenv("EMAIL_LLM_TIMEOUT", "8")),
+        max_tokens=int(os.getenv("EMAIL_LLM_MAX_TOKENS", "192")),
+    )
 
 
 def leftover_prompt(subject: str | None, body: str | None) -> str:

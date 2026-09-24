@@ -6,10 +6,17 @@ rules left as `other`. There is no per-message template. Source of truth:
 `leftover_model_intent` / `extract_email`). Tests fail if this file drifts
 from those strings.
 
-Model: local llama.cpp sidecar, **Qwen2.5-1.5B-Instruct Q4_K_M**. Heuristic
+Model: the **DeepSeek API** by default (`https://api.deepseek.com/v1`, model
+`deepseek-flash`, key from `DEEPSEEK_API_KEY`). Set `EMAIL_LLM_PROVIDER=local`
+to use the llama.cpp sidecar (**Qwen2.5-1.5B-Instruct Q4_K_M**) instead — the
+same prompt, the same parser, a different endpoint. Heuristic
 `triage.classify()` still runs first; this prompt is used only when that
-result is `other` and `EMAIL_LLM=1`. Junior PII stays on-box (D5) — no
-cloud LLM.
+result is `other` and `EMAIL_LLM=1`.
+
+> **PII:** on the default DeepSeek path the clipped leftover body (names, and
+> any USTA numbers it states) is sent to a third-party API. The `local`
+> provider keeps it on loopback / Fly 6PN. See
+> [coppa-policy.md](coppa-policy.md).
 
 Do **not** paste tournament-corpus subjects into the few-shots. Examples
 use invented names (Jane Roe / Alex Kim / Sam Lee / Jordan Blake / Casey Ng)
@@ -52,8 +59,12 @@ post-rewrite of `intent`).
 2. `leftover_prompt(clipped_subject, clipped_body)` — same `_SHOTS` for
    every email; only `{subject}` / `{body}` change (via `str.replace`, not
    `.format`, so JSON braces in the few-shots survive).
-3. Chat completion: system = `_SYSTEM`, user = that few-shot string,
-   `temperature=0`, `max_tokens` default 192.
+3. Chat completion: `POST {EMAIL_LLM_BASE_URL}/chat/completions` — DeepSeek by
+   default, the llama.cpp sidecar under `EMAIL_LLM_PROVIDER=local`; system =
+   `_SYSTEM`, user = that few-shot string, `temperature=0`, `max_tokens`
+   default 192. The bearer token is the provider's own (`DEEPSEEK_API_KEY` for
+   DeepSeek, `EMAIL_LLM_TOKEN` for the sidecar) and is never logged. The TD-chat
+   planner posts through the same client (`email_llm._post_chat`).
 4. `parse_llm_json` — `intent` is whatever the model returned (unknown
    intents coerce to `other`; that is schema cleanup, not a rule rewrite).
 
@@ -252,15 +263,19 @@ Labels are this prompt’s intents, not heuristic `classify()`.
 | `doubles` | 5 | Named partners / add-for-doubles / real confirmation body |
 | `late_entry` | 0 | Taught by Example 5; none in this PDF |
 
-Qwen2.5-1.5B-Instruct Q4_K_M matches **30/30** unguarded on this PDF when the
-footer contrast is present: whole-body `Will do` is `other` (not named
-pairing from the Subject); `will partner` with two named players stays
+Qwen2.5-1.5B-Instruct Q4_K_M (the `local` provider) matches **30/30** unguarded
+on this PDF when the footer contrast is present: whole-body `Will do` is `other`
+(not named pairing from the Subject); `will partner` with two named players stays
 `doubles`. Do not add a post-parse `intent` rewrite.
 
 ## Tests
 
 - `test_zz_email_llm.py` — shared template, shots are not corpus subjects,
-  docs quote `_SYSTEM`/`_SHOTS`.
+  docs quote `_SYSTEM`/`_SHOTS`, the provider flag (DeepSeek default / `local`),
+  the request shape (URL, `Authorization`, model) for both call sites, the URL
+  policy, and the `ok`/`down`/`off` status states.
+- `test_secret_guard.py` — the `DEEPSEEK_API_KEY` value (and any key-shaped
+  literal) appears in no tracked file; `.env.example` holds the name only.
 - `test_zz_pdf_leftover_llm.py` — one `leftover_model_intent` case per
   parsed `tournament_emails.pdf` row (unguarded `parse_llm_json`); gold in
   `backend/tests/fixtures/tournament_emails_gold.json`.

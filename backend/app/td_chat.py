@@ -1,8 +1,9 @@
 """TD chat planner: OpenAPI catalog + allowlisted API-call sequences.
 
-The 1.5B sidecar sees a *short* tool list (quality collapses on a 40-router
-dump). The full catalog from ``app.openapi()`` stays available via
-``GET /api/td-chat/catalog``. Writes do not apply until ``confirm=True``.
+The small model sees a *short* tool list (quality collapses on a 40-router
+dump; the original 1.5B sidecar needed it most). The full catalog from
+``app.openapi()`` stays available via ``GET /api/td-chat/catalog``. Writes do
+not apply until ``confirm=True``.
 """
 from __future__ import annotations
 
@@ -742,36 +743,18 @@ DEFAULT_CHAT_TIMEOUT_SEC = 180
 
 
 def chat_complete(prompt: str) -> str:
-    """POST the planner prompt to the local sidecar. Own timeout (not the 8s email one)."""
+    """POST the planner prompt through the shared small-LLM client in
+    ``email_llm`` (DeepSeek by default), so the planner and the leftover
+    classifier cannot drift apart. Own timeout (not the 8s email one)."""
     from . import email_llm
-    timeout = float(os.getenv("EMAIL_LLM_CHAT_TIMEOUT", str(DEFAULT_CHAT_TIMEOUT_SEC)))
-    max_tokens = int(os.getenv("EMAIL_LLM_CHAT_MAX_TOKENS", "256"))
-    base = email_llm.llm_base_url()
-    email_llm._assert_local_url(base)
-    model = os.getenv("EMAIL_LLM_MODEL", "qwen2.5-1.5b-instruct")
-    payload = {
-        "model": model,
-        "messages": [
+    return email_llm._post_chat(
+        [
             {"role": "system", "content": PLANNER_SYSTEM},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0,
-        "max_tokens": max_tokens,
-    }
-    headers = {"Content-Type": "application/json"}
-    token = os.getenv("EMAIL_LLM_TOKEN", "").strip()
-    if token:
-        headers["Authorization"] = "Bearer " + token
-    import urllib.request
-    req = urllib.request.Request(
-        base + "/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
+        timeout=float(os.getenv("EMAIL_LLM_CHAT_TIMEOUT", str(DEFAULT_CHAT_TIMEOUT_SEC))),
+        max_tokens=int(os.getenv("EMAIL_LLM_CHAT_MAX_TOKENS", "256")),
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
 
 
 def set_verdict(sufficient: bool, detail: str) -> None:

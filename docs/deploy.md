@@ -85,18 +85,28 @@ a COPPA-ready production topology — see §6.
 **VM size:** the site stays **`shared-cpu-1x` / 512mb** (~$3/mo). A 1.5B GGUF
 does **not** share this Machine.
 
-**Optional LLM as a second Fly app** (`fly.llm.toml`, app `courtops-llm`):
-`shared-cpu-1x` / **2gb** (~$11/mo), **no public HTTP**. Combined ~$14/mo, which
-is less than one `shared-cpu-2x` / 4gb box (~$22/mo). Fly process groups in one
-`fly.toml` must share this Postgres+uvicorn image, so they cannot host
-`llama-server`. First boot downloads Qwen2.5-1.5B-Instruct Q4_K_M onto volume
-`courtops_llm` (`/models/model.gguf`).
+**Small LLM — two options.** The default is the **DeepSeek API** (no extra
+Machine, no GGUF; leftover email text leaves the box — see
+[email-llm-prompt.md](email-llm-prompt.md)):
+
+```bash
+fly secrets set EMAIL_LLM=1 DEEPSEEK_API_KEY='sk-...' -a courtops-poc
+# EMAIL_LLM_PROVIDER defaults to deepseek; EMAIL_LLM_MODEL defaults to
+# deepseek-flash. The key is a Fly secret — never a file in the repo.
+```
+
+Or keep it on-box with the **llama.cpp sidecar as a second Fly app**
+(`fly.llm.toml`, app `courtops-llm`): `shared-cpu-1x` / **2gb** (~$11/mo), **no
+public HTTP**. Combined ~$14/mo, which is less than one `shared-cpu-2x` / 4gb box
+(~$22/mo). Fly process groups in one `fly.toml` must share this
+Postgres+uvicorn image, so they cannot host `llama-server`. First boot downloads
+Qwen2.5-1.5B-Instruct Q4_K_M onto volume `courtops_llm` (`/models/model.gguf`).
 
 ```bash
 fly apps create courtops-llm --org personal
 fly volumes create courtops_llm --size 2 --region iad -a courtops-llm
 fly deploy -c fly.llm.toml --ha=false --no-public-ips
-fly secrets set EMAIL_LLM=1 \
+fly secrets set EMAIL_LLM=1 EMAIL_LLM_PROVIDER=local \
   EMAIL_LLM_BASE_URL='http://courtops-llm.internal:8080/v1' \
   EMAIL_LLM_TOKEN='same-random-secret' -a courtops-poc
 fly secrets set LLAMA_API_KEY='same-random-secret' -a courtops-llm

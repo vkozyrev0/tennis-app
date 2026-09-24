@@ -9,6 +9,16 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-23 — Small-LLM workload moves to the DeepSeek API (key never committed)
+
+- `app/email_llm.py` now resolves one endpoint for both call sites: the **DeepSeek API** by default (`https://api.deepseek.com/v1`, model `deepseek-flash`, key from `DEEPSEEK_API_KEY`), or the existing **llama.cpp sidecar** with `EMAIL_LLM_PROVIDER=local`. `EMAIL_LLM_BASE_URL` / `EMAIL_LLM_MODEL` still override either default, and the model default follows the resolved host, so the sidecar keeps getting `qwen2.5-1.5b-instruct`.
+- The request logic moved into one transport, `email_llm._post_chat`. `_complete` (leftover classifier) and `td_chat.chat_complete` (planner) both call it, so the planner reaches DeepSeek too — previously it duplicated the POST and would have needed its own edit.
+- Credentials are host-matched: the DeepSeek host uses `DEEPSEEK_API_KEY` (env, then the Grok config's declared `env_key` / `api_key` as a local fallback); anything else uses `EMAIL_LLM_TOKEN`. The sidecar token is never sent to the public API, and no code path logs, echoes or returns the key.
+- URL policy: the DeepSeek host is allowed without `EMAIL_LLM_ALLOW_REMOTE`; every other public host is still refused (`api.x.ai`, `example.com`, `*.fly.dev`), the opt-in still permits it, and loopback / `*.internal` / `*.flycast` / dev-compose hosts behave as before.
+- Status probe is provider-aware: DeepSeek has no `/health`, so it probes `GET /v1/models` (with the bearer header); the sidecar still probes `/health`. `ok` / `down` / `off` are unchanged, a missing key makes the DeepSeek path inert (no request), and `/api/health` still reports `ok` while the LLM is down.
+- **Key hygiene:** `backend/tests/test_secret_guard.py` fails if the `DEEPSEEK_API_KEY` value — or any `sk-`-shaped literal — appears in a tracked file, and asserts `.env.example` names the variable with an empty placeholder and that `.env` files stay git-ignored. Demonstrated to fail on a pasted key-shaped literal, then reverted.
+- Docs now state the new provider and its PII posture: README (provider table + key handling), `docs/email-llm-prompt.md` (call shape, tests), `docs/deploy.md` (DeepSeek secret vs. sidecar app), `docs/design.md`, `docs/roadmap.md`, `docs/email-ingest.md`, `docs/README.md`. The "junior PII stays on-box / no cloud LLM" claim is replaced: on the default path the clipped leftover text goes to a third-party API, and `EMAIL_LLM_PROVIDER=local` is how it stays on-box.
+
 ## 2026-09-23 — Linting across the whole tree, and a mandatory pre-check-in policy
 
 - Added `ruff.toml` (repo root): explicit `E4/E7/E9/F/W/I` selection, `target-version = "py312"`, `src = ["backend"]` so isort classifies `app`/`tests` as first-party. Covers `backend/` and `scripts/`. No per-rule or global ignores.
