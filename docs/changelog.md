@@ -9,6 +9,14 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-09-23 — Deployed to Fly with the small LLM on the DeepSeek API (no sidecar)
+
+- `flyctl deploy` released `c80b95f` to `courtops-poc` (region `iad`, volume `courtops_data`): machine `d89524eb095d08` went from version 39 to 42 (the deploy plus the two secret updates), image `courtops-poc:deployment-01M38GBCC6JCK0X41PP9KHF9CZ`, health check `1 total, 1 passing`.
+- Secrets: `DEEPSEEK_API_KEY` installed and `EMAIL_LLM=1` kept; `EMAIL_LLM_BASE_URL` and `EMAIL_LLM_TOKEN` unset, so the app takes the DeepSeek default instead of pointing at the suspended `courtops-llm` sidecar.
+- Live proof of the switch: `/api/health/llm` was `{"status":"down"}` before and is `{"status":"ok"}` now (and `/api/health` reports `"llm":"ok"` with `"db":"ok"`), on two consecutive rounds. `/`, `/app.js` and the 401 on `/api/tournaments` are unchanged.
+- The sidecar was **not** deployed: the run built only the site image (no `fly.llm.toml` / `Dockerfile.llm` in the output), and `courtops-llm` is byte-for-byte where it was — suspended, same latest-deploy timestamp (Sep 6 2026), same image, same stopped machine.
+- The authenticated drive of the live leftover path (`POST /api/emails` → `/suggest`) was not possible: the deployed `ADMIN_PASSWORD` is a Fly secret and the documented POC default is refused, so the auth-free `/api/health/llm` probe carries the proof instead.
+
 ## 2026-09-23 — Small-LLM workload moves to the DeepSeek API (key never committed)
 
 - `app/email_llm.py` now resolves one endpoint for both call sites: the **DeepSeek API** by default (`https://api.deepseek.com/v1`, model `deepseek-flash`, key from `DEEPSEEK_API_KEY`), or the existing **llama.cpp sidecar** with `EMAIL_LLM_PROVIDER=local`. `EMAIL_LLM_BASE_URL` / `EMAIL_LLM_MODEL` still override either default, and the model default follows the resolved host, so the sidecar keeps getting `qwen2.5-1.5b-instruct`.
