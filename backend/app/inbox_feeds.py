@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from . import gmail_feed, outlook_feed
 from .email_ingest import restore_hidden
+from .email_llm import pass_budget
 
 HttpFn = Callable[..., Any]
 
@@ -101,35 +102,43 @@ def fetch_inbox_mails(
     skipped: list[str] = []
     gmail_out = None
     outlook_out = None
-    grow = gmail_feed.load_feed(cur)
-    if gmail_ready(grow):
-        gmail_out = gmail_feed.fetch_latest(
-            cur, imap_factory=imap_factory, since=start, until=end,
-            tournament_id=tournament_id,
-        )
-    else:
-        skipped.append("gmail")
-    orow = outlook_feed.load_feed(cur)
-    if outlook_ready(orow):
-        outlook_out = outlook_feed.fetch_latest(
-            cur, http=http, since=start, until=end,
-            tournament_id=tournament_id,
-        )
-    else:
-        skipped.append("outlook")
-    restored = 0
-    if get_all and tournament_id is not None:
-        restored = restore_hidden(cur, tournament_id)
+    # One model budget for the whole request: the download phase spends none of
+    # it, so the classify phase (one round trip per leftover copy) is what it
+    # bounds. Copies the budget refuses are still imported, classified by the
+    # heuristic, and counted in `leftover_skipped` for the status line.
+    with pass_budget() as budget:
+        grow = gmail_feed.load_feed(cur)
+        if gmail_ready(grow):
+            gmail_out = gmail_feed.fetch_latest(
+                cur, imap_factory=imap_factory, since=start, until=end,
+                tournament_id=tournament_id,
+            )
+        else:
+            skipped.append("gmail")
+        orow = outlook_feed.load_feed(cur)
+        if outlook_ready(orow):
+            outlook_out = outlook_feed.fetch_latest(
+                cur, http=http, since=start, until=end,
+                tournament_id=tournament_id,
+            )
+        else:
+            skipped.append("outlook")
+        restored = 0
+        if get_all and tournament_id is not None:
+            restored = restore_hidden(cur, tournament_id)
+        reprocessed = 0
+        reprocess_remaining = 0
+        if reprocess and tournament_id is not None and (start is not None or end is not None):
+            from .email_stamp import reprocess_window
+            out = reprocess_window(cur, tournament_id, start, end)
+            reprocessed = out.get("reprocessed", 0)
+            reprocess_remaining = out.get("remaining", 0)
     imported = (
         (gmail_out or {}).get("imported", 0)
         + (outlook_out or {}).get("imported", 0)
         + restored
     )
     duplicates = (gmail_out or {}).get("duplicates", 0) + (outlook_out or {}).get("duplicates", 0)
-    reprocessed = 0
-    if reprocess and tournament_id is not None and (start is not None or end is not None):
-        from .email_stamp import reprocess_window
-        reprocessed = reprocess_window(cur, tournament_id, start, end).get("reprocessed", 0)
     return {
         "gmail": gmail_out,
         "outlook": outlook_out,
@@ -138,4 +147,7 @@ def fetch_inbox_mails(
         "duplicates": duplicates,
         "restored": restored,
         "reprocessed": reprocessed,
+        "reprocess_remaining": reprocess_remaining,
+        "leftover_skipped": budget.denied,
+        "llm_budget": budget.as_dict(),
     }

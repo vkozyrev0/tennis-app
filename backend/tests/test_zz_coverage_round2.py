@@ -113,8 +113,9 @@ def test_gmail_search_since_and_uid_plus(monkeypatch):
     from app.db import get_conn as gc
 
     class _Since:
-        def __init__(self, host, port=None):
+        def __init__(self, host, port=None, **kwargs):
             self.host, self.port = host, port
+            self.kwargs = kwargs
         def login(self, *a):
             return ("OK", [b"ok"])
         def select(self, *a, **k):

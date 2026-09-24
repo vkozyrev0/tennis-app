@@ -227,11 +227,26 @@ def list_window_ids(
 
 
 def reprocess_window(cur, tournament_id: int, since, until) -> dict:
-    """Re-stamp CourtOps copies in a received_at window. No duplicates."""
+    """Re-stamp CourtOps copies in a received_at window. No duplicates.
+
+    Bounded like the bulk endpoint: with the model on, each copy costs one
+    round trip, so the pass stops at the model budget and reports how many
+    copies are left for a later press.
+    """
+    from .email_llm import pass_budget
+
     ids = list_window_ids(cur, tournament_id, since, until)
     out = []
-    for eid in ids:
-        rec = reprocess_email(cur, eid)
-        if rec:
-            out.append(rec["id"])
-    return {"reprocessed": len(out), "ids": out}
+    with pass_budget() as budget:
+        for eid in ids:
+            if not budget.allow():
+                break
+            rec = reprocess_email(cur, eid)
+            if rec:
+                out.append(rec["id"])
+    return {
+        "reprocessed": len(out),
+        "ids": out,
+        "remaining": max(0, len(ids) - len(out)),
+        "budget": budget.as_dict(),
+    }

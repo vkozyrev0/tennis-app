@@ -23,8 +23,11 @@ import ipaddress
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import urlparse
 
 INTENTS = frozenset({
@@ -236,8 +239,111 @@ _ON_WROTE = (
 )
 
 
+# How much model work one synchronous request may do. Each model call costs up
+# to EMAIL_LLM_TIMEOUT seconds, so a pass over N stored copies used to run for
+# N round trips inside one HTTP request (200 copies x 8s = ~27 minutes with a
+# slow endpoint, which reads as a hang in the overlay). A pass now stops at the
+# budget and reports what it left behind.
+DEFAULT_PASS_MAX_CALLS = 20
+DEFAULT_PASS_SECONDS = 20.0
+
+
+class PassBudget:
+    """Bound on the model work a single synchronous pass may do.
+
+    Pure (no I/O, injectable clock) so the policy is unit-testable without a
+    mailbox or a model: ``allow()`` says whether one more call fits, ``spend()``
+    records one, and ``as_dict()`` reports the bound to the caller.
+    """
+
+    def __init__(self, *, max_calls: int | None = None, seconds: float | None = None,
+                 clock=time.monotonic) -> None:
+        raw_calls = max_calls if max_calls is not None else os.getenv("EMAIL_LLM_MAX_CALLS")
+        raw_secs = seconds if seconds is not None else os.getenv("EMAIL_LLM_PASS_SECONDS")
+        try:
+            self.max_calls = max(0, int(raw_calls)) if raw_calls is not None else DEFAULT_PASS_MAX_CALLS
+        except (TypeError, ValueError):
+            self.max_calls = DEFAULT_PASS_MAX_CALLS
+        try:
+            self.seconds = max(0.0, float(raw_secs)) if raw_secs is not None else DEFAULT_PASS_SECONDS
+        except (TypeError, ValueError):
+            self.seconds = DEFAULT_PASS_SECONDS
+        self._clock = clock
+        self._start = clock()
+        self.calls = 0
+        self.denied = 0
+
+    def elapsed(self) -> float:
+        return self._clock() - self._start
+
+    def allow(self) -> bool:
+        """True while another model call fits inside both bounds."""
+        if self.calls >= self.max_calls:
+            return False
+        return self.elapsed() < self.seconds
+
+    def spend(self) -> None:
+        self.calls += 1
+
+    def deny(self) -> None:
+        """Record a model call that the budget refused (heuristic-only copy)."""
+        self.denied += 1
+
+    def as_dict(self) -> dict:
+        return {
+            "max_calls": self.max_calls,
+            "seconds": self.seconds,
+            "calls": self.calls,
+            "denied": self.denied,
+            "elapsed_ms": int(self.elapsed() * 1000),
+        }
+
+
 def llm_enabled() -> bool:
     return os.getenv("EMAIL_LLM", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# The budget of the pass currently running in this request/thread. Set by
+# `pass_budget()` around a download-then-parse pass so every model call made
+# underneath (ingest-time classify, the reprocess loop) shares one bound
+# without threading a parameter through ingest_email/triage.
+_ACTIVE_BUDGET: ContextVar["PassBudget | None"] = ContextVar("llm_pass_budget", default=None)
+
+
+@contextmanager
+def pass_budget(*, max_calls: int | None = None, seconds: float | None = None):
+    """Bound the model calls made inside this block.
+
+    Yields the :class:`PassBudget` so the caller can report what it spent and
+    what it left behind. Nested blocks each get their own bound.
+    """
+    budget = PassBudget(max_calls=max_calls, seconds=seconds)
+    token = _ACTIVE_BUDGET.set(budget)
+    try:
+        yield budget
+    finally:
+        _ACTIVE_BUDGET.reset(token)
+
+
+def active_budget() -> "PassBudget | None":
+    return _ACTIVE_BUDGET.get()
+
+
+def budget_allows() -> bool:
+    """True when this pass may spend another model call (no budget = yes)."""
+    budget = _ACTIVE_BUDGET.get()
+    if budget is None:
+        return True
+    if budget.allow():
+        return True
+    budget.deny()
+    return False
+
+
+def budget_spend() -> None:
+    budget = _ACTIVE_BUDGET.get()
+    if budget is not None:
+        budget.spend()
 
 
 _PDF_DATE = re.compile(r"^\[Date:[^\]]*\]\s*", re.M)
@@ -568,12 +674,17 @@ def leftover_model_intent(
     key = (subj, clipped)
     if not bypass_cache and _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
         return _LEFTOVER_LAST[1]
+    # A pass that has spent its budget classifies this copy with the heuristic
+    # only. The cache is left untouched so a later pass still gets a real answer.
+    if not budget_allows():
+        return None
     prompt = leftover_prompt(subj, clipped)
     try:
         raw = _complete(prompt)
     except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError):
         _LEFTOVER_LAST = (key, None)
         return None
+    budget_spend()
     parsed = parse_llm_json(raw)
     _LEFTOVER_LAST = (key, parsed)
     return parsed

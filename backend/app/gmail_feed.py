@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import email as email_lib
 import imaplib
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
@@ -43,6 +44,20 @@ _DEFAULTS = {
 }
 _MAX_BATCH = 50
 _MAX_WINDOW_BATCH = 200
+
+# Socket timeout for the IMAP session, in seconds. Applies to connect, login,
+# SEARCH and FETCH, so a silent mailbox fails instead of hanging the request.
+DEFAULT_IMAP_TIMEOUT = 20.0
+
+
+def _imap_timeout_sec() -> float:
+    """Finite, positive socket timeout for the IMAP session."""
+    raw = os.getenv("EMAIL_IMAP_TIMEOUT", "")
+    try:
+        value = float(raw) if str(raw).strip() else DEFAULT_IMAP_TIMEOUT
+    except (TypeError, ValueError):
+        value = DEFAULT_IMAP_TIMEOUT
+    return value if value > 0 else DEFAULT_IMAP_TIMEOUT
 
 
 def _hdr(msg: Message, name: str) -> str | None:
@@ -253,7 +268,11 @@ def _imap_fetch(
     port = int(row.get("imap_port") or 993)
     mailbox = row.get("mailbox") or "INBOX"
     factory = imap_factory or imaplib.IMAP4_SSL
-    imap = factory(host, port)
+    # A mailbox that accepts the connection and then stops answering must not
+    # block the fetch forever: imaplib's default timeout is None. The bound is
+    # per socket operation (connect, login, SEARCH, FETCH) and surfaces as the
+    # usual OSError path, which the router redacts and reports as 502.
+    imap = factory(host, port, timeout=_imap_timeout_sec())
     try:
         typ, _ = imap.login(address, secret)
         if typ != "OK":

@@ -96,9 +96,10 @@ def test_get_put_hides_password_and_keeps_cursor(_admin):
 
 
 class _FakeImap:
-    def __init__(self, host, port=None):
+    def __init__(self, host, port=None, **kwargs):
         self.host = host
         self.port = port
+        self.kwargs = kwargs
         self._uv = b"99"
 
     def login(self, user, pw):
@@ -194,8 +195,8 @@ class _QueryImap(_FakeImap):
 
 
 class _UvChange(_FakeImap):
-    def __init__(self, host, port=None):
-        super().__init__(host, port)
+    def __init__(self, host, port=None, **kwargs):
+        super().__init__(host, port, **kwargs)
         self._uv = b"100"
 
     def logout(self):
@@ -530,3 +531,65 @@ def test_gmail_feed_source_is_readonly():
     cmds = re.findall(r'imap\.uid\(\s*"(\w+)"', src)
     assert cmds
     assert set(cmds) <= {"SEARCH", "FETCH"}
+
+# --- the session must be bounded -------------------------------------------
+
+@_needs_db
+def test_imap_session_is_created_with_a_finite_timeout(monkeypatch, _admin):
+    """A mailbox that accepts TCP then goes silent must not block forever.
+
+    imaplib's default timeout is None, so the shipped fetch has to pass one.
+    The fake records exactly what the shipped code hands its factory.
+    """
+    from app import gmail_feed as gf
+
+    seen: dict = {}
+
+    class _RecordingImap:
+        def __init__(self, host, port=None, **kwargs):
+            seen["host"], seen["port"], seen["kwargs"] = host, port, kwargs
+
+        def login(self, user, pw):
+            # Behaves like a socket that stops answering: with a finite timeout
+            # the caller sees the timeout instead of hanging.
+            if seen["kwargs"].get("timeout") is None:
+                raise AssertionError("the shipped fetch created the session with no timeout")
+            raise TimeoutError("socket timeout while waiting for the mailbox")
+
+        def logout(self):
+            return ("OK", [])
+
+    monkeypatch.delenv("EMAIL_IMAP_TIMEOUT", raising=False)
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _RecordingImap)
+    client.put("/api/gmail-feed", json={
+        "enabled": True,
+        "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+    })
+
+    r = client.post("/api/gmail-feed/fetch")
+
+    # The factory the shipped code called recorded what it was handed.
+    timeout = seen["kwargs"].get("timeout")
+    assert isinstance(timeout, (int, float)) and not isinstance(timeout, bool), (
+        f"expected a finite numeric timeout, got {timeout!r}"
+    )
+    assert timeout > 0, timeout
+
+    # The silent mailbox surfaces as the normal error path, not a hang, and the
+    # error text never leaks the app password.
+    assert r.status_code in {400, 502}, r.text
+    assert "abcd efgh ijkl mnop" not in r.text
+    assert "timeout" in r.text.lower() or "timed out" in r.text.lower()
+
+
+def test_imap_timeout_is_configurable_and_always_finite(monkeypatch):
+    from app import gmail_feed as gf
+
+    monkeypatch.delenv("EMAIL_IMAP_TIMEOUT", raising=False)
+    assert gf._imap_timeout_sec() == gf.DEFAULT_IMAP_TIMEOUT > 0
+    monkeypatch.setenv("EMAIL_IMAP_TIMEOUT", "7.5")
+    assert gf._imap_timeout_sec() == 7.5
+    for bad in ("", "  ", "garbage", "0", "-3"):
+        monkeypatch.setenv("EMAIL_IMAP_TIMEOUT", bad)
+        assert gf._imap_timeout_sec() == gf.DEFAULT_IMAP_TIMEOUT, bad
