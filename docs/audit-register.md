@@ -35,7 +35,7 @@ Severity: **H** high · **M** medium · **L** low
 | D3 | 30-day sessions + default `admin/admin` | ✅ 2026-07-21 — prod session default 7d; `must_change_password` + prod API gate; SPA force modal |
 | D8 | Officials can list all tournaments | ✅ 2026-07-21 — `/me/tournaments` + availability scoped to assignment / prior avail / open events |
 | D11 | `frontend/app.js` monolith; mixed `innerHTML` | ✅ 2026-07-21 — composition root ~760 LOC; ~50 ESM modules under `frontend/app/`; residual raw `innerHTML` only where grids/print require it |
-| D15 | Docs drift (suite counts, PII plan §3, design tree) | ✅ 2026-07-21; re-synced 2026-07-29 — ~591 / 89 / 0055; stale 528 + 0049 fixed; open-work D4 |
+| D15 | Docs drift (suite counts, PII plan §3, design tree) | ✅ 2026-07-21; re-synced 2026-07-29 — ~591 / 89 / 0055; stale 528 + 0049 fixed; open-work D4. Re-synced 2026-09-21 — current-status lines now 985 / 112 / 0060 (roadmap status, design tree, test-coverage Running). The 2026-07-29 figures stay in this cell as the count from that date. |
 | D16 | Residual plaintext / under-13 without policy | ✅ 2026-07-20 — `docs/coppa-policy.md`; `ALLOW_UNDER13_PII` gate; `GET /api/coppa/policy` |
 | D2 | Fernet key rotation not operational | ✅ 2026-07-20 — MultiFernet + `PII_ENCRYPTION_KEYS` + `reencrypt_pii.py` |
 | D4 | Ingest allows `?token=` | ✅ 2026-07-20 — refused when `ENV` is prod unless `INGEST_ALLOW_QUERY_TOKEN=1` |
