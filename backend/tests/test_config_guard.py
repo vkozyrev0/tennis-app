@@ -50,8 +50,17 @@ def test_prod_rejects_dev_encryption_key(monkeypatch):
         _settings(env="prod", user="app", password="s3cret", sslmode="require").validate()
 
 
+def test_prod_rejects_malformed_encryption_key(monkeypatch):
+    monkeypatch.setenv("PII_ENCRYPTION_KEYS", "not-a-valid-fernet-key")
+    with pytest.raises(RuntimeError, match="valid Fernet key"):
+        _settings(env="prod", user="courtops_app", password="a-real-secret",
+                  sslmode="require").validate()
+
+
 def test_prod_passes_with_secure_config(monkeypatch):
-    monkeypatch.setenv("PII_ENCRYPTION_KEY", "a-real-non-default-key-set-from-the-environment")
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv("PII_ENCRYPTION_KEY", Fernet.generate_key().decode())
     for mode in ("require", "verify-ca", "verify-full"):
         _settings(env="prod", user="courtops_app", password="a-real-secret",
                   sslmode=mode).validate()
@@ -60,6 +69,20 @@ def test_prod_passes_with_secure_config(monkeypatch):
 def test_dsn_includes_sslmode():
     assert "sslmode=require" in _settings(sslmode="require").dsn
     assert "sslmode=require" in _settings(sslmode="require").admin_dsn
+
+
+def test_dsn_quotes_special_characters():
+    s = _settings(password="horse battery staple")
+    assert "password='horse battery staple'" in s.dsn
+    assert "connect_timeout=5" in s.dsn
+
+
+def test_retention_days_bad_env_falls_back():
+    from app.retention import _parse_days
+
+    assert _parse_days("90d") == 90
+    assert _parse_days(None) == 90
+    assert _parse_days("30") == 30
 
 
 def test_secure_cookie_defaults_on_in_prod(monkeypatch):

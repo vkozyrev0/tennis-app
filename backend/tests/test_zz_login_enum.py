@@ -3,10 +3,9 @@
 An attacker probing usernames must not be able to tell a nonexistent account
 from a real one with a wrong password — neither by the response body NOR by
 timing. The body is asserted here; the timing equalization (a missing user
-still runs one PBKDF2 against a dummy hash) is verified by a loose lower-bound
-on the unknown-user response time so a regression of that fix is caught.
+still runs one PBKDF2 against a dummy hash) is asserted directly against the
+call, so the regression guard does not depend on wall-clock noise.
 """
-import time
 import uuid
 
 import pytest
@@ -33,25 +32,21 @@ def test_unknown_user_and_wrong_password_return_identical_response():
     assert r_unknown.json()["detail"] == r_wrong.json()["detail"]
 
 
-def test_unknown_user_still_pays_the_hash_cost():
-    # Regression guard for the timing fix: a missing user runs PBKDF2 against a
-    # dummy hash, so its 401 is in the same ballpark as a real-user wrong-password
-    # 401 — NOT the near-instant short-circuit it would be without the fix.
+def test_unknown_user_runs_the_dummy_hash_verify(monkeypatch):
+    """Regression guard for the timing fix: a missing user must run PBKDF2
+    against the dummy hash. Assert the call directly instead of comparing
+    wall-clock times, which is flaky under CI jitter (D32)."""
+    from app.routers import auth as auth_router
+
+    calls = []
+
+    def spy(pw, hashed):
+        calls.append(hashed)
+        return False
+
+    monkeypatch.setattr(auth_router, "verify_pw", spy)
     c = TestClient(app)
-
-    def t(payload):
-        best = min(_timed(c, payload) for _ in range(3))  # min = least noise
-        return best
-
-    unknown = t({"username": "ghost_" + uuid.uuid4().hex, "password": "x"})
-    wrong = t({"username": "admin", "password": "nope"})
-    # Without the dummy-hash verify, `unknown` would skip PBKDF2 entirely and be
-    # a small fraction of `wrong`. Require it to be at least a third — lenient
-    # enough for CI jitter, strict enough to catch the short-circuit regressing.
-    assert unknown >= wrong / 3, f"unknown={unknown:.4f}s wrong={wrong:.4f}s (timing leak?)"
-
-
-def _timed(c, payload):
-    t0 = time.perf_counter()
-    c.post("/api/auth/login", json=payload)
-    return time.perf_counter() - t0
+    r = c.post("/api/auth/login",
+               json={"username": "ghost_" + uuid.uuid4().hex, "password": "x"})
+    assert r.status_code == 401
+    assert calls == [auth_router._DUMMY_HASH]

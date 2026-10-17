@@ -353,6 +353,79 @@ def test_load_feed_fallback_when_no_row():
 
 
 @_needs_db
+def test_failed_ingest_does_not_move_the_cursor_past_it(monkeypatch, _admin):
+    """D23: a message that fails to ingest stays inside the retry range."""
+    from app import outlook_feed as of
+    from app.db import get_conn
+
+    now = datetime.now(timezone.utc)
+    first = now - timedelta(hours=3)
+    base = now - timedelta(hours=4)
+    msgs = [
+        _graph_msg(message_id=f"<f-{uuid.uuid4().hex}@o.test>", subject="fails",
+                   received=first),
+        _graph_msg(message_id=f"<ok-{uuid.uuid4().hex}@o.test>", subject="lands",
+                   received=now - timedelta(hours=2)),
+    ]
+    fake = _FakeGraph(msgs)
+    monkeypatch.setattr(of, "_http_json", fake)
+    client.put("/api/outlook-feed", json={
+        "enabled": True, "tenant_id": TD_TENANT, "client_id": TD_CLIENT,
+        "client_secret": TD_SECRET, "mailbox": TD_MAILBOX, "mail_query": "",
+    })
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE outlook_feed SET last_received_at = %s WHERE id = 1",
+                        (base,))
+        conn.commit()
+
+    real_ingest = of.ingest_email
+    calls = {"n": 0}
+
+    def fail_first(cur, payload, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("classification blew up")
+        return real_ingest(cur, payload, **kw)
+
+    monkeypatch.setattr(of, "ingest_email", fail_first)
+    r = client.post("/api/outlook-feed/fetch")
+    assert r.status_code == 200, r.text
+    assert r.json()["last_status"] == "partial"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_received_at FROM outlook_feed WHERE id = 1")
+            stored = cur.fetchone()["last_received_at"]
+    assert stored >= base
+    assert stored < first
+
+
+@_needs_db
+def test_failed_download_persists_the_error_row(monkeypatch, _admin):
+    """D23: the route re-raises, so the error update has to commit on its own."""
+    from app import outlook_feed as of
+    from app.db import get_conn
+
+    client.put("/api/outlook-feed", json={
+        "enabled": True, "tenant_id": TD_TENANT, "client_id": TD_CLIENT,
+        "client_secret": TD_SECRET, "mailbox": TD_MAILBOX, "mail_query": "",
+    })
+
+    def boom(method, url, **kw):
+        raise OSError("graph is down")
+
+    monkeypatch.setattr(of, "_http_json", boom)
+    r = client.post("/api/outlook-feed/fetch")
+    assert r.status_code == 502, r.text
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_status, last_error FROM outlook_feed WHERE id = 1")
+            row = cur.fetchone()
+    assert row["last_status"] == "error"
+    assert "graph is down" in (row["last_error"] or "")
+
+
+@_needs_db
 def test_fetch_latest_ingests_and_advances_cursor(monkeypatch, _admin):
     from app import outlook_feed as of
     now = datetime.now(timezone.utc)

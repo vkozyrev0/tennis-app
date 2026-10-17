@@ -1,13 +1,13 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-09-08):** **985 tests** collected (`pytest --collect-only -q`).
+**Status (2026-10-17):** **1081 tests** collected (`pytest --collect-only -q`).
 Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
 `backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
 `# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
 without coverage. Re-run `pytest --collect-only -q` after large adds.
-Migrations through **0060** (`inbox_person`; Outlook feed 0058; email
-`deleted_at` 0059).
+Migrations through **0061** (`partb_delete_undo`; `inbox_person` 0060; Outlook
+feed 0058; email `deleted_at` 0059).
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
 are split out of the large routers; API paths and re-exports for tests are
@@ -43,7 +43,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-The names in that `test_zz_*.py` cell are examples, not the full tree. There are **112** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
+The names in that `test_zz_*.py` cell are examples, not the full tree. There are **117** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
 
 **Frontend unit checks (JS):** pure frontend logic factored out and asserted by
 DOM-free node test files (independent of AG Grid):
@@ -71,7 +71,7 @@ DOM-free node test files (independent of AG Grid):
 - `frontend/app/td_helpers.test.mjs` — blank-email guard, menu clamp, locale dates.
 - `frontend/app/modules.test.mjs` — the ESM graph itself: every relative import resolves, every named import is a real export, and every `create*` factory wired in `app.js` is passed the context keys it destructures.
 
-That is **21** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
+That is **25** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
 
 **Lint (required before every check-in):** `python -m ruff check .` (config in
 `ruff.toml`) and `npx eslint .` (config in `eslint.config.mjs`). CI runs
@@ -170,7 +170,7 @@ directly: `test_config_guard`, `test_zz_assignment_calc`, `test_zz_db_errors`,
 
 | Test | Type | API surface | Simulates |
 |------|------|-------------|-----------|
-| `test_triage_suggest` | Contract | `POST /api/emails/{id}/suggest` | The local rule-based triage classifies subject + body into one of 9 buckets (no LLM, no data leaves the building). |
+| `test_triage_suggest` | Contract | `POST /api/emails/{id}/suggest` | The local rule-based triage classifies subject + body into one of 9 buckets without calling a model. |
 | `test_inbox_and_late_entry_filing` | Contract | `/api/emails`, `/api/tournaments/{id}/late-entries` | An email is staged; filing it as a late entry marks the email `filed`/`late_entry` AND adds the player to the roster (source=late_entry). |
 | `test_late_entry_past_deadline_flag` | Contract | Late entries | A request_date after `tournament.late_entry_deadline` flags `past_deadline=true` on the row. |
 | `test_withdrawal_reason_rule_and_roster_flip` | Contract | `/api/tournaments/{id}/withdrawals` | A withdrawal needs a reason UNLESS the player was an alternate. Filing flips the roster row to `selection_status='withdrawn'`. |
@@ -263,7 +263,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | **No headless-browser run.** Node checks cover the 20 `frontend/app/*.test.mjs` files listed under Frontend unit checks. | No headless-browser test harness. Manual + preview-driven QA covers the shell; backend tests cover the API contracts the UI calls. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | Node checks cover the 25 `frontend/app/*.test.mjs` files; `scripts/ui_smoke.mjs` drives the running app in Chromium via Playwright. | Manual QA still covers visual polish; the browser smoke fails on uncaught errors, HTTP errors after sign-in, and empty tabs. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -275,7 +275,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (985 tests / 112 files)
+python -m pytest -q                                    # the whole suite (1081 tests / 117 files)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -413,11 +413,11 @@ and the one-click "file confirmed pair" path.)
 | `test_clearing_primary_clears_manual_partner` | Contract | Clearing the primary player clears the manual partner too. |
 | `test_put_without_partner_field_clears_it` | Contract | A PUT body that omits `detected_partner_id` resets it to NULL, like the other `detected_*` fields. |
 
-### test_zz_email_extract.py — pure extractor units (P2 #9) · 25 tests
+### test_zz_email_extract.py — pure extractor units (P2 #9) · 30 tests
 
 UNIT tests for `app/email_extract.py` — no DB, no HTTP. Pins each extractor's
 contract directly, including the conservative give-up paths. (The table below
-lists the original core cases; the file has grown to 25 tests, adding
+lists the original core cases; the file has grown to 30 tests, adding
 doubles-pair / withdrawal name-corpus shapes, sentence-boundary stops,
 case-variant dedup, non-decomposing-accent fuzzy matching, business-signature
 rejection, permissive separators, and middle-initial handling.)
@@ -464,7 +464,7 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **985 tests** across **112** files (see the status line at the top).
+Total suite count: **1081 tests** across **117** files (see the status line at the top).
 Recent inbox/mail additions (2026-09-08): `test_zz_inbox_people` (parallel
 name+USTA list + promote to Players), `test_zz_outlook_feed`, `test_zz_inbox_feeds`,
 `test_zz_gmail_feed` (Get mails / Get all, mailbox-safe Clear).

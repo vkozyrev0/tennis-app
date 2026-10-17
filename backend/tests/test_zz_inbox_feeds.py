@@ -272,13 +272,19 @@ def test_outlook_date_window_keeps_in_range_only(monkeypatch, _admin):
         "tenant_id": TD_TENANT, "client_id": TD_CLIENT,
     })
     monkeypatch.setattr(of, "_http_json", _FakeGraph(msgs))
-    since = (date.today() - timedelta(days=1)).isoformat()
-    until = date.today().isoformat()
+    # Derive the window from the same UTC clock as the fixture messages; local
+    # date.today() made this test flaky near midnight and at TZ boundaries.
+    since = (now - timedelta(days=1)).date().isoformat()
+    until = now.date().isoformat()
     r = client.post(f"/api/outlook-feed/fetch?since={since}&until={until}")
     assert r.status_code == 200, r.text
-    # in-window + undated kept; old/future skipped. Undated may import.
-    assert r.json()["fetched"] >= 1
-    assert r.json()["fetched"] <= 2
+    subjects = {
+        e["subject"] for e in client.get("/api/emails").json()
+        if e.get("subject") in {"too old", "in window", "too new"}
+    }
+    assert "in window" in subjects
+    assert "too old" not in subjects
+    assert "too new" not in subjects
 
 
 @_needs_db

@@ -1,8 +1,9 @@
 # CourtOps Tennis — Backend
 
 POC stack: **PostgreSQL 16** + **FastAPI** (psycopg 3, raw SQL, Pydantic) + a
-vanilla-JS frontend served by the same app. No ORM, no agent/LLM (player email is
-human-reviewed — see [docs/audit.md](../docs/audit.md) §5.1).
+vanilla-JS frontend served by the same app. No ORM. Player email stays
+human-reviewed; keyword triage suggests, and an optional leftover pass can call
+a small LLM (DeepSeek by default, local sidecar opt-in).
 
 > This file is the **quickstart only**. The canonical docs live in
 > [`docs/`](../docs/): architecture in [design.md](../docs/design.md), schema in
@@ -26,13 +27,19 @@ python -m venv .venv
 ```
 
 ## Database + run
-From the repo root, start the site with Docker Compose (Postgres lives in the
-`web` container — not a host-installed Postgres):
+
+### Docker Compose (no host Postgres)
+
+Postgres lives in the `web` container, not on the host:
 
 ```powershell
 .\scripts\run_local.ps1                 # web (API+DB+UI) + Intelligence sidecar
 .\scripts\run_local.ps1 -NoIntelligence # skip the sidecar
 ```
+
+### Manual (host Postgres required)
+
+The prerequisites above apply here. Run these from `backend/`:
 
 ```powershell
 .\.venv\Scripts\python.exe migrate.py     # create courtops DB + apply migrations/*.sql

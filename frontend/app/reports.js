@@ -1,5 +1,5 @@
 // Reports panel — staffing plan, coverage, conflicts, exports (D11).
-import { datesInRange as datesInRangeUtil } from "./util.js";
+import { datesInRange as datesInRangeUtil, csvText } from "./util.js";
 
 export function createReportsPanel(ctx) {
   const {
@@ -84,7 +84,9 @@ export function createReportsPanel(ctx) {
             const fixable = below && holders > n;
             const flag = fixable
               ? hstr` <span class="cov-flag" title="${`${n} staffed, ${holders} certified available — click to fill`}">⚑</span>` : "";
-            const attrs = fixable ? hstr` data-cov-role="${r.role}" data-cov-date="${b.date}"` : "";
+            const attrs = fixable
+              ? hstr` data-cov-role="${r.role}" data-cov-date="${b.date}" tabindex="0" role="button"`
+              : "";
             return hstr`<td class="daycol${cls ? " " + cls : ""}${fixable ? " cov-fixable" : ""}"${raw(attrs)} title="${`${n} staffed · ${holders} certified${fixable ? " — click to fill" : ""}`}">${n}${raw(flag)}</td>`;
           }).join("");
           return html`<tr><td>${certLabel(r.role)} <span class="muted">(${holders} certified)</span></td>${raw(cells)}</tr>`;
@@ -100,6 +102,13 @@ export function createReportsPanel(ctx) {
   document.addEventListener("click", (e) => {
     const cell = e.target.closest && e.target.closest("#role-coverage-table .cov-fixable");
     if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeCovPop(); return; }
+    _openCovGap(cell);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const cell = e.target.closest && e.target.closest("#role-coverage-table .cov-fixable");
+    if (!cell) return;
+    e.preventDefault();
     _openCovGap(cell);
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeCovPop(); });
@@ -252,7 +261,8 @@ export function createReportsPanel(ctx) {
 
   async function loadReports() {
     if (!getActive()) return;
-    reportData = await api(`/tournaments/${getActive().id}/reports/officials`);
+    try { reportData = await api(`/tournaments/${getActive().id}/reports/officials`); }
+    catch (e) { toast("Could not load the report: " + e.message, false); return; }
     const t = reportData.tournament, totals = reportData.totals;
     const rule = reportData.officials.find((o) => o.rule_version);
     document.getElementById("report-meta").textContent =
@@ -626,7 +636,7 @@ export function createReportsPanel(ctx) {
         `<table><thead><tr><th>Official</th><th>Nights needed</th><th>Dietary</th><th>Phone</th></tr></thead>` +
         `<tbody>${rows}</tbody></table>`;
     }).join("");
-    const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const csvData = csvText(csv);
     printDoc({
       title: `Rooming list — ${t.name}`,
       popupMsg: "Allow pop-ups to export",
@@ -662,7 +672,7 @@ export function createReportsPanel(ctx) {
         `<table><thead><tr><th>Official</th><th>Role</th><th>Site</th><th>Response</th></tr></thead>` +
         `<tbody>${rows}</tbody></table>`;
     }).join("");
-    const csvData = csv.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+    const csvData = csvText(csv);
     printDoc({
       title: `Schedule — ${t.name}`,
       popupMsg: "Allow pop-ups to export",

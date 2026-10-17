@@ -56,6 +56,37 @@ def test_change_password_happy_path_and_old_password_dies():
                       json={"username": uname, "password": "brandnew456"}).status_code == 200
 
 
+def test_change_password_kills_other_sessions():
+    """D31: every other session row for the user is deleted.
+
+    A second login cannot demonstrate this: `login` already rotates the user's
+    sessions, so a second client would invalidate the first. Insert the extra
+    session row directly and drive it with its cookie instead.
+    """
+    from app.db import get_conn
+    from app.security import COOKIE_NAME
+
+    uname, sess = _fresh_admin("origpw123")
+    token = "d31-" + uuid.uuid4().hex
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO session (token, user_id) "
+                "SELECT %s, id FROM user_account WHERE username = %s",
+                (token, uname),
+            )
+        conn.commit()
+    other = TestClient(app)
+    other.cookies.set(COOKIE_NAME, token)
+    assert other.get("/api/auth/me").status_code == 200
+
+    _ok(sess.post("/api/auth/change-password",
+                  json={"current_password": "origpw123",
+                        "new_password": "brandnew456"}), 200)
+    assert sess.get("/api/auth/me").status_code == 200
+    assert other.get("/api/auth/me").status_code == 401
+
+
 def test_wrong_current_password_rejected():
     _, sess = _fresh_admin("origpw123")
     r = sess.post("/api/auth/change-password",

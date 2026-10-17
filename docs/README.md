@@ -38,8 +38,12 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 13c | [mobile-plan.md](mobile-plan.md) | Mobile-friendly phases + menu IA (drawer, Setup split, courtside P1). |
 | 14 | [audit-register.md](audit-register.md) | **Living** post-launch audit findings (open / deferred / resolved). |
 | 15 | [review-2026-09-21.md](review-2026-09-21.md) | Four-part review (app, code, tests, docs) and which corrections shipped. |
+| 16 | [td-chat.md](td-chat.md) | TD chat planner, tool allowlist, and provider (DeepSeek default / local sidecar). |
+| 17 | [import-export-notes.md](import-export-notes.md) | Import/export audit notes and the reuse checklist. |
+| 18 | [import-page-redesign.md](import-page-redesign.md) | Import page redesign notes. |
+| 19 | [performance-notes.md](performance-notes.md) | Performance findings and measurements. |
 
-Backend suite **985** tests / **112** files (migrations through **0060**); see
+Backend suite **1081** tests / **117** files (migrations through **0061**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
 (`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`,
 `inactivity`, `inbox`, …). Inbox **Get mails** can pull **Gmail** and **Outlook**;
@@ -58,7 +62,7 @@ Windows — Docker Compose (Postgres is inside the `web` container):
 ```
 
 ```bash
-# Backend (manual)
+# Backend (manual; needs a host Postgres on the PG* settings — the Docker path above does not)
 cd backend
 python -m venv .venv && source .venv/Scripts/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt

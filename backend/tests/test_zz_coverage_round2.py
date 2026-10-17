@@ -22,10 +22,6 @@ from app.td_chat import format_td_reply, parse_plan
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -75,8 +71,8 @@ def test_parse_plan_list_and_bad_json_and_help_say():
 
 def test_parse_llm_json_decode_and_non_object():
     assert email_llm.parse_llm_json("{not json}") is None
-    # fenced non-object JSON
-    assert email_llm.parse_llm_json("```json\n[1,2]\n```") is None or True
+    # fenced non-object JSON is not a usable intent object
+    assert email_llm.parse_llm_json("```json\n[1,2]\n```") is None
 
 
 def test_gmail_decode_fallback_and_load_missing_row():
@@ -454,24 +450,21 @@ def test_playerops_blank_hotel_and_existing_update():
             assert pid == pid2
 
 
-def test_security_require_usable_and_export():
+def test_security_require_usable_and_export(monkeypatch):
     from app import security as sec
+    from app.export_gate import require_can_export_pii
+
+    monkeypatch.setenv("COURTOPS_FORCE_PASSWORD_CHANGE", "1")
+    user = {"must_change_password": True, "role": "admin", "can_export_pii": False}
+    assert sec.password_change_required(user) is True
     with pytest.raises(HTTPException) as ei:
-        # force password change path
-        user = {"must_change_password": True, "role": "admin", "can_export_pii": True}
-        import os
-        os.environ["COURTOPS_FORCE_PASSWORD_CHANGE"] = "1"
-        try:
-            if sec.password_change_required(user):
-                raise HTTPException(status_code=403, detail="password change required — POST /api/auth/change-password")
-        finally:
-            os.environ.pop("COURTOPS_FORCE_PASSWORD_CHANGE", None)
+        sec.require_usable_session(user)
     assert ei.value.status_code == 403
-    # require_export_pii function body
-    class _U(dict):
-        pass
-    with pytest.raises(HTTPException):
-        sec.require_can_export_pii if False else (_ for _ in ()).throw(HTTPException(403))
+
+    with pytest.raises(HTTPException) as ex:
+        require_can_export_pii({"role": "admin", "can_export_pii": False})
+    assert ex.value.status_code == 403
+    require_can_export_pii({"role": "admin", "can_export_pii": True})
 
 
 def test_email_put_404_and_status_filter():

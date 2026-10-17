@@ -61,12 +61,17 @@ export function createSetupCrud(ctx) {
     onLoad: (rows) => { for (const k in sitesById) delete sitesById[k]; rows.forEach((s) => (sitesById[s.id] = s)); refreshAllSelects(); if (getActive()) renderTSites(); },
   });
   let certOfficialId = null;
+  let _certSeq = 0;
   async function loadCerts(id) {
     certOfficialId = id;
+    const seq = ++_certSeq;
     const box = document.getElementById("official-certs");
     box.hidden = false;
     const chips = document.getElementById("cert-chips");
-    const certs = await api(`/officials/${id}/certifications`);
+    let certs;
+    try { certs = await api(`/officials/${id}/certifications`); }
+    catch (e) { setMsg("cert-msg", e.message, false); return; }
+    if (seq !== _certSeq || certOfficialId !== id) return;
     chips.innerHTML = "";
     if (!certs.length) chips.innerHTML = '<span class="muted">none on file</span>';
     for (const c of certs) {

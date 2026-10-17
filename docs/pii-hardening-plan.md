@@ -12,9 +12,9 @@
 > USTA #, birth year/date, city/state, parent emails/phones, free-text emails).
 > A youth-sports admin tool that knowingly stores under-13 data is **within
 > COPPA's scope** (16 CFR Part 312). The POC's defaults — localhost Postgres on
-> `postgres`/`postgres`, no TLS, no encryption at rest, no retention/deletion —
-> are acceptable for local dev **only** and must change before any shared or
-> hosted deployment.
+> `postgres`/`postgres`, no TLS, **no disk encryption** (app-layer column crypto
+> is on by default with a dev key), no retention/deletion — are acceptable for
+> local dev **only** and must change before any shared or hosted deployment.
 
 ---
 
@@ -199,9 +199,12 @@ email-body redaction endpoint) ship + are tested; the *schedule/policy/job*
 
 ### Phase H5 — Processors & policy *(§312.8 downstream)*
 - **H5.1 Written assurances** from any third party that touches the data:
-  hosting/DB provider, the future email-ingestion service, Google Maps
-  geocoding (note: geocoding an official's *home address* sends PII off-site —
-  prefer geocoding **site** addresses only, or a privacy-preserving lookup).
+  hosting/DB provider, the **DeepSeek API** when `EMAIL_LLM=1` and
+  `EMAIL_LLM_PROVIDER=deepseek` (the default — the clipped leftover email body
+  leaves the box; use `EMAIL_LLM=0` or `EMAIL_LLM_PROVIDER=local` to avoid it),
+  the email-ingestion provider, Google Maps geocoding (note: geocoding an
+  official's *home address* sends PII off-site — prefer geocoding **site**
+  addresses only, or a privacy-preserving lookup).
 - **H5.2 Information-security program doc** (coordinator, risk assessment
   cadence) — **confirm whether the amended Rule mandates this**, then write it.
 - **H5.3 Privacy notice / parental-consent posture** — if the channel ever

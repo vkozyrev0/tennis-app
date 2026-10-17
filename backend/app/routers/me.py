@@ -2,6 +2,7 @@
 profile and availability. Officials never touch the admin routers."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
@@ -48,10 +49,10 @@ def _official_may_access_tournament(cur, official_id: int, tournament_id: int) -
               SELECT 1 FROM availability av
               WHERE av.official_id = %s AND av.tournament_id = t.id
             )
-            OR t.play_end_date >= CURRENT_DATE
+            OR t.play_end_date >= %s
           )
         """,
-        (tournament_id, official_id, official_id),
+        (tournament_id, official_id, official_id, today_venue()),
     )
     return cur.fetchone() is not None
 
@@ -76,16 +77,15 @@ def my_profile(user=Depends(get_current_user), conn=Depends(db_dep)):
 def update_my_profile(body: OfficialCreate, user=Depends(get_current_user), conn=Depends(db_dep)):
     oid = _my_official_id(user)
     with conn.cursor() as cur:
-        # Audit N5: the previous UPDATE dropped lat/lng, so an official editing
-        # their own profile silently zeroed their geocoded location on the
-        # admin-side round-trip. Persist every column on OfficialCreate.
+        # lat/lng are admin/server-owned (geocoding drives mileage). A
+        # self-service edit must not move the official and inflate a claim, so
+        # this UPDATE leaves the stored coordinates untouched.
         cur.execute(
             f"""
             UPDATE official SET
                 first_name=%(first_name)s, last_name=%(last_name)s, street=%(street)s,
                 city=%(city)s, state=%(state)s, zip=%(zip)s, phone=%(phone)s,
-                email=%(email)s, dietary_restrictions=%(dietary_restrictions)s,
-                lat=%(lat)s, lng=%(lng)s
+                email=%(email)s, dietary_restrictions=%(dietary_restrictions)s
             WHERE id=%(id)s RETURNING {_OFF_COLS}
             """,
             {**body.model_dump(), "id": oid},
@@ -122,11 +122,11 @@ def my_tournaments(user=Depends(get_current_user), conn=Depends(db_dep)):
                   SELECT 1 FROM availability av
                   WHERE av.official_id = %s AND av.tournament_id = t.id
                 )
-                OR t.play_end_date >= CURRENT_DATE
+                OR t.play_end_date >= %s
               )
             ORDER BY t.play_start_date DESC
             """,
-            (oid, oid),
+            (oid, oid, today_venue()),
         )
         return cur.fetchall()
 

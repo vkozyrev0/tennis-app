@@ -1,3 +1,5 @@
+import re
+
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
@@ -108,9 +110,10 @@ def official_schedule_ics(official_id: int, conn=Depends(db_dep)):
         if row is None:
             raise HTTPException(status_code=404, detail="official not found")
         body = build_schedule_ics(cur, official_id)
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", row["last_name"] or "").strip("-") or "official"
     return Response(content=body, media_type="text/calendar",
                     headers={"Content-Disposition":
-                             f'attachment; filename="schedule-{row["last_name"]}.ics"'})
+                             f'attachment; filename="schedule-{slug}.ics"'})
 
 @router.post("", response_model=OfficialOut, status_code=201)
 def create_official(body: OfficialCreate, conn=Depends(db_dep)):

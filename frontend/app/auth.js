@@ -192,6 +192,7 @@ export function createAuth(ctx) {
     _authExpiredFired = true;
     const alreadyOut = document.body.classList.contains("is-signed-out");
     if (!alreadyOut) toast("Session expired — please sign in again", false, { sticky: true });
+    onLogout();
     applyAuth(null);
     setTimeout(() => { _authExpiredFired = false; }, 1000);
   });
@@ -208,7 +209,17 @@ export function createAuth(ctx) {
     } catch (err) { setMsg("login-msg", err.message, false); }
   });
   _logoutBtn.addEventListener("click", async () => {
-    try { await api("/auth/logout", { method: "POST" }); } catch { /* ignore */ }
+    try {
+      await api("/auth/logout", { method: "POST" });
+    } catch (err) {
+      // A 401 means the server session is already gone; anything else (network,
+      // proxy) leaves the cookie valid, so keep the UI signed in and let the
+      // user retry rather than hiding a still-live session.
+      if (!err || err.status !== 401) {
+        toast("Logout failed — check your connection and try again", false);
+        return;
+      }
+    }
     onLogout();
     applyAuth(null);
   });

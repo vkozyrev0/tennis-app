@@ -2,6 +2,7 @@
 
 Age math and env gating are pure unit tests (no DB). API 403 path needs Postgres.
 """
+import uuid
 from datetime import date
 
 import pytest
@@ -117,3 +118,72 @@ def test_api_policy_and_under13_create_blocked(monkeypatch):
         "gender": "female", "birthdate": "2010-01-01",
     })
     assert ok.status_code == 201, ok.text
+
+
+def _client_or_skip():
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    try:
+        if client.get("/api/health").json().get("db") != "ok":
+            pytest.skip("Postgres not reachable / not migrated")
+    except Exception:
+        pytest.skip("Postgres not reachable / not migrated")
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    return client
+
+
+def test_under13_update_is_refused_and_keeps_the_old_dob(monkeypatch):
+    client = _client_or_skip()
+    usta = str(uuid.uuid4().int % 10**10).zfill(10)
+    monkeypatch.setenv("ALLOW_UNDER13_PII", "1")
+    created = client.post("/api/players", json={
+        "usta_number": usta, "first_name": "Update", "last_name": "Kid",
+        "gender": "female", "birthdate": "2010-01-01",
+    })
+    assert created.status_code == 201, created.text
+    pid = created.json()["id"]
+
+    monkeypatch.setenv("ALLOW_UNDER13_PII", "0")
+    blocked = client.put(f"/api/players/{pid}", json={
+        "usta_number": usta, "first_name": "Update", "last_name": "Kid",
+        "gender": "female", "birthdate": "2015-06-01",
+    })
+    assert blocked.status_code == 403, blocked.text
+    kept = client.get(f"/api/players/{pid}")
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["birthdate"] == "2010-01-01"
+
+
+def test_under13_import_merge_is_refused(monkeypatch):
+    client = _client_or_skip()
+    monkeypatch.setenv("ALLOW_UNDER13_PII", "0")
+    t = client.post("/api/tournaments", json={
+        "name": "COPPA " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04",
+    })
+    assert t.status_code == 201, t.text
+    tid = t.json()["id"]
+    usta = str(uuid.uuid4().int % 10**10).zfill(10)
+    csv = (
+        "usta_number,first_name,last_name,gender,birthdate\n"
+        f"{usta},Import,Under,female,2015-06-01\n"
+    )
+    up = client.post(
+        f"/api/import/tournaments/{tid}/players",
+        files={"file": ("players.csv", csv, "text/csv")},
+    )
+    assert up.status_code == 201, up.text
+    merged = client.post(f"/api/import/batches/{up.json()['batch_id']}/merge")
+    assert merged.status_code == 200, merged.text
+    body = merged.json()
+    assert body["merged"] == 0 and body["failed"] == 1, body
+    err = body["errors"][0]["error"].lower()
+    assert "under-13" in err or "allow_under13_pii" in err
+    found = [
+        p for p in client.get("/api/players", params={"q": usta}).json()
+        if p["usta_number"] == usta
+    ]
+    assert not found, "the refused import must not leave a player row"

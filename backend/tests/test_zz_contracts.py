@@ -157,8 +157,26 @@ def test_players_list_query_ceiling(qcount):
 
 
 def test_emails_list_query_ceiling(qcount):
-    """COUNT + SELECT + auth; the lazy USTA backfill adds at most one UPDATE per
-    legacy row — the test inbox has none, so the ceiling stays tight."""
+    """D33: scope the ceiling to a fresh tournament so accumulated suite rows
+    cannot add backfill UPDATEs. With five stamped rows the request should be
+    auth + COUNT + SELECT + one access-audit insert; a per-row query adds five
+    and trips the ceiling."""
+    from app.db import get_conn
+
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "QC " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04",
+    }))
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for i in range(5):
+                cur.execute(
+                    "INSERT INTO email_message "
+                    "    (tournament_id, subject, body, from_address, detected_text_ready) "
+                    "VALUES (%s, %s, %s, %s, true)",
+                    (t["id"], f"QC {i}", "Body", "qc@example.com"),
+                )
+        conn.commit()
     qcount["n"] = 0
-    _ok(client.get("/api/emails?limit=50"), 200)
-    assert qcount["n"] <= 6, f"emails list ran {qcount['n']} queries (ceiling 6)"
+    _ok(client.get(f"/api/emails?tournament_id={t['id']}&limit=50"), 200)
+    assert qcount["n"] <= 5, f"emails list ran {qcount['n']} queries (ceiling 5)"

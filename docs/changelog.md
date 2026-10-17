@@ -9,6 +9,70 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-10-17 — Audit follow-up: auth throttling, view audit, ingest cursors, venue dates
+
+The first audit pass left D20, D22-D27, and D30-D35 open. This pass closed
+everything that did not need a new artifact or a CI budget (details in
+[audit-register.md](audit-register.md)):
+
+- **Login throttling:** a global per-IP bucket (20 failures / 5 min) beside the
+  per-user cap, with `FORWARDED_ALLOW_IPS` set on Fly/Render so the IP is the
+  real client. A successful login no longer resets the IP bucket.
+- **PII view audit:** catalog list, single-player GET, and inbox body reads now
+  append `access_audit` rows (identity and counts only). The decision is
+  recorded in the COPPA policy: views are audited, `can_export_pii` gates bulk
+  export.
+- **Ingest:** Gmail and Outlook cursors stop at the first failed fetch, decode,
+  or ingest instead of skipping the message, and a failed download commits its
+  `last_status='error'` row before the route returns an error.
+- **Part B deletes:** migration 0061 stores the status a withdrawal replaced and
+  whether a late entry created the roster row, so deleting the row restores the
+  roster.
+- **Venue dates:** `COURTOPS_VENUE_TZ` (default `America/New_York`) now drives
+  day-of defaults, deadlines, retention, payroll paid dates, and t-shirt order
+  dates instead of the UTC container date.
+- **Concurrency/deploy:** `FOR UPDATE` on room blocks and payroll rows; a
+  migration advisory lock; digest-pinned base images; a sha256-pinned GGUF;
+  HSTS from Caddy (the all-in-one image cannot pass the `ENV=prod` boot guard).
+- **Tests:** two-session password change, a dummy-hash enumeration check, a
+  fresh-tournament query ceiling, and removal of skip-masking setup,
+  config-reload, and source-text test patterns.
+
+D28 (CI LLM sidecar or recorded corpus) and D34 (frontend module tests) remain
+open as explicit deferrals.
+
+## 2026-10-17 — App-wide audit: PII copies, XSS sinks, broken controls, test isolation
+
+A five-surface audit (backend/security, frontend, tests, docs, presentation
+material) produced 100+ findings. The fixed set is listed in
+[audit-register.md](audit-register.md) under "2026-10-17 audit pass"; the
+deferrals are D20–D28 there. Highest-impact fixes:
+
+- **PII copies:** staged import rows now encrypt emails/phones/DOB/body and
+  clear the payload after merge; retention redacts `to_address` and the
+  `detected_*` PII and deletes old staged batches; player deletion redacts
+  linked email rows and promoted inbox people; key rotation now covers
+  `player_history.birthdate` and the Gmail/Outlook mailbox secrets.
+- **Security:** closed a stored XSS in the print window and the mobile row
+  expander, neutralized CSV formula cells on both client and server, routed the
+  roster CSV through the export audit/PII gate, restricted the Gmail IMAP host,
+  blocked a malformed Fernet key at prod boot, capped request bodies at 25 MB,
+  and stopped an official from rewriting their own `lat/lng` (mileage).
+- **Correctness/UX:** list-type header filters now render a select; the number
+  editor is a number editor; typeahead works from the keyboard; session expiry
+  runs logout cleanup; loader races and error states are handled; import deep
+  links and discard confirmation work; declared/no-show officials no longer
+  count as coverage or occupy rooms; extended player fields persist; health
+  returns 503 when the DB is down.
+- **Tests/infra:** each pytest process gets its own DB (concurrent runs no
+  longer destroy each other); new auth-matrix, cookie/logout, COPPA
+  update/import, export-gate, rotation, staging, and retention tests; CI now
+  runs the Node suite and dry-run-resolves the regenerated requirements lock.
+- **Docs:** current-status counts re-synced (1065 tests / 114 files / 0060);
+  the no-LLM claims, the design encryption claim, the Docker Hub snapshot, the
+  compose profile command, and the COPPA third-party LLM gate now match the
+  shipped code.
+
 ## 2026-09-23 — What still hung the inbox fetch: an unbounded IMAP socket and an unbounded model pass
 
 Both remaining hangs were reproduced with a probe before being fixed, and both are now bounded with tests that fail against the old code.

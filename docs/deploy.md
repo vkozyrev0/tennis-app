@@ -12,9 +12,9 @@ This is a single-TD POC topology, not production (see `design.md` §11).
 ## 1. Publish the image to GitHub Container Registry (ghcr.io)
 
 **CI does this automatically.** `.github/workflows/docker.yml` builds the image on
-every push/PR (gated on the backend test suite passing — `build.needs: test`, so the
-image only builds/pushes if the backend suite passes) and **pushes
-`ghcr.io/<owner>/tennis-app:latest` (+ a `sha-` tag) on every push to `main` and on
+every push/PR (gated on lint + the backend suite — `build.needs: [lint, test]`, so
+the image only builds/pushes when both pass) and **pushes
+`ghcr.io/<owner>/tennis-app:latest` on `main`, plus version and `sha` tags on
 `v*` tags** — using the built-in `GITHUB_TOKEN`, so no
 PAT or `docker login` is needed. After the first successful run, make the package
 public if you want hosts to pull it without a token (GitHub → your profile →
@@ -77,7 +77,7 @@ HTTPS on 443 with a valid cert is automatic on `*.fly.dev`. First boot of an
 data. `ADMIN_PASSWORD` is re-applied on every boot (rotates admin even when seed
 is skipped).
 
-**Current POC app (2026-07):** `https://courtops-poc.fly.dev` · volume
+**Current POC app (2026-10):** `https://courtops-poc.fly.dev` · volume
 `courtops_data` · `PGDATA=/data/pgdata` · keep `ENV=dev` for the bundled
 Postgres (prod boot-guard needs managed PG + TLS). This is a **demo host**, not
 a COPPA-ready production topology — see §6.
@@ -133,7 +133,8 @@ backend/.venv/Scripts/python.exe scripts/smoke_email_llm.py
 # Site header: three chips — API, DB, Intelligence — when GET /api/health is ok
 # Dedicated probe: GET /api/health/llm  → {"status":"ok"|"off"|"down"}
 
-# Or both containers: docker compose up --build
+# Or both containers (the sidecar is behind the `intel` profile):
+docker compose --profile intel up --build
 ```
 
 #### Fly day-2 ops (redeploy / reseed / local image)
@@ -248,18 +249,20 @@ of these when `ENV=prod` (boot guard, session Secure cookie, 7d sessions,
 | 7 | Ingest hardened | `INGEST_TOKEN` set; do not set `INGEST_ALLOW_QUERY_TOKEN` in prod ([email-ingest.md](email-ingest.md)) |
 | 8 | COPPA policy | Read [coppa-policy.md](coppa-policy.md); only set `ALLOW_UNDER13_PII=1` if intentional |
 | 9 | Export gate | TD accounts that export minors’ PII need `can_export_pii` + confirm |
-| 10 | Smoke after deploy | `scripts/live_feature_smoke.py` with `ADMIN_PASSWORD=…` against the public URL |
+| 10 | Proxy headers | Set `FORWARDED_ALLOW_IPS` to the proxy address(es) so the login throttle keys on the real client (D22). Fly/Render examples set `*` because their proxy is the only ingress; Caddy on loopback works with uvicorn's default |
+| 11 | Venue timezone | Set `COURTOPS_VENUE_TZ` to the event's IANA zone (default `America/New_York`) so day-of, deadlines, and retention use the venue's date, not UTC (D25) |
+| 12 | Smoke after deploy | `scripts/live_feature_smoke.py` with `ADMIN_PASSWORD=…` against the public URL |
 
 ### Live scripts (dev or staged host)
 
 ```bash
 # Prefer sequential runs — parallel logins trip the process-local throttle (D14).
-set ADMIN_PASSWORD=your-password   # PowerShell: $env:ADMIN_PASSWORD="..."
+export ADMIN_PASSWORD=your-password   # PowerShell: $env:ADMIN_PASSWORD="..."
 backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py https://courtops-poc.fly.dev
 backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py https://courtops-poc.fly.dev
 backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py --base-url https://courtops-poc.fly.dev
 ```
 
-Still **deferred** until multi-user/multi-instance: DB connection pool (D13),
+Still **deferred** until multi-instance / horizontally scaled: DB connection pool (D13),
 cluster-safe login throttle (D14), explicit CSRF tokens (D18 — SameSite=Strict
 SPA is enough for same-origin).

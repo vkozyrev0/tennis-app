@@ -45,6 +45,7 @@ from ..assignment_ops import (  # noqa: F401 — re-export for me/payroll/report
     pay_summary,
 )
 from ..db import db_dep
+from ..export_gate import csv_safe
 from ..models import (
     AssignmentCreate,
     AssignmentDayCreate,
@@ -385,10 +386,10 @@ def assignment_audit_csv(tournament_id: int, user=Depends(require_admin),
         # detail is a small jsonb object; compact-json it so the CSV stays one
         # cell per row (empty when null).
         detail = json.dumps(r["detail"], separators=(",", ":")) if r["detail"] else ""
-        w.writerow([
+        w.writerow([csv_safe(v) for v in [
             r["changed_at"].isoformat(timespec="minutes"),
             r["official_name"] or "", r["action"], detail, r["changed_by"],
-        ])
+        ]])
     body = buf.getvalue().encode("utf-8-sig")
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"
     return Response(content=body, media_type="text/csv",

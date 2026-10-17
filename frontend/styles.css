@@ -1035,9 +1035,9 @@ select + [data-lastpass-icon-root] {
 }
 
 /* Cell-local in-grid save feedback (plan P1 #3). */
-.tabulator-cell.cell-saving { opacity: 0.55; }
-.tabulator-cell.cell-saved  { box-shadow: inset 0 0 0 2px var(--ok, #2e7d32); transition: box-shadow 0.6s; }
-.tabulator-cell.cell-error  { box-shadow: inset 0 0 0 2px var(--bad); }
+.ag-cell.cell-saving { opacity: 0.55; }
+.ag-cell.cell-saved  { box-shadow: inset 0 0 0 2px var(--ok, #2e7d32); transition: box-shadow 0.6s; }
+.ag-cell.cell-error  { box-shadow: inset 0 0 0 2px var(--bad); }
 
 .combo-item { padding: 0.3rem 0.5rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap; color: var(--ink); background: var(--elev); }
 .combo-item:hover, .combo-item.hi { background: var(--sel); color: var(--ink); }
@@ -1051,6 +1051,15 @@ input:user-invalid, select:user-invalid, textarea:user-invalid,
 .combo:has(select:user-invalid) .combo-input {
   border-color: var(--bad);
   background: rgba(198, 40, 40, 0.10);
+}
+
+/* Server validation marks the offending field via markInvalid(), which sets
+   aria-invalid and .field-error. Both selectors are kept because callers may
+   set either one. */
+input.field-error, select.field-error, textarea.field-error,
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 25%, transparent);
 }
 
 .actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
@@ -1330,71 +1339,6 @@ button.touch-btn:hover:not(:disabled) {
   max-width: 520px;
   overflow: auto;
 }
-.tabulator {
-  background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-  font-family: inherit; font-size: 0.85rem; color: var(--ink);
-}
-.tabulator .tabulator-header {
-  background: var(--card); color: var(--muted);
-  border-bottom: 2px solid var(--border); font-weight: 600;
-}
-.tabulator .tabulator-header .tabulator-col {
-  background: var(--card); border-right: 0;
-}
-.tabulator .tabulator-header .tabulator-col .tabulator-col-content { padding: 0.2rem 0.4rem; }
-/* Compact column header labels. */
-.tabulator .tabulator-col-title {
-  font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em;
-}
-.tabulator-row { background: var(--card); color: var(--ink); border-bottom: 1px solid var(--border); }
-.tabulator-row.tabulator-row-even { background: var(--zebra); }
-.tabulator-row.tabulator-selectable:hover { background: var(--bg); }
-.tabulator-row.row-selected, .tabulator-row.row-selected.tabulator-row-even {
-  background: var(--sel);
-  box-shadow: inset 3px 0 0 var(--accent);  /* left-edge accent bar — visible for keyboard nav */
-}
-.tabulator .tabulator-cell { padding: 0.38rem 0.55rem; border-right: 0; }
-/* Field-level validation: server validation error highlights the offending
-   input via aria-invalid (set by markInvalid()) so the user sees what failed. */
-input.field-error, select.field-error, textarea.field-error,
-input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
-  border-color: var(--bad);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 25%, transparent);
-}
-/* Reserve scrollbar space so the right-edge action icons aren't crowded against
-   (or partially hidden by) the vertical scrollbar when it appears. */
-.tabulator .tabulator-tableholder { scrollbar-gutter: stable; }
-.tabulator .tabulator-footer { background: var(--card); color: var(--muted); border-top: 1px solid var(--border); }
-.tabulator .tabulator-placeholder, .tabulator .tabulator-placeholder-contents,
-.tabulator .tabulator-tableholder .tabulator-placeholder .tabulator-placeholder-contents {
-  /* a11y 8th-pass #3: Tabulator's built-in #ccc placeholder text fails 3:1
-     on white (1.61). Higher-specificity selector forces --muted (~6:1). */
-  color: var(--muted) !important;
-  padding: 1.6rem 1rem; font-size: 0.9rem; line-height: 1.45;
-}
-.tabulator .tabulator-placeholder-contents::before {
-  content: "✦"; display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
-  opacity: 0.45; color: var(--accent);
-  /* a11y #4: ::before content is decorative — VoiceOver was reading "Black
-     Four Pointed Star" into the empty-state phrase. speak: never is the
-     correct hint; alt: "" is the broadly-supported equivalent. */
-  speak: never; alt: "";
-}
-/* Responsive-collapse (mobile): the ▸ toggle column + the per-row expand panel
-   that holds columns folded away on narrow screens. Themed for light + dark. */
-/* The toggle is a small circle with a white +/− glyph, so it needs a colored
-   fill (a light surface would hide the white glyph). Brand accent, on both
-   themes; high specificity to beat Tabulator's default #666. */
-.tabulator .tabulator-cell .tabulator-responsive-collapse-toggle {
-  background: var(--accent); opacity: 0.9;
-}
-.tabulator .tabulator-cell .tabulator-responsive-collapse-toggle:hover { opacity: 1; }
-.tabulator .tabulator-responsive-collapse {
-  padding: 0.45rem 0.6rem; border-top: 1px solid var(--border); background: var(--zebra);
-}
-.tabulator .tabulator-responsive-collapse table { width: 100%; }
-.tabulator .tabulator-responsive-collapse table tr td { padding: 0.12rem 0.4rem; font-size: 0.82rem; vertical-align: top; }
-.tabulator .tabulator-responsive-collapse table tr td:first-child { color: var(--muted); font-weight: 600; white-space: nowrap; width: 1%; }
 
 /* Empty state for hand-built lists (assignments) — matches the Tabulator
    placeholder so all empty states across the app look the same (audit P42). */
@@ -1406,14 +1350,11 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
   opacity: 0.45; color: var(--accent);
 }
-.tabulator .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
-  border-bottom-color: var(--muted); border-top-color: var(--muted);
-}
 .grid-actions { display: flex; gap: 0.15rem; justify-content: flex-start; align-items: center; }
-/* a11y 6th-pass: Tabulator sets overflow:hidden on .tabulator-cell; bump
-   specificity so our visible-overflow always wins and the 44×44 edit/delete
+/* a11y 6th-pass: keep the action icons visible in the AG grid cell
+   so our visible-overflow always wins and the 44×44 edit/delete
    icons can't be cropped by the neighbouring cell's edge. */
-.tabulator .tabulator-cell.grid-actions-cell { overflow: visible; }
+.ag-cell.grid-actions-cell { overflow: visible; }
 /* Keyboard shortcuts tables (inside Help and any legacy modal) */
 table.shortcuts { border-collapse: collapse; width: 100%; }
 table.shortcuts th { text-align: left; padding: 0.3rem 0.6rem 0.3rem 0; font-weight: normal; min-width: 3rem; vertical-align: top; }
@@ -1655,56 +1596,28 @@ kbd {
   border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border);
 }
 /* Per-column header filter inputs (themed for light + dark). */
-.tabulator .tabulator-header-filter input,
-.tabulator .tabulator-header-filter select {
-  background: var(--card); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 3px;
-  padding: 1px 3px; width: 100%; box-sizing: border-box;
-  font-family: inherit; font-size: 0.7rem; height: 1.4rem;
-}
-.tabulator .tabulator-header-filter input::placeholder { color: var(--muted); }
-.tabulator .tabulator-header .tabulator-col .tabulator-header-filter { margin-top: 1px; }
 /* In-grid editable cells: an *always-on* affordance (the accent right-edge)
    tells you which cells respond to a click, before you hover. Hover shows a
    subtle pencil + a full ring. Editing hides the pencil and adds a strong ring. */
-.tabulator .tabulator-cell.editable-cell {
+.ag-cell.editable-cell {
   cursor: cell; position: relative;
   box-shadow: inset -2px 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
 }
-.tabulator .tabulator-cell.editable-cell:hover {
+.ag-cell.editable-cell:hover {
   box-shadow: inset 0 0 0 1px var(--border), inset -2px 0 0 var(--accent);
 }
-.tabulator .tabulator-cell.editable-cell::after {
+.ag-cell.editable-cell::after {
   content: "✎"; position: absolute; right: 0.35rem; top: 50%;
   transform: translateY(-50%); font-size: 0.72em; color: var(--muted);
   opacity: 0; transition: opacity 0.12s; pointer-events: none;
 }
-.tabulator .tabulator-cell.editable-cell:hover::after { opacity: 0.55; }
-.tabulator .tabulator-cell.tabulator-editing { box-shadow: inset 0 0 0 2px var(--accent); padding: 0; }
-.tabulator .tabulator-cell.tabulator-editing::after { display: none; }
-.tabulator .tabulator-cell.tabulator-editing input,
-.tabulator .tabulator-cell.tabulator-editing select {
-  background: var(--card); color: var(--ink); border: 0; padding: 0.32rem 0.5rem; width: 100%; box-sizing: border-box;
-}
-/* The list-editor / list-header-filter dropdown is appended to <body>, so it
-   isn't covered by the .tabulator theme rules — theme it explicitly for light +
-   dark, keep options on one line (so long values aren't clipped in a narrow
-   column), and cap its height with a scrollbar. z-index beats our overlays. */
-.tabulator-edit-list {
-  background: var(--card); color: var(--ink);
-  border: 1px solid var(--border); border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
-  max-height: 260px; overflow-y: auto; z-index: 10050;
-}
-.tabulator-edit-list .tabulator-edit-list-item {
-  color: var(--ink); white-space: nowrap; padding: 0.3rem 0.6rem;
-}
-.tabulator-edit-list .tabulator-edit-list-item.active,
-.tabulator-edit-list .tabulator-edit-list-item.hover,
-.tabulator-edit-list .tabulator-edit-list-item:hover {
+.ag-cell.editable-cell:hover::after { opacity: 0.55; }
+.ag-cell.ag-cell-inline-editing { box-shadow: inset 0 0 0 2px var(--accent); padding: 0; }
+.ag-cell.ag-cell-inline-editing::after { display: none; }
+.ag-cell.ag-cell-inline-editing input,
+.ag-cell.ag-cell-inline-editing select {
   background: var(--sel); color: var(--ink);
 }
-.tabulator-edit-list .tabulator-edit-list-placeholder { color: var(--muted); }
 
 /* ---- Reusable design-system bits (design-crit cleanup) -----------------
    - .h3-subtitle: the small "(context)" span trailing a section heading.
@@ -1861,7 +1774,8 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .ag-theme-quartz .ag-autocomplete-editor > input { width: 100%; box-sizing: border-box; margin-bottom: 4px; }
 .ag-theme-quartz .ag-autocomplete-list { max-height: 220px; overflow-y: auto; }
 .ag-theme-quartz .ag-autocomplete-opt { padding: 4px 6px; cursor: pointer; border-radius: 3px; font-size: 0.8rem; }
-.ag-theme-quartz .ag-autocomplete-opt:hover { background: var(--sel); }
+.ag-theme-quartz .ag-autocomplete-opt:hover,
+.ag-theme-quartz .ag-autocomplete-opt.hi { background: var(--sel); }
 /* Custom header cells (e.g. inbox select-all checkbox) center their content. */
 .ag-theme-quartz .ag-header-cell-custom { display: flex; align-items: center; justify-content: center; height: 100%; }
 /* Mobile responsive-collapse: the ▸ expander + the tap popup listing hidden cols. */
@@ -1887,8 +1801,8 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   display: block; margin: -3px -6px; padding: 3px 6px;
   background: rgba(255, 107, 107, 0.16); box-shadow: inset 2px 0 0 var(--bad);
 }
-.import-preview-grid .tabulator-cell .bad { color: var(--bad); font-weight: 700; }
-.import-preview-grid .tabulator-cell .ok { color: #2e9e4f; font-weight: 700; }
+.import-preview-grid .ag-cell .bad { color: var(--bad); font-weight: 700; }
+.import-preview-grid .ag-cell .ok { color: #2e9e4f; font-weight: 700; }
 /* Per-import tabs: a horizontal strip of import types + the selected one's panel. */
 .import-tabs-wrap { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
 .import-tabs { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
@@ -2239,7 +2153,7 @@ td.toggle { white-space: nowrap; }
   min-width: 1.35rem; min-height: 1.35rem; padding: 0 0.15rem; font-size: 0.9rem;
   opacity: 0; transition: opacity 0.1s ease; flex: 0 0 auto;
 }
-.tabulator-row:hover .btn-icon.inbox-affordance,
+.ag-row:hover .btn-icon.inbox-affordance,
 .btn-icon.inbox-affordance:focus-visible { opacity: 0.75; }
 .btn-icon.inbox-affordance:hover { opacity: 1; }
 
@@ -2248,7 +2162,7 @@ td.toggle { white-space: nowrap; }
    and undiscoverable. Where hover isn't available (a tablet courtside, the
    day-of surface), always show them. */
 @media (hover: none) {
-  .tabulator .tabulator-cell.editable-cell::after { opacity: 0.5; }
+  .ag-cell.editable-cell::after { opacity: 0.5; }
   .btn-icon.inbox-affordance { opacity: 0.7; }
 }
 
@@ -2400,7 +2314,7 @@ td.toggle { white-space: nowrap; }
 .rc-clean { color: var(--ok, #1f7a44); font-weight: 600; font-size: 0.85rem; margin: 0.2rem 0; }
 .rc-details { border: 1px solid var(--warn-border, #d8a400); border-radius: 8px;
   background: var(--warn-bg); padding: 0.3rem 0.6rem; }
-.rc-details > summary { cursor: pointer; font-weight: 600; font-size: 0.86rem; color: #9a6700; }
+.rc-details > summary { cursor: pointer; font-weight: 600; font-size: 0.86rem; color: var(--warn-ink); }
 .rc-chips { font-weight: 400; color: var(--muted); }
 .rc-list { list-style: none; margin: 0.4rem 0 0.2rem; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; }
 .rc-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.25rem 0.45rem; border-radius: 6px;
@@ -2427,7 +2341,7 @@ td.toggle { white-space: nowrap; }
   display: flex; align-items: center; gap: 0.6rem; }
 .sched-count { font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px;
   background: var(--sel); color: var(--muted); }
-.sched-count.sched-empty { background: var(--warn-bg); color: #9a6700; }
+.sched-count.sched-empty { background: var(--warn-bg); color: var(--warn-ink); }
 .sched-none { font-size: 0.84rem; color: var(--muted); margin: 0; }
 .sched-table { margin: 0; }
 /* Staffing conflict report */
@@ -2442,7 +2356,7 @@ td.toggle { white-space: nowrap; }
 :root[data-theme="dark"] .conflict-group li.conflict-hard { color: #f0a0a0; }
 .conflict-badge { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
   padding: 1px 5px; border-radius: 5px; background: #f6d4d4; color: #8a1f1f; margin-left: 4px; }
-.conflict-badge.soft { background: var(--warn-bg); color: #9a6700; }
+.conflict-badge.soft { background: var(--warn-bg); color: var(--warn-ink); }
 :root[data-theme="dark"] .conflict-badge { background: #4a1d1d; color: #f0b0b0; }
 /* Officials availability heatmap */
 .avail-heatmap-wrap { overflow-x: auto; margin-bottom: 1rem; }
@@ -2462,7 +2376,7 @@ td.toggle { white-space: nowrap; }
 .hm-hotel-tag { font-size: 0.75rem; }
 .avail-heatmap tfoot .hm-tot { text-align: center; font-size: 0.76rem; color: var(--muted);
   padding: 0.2rem; background: var(--bg, #fafafa); }
-.avail-heatmap tfoot .hm-thin { background: var(--warn-bg); color: #9a6700; font-weight: 700; }
+.avail-heatmap tfoot .hm-thin { background: var(--warn-bg); color: var(--warn-ink); font-weight: 700; }
 .avail-heatmap .hm-sep { opacity: .5; margin: 0 1px; }
 .avail-heatmap .hm-clickable { cursor: pointer; }
 .avail-heatmap .hm-clickable:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -2482,7 +2396,7 @@ td.toggle { white-space: nowrap; }
 .cov-tag { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   padding: 1px 4px; border-radius: 5px; background: var(--sel); color: var(--muted); }
 .cov-tag-ok { background: #e7f5ec; color: #1f7a44; }
-.cov-tag-warn { background: var(--warn-bg); color: #9a6700; }
+.cov-tag-warn { background: var(--warn-bg); color: var(--warn-ink); }
 :root[data-theme="dark"] .cov-tag-ok { background: #16301f; color: #8ed3a5; }
 .asg-flags {
   display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center;
@@ -2524,12 +2438,6 @@ td.toggle { white-space: nowrap; }
 .batch-h { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--muted); }
 .batch-table { max-width: 640px; }
 
-/* A Tabulator grid whose columns (with their min-widths) total wider than the
-   viewport must scroll WITHIN its card, not push the whole page wide. Capping
-   the outer .tabulator at its container forces the internal .tabulator-tableholder
-   (overflow:auto) to provide the horizontal scroll. Fixes the payroll grid +
-   any other wide grid on a phone. */
-.tabulator { max-width: 100%; }
 
 /* Inbox progress summary (unfiled / filed / follow-up counts). */
 .inbox-summary { font-size: 0.88rem; color: var(--muted); margin: 0.2rem 0 0.5rem; }
@@ -2712,7 +2620,7 @@ td.toggle { white-space: nowrap; }
 .dash-readiness { margin: 0.4rem 0 1rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .rdy-head { padding: 0.45rem 0.7rem; font-weight: 700; font-size: 0.92rem; }
 .rdy-head.rdy-pass { background: #e7f5ec; color: #1f7a44; }
-.rdy-head.rdy-warn { background: var(--warn-bg); color: #9a6700; }
+.rdy-head.rdy-warn { background: var(--warn-bg); color: var(--warn-ink); }
 .rdy-head.rdy-fail { background: #fbe4e4; color: #9a2020; }
 :root[data-theme="dark"] .rdy-head.rdy-pass { background: #16301f; color: #8ed3a5; }
 :root[data-theme="dark"] .rdy-head.rdy-fail { background: #3a1818; color: #f0a0a0; }

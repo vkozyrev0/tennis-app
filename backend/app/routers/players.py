@@ -72,7 +72,8 @@ _COLS = (
 
 @router.get("", response_model=list[PlayerOut])
 def list_players(response: Response, q: str | None = None,
-                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                 limit: int | None = None, offset: int = 0,
+                 user=Depends(require_admin), conn=Depends(db_dep)):
     """Optionally server-side searched/paged — the GET /api/emails pattern
     extended to the next big list (UI backlog). `q` ILIKE-matches USTA # and
     name (plaintext columns only — contact/birthdate are encrypted at rest),
@@ -93,6 +94,14 @@ def list_players(response: Response, q: str | None = None,
                             where=where, params=params,
                             order_by=" ORDER BY last_name, first_name",
                             limit=limit, offset=offset)
+        if rows:
+            # D20: the catalog lists decrypted parent contact, so record that the
+            # list was opened. One row per request, never the search text (which
+            # may contain a name).
+            log_access(cur, username=user["username"], action="view_player_list",
+                       resource_type="player_list",
+                       detail={"surface": "player_list", "limit": limit,
+                               "offset": offset, "searched": bool(q)})
         return [_decrypt_contact(r) for r in rows]
 
 
@@ -120,12 +129,17 @@ def search_players(q: str, limit: int = 10, conn=Depends(db_dep)):
 
 
 @router.get("/{player_id}", response_model=PlayerOut)
-def get_player(player_id: int, conn=Depends(db_dep)):
+def get_player(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_COLS} FROM player WHERE id = %s", (player_id,))
         row = cur.fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="player not found")
+        if row is None:
+            raise HTTPException(status_code=404, detail="player not found")
+        # D20: a targeted catalog read is the same PII surface as player 360, so
+        # it gets the same accountability (identity only, never names or contact).
+        log_access(cur, username=user["username"], action="view_player",
+                   resource_type="player", resource_id=player_id,
+                   detail={"surface": "player_get"})
     return _decrypt_contact(row)
 
 
@@ -213,7 +227,7 @@ def player_overview(
 
 
 @router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])
-def player_history(player_id: int, conn=Depends(db_dep)):
+def player_history(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -224,9 +238,23 @@ def player_history(player_id: int, conn=Depends(db_dep)):
             (player_id,),
         )
         rows = cur.fetchall()
+        if rows:
+            log_access(cur, username=user["username"], action="view_player_history",
+                       resource_type="player", resource_id=player_id,
+                       detail={"surface": "player_history"})
     for r in rows:                          # decrypt the at-rest birthdate (PII H2)
         r["birthdate"] = _dec_pii(r.get("birthdate"))
     return rows
+
+
+def _player_params(body: PlayerCreate) -> dict:
+    """Encrypt the at-rest PII columns; every extended catalog field is persisted."""
+    return {
+        **body.model_dump(),
+        "birthdate": _enc_birthdate(body.birthdate),
+        "emails": _enc_pii(body.emails),
+        "phones": _enc_pii(body.phones),
+    }
 
 
 @router.post("", response_model=PlayerOut, status_code=201)
@@ -237,12 +265,17 @@ def create_player(body: PlayerCreate, conn=Depends(db_dep)):
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO player (usta_number, first_name, last_name, gender, birthdate, city, state)
+                INSERT INTO player (usta_number, first_name, last_name, gender, birthdate,
+                    birthdate_precision, city, state, district, section, emails, phones,
+                    wtn_singles, wtn_singles_conf, wtn_doubles, wtn_doubles_conf)
                 VALUES (%(usta_number)s, %(first_name)s, %(last_name)s, %(gender)s,
-                        %(birthdate)s, %(city)s, %(state)s)
+                        %(birthdate)s, COALESCE(%(birthdate_precision)s, 'day'),
+                        %(city)s, %(state)s, %(district)s, %(section)s,
+                        %(emails)s, %(phones)s, %(wtn_singles)s, %(wtn_singles_conf)s,
+                        %(wtn_doubles)s, %(wtn_doubles_conf)s)
                 RETURNING {_COLS}
                 """,
-                {**body.model_dump(), "birthdate": _enc_birthdate(body.birthdate)},
+                _player_params(body),
             )
             return _decrypt_contact(cur.fetchone())
     except psycopg.errors.UniqueViolation:
@@ -266,6 +299,7 @@ def update_player(
     The player_history trigger snapshots the prior values and bumps updated_at.
     """
     refuse_under13_birthdate(body.birthdate, precision=body.birthdate_precision)
+    seen = None
     try:
         with conn.cursor() as cur:
             if x_if_updated_at:
@@ -280,6 +314,7 @@ def update_player(
                         status_code=409,
                         detail="player was modified elsewhere — reload and try again",
                     )
+                seen = datetime.fromisoformat(x_if_updated_at.replace("Z", "+00:00"))
             cur.execute(
                 f"""
                 UPDATE player SET
@@ -288,23 +323,40 @@ def update_player(
                     last_name = %(last_name)s,
                     gender = %(gender)s,
                     birthdate = %(birthdate)s,
+                    birthdate_precision = COALESCE(%(birthdate_precision)s, birthdate_precision),
                     city = %(city)s,
                     state = %(state)s,
+                    district = %(district)s,
+                    section = %(section)s,
+                    emails = %(emails)s,
+                    phones = %(phones)s,
+                    wtn_singles = %(wtn_singles)s,
+                    wtn_singles_conf = %(wtn_singles_conf)s,
+                    wtn_doubles = %(wtn_doubles)s,
+                    wtn_doubles_conf = %(wtn_doubles_conf)s,
                     -- Audit M19: bump updated_at on every PUT so optimistic
                     -- concurrency works even for non-history-tracked fields
                     -- (the player_history trigger only records *name* changes).
                     updated_at = now()
                 WHERE id = %(id)s
+                  AND (%(seen)s::timestamptz IS NULL OR updated_at = %(seen)s::timestamptz)
                 RETURNING {_COLS}
                 """,
-                {**body.model_dump(), "birthdate": _enc_birthdate(body.birthdate),
-                 "id": player_id},
+                {**_player_params(body), "id": player_id, "seen": seen},
             )
             row = cur.fetchone()
     except psycopg.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail="usta_number already exists")
     if row is None:
-        raise HTTPException(status_code=404, detail="player not found")
+        # The row disappeared or changed between the pre-check and the UPDATE.
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM player WHERE id = %s", (player_id,))
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="player not found")
+        raise HTTPException(
+            status_code=409,
+            detail="player was modified elsewhere — reload and try again",
+        )
     return _decrypt_contact(row)
 
 
@@ -321,6 +373,18 @@ def delete_player(player_id: int, conn=Depends(db_dep)):
     rows cascade via FKs; email links are SET NULL.
     """
     with conn.cursor() as cur:
+        # Collect the derived copies before the FKs above clear the links.
+        cur.execute(
+            "SELECT id FROM email_message WHERE detected_player_id = %s "
+            "OR detected_partner_id = %s OR %s = ANY(detected_member_ids) "
+            "UNION SELECT source_email_id FROM inbox_person "
+            "WHERE promoted_player_id = %s AND source_email_id IS NOT NULL",
+            (player_id, player_id, player_id, player_id),
+        )
+        email_ids = [r["id"] for r in cur.fetchall()]
+        cur.execute("SELECT id FROM inbox_person WHERE promoted_player_id = %s", (player_id,))
+        inbox_ids = [r["id"] for r in cur.fetchall()]
+
         cur.execute("DELETE FROM player WHERE id = %s", (player_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="player not found")
@@ -331,4 +395,16 @@ def delete_player(player_id: int, conn=Depends(db_dep)):
             "last_name = NULL, birthdate = NULL WHERE player_id = %s",
             (player_id,),
         )
+        # The minor's name/USTA can also live in the inbox row and the derived
+        # email fields; erase those copies too (§312.10).
+        if email_ids:
+            cur.execute(
+                "UPDATE email_message SET body = NULL, subject = NULL, "
+                "from_address = NULL, to_address = NULL, detected_usta_text = NULL, "
+                "detected_name_pairs = NULL, detected_reason = NULL "
+                "WHERE id = ANY(%s)",
+                (email_ids,),
+            )
+        if inbox_ids:
+            cur.execute("DELETE FROM inbox_person WHERE id = ANY(%s)", (inbox_ids,))
     return Response(status_code=204)

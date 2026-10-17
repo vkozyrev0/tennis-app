@@ -46,13 +46,25 @@ export function humanizeDetail(detail, statusText) {
   return statusText || "request failed";
 }
 
-// CSV download from a 2D matrix; quotes everything to survive embedded commas
-// and quotes. Used by every Setup CRUD + the t-shirt + assignment exports.
+// One CSV cell. Quotes everything to survive embedded commas and quotes, and
+// prefixes a formula trigger so a spreadsheet app does not execute imported
+// text (=, +, -, @, tab, CR). Email subjects and player names reach these cells.
+function _csvCell(c) {
+  let s = String(c ?? "");
+  // Prefix a formula trigger, but keep a plain negative number numeric.
+  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+(\.\d+)?$/.test(s)) s = "'" + s;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+/** Serialize a 2D matrix to CSV text with the same escaping as csvDownload. */
+export function csvText(matrix) {
+  return matrix.map((r) => r.map(_csvCell).join(",")).join("\r\n");
+}
+
+// CSV download from a 2D matrix. Used by every Setup CRUD + the t-shirt +
+// assignment exports.
 export function csvDownload(matrix, filename) {
-  const csv = matrix
-    .map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
-    .join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  const url = URL.createObjectURL(new Blob([csvText(matrix)], { type: "text/csv" }));
   const a = document.createElement("a");
   a.href = url; a.download = filename + ".csv"; a.click();
   URL.revokeObjectURL(url);

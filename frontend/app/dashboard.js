@@ -160,10 +160,12 @@ export function createDashboardPanel(ctx) {
     _renderDigest();     // cross-tournament open-task digest
     _renderWorkload();   // cross-tournament official workload balance
     // Cross-tournament overview table.
-    let tournaments = [];
-    try { tournaments = await api("/tournaments"); } catch (_) {}
+    let tournaments = [], loadErr = null;
+    try { tournaments = await api("/tournaments"); } catch (e) { loadErr = e; }
     const body = document.querySelector("#dash-overview-table tbody");
-    body.innerHTML = tournaments.length
+    body.innerHTML = loadErr
+      ? html`<tr><td class="empty" colspan="6">Could not load tournaments: ${loadErr.message}. <button type="button" class="btn-link" id="dash-retry">Retry</button></td></tr>`
+      : tournaments.length
       ? html`${tournaments.slice().sort((a, b) => String(a.play_start_date).localeCompare(String(b.play_start_date)))
           .map((t) => {
             const su = _daysUntil(t.play_start_date);
@@ -173,6 +175,7 @@ export function createDashboardPanel(ctx) {
             return html`<tr class="dash-trow${isActive ? " is-active" : ""}" data-tid="${t.id}" tabindex="0" role="button"><td>${t.name}${isActive ? raw(' <span class="badge badge-ok">active</span>') : ""}</td><td>${typeLabel(t.type)}</td><td>${fmtMDY(t.play_start_date)} – ${fmtMDY(t.play_end_date)}</td><td>${startsIn}</td><td>${raw(_deadlineCell(t.registration_deadline))}</td><td>${raw(_deadlineCell(t.late_entry_deadline))}</td></tr>`;
           })}`
       : `<tr><td class="empty" colspan="6">No tournaments yet — add one in Setup → Tournaments.</td></tr>`;
+    if (loadErr) document.getElementById("dash-retry")?.addEventListener("click", () => loadDashboard());
     body.querySelectorAll(".dash-trow").forEach((tr) => {
       const pick = () => setActive(Number(tr.dataset.tid));
       tr.addEventListener("click", pick);

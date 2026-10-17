@@ -14,10 +14,6 @@ from app.main import app
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)

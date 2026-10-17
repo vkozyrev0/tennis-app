@@ -10,6 +10,7 @@ import json
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..access_audit import log_access
 from ..crypto import decrypt as _dec_body
 from ..crypto import encrypt as _enc_body
 from ..db import db_dep
@@ -57,6 +58,7 @@ from ..models import (
 )
 from ..playerops import mark_email_filed
 from ..query_helpers import like_escape, paged_select
+from ..security import require_admin
 from ..triage import classify_timed
 
 # C2: re-export bulk extractors for registry-consistency tests.
@@ -127,7 +129,8 @@ def _finalize_email_row(cur, r: dict) -> dict:
 def list_emails(response: Response, tournament_id: int | None = None,
                 status: str | None = None, q: str | None = None,
                 unmatched: bool | None = None,
-                limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                limit: int | None = None, offset: int = 0,
+                user=Depends(require_admin), conn=Depends(db_dep)):
     """Server-side filtered/paged inbox. `q` searches subject + from_address +
     classification + division + matched player name/USTA + parsed USTA text —
     but NOT the body itself, which is encrypted at rest (H2).
@@ -165,6 +168,14 @@ def list_emails(response: Response, tournament_id: int | None = None,
                             limit=limit, offset=offset)
         for r in rows:
             _finalize_email_row(cur, r)
+        if rows:
+            # D20: the list returns decrypted bodies. One audit row per request
+            # (count only) rather than one per email, so a polled inbox does not
+            # multiply writes.
+            log_access(cur, username=user["username"], action="view_email_bodies",
+                       resource_type="email",
+                       detail={"surface": "inbox", "count": len(rows),
+                               "tournament_id": tournament_id})
     return rows
 
 

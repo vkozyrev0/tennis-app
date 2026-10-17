@@ -44,6 +44,17 @@ def test_delete_player_erases_pii_from_history():
     hist_before = client.get(f"/api/players/{p['id']}/history").json()
     assert any(h["first_name"] == "Aaa" for h in hist_before)  # PII present pre-delete
 
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "Erasure " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+    e = _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"], "subject": f"Withdraw {usta}",
+        "body": "minor details", "from_address": "parent@example.com"}))
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal", "status": "filed",
+        "detected_player_id": p["id"], "detected_usta_text": usta,
+        "detected_name_pairs": [{"name": "Aaa Bbb"}], "detected_reason": "illness"})
+
     assert client.delete(f"/api/players/{p['id']}").status_code == 204
 
     hist = client.get(f"/api/players/{p['id']}/history").json()
@@ -53,6 +64,14 @@ def test_delete_player_erases_pii_from_history():
         assert h["last_name"] is None
         assert h["usta_number"] is None
         assert h["birthdate"] is None
+
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["subject"] is None
+    assert row["body"] is None
+    assert row["detected_usta_text"] is None
+    assert row["detected_name_pairs"] is None
+    assert row["detected_reason"] is None
 
 
 def test_purge_redacts_filed_emails_but_not_new_ones():
@@ -132,6 +151,38 @@ def test_retention_sweep_rejects_negative_window():
     row = next(m for m in client.get(f"/api/emails?tournament_id={old_t['id']}").json()
                if m["id"] == e["id"])
     assert row["body"] == "must not be erased"     # untouched
+
+
+def test_retention_sweep_redacts_derived_pii_and_inbox_people():
+    from app.db import get_conn
+
+    t = _tourney("2020-01-01", "2020-01-04")
+    e = _filed_email(t["id"], "old body")
+    client.put(f"/api/emails/{e['id']}", json={
+        "tournament_id": t["id"], "classification": "withdrawal", "status": "filed",
+        "detected_player_id": None, "to_address": "td@example.com",
+        "detected_usta_text": "1234567890",
+        "detected_name_pairs": [{"name": "Kid Name"}],
+        "detected_reason": "illness",
+    })
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("INSERT INTO inbox_person (name, source_email_id) VALUES ('Kid Name', %s)",
+                    (e["id"],))
+        conn.commit()
+
+    res = _ok(client.post("/api/retention/sweep?dry_run=false"), 200)
+    assert any(r["target"] == "inbox_people" for r in res["results"])
+
+    row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+               if m["id"] == e["id"])
+    assert row["to_address"] is None
+    assert row["detected_usta_text"] is None
+    assert row["detected_name_pairs"] is None
+    assert row["detected_reason"] is None
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM inbox_person WHERE source_email_id = %s",
+                    (e["id"],))
+        assert cur.fetchone()["n"] == 0
 
 
 def test_retention_sweep_redacts_concluded_not_recent():

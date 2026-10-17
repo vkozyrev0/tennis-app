@@ -608,8 +608,10 @@ async function refreshHealth() {
     const t = setTimeout(() => ac.abort(), 4000);
     const res = await fetch("/api/health", { signal: ac.signal });
     clearTimeout(t);
-    if (!res.ok) { fail(); return; }
-    const h = await res.json();
+    // The API returns 503 with the same JSON when the DB is down; use the
+    // payload when it exists so the pill says "DB down", not "API unreachable".
+    const h = await res.json().catch(() => null);
+    if (!h) { fail(); return; }
     applyHealthPills(cluster, healthIndicators({ reachable: true, db: h.db, llm: h.llm }));
     if (dash) {
       dash.hidden = false;
@@ -639,7 +641,7 @@ const _rosterRefs = {
   loadInbox: () => { if (typeof loadInbox === "function") loadInbox(); },
 };
 const {
-  loadRoster, rosterSignInExport, rosterSignInTemplate, rosterGrid,
+  loadRoster, rosterCsvExport, rosterSignInExport, rosterSignInTemplate, rosterGrid,
   inboxAddToRoster, inboxAddBothToRoster,
 } = createRosterPanel({
   api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit,
@@ -834,7 +836,7 @@ const {
 
 // D11: remaining CSV export wiring + coverage-min control
 installExportWiring({
-  csvDownload: _csvDownload, rosterGrid, rosterSignInExport, rosterSignInTemplate,
+  csvDownload: _csvDownload, rosterGrid, rosterCsvExport, rosterSignInExport, rosterSignInTemplate,
   reportCsvExport, reportTemplateExport,
   getCoverageMin, setCoverageMin, renderCoverage,
 });
@@ -882,7 +884,7 @@ const { applyAuth } = createAuth({
     }
     if (isOfficial) officialInit();
   },
-  onLogout: () => { resetAdminLoaded(); authUser = null; },
+  onLogout: () => { resetAdminLoaded(); authUser = null; notices.clear(); },
 });
 
 // D11: trash restore

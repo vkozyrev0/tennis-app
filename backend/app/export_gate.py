@@ -12,6 +12,7 @@ Client-side grids already hold decrypted rows in memory; this gate is a
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 from fastapi import HTTPException
@@ -98,6 +99,23 @@ def require_can_export_pii(user: dict, *, redacted: bool = False) -> None:
                    "(can_export_pii=false). Use a redacted export or ask "
                    "another admin to grant export permission.",
         )
+
+
+def csv_safe(value: Any) -> Any:
+    """Neutralize a spreadsheet formula in a server-generated CSV cell.
+
+    A cell beginning with =, +, -, @, tab, or CR is treated as a formula by
+    Excel/Sheets. Prefix a single quote so imported names/notes stay text.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value)
+    # A plain negative number stays numeric; a formula-like value is prefixed.
+    if s[:1] in ("=", "+", "-", "@", "\t", "\r") and not re.fullmatch(r"[+-]?\d+(\.\d+)?", s):
+        return "'" + s
+    return value
 
 
 def redact_matrix(matrix: list[list[Any]]) -> list[list[Any]]:

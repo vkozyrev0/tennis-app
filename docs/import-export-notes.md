@@ -2,7 +2,7 @@
 
 Audit 2026-06-28. Every import and export surface was inventoried and verified
 end-to-end against the real HTTP APIs with real fake CSV/XLSX/PDF files. The
-regression net is `backend/tests/test_zz_import_export.py` (28 tests, all green).
+regression net is `backend/tests/test_zz_import_export.py` (34 tests, all green).
 Use this doc when adding a new import type or export so the same shapes/bugs
 don't recur.
 

@@ -19,10 +19,6 @@ from app.routers.me import my_official_id_dep
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -53,10 +49,6 @@ def test_security_require_functions_direct():
                 {"must_change_password": True, "role": "admin", "id": 1}
             )
         assert e2.value.status_code == 403
-        with pytest.raises(HTTPException):
-            security.require_export_pii(
-                {"role": "admin", "can_export_pii": False, "id": 1}
-            )
     finally:
         os.environ.pop("COURTOPS_FORCE_PASSWORD_CHANGE", None)
 
@@ -344,20 +336,18 @@ def test_import_merged_row_409_and_merge_notes(monkeypatch):
     # officials import
     up = client.post(f"/api/import/tournaments/{t['id']}/officials",
                      files={"file": ("o.csv", csv, "text/csv")})
-    if up.status_code not in (200, 201):
-        return
+    assert up.status_code in (200, 201), up.text
     bid = up.json().get("id") or up.json().get("batch_id")
-    if not bid:
-        return
+    assert bid, up.text
     client.post(f"/api/import/batches/{bid}/merge")
     # merged row edit
     listing = client.get(f"/api/import/batches/{bid}")
-    if listing.status_code == 200:
-        rows = listing.json().get("rows") or listing.json().get("items") or []
-        if rows:
-            rid = rows[0]["id"]
-            r = client.patch(f"/api/import/batches/{bid}/rows/{rid}", json={"data": {"first_name": "X"}})
-            assert r.status_code in (200, 409)
+    assert listing.status_code == 200, listing.text
+    rows = listing.json().get("rows") or listing.json().get("items") or []
+    assert rows, listing.text
+    rid = rows[0]["id"]
+    r = client.patch(f"/api/import/batches/{bid}/rows/{rid}", json={"data": {"first_name": "X"}})
+    assert r.status_code in (200, 409)
 
 
 def test_users_last_admin_409_direct():
@@ -366,9 +356,9 @@ def test_users_last_admin_409_direct():
     extra = client.post("/api/admin/users", json={
         "username": "tmp_" + uuid.uuid4().hex[:6], "password": "password1",
     })
-    if extra.status_code == 201:
-        eid = extra.json()["id"]
-        client.delete(f"/api/admin/users/{eid}")
+    assert extra.status_code == 201, extra.text
+    eid = extra.json()["id"]
+    assert client.delete(f"/api/admin/users/{eid}").status_code == 204
     r = client.delete(f"/api/admin/users/{admin['id']}")
     assert r.status_code in (400, 409)
 
@@ -416,15 +406,19 @@ def test_assignment_create_bad_fk():
 
 def test_venue_official_needs_site():
     t = _t()
+    site = _ok(client.post("/api/sites", json={"name": "R4S " + uuid.uuid4().hex[:5]}))
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site["id"]]}), 200)
     o = _ok(client.post("/api/officials", json={"first_name": "Ch", "last_name": uuid.uuid4().hex[:5]}))
     _ok(client.post(f"/api/officials/{o['id']}/certifications", json={"cert_type": "chair_umpire"}))
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                        json={"official_id": o["id"], "site_id": site["id"]}))
     day = client.post(f"/api/assignments/{a['id']}/days", json={
         "work_date": t["play_start_date"], "working_as": "chair_umpire",
     })
-    if day.status_code == 201:
-        r = client.put(f"/api/assignments/{a['id']}", json={"official_id": o["id"], "site_id": None})
-        assert r.status_code == 400
+    assert day.status_code == 201, day.text
+    r = client.put(f"/api/assignments/{a['id']}", json={"official_id": o["id"], "site_id": None})
+    assert r.status_code == 400
 
 
 def test_detect_empty_first_last_on_roster():

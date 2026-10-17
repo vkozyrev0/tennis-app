@@ -12,10 +12,12 @@ import {
  *   confirmDialog: (message: string, okLabel?: string, okKind?: string) => Promise<boolean>,
  *   getAuthUser: () => { can_export_pii?: boolean } | null,
  *   getActive: () => { id?: number } | null,
+ *   download?: (matrix: any[][], filename: string) => void,
  * }} ctx
  */
 export function createCsvExport(ctx) {
-  const { api, toast, confirmDialog, getAuthUser, getActive } = ctx;
+  const { api, toast, confirmDialog, getAuthUser, getActive,
+    download = csvDownloadRaw } = ctx;
 
   async function logClientExport(resource, detail = {}) {
     const active = getActive();
@@ -42,7 +44,8 @@ export function createCsvExport(ctx) {
     const authUser = getAuthUser();
 
     if (minors) {
-      const can = !authUser || authUser.can_export_pii !== false;
+      // Fail closed: no signed-in user means no PII export.
+      const can = !!authUser && authUser.can_export_pii !== false;
       if (!can) {
         toast("Full PII CSV export is disabled for your account", false);
         return false;
@@ -72,7 +75,7 @@ export function createCsvExport(ctx) {
       toast(e.message || "export not allowed", false);
       return false;
     }
-    csvDownloadRaw(data, filename);
+    download(data, filename);
     return true;
   }
 

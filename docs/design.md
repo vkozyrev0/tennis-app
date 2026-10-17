@@ -33,7 +33,9 @@ The tool stops at producing structured, auditable lists + a staffing plan.
   official isn't certified for is a **hard HTTP 409** when certifications are
   on file. Only physical impossibilities (a full room block) hard-block lodging.
 - *Provenance on Part B* — every filed row links back to its source email.
-- *Minors' PII is a constraint* — names/emails/phones/birthdate encrypted at rest.
+- *Minors' PII is a constraint* — emails, phones, birthdate and email bodies are
+  encrypted at rest; names and USTA # are plaintext by documented decision
+  ([coppa-policy.md](coppa-policy.md)).
 
 ---
 
@@ -41,9 +43,9 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 
 | Layer | Choice | Notes |
 |---|---|---|
-| DB | **PostgreSQL 16** (Docker, container `courtops-pg`) | Plain SQL migrations, no ORM. |
+| DB | **PostgreSQL 16** (bundled in the all-in-one `web` container) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (920 LOC, ES module) + **61** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (930 LOC, ES module) + **62** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -88,17 +90,17 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0060_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0061_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (985 tests / 112 files)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1081 tests / 117 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # 920 LOC composition root (D11; counted 2026-09-21)
-  app/                 # 61 ESM modules (*.js; createX / installX + helpers), including:
+  app.js               # 930 LOC composition root (D11; counted 2026-10-17)
+  app/                 # 62 ESM modules (*.js; createX / installX + helpers), including:
     util.js, shirts.js, roster_prefill.js, origin_col.js
     html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
     grids.js, auth.js, state.js, player_list.js, catalog.js, labels.js
@@ -191,9 +193,10 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0060`), each tracked in
-`schema_migrations`. `migrate.py` creates the DB if absent then applies pending
-files. **Reference catalogs** (`division`, `tournament_event`,
+**Migrations are forward-only, filename-ordered** (`0001…0061`), each tracked in
+`schema_migrations`. `migrate.py` creates the DB if absent, takes a Postgres
+advisory lock so two booting containers cannot apply the same file, then applies
+pending files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
 those tables on wipe (truncating them would leave the pickers empty).
 
@@ -371,7 +374,7 @@ The assignment-change audit-action enum gains `finalized` / `unfinalized` / `pai
 ## 8. Frontend design
 
 **No build, one page, composition root.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (920 LOC,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (930 LOC,
 loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
 `setActive`, factory wiring, and `init()`. Behaviour lives in 61
 `frontend/app/*.js` modules (`createXPanel(ctx)` / `installX(ctx)` and
@@ -460,7 +463,8 @@ trash / admin users → `init()`.
 - `pytest`, run against a **separate `courtops_test` DB** (conftest sets
   `PGDATABASE` before `app.config` imports, then migrates + seeds once).
 - `test_smoke.py` — one focused test per behaviour/contract.
-- `test_td_e2e.py` — one end-to-end walk of the whole TD workflow at the API.
+- `test_td_e2e.py` — three end-to-end walks: the full TD workflow plus two
+  focused scenarios, all at the API.
 - `test_zz_*.py` — per-feature suites, **named to sort last** so their
   autouse `admin/admin` logins don't pre-empt a still-running earlier module.
 - Autouse `_reset_login_throttle` (conftest) clears the in-process login-throttle
@@ -474,8 +478,9 @@ trash / admin users → `init()`.
   challenges a TD hits and asserts each surfaces. Prefers `httpx`, retries only
   idempotent GETs.
 - **CI** (`.github/workflows/docker.yml`): every push/PR runs the suite against a
-  Postgres 16 service container; the Docker image build is gated on it
-  (`build needs: test`), and pushes to `main` publish the image to ghcr.
+  Postgres 16 service container; the Docker image build is gated on lint and
+  the suite (`build needs: [lint, test]`), and pushes to `main` publish the
+  image to ghcr.
 
 ---
 
@@ -505,8 +510,9 @@ regenerating equivalent DDL) then rebuilding the routers per the patterns above.
 
 **If scaling past the POC:** add a connection pool; replace the no-cache
 middleware with hashed asset filenames; move the login throttle + session store
-to Redis; consider an LLM (with an explicit cloud-PII decision) behind the
-`triage.classify` seam; the Google Maps driving-distance provider behind the
+to Redis; the leftover small-LLM pass already sits behind the
+`triage.classify` seam (DeepSeek by default, local sidecar opt-in); the Google
+Maps driving-distance provider behind the
 `geocode` seam is already **scaffolded** (migration 0047, key-gated on
 `GOOGLE_MAPS_API_KEY`, source `maps`) with the great-circle estimate as the
 key-free fallback — finishing it just needs the key + egress + cost sign-off;

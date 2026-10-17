@@ -78,9 +78,14 @@ controls below — it is not a full COPPA compliance certificate.
   `user_account.can_export_pii` plus a SPA confirm (`detail.confirmed`). New
   secondary admins default **false**. Redacted column-stripped exports set
   `detail.redacted` (still need the capability flag).
-- **View accountability (D19):** opening player 360 logs `access_audit`
-  (`view_player_360` + player id + optional tournament — never names/contact).
-  Review via `GET /api/access-audit`.
+- **View accountability (D19/D20):** every PII view is logged to
+  `access_audit` (`view_player_360` with the player id and optional tournament,
+  `view_player` for a single catalog GET, `view_player_list` once per catalog
+  list request, `view_email_bodies` once per inbox request). Rows carry identity
+  and counts only, never names, contact fields, or search text. Review via
+  `GET /api/access-audit`. The flag gates **bulk export**, not viewing: a TD
+  back office has to read contact data to run an event, so views are audited
+  rather than redacted.
 - **Retention (H3):** filed-email free text redacted after
   `EMAIL_RETENTION_DAYS` past tournament end (`POST /api/retention/sweep`).
 - **Erasure (H3.2):** `DELETE /api/players/{id}` nulls PII on `player_history`.
@@ -89,11 +94,15 @@ controls below — it is not a full COPPA compliance certificate.
 - **Security headers (D17):** CSP (`script-src 'self'`, styles allow inline),
   `X-Frame-Options: DENY`, `nosniff`, referrer + permissions policy; HSTS when
   `ENV=prod` (or `COURTOPS_HSTS=1`).
+- **Leftover-email LLM (third-party processor):** when `EMAIL_LLM=1`, the
+  clipped body of an `other` email goes to the configured provider. The
+  **default is DeepSeek**, off-box. Set `EMAIL_LLM=0` or
+  `EMAIL_LLM_PROVIDER=local` before real under-13 data. The hosted demo runs
+  `ENV=dev` with DeepSeek enabled and is not COPPA-ready.
 
-Still open (not this thin policy): least-privilege multi-user (H4.3); optional
-broader view logging (catalog GET / history); deploy-time disk encryption + KMS
-key hosting; explicit CSRF token only if the SPA ever goes cross-site (D18 —
-today SameSite=Strict + same-origin).
+Still open (not this thin policy): least-privilege multi-user (H4.3);
+deploy-time disk encryption + KMS key hosting; explicit CSRF token only if the
+SPA ever goes cross-site (D18 — today SameSite=Strict + same-origin).
 
 ---
 
@@ -106,6 +115,9 @@ today SameSite=Strict + same-origin).
 5. Schedule retention sweep; set `EMAIL_RETENTION_DAYS` deliberately
 6. Only then set **`ALLOW_UNDER13_PII=1`** if under-13 juniors will be stored
 7. Prefer header-only email ingest (`INGEST_ALLOW_QUERY_TOKEN` off)
+8. Decide the LLM path before real under-13 data: **`EMAIL_LLM=0`**, or
+   **`EMAIL_LLM_PROVIDER=local`** so the clipped body stays on-box. DeepSeek is
+   the default and sends that text to a third party.
 
 ---
 

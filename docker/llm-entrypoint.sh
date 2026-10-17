@@ -5,9 +5,18 @@ set -euo pipefail
 
 MODEL="${GGUF_PATH:-/models/model.gguf}"
 URL="${GGUF_URL:-https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
+SHA256="${GGUF_SHA256:-6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e}"
 HOST="${LLAMA_HOST:-::}"
 PORT="${LLAMA_PORT:-8080}"
 MIN_BYTES="${GGUF_MIN_BYTES:-800000000}"
+
+sha_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
 mkdir -p "$(dirname "$MODEL")"
 size=0
@@ -19,6 +28,10 @@ if [[ ! -s "$MODEL" || "$size" -lt "$MIN_BYTES" ]]; then
   need_fetch=1
 elif ! head -c 4 "$MODEL" | grep -q GGUF; then
   echo "[llm] $MODEL is not a GGUF file — re-downloading"
+  need_fetch=1
+elif [[ "$(sha_of "$MODEL")" != "$SHA256" ]]; then
+  # D26: a corrupted or swapped volume must not be served.
+  echo "[llm] $MODEL checksum mismatch — re-downloading"
   need_fetch=1
 fi
 if [[ "$need_fetch" -eq 1 ]]; then
@@ -36,6 +49,12 @@ if [[ "$need_fetch" -eq 1 ]]; then
   got="$(wc -c < "$tmp" | tr -d ' ')"
   if [[ "$got" -lt "$MIN_BYTES" ]] || ! head -c 4 "$tmp" | grep -q GGUF; then
     echo "[llm] download is not a GGUF ($got bytes): $(head -c 120 "$tmp" | tr '\n' ' ')" >&2
+    rm -f "$tmp"
+    exit 1
+  fi
+  got_sha="$(sha_of "$tmp")"
+  if [[ "$got_sha" != "$SHA256" ]]; then
+    echo "[llm] GGUF checksum mismatch: got $got_sha, want $SHA256" >&2
     rm -f "$tmp"
     exit 1
   fi

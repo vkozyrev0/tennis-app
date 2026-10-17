@@ -12,9 +12,11 @@ AES-128-CBC + HMAC-SHA256, ciphertext is urlsafe-base64 **text**, so columns
 stay `text` and need no schema change):
 
 - **Encrypted at rest today:** `email_message.body`, `player.emails`,
-  `player.phones`, `player.birthdate` (migration 0037 widened `birthdate`
-  `date`→`text`). Encrypt on write, `decrypt()` on read; detection/triage/search
-  over the body run on the decrypted-in-memory value.
+  `player.phones`, `player.birthdate`, `player_history.birthdate` (migration
+  0037 widened both `birthdate` columns `date`→`text`), and the Gmail/Outlook
+  `*.secret_enc` mailbox credentials. Encrypt on write, `decrypt()` on read;
+  detection/triage/search over the body run on the decrypted-in-memory value.
+  The rotation backfill targets all of these tables.
 - **Deliberately NOT encrypted:** `email_message.subject` / `from_address` — they
   back the server-side inbox `ILIKE` search and the detector's subject/sender
   matching; encrypting them breaks both. Covered by the disk-level baseline

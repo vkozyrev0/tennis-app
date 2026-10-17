@@ -18,8 +18,10 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..export_audit import log_export
+from ..export_gate import csv_safe
 from ..models import PaymentBatchCreate, PayrollMarkPaid
 from ..security import require_admin
 from .assignments import _ASG_SELECT, _audit, _summaries, _summary
@@ -169,7 +171,7 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
         return "" if v is None else f"{float(v):.2f}"
 
     for r in recs:
-        w.writerow([
+        w.writerow([csv_safe(v) for v in [
             r["official_name"], r["days_worked"], r["no_show_days"],
             money(r["pay"]), money(r["mileage"]), money(r["total"]),
             r["rule_version"] or "",
@@ -178,7 +180,7 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
             r["paid_at"].isoformat() if r["paid_at"] else "",
             r["paid_method"] or "", r["paid_note"] or "",
             r["batch_reference"] or "",
-        ])
+        ]])
     body = buf.getvalue().encode("utf-8-sig")
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"
     return Response(content=body, media_type="text/csv",
@@ -258,12 +260,12 @@ def mark_paid(record_id: int, body: PayrollMarkPaid, user=Depends(require_admin)
         cur.execute(
             "UPDATE payroll_record SET "
             "  paid = %(paid)s, "
-            "  paid_at = CASE WHEN %(paid)s THEN COALESCE(%(paid_at)s, CURRENT_DATE) END, "
+            "  paid_at = CASE WHEN %(paid)s THEN COALESCE(%(paid_at)s, %(today)s::date) END, "
             "  paid_method = CASE WHEN %(paid)s THEN %(paid_method)s END, "
             "  paid_note = CASE WHEN %(paid)s THEN %(paid_note)s END "
             "WHERE id = %(id)s "
             f"RETURNING {_REC_COLS.replace('r.', '')}",
-            {**body.model_dump(), "id": record_id},
+            {**body.model_dump(), "id": record_id, "today": today_venue()},
         )
         row = cur.fetchone()
         if rec["assignment_id"] is not None:
@@ -358,7 +360,7 @@ def create_batch(tournament_id: int, body: PaymentBatchCreate,
         ids = list(dict.fromkeys(body.record_ids))
         cur.execute(
             "SELECT id, assignment_id, tournament_id, paid, batch_id "
-            "FROM payroll_record WHERE id = ANY(%s)", (ids,))
+            "FROM payroll_record WHERE id = ANY(%s) ORDER BY id FOR UPDATE", (ids,))
         found = {r["id"]: r for r in cur.fetchall()}
         missing = [i for i in ids if i not in found]
         if missing:

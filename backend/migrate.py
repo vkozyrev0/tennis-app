@@ -14,6 +14,12 @@ from app.config import settings
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 
+# Session-level advisory lock around the whole run (D26). Two containers booting
+# against the same database would otherwise both read `schema_migrations` and
+# apply the same file. The lock is released when this connection closes, so a
+# crashed runner cannot wedge the next boot.
+_MIGRATION_LOCK_KEY = 0x434F5552  # "COUR", a fixed app-wide key
+
 
 def ensure_database() -> None:
     """CREATE DATABASE <target> if it doesn't already exist."""
@@ -46,23 +52,30 @@ def apply_migrations() -> int:
         conn.commit()
 
         with conn.cursor() as cur:
-            cur.execute("SELECT version FROM schema_migrations")
-            done = {r[0] for r in cur.fetchall()}
-
-        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-            version = path.name
-            if version in done:
-                print(f"skip    {version}")
-                continue
-            sql = path.read_text(encoding="utf-8")
+            cur.execute("SELECT pg_advisory_lock(%s)", (_MIGRATION_LOCK_KEY,))
+        try:
             with conn.cursor() as cur:
-                cur.execute(sql)
-                cur.execute(
-                    "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
-                )
-            conn.commit()
-            applied_count += 1
-            print(f"applied {version}")
+                cur.execute("SELECT version FROM schema_migrations")
+                done = {r[0] for r in cur.fetchall()}
+
+            for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+                version = path.name
+                if version in done:
+                    print(f"skip    {version}")
+                    continue
+                sql = path.read_text(encoding="utf-8")
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cur.execute(
+                        "INSERT INTO schema_migrations (version) VALUES (%s)", (version,)
+                    )
+                conn.commit()
+                applied_count += 1
+                print(f"applied {version}")
+        finally:
+            conn.rollback()  # clear an aborted transaction before unlocking
+            with conn.cursor() as cur:
+                cur.execute("SELECT pg_advisory_unlock(%s)", (_MIGRATION_LOCK_KEY,))
     return applied_count
 
 

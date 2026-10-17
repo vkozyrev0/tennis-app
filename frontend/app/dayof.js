@@ -45,13 +45,16 @@ export function createDayOfPanel(ctx) {
     return start || today;
   }
 
+  let _dayofSeq = 0;
   async function loadDayOf() {
     if (!getActive()) return;
+    const seq = ++_dayofSeq;
     if (!_DAYOF.date) _DAYOF.date = _dayOfDefaultDate(getActive());
     _wireDayOf();
     let d;
     try { d = await api(`/tournaments/${getActive().id}/day-of?on=${_DAYOF.date}`); }
     catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
+    if (seq !== _dayofSeq) return;
     // If we still landed outside the window (e.g. sticky date from another
     // tournament) and the API reports play dates, snap once to play_start.
     if (!d.in_window && d.play_start_date && _DAYOF.date !== d.play_start_date
@@ -59,6 +62,7 @@ export function createDayOfPanel(ctx) {
       _DAYOF.date = d.play_start_date;
       try { d = await api(`/tournaments/${getActive().id}/day-of?on=${_DAYOF.date}`); }
       catch (e) { toast("Couldn't load the day-of view: " + e.message, false); return; }
+      if (seq !== _dayofSeq) return;
     }
     _dayofData = d;
     try {

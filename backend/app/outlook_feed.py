@@ -527,6 +527,10 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
             """,
             (msg, _FEED_ID),
         )
+        # The route raises, and the request dependency rolls the transaction
+        # back on the way out. Commit the error row on its own so the operator
+        # can see why the fetch failed (D23).
+        cur.connection.commit()
         if isinstance(exc, OSError):
             raise OSError(msg) from exc
         raise RuntimeError(msg) from exc
@@ -534,7 +538,9 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
     dupes = 0
     errors: list[str] = []
     tid = tournament_id if tournament_id is not None else row.get("tournament_id")
+    failure_at: datetime | None = None
     for item in messages:
+        dt = parse_received_at(item.get("receivedDateTime"))
         try:
             payload = graph_message_to_payload(item, tournament_id=tid)
             result = ingest_email(cur, payload, auto_classify=True)
@@ -544,6 +550,21 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
                 imported += 1
         except Exception as exc:
             errors.append(_redact(str(exc)[:200]))
+            if failure_at is None and dt is not None:
+                failure_at = dt
+    # D23: the timestamp cursor may not move past a message that failed to
+    # ingest. Cap it just below the first failure and never below the stored
+    # cursor, so the retry range still includes the failed message.
+    cursor = new_cursor
+    if failure_at is not None:
+        cap = failure_at - timedelta(microseconds=1)
+        if cursor is None or cap < cursor:
+            cursor = cap
+        stored = row.get("last_received_at")
+        if stored is not None and not isinstance(stored, datetime):
+            stored = parse_received_at(stored)
+        if stored is not None and cursor < stored:
+            cursor = stored
     status = "ok" if not errors else "partial"
     err = "; ".join(errors[:3]) if errors else None
     cur.execute(
@@ -555,7 +576,7 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
         WHERE id = %s
         RETURNING *
         """,
-        (new_cursor, status, err, imported, dupes, _FEED_ID),
+        (cursor, status, err, imported, dupes, _FEED_ID),
     )
     out = public_row(dict(cur.fetchone()))
     out["fetched"] = len(messages)

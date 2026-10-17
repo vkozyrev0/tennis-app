@@ -8,6 +8,7 @@ import psycopg
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 
 from .. import importer
+from ..bulk_ops import savepoint
 from ..db import db_dep
 from ..models import RosterEntryCreate, RosterEntryOut, RosterSignIn
 from ..playerops import upsert_player
@@ -27,7 +28,13 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
     response shape is preserved for the existing frontend.
     """
     cfg = importer.TYPES["roster"]
-    records = importer.parse_file(file.filename, await file.read(), cfg["cols"])
+    try:
+        records = importer.parse_file(file.filename, await file.read(), cfg["cols"])
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"couldn't parse {file.filename!r} — is it a valid CSV/XLSX? ({type(e).__name__})",
+        ) from e
     created = updated = upserted = 0
     errors: list[str] = []
     with conn.cursor() as cur:
@@ -40,21 +47,21 @@ async def import_roster(tournament_id: int, file: UploadFile = File(...), conn=D
             if err:
                 errors.append(f"row {row_num}: {err}")
                 continue
-            cur.execute("SAVEPOINT row")
             try:
-                cur.execute("SELECT 1 FROM player WHERE usta_number = %s",
-                            (rec["data"]["usta_number"],))
-                existed = cur.fetchone() is not None
-                cfg["merge"](cur, tournament_id, rec["data"])
-                cur.execute("RELEASE SAVEPOINT row")
+                with savepoint(cur, "roster_row"):
+                    cur.execute("SELECT 1 FROM player WHERE usta_number = %s",
+                                (rec["data"]["usta_number"],))
+                    existed = cur.fetchone() is not None
+                    cfg["merge"](cur, tournament_id, rec["data"])
                 if existed:
                     updated += 1
                 else:
                     created += 1
                 upserted += 1
             except HTTPException as e:
-                cur.execute("ROLLBACK TO SAVEPOINT row")
                 errors.append(f"row {row_num}: {e.detail}")
+            except Exception as e:
+                errors.append(f"row {row_num}: {type(e).__name__}")
     return {"created_players": created, "updated_players": updated,
             "entries": upserted, "errors": errors}
 

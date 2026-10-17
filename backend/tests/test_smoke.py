@@ -10,6 +10,7 @@ from datetime import date, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import get_conn
 from app.main import app
 
 client = TestClient(app)
@@ -360,6 +361,30 @@ def test_player_city_state():
         "usta_number": p["usta_number"], "gender": "female", "birthdate": "2010-01-01",
         "city": "Macon", "state": "GA"}).json()
     assert upd["city"] == "Macon"
+
+
+def test_player_extended_fields_persist_and_encrypt():
+    usta = "EXT" + uuid.uuid4().hex[:7]
+    p = _ok(client.post("/api/players", json={
+        "usta_number": usta, "gender": "female", "first_name": "Ext", "last_name": "Fields",
+        "birthdate": "2010-01-01", "birthdate_precision": "year",
+        "district": "D1", "section": "S1", "emails": "parent@example.com",
+        "phones": "555-0100", "wtn_singles": 3.5, "wtn_singles_conf": "S",
+        "wtn_doubles": 4.0, "wtn_doubles_conf": "D",
+    }))
+    assert p["emails"] == "parent@example.com" and p["phones"] == "555-0100"
+    assert p["district"] == "D1" and p["wtn_singles"] == 3.5
+    upd = _ok(client.put(f"/api/players/{p['id']}", json={
+        "usta_number": usta, "gender": "female", "first_name": "Ext", "last_name": "Fields",
+        "emails": "new@example.com", "phones": "555-0200", "district": "D2",
+        "wtn_doubles": 4.5,
+    }), code=200)
+    assert upd["emails"] == "new@example.com" and upd["phones"] == "555-0200"
+    assert upd["district"] == "D2" and upd["wtn_doubles"] == 4.5
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT emails, phones FROM player WHERE id = %s", (p["id"],))
+        row = cur.fetchone()
+    assert row["emails"].startswith("gAAAA") and row["phones"].startswith("gAAAA")
 
 
 def test_import_staging_and_merge():
@@ -1116,6 +1141,9 @@ def test_inbox_and_late_entry_filing():
     assert any(e["usta_number"] == num for e in client.get(f"/api/tournaments/{t['id']}/players").json())
     assert len(client.get(f"/api/tournaments/{t['id']}/late-entries").json()) == 1
     assert client.delete(f"/api/late-entries/{le['id']}").status_code == 204
+    # D24: the late entry created the roster row, so deleting it removes it.
+    assert not any(e["usta_number"] == num
+                   for e in client.get(f"/api/tournaments/{t['id']}/players").json())
 
 
 def test_withdrawal_reason_rule_and_roster_flip():
@@ -1131,6 +1159,9 @@ def test_withdrawal_reason_rule_and_roster_flip():
     entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json() if e["usta_number"] == p["usta_number"])
     assert entry["selection_status"] == "withdrawn"
     assert client.delete(f"/api/withdrawals/{w['id']}").status_code == 204
+    # D24: the delete restores the status the withdrawal replaced.
+    entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json() if e["usta_number"] == p["usta_number"])
+    assert entry["selection_status"] == "selected"
 
 
 def test_withdrawal_alternate_needs_no_reason():
@@ -1138,6 +1169,23 @@ def test_withdrawal_alternate_needs_no_reason():
     client.post(f"/api/tournaments/{t['id']}/players", json={"player_id": p["id"], "selection_status": "alternate"})
     w = _ok(client.post(f"/api/tournaments/{t['id']}/withdrawals", json={"usta_number": p["usta_number"]}))
     assert w["was_alternate"] is True and (w["reason"] is None or w["reason"] == "")
+    assert client.delete(f"/api/withdrawals/{w['id']}").status_code == 204
+    entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json()
+                 if e["usta_number"] == p["usta_number"])
+    assert entry["selection_status"] == "alternate"
+
+
+def test_partb_delete_leaves_a_preexisting_roster_row():
+    """D24: only the change the Part B row made is undone."""
+    t, p = _tournament(), _player()
+    client.post(f"/api/tournaments/{t['id']}/players",
+                json={"player_id": p["id"], "selection_status": "selected"})
+    le = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries", json={
+        "usta_number": p["usta_number"], "age_division": "B16", "events": "Singles"}))
+    assert client.delete(f"/api/late-entries/{le['id']}").status_code == 204
+    row = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json()
+               if e["usta_number"] == p["usta_number"])
+    assert row["selection_status"] == "selected"
 
 
 def test_part_b_inline_edits():
@@ -1344,8 +1392,15 @@ def test_auth_gating_and_official_self_service():
     assert off.get("/api/sites").status_code == 403          # admin only
     me = off.get("/api/me").json()
     assert me["official"]["id"] == o["id"]
-    upd = off.put("/api/me/profile", json={"first_name": "Self", "last_name": "Serve", "phone": "555-9"})
+    client.put(f"/api/officials/{o['id']}", json={
+        "first_name": "Self", "last_name": "Serve", "lat": 30.0, "lng": -80.0})
+    # A self-service edit may not move the official: lat/lng are admin-owned,
+    # and mileage is computed from them.
+    upd = off.put("/api/me/profile", json={
+        "first_name": "Self", "last_name": "Serve", "phone": "555-9",
+        "lat": 99.0, "lng": 99.0})
     assert upd.status_code == 200 and upd.json()["phone"] == "555-9"
+    assert upd.json()["lat"] == 30.0 and upd.json()["lng"] == -80.0
 
     # official sets own availability for a tournament (D8: open/future event)
     t = _tournament(play_start_date="2027-06-01", play_end_date="2027-06-04")

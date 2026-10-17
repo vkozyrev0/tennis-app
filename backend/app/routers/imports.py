@@ -105,7 +105,7 @@ async def upload(tournament_id: int, import_type: str,
             cur.execute(
                 "INSERT INTO import_row (batch_id, row_num, data, valid, error) "
                 "VALUES (%s,%s,%s,%s,%s)",
-                (bid, r["row_num"], Json(r["data"]), err is None, err),
+                (bid, r["row_num"], Json(importer.encrypt_staged(r["data"])), err is None, err),
             )
     return {"batch_id": bid, "import_type": import_type, "total": len(rows),
             "valid": valid, "invalid": len(rows) - valid, "errors": errors[:50]}
@@ -122,6 +122,8 @@ def get_batch(batch_id: int, conn=Depends(db_dep)):
         cur.execute("SELECT id, row_num, data, valid, error, merged FROM import_row "
                     "WHERE batch_id = %s ORDER BY row_num", (batch_id,))
         batch["rows"] = cur.fetchall()
+        for r in batch["rows"]:
+            r["data"] = importer.decrypt_staged(r["data"])
     return batch
 
 
@@ -153,7 +155,7 @@ def edit_row(batch_id: int, row_id: int, body: ImportRowUpdate, conn=Depends(db_
         err = importer.validate(data, cfg["cols"], cur, kind=batch["import_type"])
         cur.execute(
             "UPDATE import_row SET data = %s, valid = %s, error = %s WHERE id = %s",
-            (Json(data), err is None, err, row_id),
+            (Json(importer.encrypt_staged(data)), err is None, err, row_id),
         )
         return {"id": row_id, "data": data, "valid": err is None, "error": err,
                 "counts": _batch_counts(cur, batch_id)}
@@ -215,10 +217,10 @@ def bulk_set_column(batch_id: int, body: ImportBulkSet, conn=Depends(db_dep)):
         rows = cur.fetchall()
         changed = 0
         for r in rows:
-            data = {**r["data"], body.column: val}
+            data = {**importer.decrypt_staged(r["data"]), body.column: val}
             err = importer.validate(data, cfg["cols"], cur, kind=cfg.get("key"))
             cur.execute("UPDATE import_row SET data = %s, valid = %s, error = %s WHERE id = %s",
-                        (Json(data), err is None, err, r["id"]))
+                        (Json(importer.encrypt_staged(data)), err is None, err, r["id"]))
             changed += 1
         return {"changed": changed, "counts": _batch_counts(cur, batch_id)}
 
@@ -231,7 +233,10 @@ def _staged_rows_for_merge(cur, batch_id: int, only: list[int] | None):
     else:
         cur.execute("SELECT id, row_num, data FROM import_row "
                     "WHERE batch_id = %s AND valid AND NOT merged ORDER BY row_num", (batch_id,))
-    return cur.fetchall()
+    rows = cur.fetchall()
+    for r in rows:
+        r["data"] = importer.decrypt_staged(r["data"])
+    return rows
 
 
 @router.post("/batches/{batch_id}/conflicts")
@@ -291,8 +296,11 @@ def merge_batch(batch_id: int, body: ImportMergeOptions | None = None, conn=Depe
                 # the whole batch transaction.
                 cur.execute("SAVEPOINT imp_bk")
                 try:
-                    cur.execute("UPDATE import_row SET merged = true, error = %s WHERE id = %s",
-                                (note, r["id"]))
+                    cur.execute(
+                        "UPDATE import_row SET merged = true, error = %s, "
+                        "data = '{}'::jsonb WHERE id = %s",
+                        (note, r["id"]),
+                    )
                     cur.execute("RELEASE SAVEPOINT imp_bk")
                 except Exception:
                     cur.execute("ROLLBACK TO SAVEPOINT imp_bk")

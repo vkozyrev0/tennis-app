@@ -285,7 +285,18 @@ def resolve_tournament_id(
         if row:
             return row["id"]
 
-    return default_tournament_id()
+    # A stale env id (deleted tournament) must not reject every inbound
+    # message: validate it, and otherwise leave the message unscoped.
+    fallback = default_tournament_id()
+    if fallback is not None:
+        cur.execute(
+            "SELECT id FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (fallback,),
+        )
+        row = cur.fetchone()
+        if row:
+            return row["id"]
+    return None
 
 
 def sender_key(addr: str | None) -> str:

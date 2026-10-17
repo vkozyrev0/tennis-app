@@ -24,9 +24,9 @@ ORDER BY ad.work_date, t.name
 
 
 def _esc(text: str) -> str:
-    """RFC 5545 TEXT escaping: backslash, semicolon, comma, newline."""
+    """RFC 5545 TEXT escaping: backslash, semicolon, comma, newline, CR."""
     return (str(text).replace("\\", "\\\\").replace(";", "\\;")
-            .replace(",", "\\,").replace("\n", "\\n"))
+            .replace(",", "\\,").replace("\r", "\\n").replace("\n", "\\n"))
 
 
 def _cert_label(v: str) -> str:

@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from ..clock import today_venue
 from ..db import db_dep
 from .assignments import hard_conflict_counts
 
@@ -23,14 +24,15 @@ def upcoming_deadlines(within_days: int = 14, conn=Depends(db_dep)):
     Covers the registration + late-entry deadlines and the play-start date,
     sorted by date. `days_until` is negative for an overdue date."""
     within_days = max(1, min(within_days, 120))
+    today = today_venue()
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, play_start_date, registration_deadline, late_entry_deadline "
-            "FROM tournament WHERE play_end_date >= CURRENT_DATE AND deleted_at IS NULL "
-            "ORDER BY play_start_date"
+            "FROM tournament WHERE play_end_date >= %s AND deleted_at IS NULL "
+            "ORDER BY play_start_date",
+            (today,),
         )
         rows = cur.fetchall()
-    today = date.today()
     items = []
     for t in rows:
         for kind, dval in (("registration", t["registration_deadline"]),
@@ -55,13 +57,14 @@ def digest(conn=Depends(db_dep)):
     officials, uncovered play-window days, incomplete roster entries) — so the TD
     sees everything that needs attention across every active event in one place.
     Set-based aggregates (one query per category), not per-tournament loops."""
-    today = date.today()
+    today = today_venue()
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, play_start_date, play_end_date, "
             "       registration_deadline, late_entry_deadline "
-            "FROM tournament WHERE play_end_date >= CURRENT_DATE AND deleted_at IS NULL "
-            "ORDER BY play_start_date"
+            "FROM tournament WHERE play_end_date >= %s AND deleted_at IS NULL "
+            "ORDER BY play_start_date",
+            (today,),
         )
         tours = cur.fetchall()
         ids = [t["id"] for t in tours]
@@ -202,7 +205,7 @@ def day_of(tournament_id: int, on: str | None = None, conn=Depends(db_dep)):
         except ValueError:
             raise HTTPException(status_code=400, detail="on must be ISO format (YYYY-MM-DD)")
     else:
-        day = date.today()
+        day = today_venue()
     with conn.cursor() as cur:
         cur.execute("SELECT play_start_date, play_end_date FROM tournament WHERE id = %s",
                     (tournament_id,))
@@ -354,7 +357,10 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
         # Coverage gaps: play-window days with no official assigned at all.
         cur.execute(
             "SELECT DISTINCT ad.work_date FROM assignment_day ad "
-            "JOIN assignment a ON a.id = ad.assignment_id WHERE a.tournament_id = %s",
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "WHERE a.tournament_id = %s "
+            "  AND a.response_status <> 'declined' "
+            "  AND ad.actual_status <> 'no_show'",
             (tournament_id,),
         )
         worked = {r["work_date"] for r in cur.fetchall()}

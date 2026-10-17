@@ -323,6 +323,48 @@ def test_players_and_officials_catalog_round_trip():
 # ============================================================ XLSX + PDF paths
 
 
+def test_csv_safe_neutralizes_formula_cells():
+    from app.export_gate import csv_safe
+
+    assert csv_safe("=1+1") == "'=1+1"
+    assert csv_safe("+cmd") == "'+cmd"
+    assert csv_safe("-2+3") == "'-2+3"
+    assert csv_safe("@cmd") == "'@cmd"
+    assert csv_safe("\tx") == "'\tx"
+    assert csv_safe("safe") == "safe"
+    assert csv_safe(None) == ""
+    assert csv_safe("-2") == "-2"
+    assert csv_safe(-50.0) == -50.0
+
+
+def test_staged_import_pii_is_encrypted_and_cleared_after_merge():
+    """Uploaded contact/DOB values are ciphertext at rest; the grid still sees
+    plaintext, and a merged row no longer carries the staged payload."""
+    t = _tournament()
+    u = _u()
+    csv = (
+        "usta_number,first_name,last_name,gender,emails,phones,birthdate\n"
+        f"{u},Pii,Stage,female,parent@example.com,555-0100,2012-01-02\n"
+    )
+    up = _stage(t["id"], "players", "players.csv", csv)
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT data FROM import_row WHERE batch_id = %s", (up["batch_id"],))
+        raw = cur.fetchone()["data"]
+    assert raw["emails"] != "parent@example.com"
+    assert raw["emails"].startswith("gAAAA")
+    assert raw["birthdate"].startswith("gAAAA")
+
+    shown = client.get(f"/api/import/batches/{up['batch_id']}").json()
+    assert shown["rows"][0]["data"]["emails"] == "parent@example.com"
+    assert shown["rows"][0]["data"]["birthdate"] == "2012-01-02"
+
+    m = _merge(up["batch_id"])
+    assert m["merged"] == 1, m
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT data FROM import_row WHERE batch_id = %s", (up["batch_id"],))
+        assert cur.fetchone()["data"] == {}
+
+
 def test_roster_xlsx_import_end_to_end():
     """The openpyxl read path — build a REAL .xlsx in memory and import it."""
     t = _tournament()

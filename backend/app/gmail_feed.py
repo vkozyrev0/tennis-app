@@ -24,6 +24,7 @@ from .crypto import encrypt as _enc
 from .email_ingest import IngestPayload, html_to_text, ingest_email
 
 _FEED_ID = 1
+ALLOWED_IMAP_HOSTS = frozenset({"imap.gmail.com", "imap.googlemail.com"})
 _DEFAULTS = {
     "enabled": False,
     "gmail_address": None,
@@ -258,13 +259,22 @@ def _imap_fetch(
     imap_factory: Callable[..., Any] | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
-) -> tuple[list[tuple[int, bytes]], int | None, int | None]:
-    """Return [(uid, rfc822), ...], new last_uid, uidvalidity."""
+) -> tuple[list[tuple[int, bytes]], list[int], int | None]:
+    """Return [(uid, rfc822), ...], the target UIDs in order, and uidvalidity.
+
+    The target list is separate from the successful messages: the caller can
+    only move the cursor through UIDs that fetched *and* decoded, so a failed
+    message is not silently skipped (D23).
+    """
     address = (row.get("gmail_address") or "").strip()
     secret = _dec(row.get("secret_enc")) or ""
     if not address or not secret:
         raise RuntimeError("Gmail address and app password are required")
-    host = row.get("imap_host") or "imap.gmail.com"
+    host = str(row.get("imap_host") or "imap.gmail.com").strip().lower()
+    # The feed decrypts and sends the stored app password to this host. Restrict
+    # it so an admin cannot redirect the credential to a server they control.
+    if host not in ALLOWED_IMAP_HOSTS:
+        raise RuntimeError("Gmail feed host must be imap.gmail.com")
     port = int(row.get("imap_port") or 993)
     mailbox = row.get("mailbox") or "INBOX"
     factory = imap_factory or imaplib.IMAP4_SSL
@@ -332,8 +342,7 @@ def _imap_fetch(
                     break
             if raw:
                 messages.append((uid, raw))
-        new_last = max([last_uid] + [u for u, _ in messages]) if messages else last_uid
-        return messages, int(new_last) if new_last else last_uid, uv
+        return messages, uids, uv
     finally:
         try:
             imap.logout()
@@ -344,10 +353,11 @@ def _imap_fetch(
 class _Window(NamedTuple):
     """Download-phase result: the whole window in memory, unclassified."""
 
-    payloads: list[IngestPayload]
+    payloads: list[tuple[int, IngestPayload]]
     errors: list[str]
     fetched: int
-    last_uid: int | None
+    cursor: int
+    base_uid: int
     uidvalidity: int | None
 
 
@@ -364,17 +374,37 @@ def _download_window(
     Runs to completion before any classification happens — the returned
     ``payloads`` are the in-memory batch ``fetch_latest`` classifies once.
     """
-    messages, new_last, uv = _imap_fetch(
+    messages, uids, uv = _imap_fetch(
         row, imap_factory=imap_factory, since=since, until=until,
     )
-    payloads: list[IngestPayload] = []
+    payloads: list[tuple[int, IngestPayload]] = []
     errors: list[str] = []
-    for _uid, raw in messages:
+    decoded: set[int] = set()
+    for uid, raw in messages:
         try:
-            payloads.append(message_to_payload(raw, tournament_id=tournament_id))
+            payloads.append((uid, message_to_payload(raw, tournament_id=tournament_id)))
+            decoded.add(uid)
         except Exception as exc:
             errors.append(str(exc)[:200])
-    return _Window(payloads, errors, len(messages), new_last, uv)
+    fetched_uids = {uid for uid, _ in messages}
+    missing = [uid for uid in uids if uid not in fetched_uids]
+    if missing:
+        errors.append(f"fetch failed for UID(s) {', '.join(map(str, missing[:3]))}"
+                      + (" …" if len(missing) > 3 else ""))
+    # D23: advance through contiguous successes only. A failed FETCH or decode
+    # leaves the cursor below that UID, so the next run retries it instead of
+    # skipping the message forever.
+    base_uid = int(row.get("last_uid") or 0)
+    if uv is not None and row.get("uidvalidity") is not None \
+            and int(row["uidvalidity"]) != uv:
+        base_uid = 0  # mailbox rebuilt, the old UID cursor is meaningless
+    cursor = base_uid
+    for uid in uids:
+        if uid not in decoded:
+            break
+        if uid > cursor:
+            cursor = uid
+    return _Window(payloads, errors, len(messages), cursor, base_uid, uv)
 
 
 def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
@@ -398,12 +428,17 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
             """,
             (str(exc)[:500], _FEED_ID),
         )
+        # The route raises, and the request dependency rolls the transaction
+        # back on the way out. Commit the error row on its own so the operator
+        # can see why the fetch failed (D23).
+        cur.connection.commit()
         raise
     # Classify phase: one pass over the downloaded batch.
     imported = 0
     dupes = 0
     errors = window.errors
-    for payload in window.payloads:
+    failure_uid: int | None = None
+    for uid, payload in window.payloads:
         try:
             result = ingest_email(cur, payload, auto_classify=True)
             if result.get("duplicate"):
@@ -412,6 +447,13 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
                 imported += 1
         except Exception as exc:
             errors.append(str(exc)[:200])
+            if failure_uid is None:
+                failure_uid = uid
+    # D23: an ingest failure inside the window must not let the cursor jump over
+    # that message. Keep it at the first failure (never below the prior cursor).
+    cursor = window.cursor
+    if failure_uid is not None:
+        cursor = max(window.base_uid, min(cursor, failure_uid - 1))
     status = "ok" if not errors else "partial"
     err = "; ".join(errors[:3]) if errors else None
     cur.execute(
@@ -423,7 +465,7 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
         WHERE id = %s
         RETURNING *
         """,
-        (window.last_uid, window.uidvalidity, status, err, imported, dupes, _FEED_ID),
+        (cursor, window.uidvalidity, status, err, imported, dupes, _FEED_ID),
     )
     out = public_row(dict(cur.fetchone()))
     out["fetched"] = window.fetched

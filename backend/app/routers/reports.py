@@ -147,6 +147,7 @@ def day_schedule(tournament_id: int, conn=Depends(db_dep)):
             "JOIN official o ON o.id = a.official_id "
             "LEFT JOIN site s ON s.id = a.site_id "
             "WHERE a.tournament_id = %s AND a.response_status <> 'declined' "
+            "  AND ad.actual_status <> 'no_show' "
             "ORDER BY ad.work_date, site_label NULLS FIRST, o.last_name, o.first_name",
             (tournament_id,),
         )
@@ -308,7 +309,12 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     # already-loaded officials' days (in-window dates only) — no extra query.
     day_counts: dict[str, int] = {}
     for o in officials:
+        # A declined official is not staffed; a no-show day did not happen.
+        if o.get("response_status") == "declined":
+            continue
         for d in o["days"]:
+            if d.get("actual_status") == "no_show":
+                continue
             day_counts[d["work_date"]] = day_counts.get(d["work_date"], 0) + 1
     coverage = []
     cur_day = date.fromisoformat(t["play_start_date"])

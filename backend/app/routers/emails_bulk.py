@@ -295,13 +295,18 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
     filed_count = 0
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, tournament_id, classification, detected_player_id, subject, body "
+            "SELECT id, tournament_id, classification, status, detected_player_id, subject, body "
             "FROM email_message WHERE id = ANY(%s)",
             (body.email_ids,),
         )
         rows = cur.fetchall()
         for em in rows:
             em["body"] = _dec_body(em.get("body"))  # PII H2: for the extractors
+            # A second click (or a second selection including a filed row) must
+            # not insert the same list row again.
+            if em["status"] == "filed":
+                skipped.append({"id": em["id"], "reason": "already filed"})
+                continue
             tid, cls, pid = em["tournament_id"], em["classification"], em["detected_player_id"]
             if cls in FILE_NEEDS_PLAYER and pid is None:
                 skipped.append({"id": em["id"], "reason": FILE_NEEDS_PLAYER_REASON})

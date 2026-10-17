@@ -81,7 +81,8 @@ export function createIncidentsPanel(ctx) {
     const active = getActive();
     if (!active) return;
     fillSelect(document.getElementById("inc-site"), Object.values(getSitesById()), siteLabel, true);
-    incidentsGrid.setData(await api(`/tournaments/${active.id}/incidents`));
+    try { incidentsGrid.setData(await api(`/tournaments/${active.id}/incidents`)); }
+    catch (e) { setMsg("incident-msg", e.message, false); }
   }
 
   if (incidentForm) {

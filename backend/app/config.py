@@ -6,13 +6,19 @@ see docs/roadmap.md §Stack security note). Override via backend/.env or env var
 import os
 from pathlib import Path
 
-# Load backend/.env if python-dotenv is available (optional).
-try:
-    from dotenv import load_dotenv
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except Exception:
-    pass
+def _load_dotenv() -> None:
+    """Load backend/.env when python-dotenv is installed. Never fails import:
+    the deployed image gets its config from the environment."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    except Exception:
+        pass
+
+
+_load_dotenv()
 
 
 class Settings:
@@ -42,6 +48,13 @@ class Settings:
     def ingest_enabled(self) -> bool:
         return bool(self.ingest_token)
 
+    # Venue-local calendar (D25). The container clock is UTC, so `date.today()`
+    # is already tomorrow for a US evening. Day-of defaults, deadlines, and
+    # retention cutoffs use this zone. Read live so tests can monkeypatch it.
+    @property
+    def venue_tz(self) -> str:
+        return os.getenv("COURTOPS_VENUE_TZ", "America/New_York").strip()
+
     _DEV_ENVS = {"dev", "development", "local", "test", "ci"}
     _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}
 
@@ -65,19 +78,23 @@ class Settings:
     def is_prod(self) -> bool:
         return self._resolved_env() not in self._DEV_ENVS
 
-    @property
-    def dsn(self) -> str:
-        return (
-            f"host={self.host} port={self.port} dbname={self.dbname} "
-            f"user={self.user} password={self.password} sslmode={self.sslmode}"
+    def _conninfo(self, dbname: str) -> str:
+        # make_conninfo quotes values, so a password with a space or quote does
+        # not corrupt the DSN. connect_timeout bounds a blackholed database.
+        from psycopg.conninfo import make_conninfo
+        return make_conninfo(
+            host=self.host, port=self.port, dbname=dbname,
+            user=self.user, password=self.password, sslmode=self.sslmode,
+            connect_timeout=5,
         )
 
     @property
+    def dsn(self) -> str:
+        return self._conninfo(self.dbname)
+
+    @property
     def admin_dsn(self) -> str:
-        return (
-            f"host={self.host} port={self.port} dbname={self.admin_dbname} "
-            f"user={self.user} password={self.password} sslmode={self.sslmode}"
-        )
+        return self._conninfo(self.admin_dbname)
 
     def validate(self) -> None:
         """Fail fast on insecure POC defaults outside dev (PII hardening H1 —
@@ -98,6 +115,10 @@ class Settings:
                 "require / verify-ca / verify-full"
             )
         from . import crypto  # local import: crypto pulls in `cryptography`
+        try:
+            crypto.validate_keys()
+        except (TypeError, ValueError) as e:
+            problems.append(f"PII_ENCRYPTION_KEY(S) is not a valid Fernet key: {e}")
         if crypto.using_dev_key():
             problems.append(
                 "PII_ENCRYPTION_KEY is the POC dev default — set a real Fernet key "
@@ -112,3 +133,7 @@ class Settings:
 
 
 settings = Settings()
+
+# Hard ceiling for an API request body (imports, roster uploads, ingest).
+# The app and its Postgres share one container; an unbounded upload can OOM both.
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024

@@ -12,14 +12,28 @@
 #   docker volume create courtops_data
 #   docker run -d --name courtops --restart unless-stopped \
 #       -v courtops_data:/opt/courtops/pgdata \
+#       -e ADMIN_PASSWORD='choose-a-strong-one' \
 #       -p 127.0.0.1:8000:8000 ghcr.io/vkozyrev0/tennis-app:latest
+#
+# The port is published on loopback only: Caddy is the public listener.
+# ENV=prod is intentionally absent. The bundled Postgres speaks plaintext on
+# loopback with the POC role, and the app's boot guard refuses that combination
+# under ENV=prod. A real deployment splits the database out; see docs/deploy.md.
 #
 # Then run Caddy (host install, or the official caddy image) with this file.
 # Replace courtops.example.com with your domain — that's all Caddy needs to get
 # a valid cert.
 
 courtops.example.com {
+	# Bound uploads at the edge as well as in the app.
+	request_body {
+		max_size 25MB
+	}
+	# D26: the all-in-one image cannot run ENV=prod (the boot guard refuses the
+	# bundled loopback Postgres with default creds and a non-TLS DSN), so the app
+	# does not emit HSTS here. Set it at the edge instead. A split-DB deployment
+	# with ENV=prod gets HSTS from the app as well.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 	# App already sets CSP / nosniff / X-Frame-Options / Referrer-Policy (D17).
-	# Caddy still terminates TLS; ENV=prod enables HSTS on the app responses.
 	reverse_proxy 127.0.0.1:8000
 }

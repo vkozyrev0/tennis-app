@@ -61,6 +61,7 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
         )
         entry = cur.fetchone()
         was_alternate = bool(entry and entry["selection_status"] == "alternate")
+        prior_status = entry["selection_status"] if entry else None
 
         # Reason rule (§2.4): required unless they were an alternate.
         if not was_alternate and not (body.reason and body.reason.strip()):
@@ -79,11 +80,12 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
         cur.execute(
             """
             INSERT INTO withdrawal
-                (tournament_id, player_id, events, reason, notes, was_alternate, source_email_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                (tournament_id, player_id, events, reason, notes, was_alternate,
+                 prior_status, source_email_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
             (tournament_id, pid, body.events, body.reason, body.notes,
-             was_alternate, body.source_email_id),
+             was_alternate, prior_status, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
 
@@ -117,8 +119,31 @@ def update_withdrawal(withdrawal_id: int, body: WithdrawalUpdate, conn=Depends(d
 
 @router.delete("/api/withdrawals/{withdrawal_id}", status_code=204)
 def delete_withdrawal(withdrawal_id: int, conn=Depends(db_dep)):
+    """D24: undo the roster flip this withdrawal made.
+
+    Restore the status the row replaced, but only while the player is still
+    withdrawn and no other withdrawal for this tournament/player remains. A
+    later roster edit therefore wins over a stale delete.
+    """
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM withdrawal WHERE id = %s", (withdrawal_id,))
-        if cur.rowcount == 0:
+        cur.execute(
+            "SELECT tournament_id, player_id, prior_status FROM withdrawal WHERE id = %s",
+            (withdrawal_id,),
+        )
+        w = cur.fetchone()
+        if w is None:
             raise HTTPException(status_code=404, detail="withdrawal not found")
+        cur.execute("DELETE FROM withdrawal WHERE id = %s", (withdrawal_id,))
+        if w["prior_status"] is not None:
+            cur.execute(
+                "SELECT 1 FROM withdrawal WHERE tournament_id = %s AND player_id = %s LIMIT 1",
+                (w["tournament_id"], w["player_id"]),
+            )
+            if cur.fetchone() is None:
+                cur.execute(
+                    "UPDATE tournament_entry SET selection_status = %s "
+                    "WHERE tournament_id = %s AND player_id = %s "
+                    "  AND selection_status = 'withdrawn'",
+                    (w["prior_status"], w["tournament_id"], w["player_id"]),
+                )
     return Response(status_code=204)
