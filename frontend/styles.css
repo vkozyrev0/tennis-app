@@ -1053,6 +1053,15 @@ input:user-invalid, select:user-invalid, textarea:user-invalid,
   background: rgba(198, 40, 40, 0.10);
 }
 
+/* Server validation marks the offending field via markInvalid(), which sets
+   aria-invalid and .field-error. Both selectors are kept because callers may
+   set either one. */
+input.field-error, select.field-error, textarea.field-error,
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
+  border-color: var(--bad);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 25%, transparent);
+}
+
 .actions-row { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.55rem; }
 
 /* ==========================================================================
