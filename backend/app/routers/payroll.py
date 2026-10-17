@@ -18,6 +18,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..export_audit import log_export
 from ..export_gate import csv_safe
@@ -259,12 +260,12 @@ def mark_paid(record_id: int, body: PayrollMarkPaid, user=Depends(require_admin)
         cur.execute(
             "UPDATE payroll_record SET "
             "  paid = %(paid)s, "
-            "  paid_at = CASE WHEN %(paid)s THEN COALESCE(%(paid_at)s, CURRENT_DATE) END, "
+            "  paid_at = CASE WHEN %(paid)s THEN COALESCE(%(paid_at)s, %(today)s::date) END, "
             "  paid_method = CASE WHEN %(paid)s THEN %(paid_method)s END, "
             "  paid_note = CASE WHEN %(paid)s THEN %(paid_note)s END "
             "WHERE id = %(id)s "
             f"RETURNING {_REC_COLS.replace('r.', '')}",
-            {**body.model_dump(), "id": record_id},
+            {**body.model_dump(), "id": record_id, "today": today_venue()},
         )
         row = cur.fetchone()
         if rec["assignment_id"] is not None:
@@ -359,7 +360,7 @@ def create_batch(tournament_id: int, body: PaymentBatchCreate,
         ids = list(dict.fromkeys(body.record_ids))
         cur.execute(
             "SELECT id, assignment_id, tournament_id, paid, batch_id "
-            "FROM payroll_record WHERE id = ANY(%s)", (ids,))
+            "FROM payroll_record WHERE id = ANY(%s) ORDER BY id FOR UPDATE", (ids,))
         found = {r["id"]: r for r in cur.fetchall()}
         missing = [i for i in ids if i not in found]
         if missing:

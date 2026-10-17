@@ -72,7 +72,8 @@ _COLS = (
 
 @router.get("", response_model=list[PlayerOut])
 def list_players(response: Response, q: str | None = None,
-                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                 limit: int | None = None, offset: int = 0,
+                 user=Depends(require_admin), conn=Depends(db_dep)):
     """Optionally server-side searched/paged — the GET /api/emails pattern
     extended to the next big list (UI backlog). `q` ILIKE-matches USTA # and
     name (plaintext columns only — contact/birthdate are encrypted at rest),
@@ -93,6 +94,14 @@ def list_players(response: Response, q: str | None = None,
                             where=where, params=params,
                             order_by=" ORDER BY last_name, first_name",
                             limit=limit, offset=offset)
+        if rows:
+            # D20: the catalog lists decrypted parent contact, so record that the
+            # list was opened. One row per request, never the search text (which
+            # may contain a name).
+            log_access(cur, username=user["username"], action="view_player_list",
+                       resource_type="player_list",
+                       detail={"surface": "player_list", "limit": limit,
+                               "offset": offset, "searched": bool(q)})
         return [_decrypt_contact(r) for r in rows]
 
 
@@ -120,12 +129,17 @@ def search_players(q: str, limit: int = 10, conn=Depends(db_dep)):
 
 
 @router.get("/{player_id}", response_model=PlayerOut)
-def get_player(player_id: int, conn=Depends(db_dep)):
+def get_player(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(f"SELECT {_COLS} FROM player WHERE id = %s", (player_id,))
         row = cur.fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail="player not found")
+        if row is None:
+            raise HTTPException(status_code=404, detail="player not found")
+        # D20: a targeted catalog read is the same PII surface as player 360, so
+        # it gets the same accountability (identity only, never names or contact).
+        log_access(cur, username=user["username"], action="view_player",
+                   resource_type="player", resource_id=player_id,
+                   detail={"surface": "player_get"})
     return _decrypt_contact(row)
 
 
@@ -213,7 +227,7 @@ def player_overview(
 
 
 @router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])
-def player_history(player_id: int, conn=Depends(db_dep)):
+def player_history(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -224,6 +238,10 @@ def player_history(player_id: int, conn=Depends(db_dep)):
             (player_id,),
         )
         rows = cur.fetchall()
+        if rows:
+            log_access(cur, username=user["username"], action="view_player_history",
+                       resource_type="player", resource_id=player_id,
+                       detail={"surface": "player_history"})
     for r in rows:                          # decrypt the at-rest birthdate (PII H2)
         r["birthdate"] = _dec_pii(r.get("birthdate"))
     return rows

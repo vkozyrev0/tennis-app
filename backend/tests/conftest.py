@@ -99,4 +99,6 @@ def _reset_login_throttle():
     from app.routers import auth
     auth._attempts.clear()
     auth._locked_until.clear()
+    auth._ip_attempts.clear()
+    auth._ip_locked_until.clear()
     yield

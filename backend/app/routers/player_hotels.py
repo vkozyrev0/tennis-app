@@ -4,6 +4,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..models import (
     PlayerHotelCreate,
@@ -355,9 +356,9 @@ def place_tshirt_order(tournament_id: int, conn=Depends(db_dep)):
         # display rows; unknown sizes are stored on the live count but skipped here.
         snap = {code: int(live.get(code, 0)) for code, _ in _SIZE_ORDER}
         cur.execute(
-            "UPDATE tshirt_order SET ordered_at = CURRENT_DATE, snapshot = %s::jsonb, updated_at = now() "
+            "UPDATE tshirt_order SET ordered_at = %s::date, snapshot = %s::jsonb, updated_at = now() "
             "WHERE tournament_id = %s",
-            (json.dumps(snap), tournament_id),
+            (today_venue(), json.dumps(snap), tournament_id),
         )
     return get_tshirt_order(tournament_id, conn)
 

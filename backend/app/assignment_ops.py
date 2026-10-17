@@ -219,7 +219,8 @@ def _check_room_capacity(cur, room_block_id, exclude_id=None) -> None:
     """Hard guard: refuse to put an official in a block with no rooms left."""
     if room_block_id is None:
         return
-    cur.execute("SELECT room_count FROM room_block WHERE id = %s", (room_block_id,))
+    cur.execute("SELECT room_count FROM room_block WHERE id = %s FOR UPDATE",
+                (room_block_id,))
     rb = cur.fetchone()
     if rb is None:
         raise HTTPException(status_code=400, detail="room_block_id does not exist")

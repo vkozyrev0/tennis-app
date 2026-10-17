@@ -106,10 +106,3 @@ def require_admin(user=Depends(require_usable_session)) -> dict:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="admin only")
     return user
-
-
-def require_export_pii(user=Depends(require_admin)) -> dict:
-    """H4.2: admin who may download full minors-PII CSVs (can_export_pii)."""
-    from .export_gate import require_can_export_pii
-    require_can_export_pii(user, redacted=False)
-    return user

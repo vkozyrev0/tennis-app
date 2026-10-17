@@ -21,19 +21,25 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 _DUMMY_HASH = hash_pw(secrets.token_urlsafe(16))
 
 
-# In-process rate limiter: keyed on (client_ip, username_lower). 5 failures in
-# 5 minutes trip a 5-minute lockout. Resets on a successful login. For a POC
-# this is intentionally in-memory; a multi-worker deployment needs a shared
-# store (Redis or a `login_attempt` table).
+# In-process rate limiter. Two buckets: (client_ip, username_lower) with 5
+# failures in 5 minutes, and a global per-IP bucket with 20 failures in the
+# same window. The per-key cap alone is bypassed by rotating usernames, and the
+# per-IP cap alone would lock out a whole office NAT after one bad actor. Both
+# reset after their window; a successful login clears only the user key, never
+# the IP bucket. For a POC this is intentionally in-memory; a multi-worker
+# deployment needs a shared store (Redis or a `login_attempt` table).
 _FAIL_WINDOW_S = 300
 _FAIL_LIMIT = 5
+_IP_FAIL_LIMIT = 20
 _LOCKOUT_S = 300
 _attempts: dict[tuple[str, str], list[float]] = defaultdict(list)
 _locked_until: dict[tuple[str, str], float] = {}
+_ip_attempts: dict[str, list[float]] = defaultdict(list)
+_ip_locked_until: dict[str, float] = {}
 _lock = Lock()
 
 
-_MAX_TRACKED_KEYS = 10_000  # bound the dict so a sprayer can't exhaust memory
+_MAX_TRACKED_KEYS = 10_000  # bound the dicts so a sprayer can't exhaust memory
 
 
 def _gc_attempts(now: float) -> None:
@@ -51,13 +57,26 @@ def _gc_attempts(now: float) -> None:
                 _attempts[k] = kept
             else:
                 _attempts.pop(k, None)
+    for ip in list(_ip_attempts.keys()):
+        with _lock:
+            bucket = _ip_attempts.get(ip)
+            if bucket is None:
+                continue
+            kept = [t for t in bucket if now - t < _FAIL_WINDOW_S]
+            if kept:
+                _ip_attempts[ip] = kept
+            else:
+                _ip_attempts.pop(ip, None)
     with _lock:
         for k, until in list(_locked_until.items()):
             if now >= until:
                 _locked_until.pop(k, None)
+        for ip, until in list(_ip_locked_until.items()):
+            if now >= until:
+                _ip_locked_until.pop(ip, None)
 
 
-def _record_fail(key: tuple[str, str]) -> None:
+def _record_fail(key: tuple[str, str], ip: str | None = None) -> None:
     now = time.monotonic()
     # Audit N6 + M11 + F24: opportunistic GC of stale entries. Trigger at hard
     # cap or on ~1% of calls so cleanup pressure tracks the request rate.
@@ -69,20 +88,39 @@ def _record_fail(key: tuple[str, str]) -> None:
         _attempts[key] = bucket
         if len(bucket) >= _FAIL_LIMIT:
             _locked_until[key] = now + _LOCKOUT_S
+        if ip is not None:
+            ip_bucket = [t for t in _ip_attempts.get(ip, []) if now - t < _FAIL_WINDOW_S]
+            ip_bucket.append(now)
+            _ip_attempts[ip] = ip_bucket
+            if len(ip_bucket) >= _IP_FAIL_LIMIT:
+                _ip_locked_until[ip] = now + _LOCKOUT_S
 
 
-def _check_lock(key: tuple[str, str]) -> None:
+def _check_lock(key: tuple[str, str], ip: str | None = None) -> None:
+    """D22: refuse while either the user key or the whole client IP is locked.
+
+    The per-IP bucket catches a sprayer rotating usernames. Deployments behind
+    a proxy must set ``FORWARDED_ALLOW_IPS`` (uvicorn trusts only the loopback
+    proxy by default) or every client shares the proxy's address and one bad
+    actor can lock out the rest.
+    """
     now = time.monotonic()
     with _lock:
         until = _locked_until.get(key)
-        if until and now < until:
+        ip_until = _ip_locked_until.get(ip) if ip is not None else None
+        if ip_until is not None and now < ip_until:
+            until = max(until or 0.0, ip_until)
+        if until is not None and now < until:
             raise HTTPException(
                 status_code=429,
                 detail=f"too many failed attempts; retry in {int(until - now)}s",
             )
-        if until and now >= until:
+        if until is not None and now >= until:
             _locked_until.pop(key, None)
             _attempts.pop(key, None)
+        if ip_until is not None and now >= ip_until:
+            _ip_locked_until.pop(ip, None)
+            _ip_attempts.pop(ip, None)
 
 
 def _clear_attempts(key: tuple[str, str]) -> None:
@@ -151,7 +189,7 @@ def _user_public(user: dict) -> dict:
 def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_dep)):
     client_ip = request.client.host if request.client else "?"
     key = (client_ip, (body.username or "").strip().lower())
-    _check_lock(key)
+    _check_lock(key, client_ip)
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, username, password_hash, role, official_id, can_export_pii, "
@@ -165,7 +203,7 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(db_d
             # faster 401 leaks which usernames exist (see _DUMMY_HASH).
             if user is None:
                 verify_pw(body.password, _DUMMY_HASH)
-            _record_fail(key)
+            _record_fail(key, client_ip)
             raise HTTPException(status_code=401, detail="invalid username or password")
         # D3: still on the POC default admin/admin password → require rotation
         # (enforced in prod via require_usable_session; SPA always sees the flag).

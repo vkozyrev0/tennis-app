@@ -2,6 +2,7 @@
 tournament_entry (source=late_entry) and marks the source email filed (audit §4.1)."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..models import LateEntryCreate, LateEntryOut, LateEntryUpdate
 from ..playerops import mark_email_filed, upsert_player
@@ -12,9 +13,7 @@ router = APIRouter(tags=["late-entries"])
 _COLS = """
 le.id, le.tournament_id, le.player_id, le.request_date, le.request_time,
        le.age_division, le.events, le.source_email_id, em.subject AS source_subject,
-       p.usta_number, p.first_name, p.last_name,
-       (t.late_entry_deadline IS NOT NULL
-        AND COALESCE(le.request_date, CURRENT_DATE) > t.late_entry_deadline) AS past_deadline
+       p.usta_number, p.first_name, p.last_name, t.late_entry_deadline
 """
 _FROM = """
 FROM late_entry le
@@ -23,6 +22,15 @@ JOIN tournament t ON t.id = le.tournament_id
 LEFT JOIN email_message em ON em.id = le.source_email_id
 """
 _SELECT = f"SELECT {_COLS} {_FROM}"
+
+
+def _with_deadline(row: dict) -> dict:
+    """`past_deadline` is decided on the venue's calendar (D25), not the
+    database container's UTC date."""
+    deadline = row.pop("late_entry_deadline", None)
+    requested = row.get("request_date") or today_venue()
+    row["past_deadline"] = bool(deadline is not None and requested > deadline)
+    return row
 
 
 @router.get("/api/tournaments/{tournament_id}/late-entries", response_model=list[LateEntryOut])
@@ -35,10 +43,11 @@ def list_late_entries(tournament_id: int, response: Response, q: str | None = No
         params += [f"%{like_escape(q.strip())}%"] * n
     where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        return paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+        rows = paged_select(cur, response, cols=_COLS, from_sql=_FROM,
                             where=where, params=params,
                             order_by=" ORDER BY le.request_date, le.id",
                             limit=limit, offset=offset)
+        return [_with_deadline(r) for r in rows]
 
 
 @router.post("/api/tournaments/{tournament_id}/late-entries",
@@ -56,7 +65,14 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         # registered gender. New players are rejected by upsert_player.
         pid = upsert_player(cur, body.usta_number, body.first_name, body.last_name, body.gender)
 
-        # Put them on the roster (source=late_entry) if not already there.
+        # Put them on the roster (source=late_entry) if not already there, and
+        # remember whether this filing created the row so deleting it can undo
+        # that (D24).
+        cur.execute(
+            "SELECT 1 FROM tournament_entry WHERE tournament_id = %s AND player_id = %s",
+            (tournament_id, pid),
+        )
+        created_entry = cur.fetchone() is None
         cur.execute(
             """
             INSERT INTO tournament_entry
@@ -73,11 +89,11 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
             """
             INSERT INTO late_entry
                 (tournament_id, player_id, request_date, request_time, age_division,
-                 events, source_email_id)
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                 events, source_email_id, created_entry)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
             (tournament_id, pid, body.request_date, body.request_time,
-             body.age_division, body.events, body.source_email_id),
+             body.age_division, body.events, body.source_email_id, created_entry),
         )
         new_id = cur.fetchone()["id"]
 
@@ -85,7 +101,7 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         mark_email_filed(cur, body.source_email_id, "late_entry")
 
         cur.execute(_SELECT + " WHERE le.id = %s", (new_id,))
-        return cur.fetchone()
+        return _with_deadline(cur.fetchone())
 
 
 @router.put("/api/late-entries/{entry_id}", response_model=LateEntryOut)
@@ -99,13 +115,38 @@ def update_late_entry(entry_id: int, body: LateEntryUpdate, conn=Depends(db_dep)
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="late entry not found")
         cur.execute(_SELECT + " WHERE le.id = %s", (entry_id,))
-        return cur.fetchone()
+        return _with_deadline(cur.fetchone())
 
 
 @router.delete("/api/late-entries/{entry_id}", status_code=204)
 def delete_late_entry(entry_id: int, conn=Depends(db_dep)):
+    """D24: if this filing put the player on the roster, take them back off.
+
+    Only when no other late entry or withdrawal still references the player,
+    and only while the row is still the one the late entry created.
+    """
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM late_entry WHERE id = %s", (entry_id,))
-        if cur.rowcount == 0:
+        cur.execute(
+            "SELECT tournament_id, player_id, created_entry FROM late_entry WHERE id = %s",
+            (entry_id,),
+        )
+        le = cur.fetchone()
+        if le is None:
             raise HTTPException(status_code=404, detail="late entry not found")
+        cur.execute("DELETE FROM late_entry WHERE id = %s", (entry_id,))
+        if le["created_entry"]:
+            cur.execute(
+                "SELECT 1 FROM late_entry WHERE tournament_id = %s AND player_id = %s "
+                "UNION ALL "
+                "SELECT 1 FROM withdrawal WHERE tournament_id = %s AND player_id = %s "
+                "LIMIT 1",
+                (le["tournament_id"], le["player_id"],
+                 le["tournament_id"], le["player_id"]),
+            )
+            if cur.fetchone() is None:
+                cur.execute(
+                    "DELETE FROM tournament_entry "
+                    "WHERE tournament_id = %s AND player_id = %s AND source = 'late_entry'",
+                    (le["tournament_id"], le["player_id"]),
+                )
     return Response(status_code=204)

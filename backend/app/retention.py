@@ -22,6 +22,8 @@ tool; this sweep is the policy-driven job.
 """
 import os
 
+from .clock import today_venue
+
 
 def _parse_days(raw: str | None) -> int:
     """Parse the retention window; a malformed value falls back to 90 instead
@@ -36,7 +38,8 @@ def _parse_days(raw: str | None) -> int:
 DEFAULT_EMAIL_RETENTION_DAYS = _parse_days(os.getenv("EMAIL_RETENTION_DAYS", "90"))
 
 # Eligible = filed, still has free text, and its tournament concluded (or, if
-# untournamented, it was received) more than N days ago.
+# untournamented, it was received) more than N days ago. The cutoff date comes
+# from the venue clock (D25), not the container's UTC `current_date`.
 _ELIGIBLE_EMAIL_IDS = (
     "SELECT e.id FROM email_message e "
     "LEFT JOIN tournament t ON t.id = e.tournament_id "
@@ -44,7 +47,7 @@ _ELIGIBLE_EMAIL_IDS = (
     "  AND (e.body IS NOT NULL OR e.subject IS NOT NULL OR e.from_address IS NOT NULL "
     "       OR e.to_address IS NOT NULL OR e.detected_usta_text IS NOT NULL "
     "       OR e.detected_name_pairs IS NOT NULL OR e.detected_reason IS NOT NULL) "
-    "  AND COALESCE(t.play_end_date, e.received_at::date) < current_date - %s::int"
+    "  AND COALESCE(t.play_end_date, e.received_at::date) < %s::date - %s::int"
 )
 
 
@@ -87,11 +90,12 @@ def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = Tr
     # must too (it's the one wired to a scheduler).
     if days < 0:
         raise ValueError("older_than_days must be >= 0")
-    cur.execute(_ELIGIBLE_EMAIL_IDS, (days,))
+    today = today_venue()
+    cur.execute(_ELIGIBLE_EMAIL_IDS, (today, days))
     ids = [r["id"] for r in cur.fetchall()]
     cur.execute(
-        "SELECT count(*) AS n FROM import_batch WHERE created_at < current_date - %s::int",
-        (days,),
+        "SELECT count(*) AS n FROM import_batch WHERE created_at < %s::date - %s::int",
+        (today, days),
     )
     import_batches = cur.fetchone()["n"]
     inbox_people = 0
@@ -106,8 +110,8 @@ def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = Tr
         inbox_people = cur.rowcount
     if import_batches and not dry_run:
         cur.execute(
-            "DELETE FROM import_batch WHERE created_at < current_date - %s::int",
-            (days,),
+            "DELETE FROM import_batch WHERE created_at < %s::date - %s::int",
+            (today, days),
         )
     return {
         "dry_run": dry_run,

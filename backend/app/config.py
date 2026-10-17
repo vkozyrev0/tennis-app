@@ -6,13 +6,19 @@ see docs/roadmap.md §Stack security note). Override via backend/.env or env var
 import os
 from pathlib import Path
 
-# Load backend/.env if python-dotenv is available (optional).
-try:
-    from dotenv import load_dotenv
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
-except Exception:
-    pass
+def _load_dotenv() -> None:
+    """Load backend/.env when python-dotenv is installed. Never fails import:
+    the deployed image gets its config from the environment."""
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    except Exception:
+        pass
+
+
+_load_dotenv()
 
 
 class Settings:
@@ -41,6 +47,13 @@ class Settings:
     @property
     def ingest_enabled(self) -> bool:
         return bool(self.ingest_token)
+
+    # Venue-local calendar (D25). The container clock is UTC, so `date.today()`
+    # is already tomorrow for a US evening. Day-of defaults, deadlines, and
+    # retention cutoffs use this zone. Read live so tests can monkeypatch it.
+    @property
+    def venue_tz(self) -> str:
+        return os.getenv("COURTOPS_VENUE_TZ", "America/New_York").strip()
 
     _DEV_ENVS = {"dev", "development", "local", "test", "ci"}
     _SECURE_SSLMODES = {"require", "verify-ca", "verify-full"}

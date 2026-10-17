@@ -2,6 +2,7 @@
 profile and availability. Officials never touch the admin routers."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..clock import today_venue
 from ..db import db_dep
 from ..ical import build_schedule_ics
 from ..models import AssignmentResponse, MyAvailabilitySet, OfficialCreate
@@ -48,10 +49,10 @@ def _official_may_access_tournament(cur, official_id: int, tournament_id: int) -
               SELECT 1 FROM availability av
               WHERE av.official_id = %s AND av.tournament_id = t.id
             )
-            OR t.play_end_date >= CURRENT_DATE
+            OR t.play_end_date >= %s
           )
         """,
-        (tournament_id, official_id, official_id),
+        (tournament_id, official_id, official_id, today_venue()),
     )
     return cur.fetchone() is not None
 
@@ -121,11 +122,11 @@ def my_tournaments(user=Depends(get_current_user), conn=Depends(db_dep)):
                   SELECT 1 FROM availability av
                   WHERE av.official_id = %s AND av.tournament_id = t.id
                 )
-                OR t.play_end_date >= CURRENT_DATE
+                OR t.play_end_date >= %s
               )
             ORDER BY t.play_start_date DESC
             """,
-            (oid, oid),
+            (oid, oid, today_venue()),
         )
         return cur.fetchall()
 

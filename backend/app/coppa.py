@@ -24,6 +24,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from .clock import today_venue
 from .config import settings
 
 # COPPA's bright line (16 CFR Part 312): under 13.
@@ -93,7 +94,7 @@ def age_years(
     anchor = conservative_birth_anchor(birthdate, precision)
     if anchor is None:
         return None
-    today = as_of or date.today()
+    today = as_of or today_venue()
     years = today.year - anchor.year
     if (today.month, today.day) < (anchor.month, anchor.day):
         years -= 1
