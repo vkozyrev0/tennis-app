@@ -174,15 +174,17 @@ def test_leftover_prompt_is_one_shared_template():
 def test_docs_inventory_cites_shipped_inbox_idle_mail():
     """docs/README + data-model + test-coverage must name live surfaces."""
     root = Path(__file__).resolve().parents[2]
-    readme = (root / "docs" / "README.md").read_text(encoding="utf-8")
-    # docker-compose mounts backend/ not docs/; the baked image README still
-    # says 0055. CI copies the tree, so 0060 must be present there.
-    if "migrations through **0055**" in readme and "0060" not in readme:
+    readme_path = root / "docs" / "README.md"
+    if not readme_path.exists():
         pytest.skip("docs/ not mounted in this environment")
+    readme = readme_path.read_text(encoding="utf-8")
     model = (root / "docs" / "data-model.md").read_text(encoding="utf-8")
     coverage = (root / "docs" / "test-coverage.md").read_text(encoding="utf-8")
     ingest = (root / "docs" / "email-ingest.md").read_text(encoding="utf-8")
-    assert "0060" in readme
+    # Derive the head so a new migration cannot leave a stale citation behind.
+    head = max(p.stem.split("_")[0]
+               for p in (root / "backend" / "migrations").glob("*.sql"))
+    assert head in readme
     assert "inbox people" in readme.lower() or "inbox_person" in readme
     assert "Still there?" in readme
     assert "inbox_person" in model

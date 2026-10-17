@@ -80,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
     need("docs/test-coverage.md", rf"That is \*\*{frontend_tests}\*\* `frontend/app/\*\.test\.mjs`",
          f"That is **{frontend_tests}** frontend test files")
     need("docs/design.md", rf"\b{migration}\b", f"migration head {migration}")
+    need("docs/test-coverage.md", rf"Migrations through \*\*{migration}\*\*",
+         f"migration head {migration}")
 
     if problems:
         print("\n".join(problems))

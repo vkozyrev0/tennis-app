@@ -6,8 +6,8 @@ Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
 `backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
 `# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
 without coverage. Re-run `pytest --collect-only -q` after large adds.
-Migrations through **0060** (`inbox_person`; Outlook feed 0058; email
-`deleted_at` 0059).
+Migrations through **0061** (`partb_delete_undo`; `inbox_person` 0060; Outlook
+feed 0058; email `deleted_at` 0059).
 
 **C2 module map (2026-07-21):** email bulk/detect/stamp and assignment ops/bulk
 are split out of the large routers; API paths and re-exports for tests are
