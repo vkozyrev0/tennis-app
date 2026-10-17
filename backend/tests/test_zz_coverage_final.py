@@ -21,10 +21,6 @@ from app.triage import classify
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -448,18 +444,21 @@ def test_room_block_put_missing_id():
 
 def test_assignment_chair_needs_site_and_hotel_mismatch_report():
     t = _t()
+    site = _ok(client.post("/api/sites", json={"name": "FinS " + uuid.uuid4().hex[:5]}))
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site["id"]]}), 200)
     o = _ok(client.post("/api/officials", json={"first_name": "Ch", "last_name": uuid.uuid4().hex[:5]}))
     _ok(client.post(f"/api/officials/{o['id']}/certifications", json={"cert_type": "chair_umpire"}))
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                        json={"official_id": o["id"], "site_id": site["id"]}))
     day = client.post(f"/api/assignments/{a['id']}/days", json={
         "work_date": t["play_start_date"], "working_as": "chair_umpire",
     })
-    assert day.status_code in (201, 400), day.text
-    if day.status_code == 201:
-        r = client.put(f"/api/assignments/{a['id']}", json={
-            "official_id": o["id"], "site_id": None,
-        })
-        assert r.status_code == 400
+    assert day.status_code == 201, day.text
+    r = client.put(f"/api/assignments/{a['id']}", json={
+        "official_id": o["id"], "site_id": None,
+    })
+    assert r.status_code == 400
     # hotel mismatch flag on conflicts
     hotel = _ok(client.post("/api/hotels", json={"name": "Mis " + uuid.uuid4().hex[:4]}))
     rb = _ok(client.post("/api/room-blocks", json={
@@ -533,10 +532,10 @@ def test_official_second_username_unique():
 
 
 def test_require_export_pii_function():
-    from app.security import require_export_pii
+    from app.export_gate import require_can_export_pii
     with pytest.raises(HTTPException) as ei:
-        require_export_pii({"role": "admin", "can_export_pii": False, "id": 1,
-                            "must_change_password": False})
+        require_can_export_pii({"role": "admin", "can_export_pii": False, "id": 1,
+                                "must_change_password": False})
     assert ei.value.status_code == 403
 
 
@@ -607,8 +606,8 @@ def test_users_delete_other_when_last():
     extra = client.post("/api/admin/users", json={
         "username": "last_" + uuid.uuid4().hex[:6], "password": "password1",
     })
-    if extra.status_code == 201:
-        eid = extra.json()["id"]
-        # logged in as seed admin; deleting extra when more than one admin succeeds
-        r = client.delete(f"/api/admin/users/{eid}")
-        assert r.status_code in (204, 409, 400)
+    assert extra.status_code == 201, extra.text
+    eid = extra.json()["id"]
+    # logged in as seed admin; deleting extra when more than one admin succeeds
+    r = client.delete(f"/api/admin/users/{eid}")
+    assert r.status_code == 204, r.text

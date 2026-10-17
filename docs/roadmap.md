@@ -11,9 +11,9 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 > (see *On hold*). Later rounds — **D11**
 > frontend split, security/COPPA/export audit, email auto-ingest app side, Fly
 > persistent volume + inbox triage UX — are in [changelog.md](changelog.md).
-> Suite: **1065** tests / **114** files, the figure in [test-coverage.md](test-coverage.md)
-> (collected 2026-10-17; file count and migration head **0060** rechecked
-> 2026-09-21). CI (`.github/workflows/docker.yml`)
+> Suite: **1081** tests / **117** files, the figure in [test-coverage.md](test-coverage.md)
+> (collected 2026-10-17; file count and migration head **0061** rechecked
+> 2026-10-17). CI (`.github/workflows/docker.yml`)
 > gates the image build and publishes `ghcr.io/vkozyrev0/tennis-app:latest` on
 > green `main` pushes. Live POC: `https://courtops-poc.fly.dev` (see
 > [deploy.md](deploy.md)).

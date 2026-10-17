@@ -69,10 +69,6 @@ from app.td_chat import (
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -89,19 +85,19 @@ def test_settings_ingest_flags_empty(monkeypatch):
 
 
 def test_dotenv_load_failure_is_swallowed(monkeypatch):
-    import importlib
+    """A missing/broken python-dotenv must not stop the module importing.
 
+    Call the loader directly. Reloading app.config rebuilt `Settings` and left
+    the rest of the suite holding a different object (D35).
+    """
     import app.config as cfg
 
     def _boom(*_a, **_k):
         raise RuntimeError("dotenv down")
 
     monkeypatch.setattr("dotenv.load_dotenv", _boom)
-    importlib.reload(cfg)
-    assert cfg.settings.dbname  # still constructed
-    # Restore a clean module for later tests (env still set by conftest).
-    monkeypatch.undo()
-    importlib.reload(cfg)
+    cfg._load_dotenv()
+    assert cfg.settings.dbname
 
 
 def test_crypto_primary_key_id_short_and_long(monkeypatch):
@@ -136,7 +132,7 @@ def test_password_change_required_env_overrides(monkeypatch):
     assert security.password_change_required(user) is True
 
 
-def test_require_export_pii_uses_gate():
+def test_require_can_export_pii_gate():
     from app.export_gate import require_can_export_pii
     with pytest.raises(HTTPException) as ei:
         require_can_export_pii({"role": "official", "can_export_pii": True})

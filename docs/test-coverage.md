@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-10-17):** **1065 tests** collected (`pytest --collect-only -q`).
+**Status (2026-10-17):** **1081 tests** collected (`pytest --collect-only -q`).
 Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
 `backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
 `# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
@@ -43,7 +43,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-The names in that `test_zz_*.py` cell are examples, not the full tree. There are **114** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
+The names in that `test_zz_*.py` cell are examples, not the full tree. There are **117** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
 
 **Frontend unit checks (JS):** pure frontend logic factored out and asserted by
 DOM-free node test files (independent of AG Grid):
@@ -275,7 +275,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (1065 tests / 114 files)
+python -m pytest -q                                    # the whole suite (1081 tests / 117 files)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -464,7 +464,7 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **1065 tests** across **114** files (see the status line at the top).
+Total suite count: **1081 tests** across **117** files (see the status line at the top).
 Recent inbox/mail additions (2026-09-08): `test_zz_inbox_people` (parallel
 name+USTA list + promote to Players), `test_zz_outlook_feed`, `test_zz_inbox_feeds`,
 `test_zz_gmail_feed` (Get mails / Get all, mailbox-safe Clear).

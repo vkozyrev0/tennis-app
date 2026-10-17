@@ -14,7 +14,6 @@ import pytest
 from app.email_llm import (
     INTENTS,
     leftover_model_intent,
-    leftover_prompt,
     probe_llm,
 )
 from app.importer import _parse_pdf_emails
@@ -45,18 +44,30 @@ def test_gold_intents_are_leftover_intents():
     assert all(g["intent"] in INTENTS for g in _GOLD)
 
 
-def test_extract_uses_shipped_leftover_prompt_builder():
-    src = Path(__file__).resolve().parents[1] / "app" / "email_llm.py"
-    text = src.read_text(encoding="utf-8")
-    assert "def leftover_prompt(" in text
-    assert "prompt = leftover_prompt(subj, clipped)" in text
-    assert "parse_llm_json(raw)" in text
-    assert "def leftover_model_intent(" in text
-    assert "return leftover_model_intent(subject, body)" in text
-    assert "guard_leftover_intent" not in text
-    p = leftover_prompt("Subj X", "Body Y")
-    assert "Subj X" in p and "Body Y" in p
-    assert p.count("{subject}") == 0
+def test_leftover_model_intent_uses_the_shipped_prompt(monkeypatch):
+    """Behavior, not a source grep: the shipped builder is what reaches the
+    transport, with the subject and body substituted in (D35)."""
+    from app import email_llm
+
+    seen = {}
+
+    def fake_complete(prompt):
+        seen["prompt"] = prompt
+        return ('{"intent":"withdrawal",'
+                '"players":[{"name":"Ann","usta":null}],"confidence":0.9}')
+
+    monkeypatch.setattr(email_llm, "llm_enabled", lambda: True)
+    monkeypatch.setattr(email_llm, "_complete", fake_complete)
+    monkeypatch.setattr(email_llm, "budget_allows", lambda: True)
+    monkeypatch.setattr(email_llm, "budget_spend", lambda: None)
+
+    out = email_llm.leftover_model_intent(
+        "Withdraw Ann", "Please withdraw Ann.", bypass_cache=True,
+    )
+    assert out["intent"] == "withdrawal"
+    assert "Withdraw Ann" in seen["prompt"]
+    assert "Please withdraw Ann." in seen["prompt"]
+    assert "{subject}" not in seen["prompt"]
 
 
 _SIDECAR_ENV = {

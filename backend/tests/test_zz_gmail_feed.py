@@ -257,6 +257,67 @@ def test_fetch_imap_failures_and_query_and_uidvalidity(monkeypatch, _admin):
 
 
 @_needs_db
+def test_failed_fetch_does_not_advance_cursor_past_it(monkeypatch, _admin):
+    """D23: a gap in the UID sequence must stop the cursor below the gap."""
+    from app import gmail_feed as gf
+    from app.db import get_conn
+
+    class _Gap(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                return ("OK", [b"21 22 23"])
+            if cmd == "FETCH" and int(args[0]) == 22:
+                return ("NO", [])
+            return super().uid(cmd, *args)
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+    })
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE gmail_feed SET last_uid = 20, uidvalidity = 99 WHERE id = 1")
+        conn.commit()
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _Gap)
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 200, r.text
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_uid, last_status, last_error FROM gmail_feed WHERE id = 1")
+            row = cur.fetchone()
+    assert row["last_uid"] == 21
+    assert row["last_status"] == "partial"
+    assert "22" in (row["last_error"] or "")
+
+
+@_needs_db
+def test_failed_download_persists_the_error_row(monkeypatch, _admin):
+    """D23: the route re-raises, so the error update has to commit on its own."""
+    from app import gmail_feed as gf
+    from app.db import get_conn
+
+    class _Boom(_FakeImap):
+        def uid(self, cmd, *args):
+            if cmd == "SEARCH":
+                raise OSError("imap went away")
+            return super().uid(cmd, *args)
+
+    client.put("/api/gmail-feed", json={
+        "enabled": True, "gmail_address": "director@gmail.com",
+        "app_password": "abcd efgh ijkl mnop",
+    })
+    monkeypatch.setattr(gf.imaplib, "IMAP4_SSL", _Boom)
+    r = client.post("/api/gmail-feed/fetch")
+    assert r.status_code == 502, r.text
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT last_status, last_error FROM gmail_feed WHERE id = 1")
+            row = cur.fetchone()
+    assert row["last_status"] == "error"
+    assert "imap went away" in (row["last_error"] or "")
+
+
+@_needs_db
 def test_gmail_fetch_stamps_source_and_skips_same_rfc_id(monkeypatch, _admin):
     from datetime import date, timedelta
 

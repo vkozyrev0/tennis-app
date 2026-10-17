@@ -11,18 +11,13 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app import email_extract, security
+from app import email_extract
 from app.db import get_conn
 from app.main import app
 from app.routers import auth as auth_mod
 from app.triage import classify
 
 client = TestClient(app)
-
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -75,10 +70,11 @@ def test_successful_event_put_and_hotel_404():
 
 
 def test_require_export_pii_ok():
-    out = security.require_export_pii({
-        "role": "admin", "can_export_pii": True, "must_change_password": False, "id": 1,
-    })
-    assert out["role"] == "admin"
+    from app.export_gate import require_can_export_pii
+    out = require_can_export_pii(
+        {"role": "admin", "can_export_pii": True, "must_change_password": False, "id": 1}
+    )
+    assert out is None
 
 
 def test_td_chat_resolve_raises(monkeypatch):
@@ -290,11 +286,10 @@ def test_chair_day_then_clear_site():
     day = client.post(f"/api/assignments/{a['id']}/days", json={
         "work_date": t["play_start_date"], "working_as": "chair_umpire",
     })
-    assert day.status_code in (201, 400), day.text
-    if day.status_code == 201:
-        r = client.put(f"/api/assignments/{a['id']}",
-                       json={"official_id": o["id"], "site_id": None})
-        assert r.status_code == 400
+    assert day.status_code == 201, day.text
+    r = client.put(f"/api/assignments/{a['id']}",
+                   json={"official_id": o["id"], "site_id": None})
+    assert r.status_code == 400
 
 
 def test_conflicts_hotel_mismatch():

@@ -24,20 +24,8 @@ Severity: **H** high · **M** medium · **L** low
 | D13 | No DB connection pool | ⏸️ | Trigger: multi-worker / multi-instance |
 | D14 | Login throttle process-local | ⏸️ | Trigger: multi-instance |
 | D18 | CSRF not explicit | ⏸️ | **Deferred:** cookie is `SameSite=Strict` + SPA is same-origin only; add CSRF tokens if cross-site clients or non-browser consumers appear |
-| D20 | API PII views are not all audited; `can_export_pii=false` only gates CSV bytes | M | Player 360 logs `access_audit`, but `GET /api/players` / `/{id}` and email-body reads do not; an admin with the flag off can still read contact PII via curl. Decide: redact those responses, log them, or accept as TD back-office access. |
-| D22 | Login throttle keys on `(proxy IP, username)` | M | Random usernames bypass the per-key cap, and behind Fly/Render every client shares the proxy IP, so five bad guesses can lock out `admin`. Add a global per-IP cap and set trusted proxy headers. |
-| D23 | Feed cursor advances past failed messages | L | Gmail/Outlook write `last_uid`/`last_received_at` even when rows errored, and the `last_status='error'` write is rolled back. Advance only past successes and persist the error separately. |
-| D24 | Deleting a withdrawal/late entry leaves its roster side effect | L | The delete removes the row but the roster stays `withdrawn` or keeps the inserted entry. Restore the prior status/remove the sourced row. |
-| D25 | Server-local dates for day-of/deadlines/retention | L | `date.today()` / `CURRENT_DATE` on a UTC container is off by one for US evenings. Use a configured venue timezone. |
-| D26 | Deploy hygiene | L | No `pg_advisory_lock` around migrations, base images/GGUF not digest/checksum pinned, and the Caddy example omits `ENV=prod`. |
-| D27 | Room-block and payment-batch check-then-act | L | Capacity/payment checks read then write without `FOR UPDATE`; two admins can overbook or double-batch. |
-| D28 | LLM corpus tests skip in CI | L | The sidecar-dependent corpus suites skip unless a local llama.cpp answers on :8080; CI has no sidecar. Record responses or add a sidecar job. |
-| D30 | `require_export_pii` has no production caller | L | Defined in `security.py`, used only by a coverage test; live CSV routes use `require_admin`. Wire it into the minors-PII server CSV routes or delete it and its test. |
-| D31 | No test that a self-service password change kills other sessions | L | `auth.change_password` deletes other sessions; the suite checks the current session only. Add a two-session test. |
-| D32 | Login-enumeration test is timing-based | L | `test_zz_login_enum.py` asserts a wall-clock ratio. Monkeypatch `verify_pw` and assert the dummy-hash path instead. |
-| D33 | Query-ceiling test depends on accumulated rows | L | `test_zz_contracts.py` asserts `<= 6` queries against the shared inbox; scope it to a fresh tournament. |
-| D34 | 44 of 62 frontend modules have no direct test | L | `util`, `export_csv`, and `print` now have tests; the rest (including `auth.js`, `state.js`, `grids.js`) rely on the browser smoke. Add focused unit tests as the modules change. |
-| D35 | Test-pattern debt | L | Skip-masking setup, conditional assertion blocks, source-text assertions, and a config-reload test that creates divergent `settings` objects remain in the coverage-only suites (`test_zz_coverage_*`, `test_zz_pdf_leftover_llm`, `test_zz_unit_coverage`). |
+| D28 | LLM corpus tests skip in CI | ⏸️ | **Deferred 2026-10-17:** the suites need a llama.cpp sidecar or recorded corpus fixtures. Recorded responses mean a multi-MB artifact and a decision about masking real mail; a CI sidecar adds a model download to every run. The tests still skip loudly, and `docs/test-coverage.md` names them. Revisit with a recorded-fixtures spike. |
+| D34 | 44 of 62 frontend modules have no direct test | ⏸️ | **Ongoing program, not a defect:** `util`, `export_csv`, and `print` have tests; the rest rely on the browser smoke. Add focused tests as modules change. The 2026-10-17 pass added no new modules. |
 
 
 ## Resolved (this register)
@@ -51,13 +39,25 @@ Severity: **H** high · **M** medium · **L** low
 | D3 | 30-day sessions + default `admin/admin` | ✅ 2026-07-21 — prod session default 7d; `must_change_password` + prod API gate; SPA force modal |
 | D8 | Officials can list all tournaments | ✅ 2026-07-21 — `/me/tournaments` + availability scoped to assignment / prior avail / open events |
 | D11 | `frontend/app.js` monolith; mixed `innerHTML` | ✅ 2026-07-21 — composition root ~760 LOC; ~50 ESM modules under `frontend/app/`; residual raw `innerHTML` only where grids/print require it |
-| D15 | Docs drift (suite counts, PII plan §3, design tree) | ✅ 2026-07-21; re-synced 2026-07-29 — ~591 / 89 / 0055; stale 528 + 0049 fixed; open-work D4. Re-synced 2026-09-21 — current-status lines then said 985 / 112 / 0060. Re-synced again **2026-10-17** — 1065 tests / 114 files / 0060, 62 frontend modules, 930 app.js lines, 25 frontend test files. Historical changelog/review counts keep the date they were written. |
+| D15 | Docs drift (suite counts, PII plan §3, design tree) | ✅ 2026-07-21; re-synced 2026-07-29 — ~591 / 89 / 0055; stale 528 + 0049 fixed; open-work D4. Re-synced 2026-09-21 — current-status lines then said 985 / 112 / 0060. Re-synced again **2026-10-17** — 1081 tests / 117 files / 0061, 62 frontend modules, 930 app.js lines, 25 frontend test files. Historical changelog/review counts keep the date they were written. |
 | D16 | Residual plaintext / under-13 without policy | ✅ 2026-07-20 — `docs/coppa-policy.md`; `ALLOW_UNDER13_PII` gate; `GET /api/coppa/policy` |
 | D2 | Fernet key rotation not operational | ✅ 2026-07-20 — MultiFernet + `PII_ENCRYPTION_KEYS` + `reencrypt_pii.py` |
 | D4 | Ingest allows `?token=` | ✅ 2026-07-20 — refused when `ENV` is prod unless `INGEST_ALLOW_QUERY_TOKEN=1` |
 | D21 | Bulk "Populate lists" re-filed an already-filed email | ✅ 2026-10-17 — `bulk_populate` now skips rows whose `status` is `filed`; a distinct second email for the same player is still its own row by design. |
 | D29 | Dead Tabulator comments/rules + unreachable export scrape | ✅ 2026-10-17 — removed the dead `.tabulator` CSS, converted the editable-cell/action selectors to `.ag-cell`, and deleted the unreachable `EXPORTABLE` table scrape in `export_wiring.js`. |
 | D12 | Unpinned `requirements.txt` | ✅ 2026-07-20 — version bounds + `requirements.lock`. Lock regenerated 2026-10-17 (the old one could not resolve) and CI now dry-run-resolves it. |
+| D20 | Catalog/inbox PII views unaudited | ✅ 2026-10-17 — `GET /api/players` (`view_player_list`, one row per request), `GET /api/players/{id}` (`view_player`), `GET /api/players/{id}/history` (`view_player_history`), and the inbox body list (`view_email_bodies`, count only) now append `access_audit`. Decision recorded in `coppa-policy.md`: views are audited, not redacted; `can_export_pii` gates bulk export. |
+| D22 | Login throttle keyed on proxy IP + username | ✅ 2026-10-17 — a global per-IP bucket (20 failures / 5 min) sits beside the 5-per-user cap; a success clears only the user key. `FORWARDED_ALLOW_IPS` documented and set in `fly.toml` / `render.yaml` so the IP is the real client. |
+| D23 | Feed cursor advanced past failed messages | ✅ 2026-10-17 — Gmail advances through contiguous fetched+decoded UIDs and stops at the first FETCH/decode/ingest failure; Outlook caps the timestamp just below the first failed message. Both write `last_status='error'` on a failed download and commit it before the route re-raises. |
+| D24 | Part B delete left its roster side effect | ✅ 2026-10-17 — migration 0061 stores `withdrawal.prior_status` and `late_entry.created_entry`; deleting restores the prior status or removes the row the filing created, unless another Part B row still references the player. |
+| D25 | Server-local dates | ✅ 2026-10-17 — `app/clock.py` + `COURTOPS_VENUE_TZ` (default `America/New_York`); day-of, deadlines, retention, payroll paid-date, t-shirt order date, and late-entry deadline all use the venue date. No `date.today()` / `CURRENT_DATE` decision remains. |
+| D26 | Deploy hygiene | ✅ 2026-10-17 — `migrate.py` takes a `pg_advisory_lock`; both base images are digest-pinned; the GGUF is pinned by sha256 and re-verified on boot; Caddy sends HSTS at the edge. `ENV=prod` stays off for the all-in-one image because the boot guard refuses its bundled loopback DB; the Caddyfile records that tradeoff. |
+| D27 | Room-block / payment-batch check-then-act | ✅ 2026-10-17 — the capacity read locks the `room_block` row (`FOR UPDATE`), and batch creation locks its payroll records in id order. A two-connection test proves the block row is held. |
+| D30 | `require_export_pii` had no caller | ✅ 2026-10-17 — deleted the dead dependency and the coverage-only tests that exercised it; `require_can_export_pii` remains and is used by `POST /api/export-audit`. |
+| D31 | No two-session password-change test | ✅ 2026-10-17 — inserts a second session row, drives it with its cookie, and asserts the change kills it while the caller survives. (A second login cannot be used: login already rotates the user's sessions.) |
+| D32 | Login-enumeration test was timing-based | ✅ 2026-10-17 — monkeypatches `verify_pw` and asserts the missing-user path runs it once with `_DUMMY_HASH`. No wall-clock assertion. |
+| D33 | Query-ceiling test depended on accumulated rows | ✅ 2026-10-17 — scoped to a fresh tournament with five stamped emails; ceiling covers auth + count + select + the new access-audit insert. |
+| D35 | Test-pattern debt | ✅ 2026-10-17 — `_load_dotenv()` is called directly instead of reloading `app.config`; skip-masking health probes are gone from the coverage-only suites; the source-text prompt test became a transport-level behavior test; conditional setup assertions now assert the setup. |
 | D5 | Assignment `site_id` not tournament-scoped (API) | ✅ 2026-07-19 — `_check_assignment_refs` on create/update/bulk |
 | D6 | Assignment `room_block_id` not tournament-scoped (API) | ✅ 2026-07-19 — same helper |
 | D9 | Inbox list re-ran extractors per row | ✅ 2026-07-19 — migration 0051 stamp + column reads; search/paging UX |
@@ -100,6 +100,33 @@ open items above are the deferrals; these shipped:
   logout assertions, COPPA update + import gates, client export-gate tests,
   rotation/staging/retention coverage, and the frontend module tests that
   previously did not exist; CI now runs the Node suite.
+
+## 2026-10-17 follow-up pass — the audit's remaining open findings
+
+The first pass left D20, D22-D27, and D30-D35 open. This pass closed every one
+that did not need an artifact or a budget decision:
+
+- **Auth/API:** a global per-IP login bucket plus trusted proxy headers (D22);
+  catalog list, single-player, and inbox body reads now append `access_audit`
+  (D20); the dead `require_export_pii` dependency is gone (D30).
+- **Ingest:** the Gmail UID and Outlook timestamp cursors stop at the first
+  failure instead of skipping the message, and a failed download now persists
+  its `last_status='error'` row (D23).
+- **Part B:** migration 0061 records what a withdrawal or late entry changed,
+  so deleting it restores the roster instead of leaving it stale (D24).
+- **Calendar:** `app/clock.py` + `COURTOPS_VENUE_TZ` replace every
+  `date.today()` / `CURRENT_DATE` decision, including retention and payroll
+  (D25).
+- **Concurrency/deploy:** `FOR UPDATE` on room blocks and payroll rows (D27);
+  a migration advisory lock, digest-pinned images, a sha256-pinned GGUF, and
+  edge HSTS from Caddy (D26).
+- **Tests:** two-session password change (D31), dummy-hash enumeration check
+  (D32), a fresh-tournament query ceiling (D33), and the D35 cleanup of
+  skip-masking setup, reload-based config tests, and source-text assertions.
+
+D28 (CI LLM sidecar / recorded corpus) and D34 (frontend module tests) stay
+open as explicit deferrals. The decision trail is
+`.audit/audit-open-fixes.tsv`.
 
 ## Pass 1 carry-forward (still valid)
 

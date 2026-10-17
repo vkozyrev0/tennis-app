@@ -17,10 +17,6 @@ from app.routers.td_chat import _run_handlers, _summarize_result
 
 client = TestClient(app)
 
-pytestmark = pytest.mark.skipif(
-    client.get("/api/health").json().get("db") != "ok",
-    reason="Postgres not reachable / not migrated (run migrate.py)",
-)
 
 
 @pytest.fixture(autouse=True)
@@ -44,9 +40,14 @@ def _t():
 
 def test_assignment_404s_and_duplicate():
     t = _t()
+    site = _ok(client.post("/api/sites", json={"name": "R3S " + uuid.uuid4().hex[:5]}))
+    _ok(client.put(f"/api/tournaments/{t['id']}/sites",
+                   json={"site_ids": [site["id"]]}), 200)
     o = _ok(client.post("/api/officials", json={"first_name": "R3", "last_name": uuid.uuid4().hex[:5]}))
     _ok(client.post(f"/api/officials/{o['id']}/certifications", json={"cert_type": "roving_official"}))
-    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]}))
+    _ok(client.post(f"/api/officials/{o['id']}/certifications", json={"cert_type": "chair_umpire"}))
+    a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
+                        json={"official_id": o["id"], "site_id": site["id"]}))
     dup = client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o["id"]})
     assert dup.status_code == 409
     o2 = _ok(client.post("/api/officials", json={"first_name": "R3b", "last_name": uuid.uuid4().hex[:5]}))
@@ -66,9 +67,9 @@ def test_assignment_404s_and_duplicate():
     day = client.post(f"/api/assignments/{a['id']}/days", json={
         "work_date": t["play_start_date"], "working_as": "chair_umpire",
     })
-    if day.status_code == 201:
-        cleared = client.put(f"/api/assignments/{a['id']}", json={"official_id": o["id"], "site_id": None})
-        assert cleared.status_code in (200, 400)
+    assert day.status_code == 201, day.text
+    cleared = client.put(f"/api/assignments/{a['id']}", json={"official_id": o["id"], "site_id": None})
+    assert cleared.status_code == 400, cleared.text
     # conflicts report with hotel mismatch / out of window is extra
     client.get(f"/api/tournaments/{t['id']}/conflicts")
 
@@ -328,7 +329,6 @@ def test_security_usable_session_and_export(monkeypatch):
 
 def test_require_export_pii_wrapper():
     from app.export_gate import require_can_export_pii as gate
-    # drive security.require_export_pii's body by calling gate as it does
     with pytest.raises(HTTPException):
         gate({"role": "official", "can_export_pii": True}, redacted=False)
 
@@ -527,26 +527,31 @@ def test_staff_delete_after_create():
     st = client.post(f"/api/tournaments/{t['id']}/staff", json={
         "name": "Site Dir", "role": "site_director",
     })
-    if st.status_code == 201:
-        sid = st.json()["id"]
-        assert client.delete(f"/api/staff/{sid}").status_code == 204
-        assert client.delete(f"/api/staff/{sid}").status_code == 404
+    assert st.status_code == 201, st.text
+    sid = st.json()["id"]
+    assert client.delete(f"/api/staff/{sid}").status_code == 204
+    assert client.delete(f"/api/staff/{sid}").status_code == 404
 
 
 def test_doubles_delete_request_twice():
     t = _t()
     u = "m" + uuid.uuid4().hex[:9]
+    partner_u = "n" + uuid.uuid4().hex[:9]
     _ok(client.post("/api/players", json={
         "usta_number": u, "first_name": "Dr", "last_name": "Req", "gender": "female",
     }))
+    _ok(client.post("/api/players", json={
+        "usta_number": partner_u, "first_name": "Pa", "last_name": "Rtner",
+        "gender": "female",
+    }))
     r = client.post(f"/api/tournaments/{t['id']}/doubles-requests", json={
         "usta_number": u, "first_name": "Dr", "last_name": "Req", "gender": "female",
-        "partner_usta": "n" + uuid.uuid4().hex[:9], "age_division": "G14",
+        "partner_usta": partner_u, "age_division": "G14",
     })
-    if r.status_code == 201:
-        rid = (r.json().get("request") or r.json())["id"]
-        assert client.delete(f"/api/doubles-requests/{rid}").status_code == 204
-        assert client.delete(f"/api/doubles-requests/{rid}").status_code == 404
+    assert r.status_code == 201, r.text
+    rid = (r.json().get("request") or r.json())["id"]
+    assert client.delete(f"/api/doubles-requests/{rid}").status_code == 204
+    assert client.delete(f"/api/doubles-requests/{rid}").status_code == 404
 
 
 def test_tournament_set_site_division_clear():

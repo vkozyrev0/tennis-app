@@ -9,6 +9,38 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-10-17 — Audit follow-up: auth throttling, view audit, ingest cursors, venue dates
+
+The first audit pass left D20, D22-D27, and D30-D35 open. This pass closed
+everything that did not need a new artifact or a CI budget (details in
+[audit-register.md](audit-register.md)):
+
+- **Login throttling:** a global per-IP bucket (20 failures / 5 min) beside the
+  per-user cap, with `FORWARDED_ALLOW_IPS` set on Fly/Render so the IP is the
+  real client. A successful login no longer resets the IP bucket.
+- **PII view audit:** catalog list, single-player GET, and inbox body reads now
+  append `access_audit` rows (identity and counts only). The decision is
+  recorded in the COPPA policy: views are audited, `can_export_pii` gates bulk
+  export.
+- **Ingest:** Gmail and Outlook cursors stop at the first failed fetch, decode,
+  or ingest instead of skipping the message, and a failed download commits its
+  `last_status='error'` row before the route returns an error.
+- **Part B deletes:** migration 0061 stores the status a withdrawal replaced and
+  whether a late entry created the roster row, so deleting the row restores the
+  roster.
+- **Venue dates:** `COURTOPS_VENUE_TZ` (default `America/New_York`) now drives
+  day-of defaults, deadlines, retention, payroll paid dates, and t-shirt order
+  dates instead of the UTC container date.
+- **Concurrency/deploy:** `FOR UPDATE` on room blocks and payroll rows; a
+  migration advisory lock; digest-pinned base images; a sha256-pinned GGUF;
+  HSTS from Caddy (the all-in-one image cannot pass the `ENV=prod` boot guard).
+- **Tests:** two-session password change, a dummy-hash enumeration check, a
+  fresh-tournament query ceiling, and removal of skip-masking setup,
+  config-reload, and source-text test patterns.
+
+D28 (CI LLM sidecar or recorded corpus) and D34 (frontend module tests) remain
+open as explicit deferrals.
+
 ## 2026-10-17 — App-wide audit: PII copies, XSS sinks, broken controls, test isolation
 
 A five-surface audit (backend/security, frontend, tests, docs, presentation

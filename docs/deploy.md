@@ -249,7 +249,9 @@ of these when `ENV=prod` (boot guard, session Secure cookie, 7d sessions,
 | 7 | Ingest hardened | `INGEST_TOKEN` set; do not set `INGEST_ALLOW_QUERY_TOKEN` in prod ([email-ingest.md](email-ingest.md)) |
 | 8 | COPPA policy | Read [coppa-policy.md](coppa-policy.md); only set `ALLOW_UNDER13_PII=1` if intentional |
 | 9 | Export gate | TD accounts that export minors’ PII need `can_export_pii` + confirm |
-| 10 | Smoke after deploy | `scripts/live_feature_smoke.py` with `ADMIN_PASSWORD=…` against the public URL |
+| 10 | Proxy headers | Set `FORWARDED_ALLOW_IPS` to the proxy address(es) so the login throttle keys on the real client (D22). Fly/Render examples set `*` because their proxy is the only ingress; Caddy on loopback works with uvicorn's default |
+| 11 | Venue timezone | Set `COURTOPS_VENUE_TZ` to the event's IANA zone (default `America/New_York`) so day-of, deadlines, and retention use the venue's date, not UTC (D25) |
+| 12 | Smoke after deploy | `scripts/live_feature_smoke.py` with `ADMIN_PASSWORD=…` against the public URL |
 
 ### Live scripts (dev or staged host)
 

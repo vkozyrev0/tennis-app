@@ -72,6 +72,71 @@ def test_player_360_with_tournament_scoped_log():
     assert any(i["tournament_id"] == t["id"] for i in lst["items"])
 
 
+def test_catalog_list_and_single_get_are_logged():
+    """D20: the catalog list and a single GET decrypt contact PII, so both are
+    recorded; the list logs one row per request and never the search text."""
+    p = _ok(client.post("/api/players", json={
+        "usta_number": "CC" + uuid.uuid4().hex[:8],
+        "first_name": "List",
+        "last_name": "Audit",
+        "gender": "male",
+        "birthdate": "2012-02-02",
+    }), 201)
+    _ok(client.get(f"/api/players?q={p['usta_number']}"))
+    _ok(client.get(f"/api/players/{p['id']}"))
+    # An update to a tracked field creates the history row the history read
+    # returns (the trigger ignores fields such as city).
+    _ok(client.put(f"/api/players/{p['id']}", json={
+        "usta_number": p["usta_number"],
+        "first_name": "Lista",
+        "last_name": "Audit",
+        "gender": "male",
+        "birthdate": "2012-02-02",
+        "city": "Macon",
+    }), 200)
+    _ok(client.get(f"/api/players/{p['id']}/history"))
+
+    got = _ok(client.get(
+        f"/api/access-audit?resource_id={p['id']}&action=view_player&limit=10"
+    ))
+    hit = next(i for i in got["items"] if i["action"] == "view_player")
+    assert hit["username"] == "admin"
+    assert hit["resource_type"] == "player"
+
+    hist = _ok(client.get(
+        f"/api/access-audit?resource_id={p['id']}&action=view_player_history&limit=5"
+    ))
+    assert hist["total"] >= 1
+
+    lst = _ok(client.get("/api/access-audit?action=view_player_list&limit=5"))
+    assert lst["total"] >= 1
+    detail = lst["items"][0]["detail"]
+    assert detail["surface"] == "player_list"
+    assert detail["searched"] is True
+    assert p["usta_number"] not in str(lst["items"][0])
+
+
+def test_inbox_body_read_is_logged():
+    t = _ok(client.post("/api/tournaments", json={
+        "name": "MailAudit " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04",
+    }), 201)
+    _ok(client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Body read",
+        "body": "Please withdraw Anna Brown.",
+        "from_address": "parent@example.com",
+    }), 201)
+    _ok(client.get(f"/api/emails?tournament_id={t['id']}"))
+    got = _ok(client.get(
+        "/api/access-audit?action=view_email_bodies&limit=5"
+    ))
+    hit = got["items"][0]
+    assert hit["resource_type"] == "email"
+    assert hit["detail"]["surface"] == "inbox"
+    assert hit["detail"]["tournament_id"] == t["id"]
+
+
 def test_missing_player_not_logged():
     before = _ok(client.get("/api/access-audit?limit=1"))
     total_before = before["total"]

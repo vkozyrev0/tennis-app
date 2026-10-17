@@ -1141,6 +1141,9 @@ def test_inbox_and_late_entry_filing():
     assert any(e["usta_number"] == num for e in client.get(f"/api/tournaments/{t['id']}/players").json())
     assert len(client.get(f"/api/tournaments/{t['id']}/late-entries").json()) == 1
     assert client.delete(f"/api/late-entries/{le['id']}").status_code == 204
+    # D24: the late entry created the roster row, so deleting it removes it.
+    assert not any(e["usta_number"] == num
+                   for e in client.get(f"/api/tournaments/{t['id']}/players").json())
 
 
 def test_withdrawal_reason_rule_and_roster_flip():
@@ -1156,6 +1159,9 @@ def test_withdrawal_reason_rule_and_roster_flip():
     entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json() if e["usta_number"] == p["usta_number"])
     assert entry["selection_status"] == "withdrawn"
     assert client.delete(f"/api/withdrawals/{w['id']}").status_code == 204
+    # D24: the delete restores the status the withdrawal replaced.
+    entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json() if e["usta_number"] == p["usta_number"])
+    assert entry["selection_status"] == "selected"
 
 
 def test_withdrawal_alternate_needs_no_reason():
@@ -1163,6 +1169,23 @@ def test_withdrawal_alternate_needs_no_reason():
     client.post(f"/api/tournaments/{t['id']}/players", json={"player_id": p["id"], "selection_status": "alternate"})
     w = _ok(client.post(f"/api/tournaments/{t['id']}/withdrawals", json={"usta_number": p["usta_number"]}))
     assert w["was_alternate"] is True and (w["reason"] is None or w["reason"] == "")
+    assert client.delete(f"/api/withdrawals/{w['id']}").status_code == 204
+    entry = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json()
+                 if e["usta_number"] == p["usta_number"])
+    assert entry["selection_status"] == "alternate"
+
+
+def test_partb_delete_leaves_a_preexisting_roster_row():
+    """D24: only the change the Part B row made is undone."""
+    t, p = _tournament(), _player()
+    client.post(f"/api/tournaments/{t['id']}/players",
+                json={"player_id": p["id"], "selection_status": "selected"})
+    le = _ok(client.post(f"/api/tournaments/{t['id']}/late-entries", json={
+        "usta_number": p["usta_number"], "age_division": "B16", "events": "Singles"}))
+    assert client.delete(f"/api/late-entries/{le['id']}").status_code == 204
+    row = next(e for e in client.get(f"/api/tournaments/{t['id']}/players").json()
+               if e["usta_number"] == p["usta_number"])
+    assert row["selection_status"] == "selected"
 
 
 def test_part_b_inline_edits():

@@ -90,13 +90,13 @@ backend/
     _models_common.py / _models_auth.py / _models_setup.py /
     _models_workspace.py / _models_inbox.py     # Pydantic models, grouped by area
     routers/           # one module per resource (see §6)
-  migrations/          # 0001_*.sql … 0060_*.sql, applied in filename order
+  migrations/          # 0001_*.sql … 0061_*.sql, applied in filename order
   migrate.py           # runner: create DB if needed, apply pending, track in schema_migrations
   seed.py              # lean idempotent baseline (sites, 32 players, rates, admin)
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1065 tests / 114 files)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1081 tests / 117 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
   app.js               # 930 LOC composition root (D11; counted 2026-10-17)
@@ -193,9 +193,10 @@ header) and `like_escape` (escapes `%`/`_` in user search terms).
 `/api/officials/search` and `/workload` are declared above `/{official_id}`).
 Cross-router static-vs-dynamic collisions are avoided by full-path naming.
 
-**Migrations are forward-only, filename-ordered** (`0001…0060`), each tracked in
-`schema_migrations`. `migrate.py` creates the DB if absent then applies pending
-files. **Reference catalogs** (`division`, `tournament_event`,
+**Migrations are forward-only, filename-ordered** (`0001…0061`), each tracked in
+`schema_migrations`. `migrate.py` creates the DB if absent, takes a Postgres
+advisory lock so two booting containers cannot apply the same file, then applies
+pending files. **Reference catalogs** (`division`, `tournament_event`,
 `certification_rate`) are seeded *by migrations*, so `reset_demo.py` preserves
 those tables on wipe (truncating them would leave the pickers empty).
 

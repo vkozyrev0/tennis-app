@@ -5,6 +5,7 @@ coverage / rooms counts for one tournament without building the full report.
 
 Named to sort last (same rationale as the other test_zz modules)."""
 import uuid
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
@@ -177,6 +178,14 @@ def test_day_of_lists_officials_working_that_date():
     assert row["actual_status"] == "planned" and row["response_status"] == "pending"
     # ...and NOT on a different date in the window
     assert _dayof(t["id"], "2026-06-03")["officials_count"] == 0
+
+
+def test_day_of_defaults_to_the_venue_date(monkeypatch):
+    """D25: no `on` param means today on the venue's clock, not UTC."""
+    from app.routers import dashboard
+    t = _tournament()
+    monkeypatch.setattr(dashboard, "today_venue", lambda: date(2026, 6, 2))
+    assert _dayof(t["id"])["date"] == "2026-06-02"
 
 
 def test_day_of_out_of_window_flag():
