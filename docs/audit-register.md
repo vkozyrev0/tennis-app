@@ -26,6 +26,7 @@ Severity: **H** high · **M** medium · **L** low
 | D18 | CSRF not explicit | ⏸️ | **Deferred:** cookie is `SameSite=Strict` + SPA is same-origin only; add CSRF tokens if cross-site clients or non-browser consumers appear |
 | D28 | LLM corpus tests skip in CI | ⏸️ | **Deferred 2026-10-17:** the suites need a llama.cpp sidecar or recorded corpus fixtures. Recorded responses mean a multi-MB artifact and a decision about masking real mail; a CI sidecar adds a model download to every run. The tests still skip loudly, and `docs/test-coverage.md` names them. Revisit with a recorded-fixtures spike. |
 | D34 | 44 of 62 frontend modules have no direct test | ⏸️ | **Ongoing program, not a defect:** `util`, `export_csv`, and `print` have tests; the rest rely on the browser smoke. Add focused tests as modules change. The 2026-10-17 pass added no new modules. |
+| D36 | Late-entry delete can discard a later manual roster edit | L | If a late entry created the roster row and an admin later changes its status, deleting the late entry removes the row anyway. The withdrawal path guards on `selection_status = 'withdrawn'`; the late-entry path should guard likewise. Found by the PR #6 verifier. |
 
 
 ## Resolved (this register)
