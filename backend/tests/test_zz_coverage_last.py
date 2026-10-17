@@ -235,7 +235,7 @@ def test_digest_empty_ids():
             return EmptyCur()
 
     out = digest(conn=EmptyConn())
-    assert isinstance(out, list) or isinstance(out, dict)
+    assert isinstance(out, dict)
 
 
 def test_triage_singles_only_partner():

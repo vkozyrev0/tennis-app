@@ -86,6 +86,8 @@ def _summary(cur, a: dict) -> dict:
         "JOIN tournament t2 ON t2.id = a2.tournament_id "
         "LEFT JOIN site s2 ON s2.id = a2.site_id "
         "WHERE a2.official_id = %s AND a2.id <> %s "
+        "  AND a2.response_status <> 'declined' "
+        "  AND ad.actual_status <> 'no_show' "
         "ORDER BY ad.work_date",
         (a["official_id"], a["id"]),
     )
@@ -223,12 +225,14 @@ def _check_room_capacity(cur, room_block_id, exclude_id=None) -> None:
         raise HTTPException(status_code=400, detail="room_block_id does not exist")
     if exclude_id is None:
         cur.execute(
-            "SELECT count(*) AS n FROM assignment WHERE room_block_id = %s",
+            "SELECT count(*) AS n FROM assignment "
+            "WHERE room_block_id = %s AND response_status <> 'declined'",
             (room_block_id,),
         )
     else:
         cur.execute(
-            "SELECT count(*) AS n FROM assignment WHERE room_block_id = %s AND id <> %s",
+            "SELECT count(*) AS n FROM assignment "
+            "WHERE room_block_id = %s AND id <> %s AND response_status <> 'declined'",
             (room_block_id, exclude_id),
         )
     if cur.fetchone()["n"] >= rb["room_count"]:
@@ -342,9 +346,11 @@ def hard_conflict_counts(cur, tournament_ids: list[int]) -> dict:
     cur.execute(
         "SELECT a.tournament_id, count(*) AS n "
         "FROM assignment a JOIN assignment_day ad ON ad.assignment_id = a.id "
-        "WHERE a.tournament_id = ANY(%s) AND EXISTS ("
+        "WHERE a.tournament_id = ANY(%s) AND a.response_status <> 'declined' "
+        "  AND ad.actual_status <> 'no_show' AND EXISTS ("
         "  SELECT 1 FROM assignment a2 JOIN assignment_day ad2 ON ad2.assignment_id = a2.id "
-        "  WHERE a2.official_id = a.official_id AND a2.id <> a.id AND ad2.work_date = ad.work_date) "
+        "  WHERE a2.official_id = a.official_id AND a2.id <> a.id AND ad2.work_date = ad.work_date "
+        "    AND a2.response_status <> 'declined' AND ad2.actual_status <> 'no_show') "
         "GROUP BY a.tournament_id",
         (tournament_ids,),
     )

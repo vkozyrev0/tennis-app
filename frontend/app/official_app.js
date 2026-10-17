@@ -127,10 +127,12 @@ export function createOfficialApp(ctx) {
       box.appendChild(card);
     }
   }
+  let _meAvailSeq = 0;
   async function loadMyAvailability() {
     const sel = document.getElementById("me-tournament");
     const box = document.getElementById("me-dates");
     if (!box) return;
+    const seq = ++_meAvailSeq;
     if (!sel || !sel.value) { box.innerHTML = ""; return; }
     const t = meTournaments.find((x) => String(x.id) === sel.value);
     if (!t) {
@@ -144,6 +146,7 @@ export function createOfficialApp(ctx) {
     let av;
     try { av = await api(`/me/availability/${sel.value}`); }
     catch (e) { box.innerHTML = hstr`<p class="msg bad">${e.message}</p>`; toast(e.message, false); return; }
+    if (seq !== _meAvailSeq) return;
     document.getElementById("me-hotel").checked = !!av.hotel_needed;
     const checked = new Set(av.dates || []);
     box.innerHTML = "";

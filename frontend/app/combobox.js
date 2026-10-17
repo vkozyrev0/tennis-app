@@ -166,6 +166,17 @@ export function enhanceSelect(sel) {
   // Select existing text on focus so the first keystroke overtypes a prior choice.
   input.addEventListener("focus", () => { open(); input.select(); });
   input.addEventListener("click", open);
+  // Tabbing out must close the portaled list; otherwise each combo stays open
+  // with aria-expanded="true" and covers the fields below.
+  input.addEventListener("focusout", (e) => {
+    const next = e.relatedTarget;
+    if (next && (wrap.contains(next) || list.contains(next))) return;
+    setTimeout(() => {
+      const a = document.activeElement;
+      if (a === input || wrap.contains(a) || list.contains(a)) return;
+      if (!list.hidden) close(false);
+    }, 0);
+  });
   input.addEventListener("input", () => {
     hi = -1;
     render(input.value);

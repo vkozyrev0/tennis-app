@@ -12,7 +12,8 @@
 // string; every interpolated value inside `body`/`styleExtra` already goes
 // through esc() at the call site (escapes &<>), so a name containing
 // `</style>` becomes `&lt;/style&gt;` and cannot break out of the document.
-// The popup is a fresh document with no shared origin state.
+// The popup is same-origin with the opener, so the CSV values embedded in its
+// <script> must also be JS-string-literal safe (see _jsString).
 
 import { esc } from "./util.js";
 
@@ -31,6 +32,13 @@ const PRINT_BASE_CSS = `
       tr.totals td { font-weight: 700; background: #e7f1ea; border-top: 2px solid #2e6f40; }
       @media print { @page { margin: 1.2cm; } .noprint { display: none; } h2 { page-break-after: avoid; } }
       .noprint { margin-top: 1rem; } .noprint button { font: inherit; padding: 0.4rem 0.9rem; cursor: pointer; }`;
+
+// Embed a value as a JS string literal inside the popup's <script>. JSON.stringify
+// leaves `<` intact, so a CSV cell containing `</script>` would close the script
+// element. Escaping `<` (and the JS line separators) keeps it inert.
+function _jsString(v) {
+  return JSON.stringify(v).replace(/</g, "\\u003c");
+}
 
 /**
  * @param {{ toast: (text: string, ok?: boolean) => void }} ctx
@@ -58,10 +66,10 @@ export function createPrintDoc(ctx) {
     const csvBtn = csv ? ` <button id="dl">⬇ CSV</button>` : "";
     const csvScript = csv ? `
       document.getElementById("dl").addEventListener("click", function () {
-        var blob = new Blob([${JSON.stringify(csv.data)}], {type: "text/csv"});
+        var blob = new Blob([${_jsString(csv.data)}], {type: "text/csv"});
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = ${JSON.stringify(csv.filename)};
+        a.download = ${_jsString(csv.filename)};
         a.click();
       });` : "";
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>

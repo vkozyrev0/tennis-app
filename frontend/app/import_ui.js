@@ -99,6 +99,8 @@ export function createImportPage(ctx) {
     const required = new Set(meta.required || []);
     const cols = meta.columns || [];
     const bid = body.batch_id;
+    if (el._importGrid && typeof el._importGrid.destroy === "function") el._importGrid.destroy();
+    el._importGrid = null;
     el.innerHTML = "";
 
     const head = document.createElement("div"); head.className = "import-preview-head";
@@ -193,6 +195,7 @@ export function createImportPage(ctx) {
       index: "_id", editTriggerEvent: "click",
       placeholder: "No rows in this file.", columns: colDefs,
     });
+    el._importGrid = grid;
     grid.setData(batch.rows.filter((r) => !r.merged).map(mapRow));
     refresh();
     grid.on("tableBuilt", refresh);
@@ -284,8 +287,15 @@ export function createImportPage(ctx) {
       } catch (e) { toast(e.message, false); merge.disabled = false; }
     });
     disc.addEventListener("click", async () => {
-      try { await api(`/import/batches/${bid}`, { method: "DELETE" }); el.innerHTML = ""; _importTabBadge(meta.key, 0); }
-      catch (e) { toast(e.message, false); }
+      if (!(await confirmDialog("Discard this staged batch? Every staged row will be lost.",
+        "Discard", "danger"))) return;
+      try {
+        await api(`/import/batches/${bid}`, { method: "DELETE" });
+        if (el._importGrid && typeof el._importGrid.destroy === "function") el._importGrid.destroy();
+        el._importGrid = null;
+        el.innerHTML = "";
+        _importTabBadge(meta.key, 0);
+      } catch (e) { toast(e.message, false); }
     });
   }
   // Which import types are Setup catalogs (no active tournament needed) vs
@@ -341,6 +351,7 @@ export function createImportPage(ctx) {
     return sec;
   }
 
+  let _buildPending = null;
   async function buildImportPage() {
     const tabsRoot = document.getElementById("import-tabs");
     const panelRoot = document.getElementById("import-panel");
@@ -348,10 +359,13 @@ export function createImportPage(ctx) {
     if (!tabsRoot || !panelRoot) return;
     // Toggle the needs-active hint based on current selection.
     if (note) note.hidden = !!getActive();
-    if (tabsRoot.dataset.built) return;
-    // Set the guard BEFORE the await so a second concurrent call (e.g. the tab
-    // click handler + gotoImport both firing) doesn't race past this check.
+    // A second caller (the tab handler plus gotoImport) must wait for the
+    // in-flight build, not return early before _activate is assigned.
+    if (tabsRoot.dataset.built) { if (_buildPending) await _buildPending; return; }
+    // Set the guard BEFORE the await so a second concurrent call doesn't race
+    // past this check.
     tabsRoot.dataset.built = "1";
+    _buildPending = (async () => {
     let types;
     try { types = await api("/import/types"); }
     catch (e) { panelRoot.textContent = e.message; tabsRoot.dataset.built = ""; return; }
@@ -393,6 +407,8 @@ export function createImportPage(ctx) {
     }
     const first = (groups.find((g) => g.keys.length) || { keys: [] }).keys[0];
     if (first) activate(first.key);
+    })();
+    try { await _buildPending; } finally { _buildPending = null; }
   }
 
   // Deep-link helper: activates the Setup → Import tab, builds the page if

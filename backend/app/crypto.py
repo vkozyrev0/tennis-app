@@ -44,6 +44,12 @@ def _fernet() -> MultiFernet:
     return MultiFernet([Fernet(k.encode()) for k in _keys()])
 
 
+def validate_keys() -> None:
+    """Raise ValueError if any configured key is not a valid Fernet key."""
+    for k in _keys():
+        Fernet(k.encode())
+
+
 def using_dev_key() -> bool:
     """True if the configured key set still includes the baked-in POC key."""
     return _DEV_KEY in _keys()

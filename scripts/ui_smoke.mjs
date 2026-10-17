@@ -258,14 +258,21 @@ async function desktopRun(browser) {
     const row = page.locator("#panel-t-inbox .ag-row", { hasText: seeded.subject }).first();
     check("inbox: the seeded email is listed", await row.count() > 0);
     if (await row.count()) {
-      // Open the row's ⋯ menu from the keyboard: a mouse click also makes AG
-      // Grid scroll the row into view, and the menu closes itself on scroll.
+      // Prefer the keyboard path. If AG Grid's focus manager steals focus, a
+      // programmatic click still exercises the menu without the scroll-close
+      // coupling that a real mouse click introduces.
       const trigger = row.locator("button.row-more").first();
       await trigger.focus();
       await page.keyboard.press("ArrowDown");
-      await page.waitForTimeout(600);
-      const fileItem = page.locator("button.menu-btn-item:visible")
+      await page.waitForTimeout(300);
+      let fileItem = page.locator("button.menu-btn-item:visible")
         .filter({ hasText: /^File as/i }).first();
+      if (await fileItem.count() === 0) {
+        await trigger.evaluate((el) => el.click());
+        await page.waitForTimeout(300);
+        fileItem = page.locator("button.menu-btn-item:visible")
+          .filter({ hasText: /^File as/i }).first();
+      }
       check("inbox: the File as … action is offered", await fileItem.count() > 0);
       await page.screenshot({ path: `${SHOTS}/06-inbox-row-menu.png` });
       if (await fileItem.count()) {

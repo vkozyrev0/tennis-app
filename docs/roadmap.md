@@ -5,13 +5,14 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 [vision-summary.md](vision-summary.md) · [audit.md](audit.md) ·
 [data-model.md](data-model.md).
 
-> **Status (2026-07-29):** Phases 0–4 are functionally shipped; Phase 5 is polish
-> and deploy-time hardening (see *On hold* for externally blocked items: Maps
-> key, mail provider, cloud-LLM privacy, prod PII/DB role). Later rounds — **D11**
+> **Status (2026-10-17):** Phases 0–4 are functionally shipped. The partial
+> pieces are Phase 2's Maps *driving* distance (key-blocked) and Phase 3's
+> external mail-provider wiring; Phase 5 is polish and deploy-time hardening
+> (see *On hold*). Later rounds — **D11**
 > frontend split, security/COPPA/export audit, email auto-ingest app side, Fly
 > persistent volume + inbox triage UX — are in [changelog.md](changelog.md).
-> Suite: **985** tests / **112** files, the figure in [test-coverage.md](test-coverage.md)
-> (collected 2026-09-08; file count and migration head **0060** rechecked
+> Suite: **1065** tests / **114** files, the figure in [test-coverage.md](test-coverage.md)
+> (collected 2026-10-17; file count and migration head **0060** rechecked
 > 2026-09-21). CI (`.github/workflows/docker.yml`)
 > gates the image build and publishes `ghcr.io/vkozyrev0/tennis-app:latest` on
 > green `main` pushes. Live POC: `https://courtops-poc.fly.dev` (see
@@ -33,8 +34,9 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 ---
 
 ## Stack decision (D6) — POC stack confirmed
-The proof-of-concept (POC) is a small, conventional 3-tier app. **No agent/LLM in
-scope** (D5/§5.1: email is human-reviewed, not parsed).
+The proof-of-concept (POC) is a small, conventional 3-tier app. **No agent files a
+row.** Email is human-reviewed; keyword triage suggests, and an optional
+leftover pass can call a small LLM (D5/§5.1).
 
 > *Note (2026-09-23):* a person still files every message. `app/triage.py`
 > suggests a label from keywords, and leftovers can take a second pass
@@ -251,9 +253,9 @@ pay snapshots).
 ---
 
 ## Phase 3 — Email ingestion + human review (Part B core)  🚧
-The player side starts as a **human-review workflow — no automated parsing**
-(D5/§5.1). The TD forwards player/parent email to a dedicated address; it lands in
-a review inbox; a person files each message into the right list.
+The player side is a **human-review workflow**: triage suggests a classification,
+and a person files each message into the right list. The TD can paste mail,
+import a PDF, use the ingest webhook, or connect the Gmail/Outlook feeds.
 - [x] Ingestion: **POC manual add** to the inbox (migration 0011) **plus**
       token-authenticated auto-ingest webhook (migration 0050, `POST
       /api/ingest/email` + form adapter). Dedicated provider wiring still needs
@@ -311,7 +313,9 @@ Remaining: the optional auto-triage agent.
 ---
 
 ## Phase 5 — Polish & hardening
-- [ ] PII: encryption at rest, access control, retention policy (audit §5.1).
+- [~] PII: column encryption, access control, and the retention sweep ship.
+      Disk/volume encryption and a least-privilege DB role remain deploy-time
+      (audit §5.1).
 - [x] **Audit trail for money** (migration 0036, audit §5.3): the snapshot now
       also freezes the calc **inputs** in `assignment.pay_audit` (jsonb) — the
       one-way miles used, the rule constants (free-miles / rate / cap), and the
@@ -347,7 +351,7 @@ buildable without them is done; revisit when the prerequisite is available.
 | Item | Why it's blocked | To unblock |
 |------|------------------|------------|
 | **Google Maps auto-distance** (driving home↔site round-trip) — Phase 2 / D3/U2 | Needs a billed Maps API key + network egress for *driving* distance. **Partly shipped:** a key-free **great-circle estimate** from stored lat/long now exists (`app/geocode.py`, `POST /api/distances/auto`, source=`geocoded`), and the **driving-distance Distance Matrix call is now scaffolded** (migration 0047, `road_one_way_miles()` behind `GOOGLE_MAPS_API_KEY`, source=`maps`) — still **key-blocked**. | Provide an API key + confirm cost + egress; the driving-distance path is wired (the estimate stays the fallback). |
-| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side + Fly webhook live** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md); `courtops-poc` has `INGEST_TOKEN`). Still needs a **mail provider** (Mailgun / SendGrid Inbound / CF Email Worker) to forward real mail. Manual paste + `scripts/smoke_ingest.py` remain the day-to-day paths until then. | Point the chosen provider at the live webhook; keep `INGEST_TOKEN` secret. |
+| **Real email auto-ingest** (forwarding address) — Phase 3 / D4 | **App side + Fly webhook live** (migration 0050, `/api/ingest/email`, `tournament.ingest_address`, [email-ingest.md](email-ingest.md); `courtops-poc` has `INGEST_TOKEN`). Still needs a **mail provider** (Mailgun / SendGrid Inbound / CF Email Worker) to forward real mail. Paste/PDF import, the ingest webhook, and the Gmail/Outlook feeds remain the live paths; a forwarding provider is still external. | Point the chosen provider at the live webhook; keep `INGEST_TOKEN` secret. |
 | **Cloud LLM triage** (off-box model reads email content) — D5 | Keyword suggest plus the DeepSeek-API leftover pass ship (`triage.py`, `email_llm.py`, `EMAIL_LLM=1`); `EMAIL_LLM_PROVIDER=local` keeps it on the on-box sidecar. A full cloud agent that reads minors' email end to end is still open. | Decide D5 for the agent. The heuristic and the leftover pass stay. |
 | **Prod PII / DB-role deploy work** — Phase 5 / audit §5.1, §5.3 | Column encryption (**H2.2**) and MultiFernet rotation (**H2.3**, `reencrypt_pii.py`) ship, as do the **H1** boot guard and the **H3** retention sweep (`GET /api/retention/policy`, `POST /api/retention/sweep`). Still deploy-time: least-privilege DB role, app TLS, disk encryption (H2.1), secret-manager hosting for keys, retention cron (H3.3). | At deploy time: dedicated DB user, TLS, disk encryption, secret manager, cron. Column encryption is already in the app. |
 | ~~**Non-official staff in the Staffing Plan**~~ — ✅ **SHIPPED** (migration 0032): a per-tournament `tournament_staff` roster (name + `staff_role` ∈ Site Director / Player Amenities / Trainer / Operations / Stringer / Other + contact), a **Staffing → Staff** tab (CRUD), and an **"Other staff"** section in the officials report (+ `staff_count`). Per-day staff scheduling now ships (staff_day, day-column report grid); flat daily-rate pay now ships (report totals staff pay); per-day-varying rates remain a possible refinement. |

@@ -176,4 +176,65 @@ export function enhanceDetailDialogs() {
     }
     obs.observe(dlg, { attributes: true, attributeOldValue: true, attributeFilter: ["class"] });
   }
+
+  // Bespoke `.modal` dialogs (payroll, admin users, auth, import) are created
+  // on demand or toggled via [hidden]. Give them the same focus move/restore and
+  // background inert as the detail panes.
+  let _lastModalFocus = null;
+  function _modalFocusables(m) {
+    return [...m.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((el) => !el.hidden && el.getClientRects().length);
+  }
+  function _watchModal(m) {
+    if (m._focusWatched) return;
+    m._focusWatched = true;
+    let open = false;
+    const sync = () => {
+      const nowOpen = !m.hidden;
+      if (nowOpen === open) return;
+      open = nowOpen;
+      if (open) {
+        if (!m.hasAttribute("role")) m.setAttribute("role", "dialog");
+        if (!m.hasAttribute("aria-modal")) m.setAttribute("aria-modal", "true");
+        _lastModalFocus = document.activeElement;
+        _refreshBackgroundInert();
+        requestAnimationFrame(() => {
+          const f = _modalFocusables(m)[0];
+          if (f) try { f.focus(); } catch (_) {}
+        });
+      } else {
+        const prev = _lastModalFocus;
+        _lastModalFocus = null;
+        _refreshBackgroundInert();
+        if (prev && prev.isConnected && typeof prev.focus === "function") {
+          try { prev.focus(); } catch (_) {}
+        }
+      }
+    };
+    new MutationObserver(sync).observe(m, { attributes: true, attributeFilter: ["hidden"] });
+    sync();
+  }
+  document.querySelectorAll(".modal").forEach(_watchModal);
+  new MutationObserver((muts) => {
+    for (const mut of muts) {
+      for (const n of mut.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.matches && n.matches(".modal")) _watchModal(n);
+        if (n.querySelectorAll) n.querySelectorAll(".modal").forEach(_watchModal);
+      }
+    }
+  }).observe(document.body, { childList: true });
+
+  // Trap Tab inside the open dialog so focus cannot walk the inert background.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const m = document.querySelector(".modal:not([hidden]), .detail-pane.detail-open");
+    if (!m) return;
+    const f = _modalFocusables(m);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }

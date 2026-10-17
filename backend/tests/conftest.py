@@ -6,19 +6,19 @@ env at import time). pytest imports conftest.py before the test modules, so this
 runs first. The test DB is DROPPED and recreated, migrated, and seeded once per
 session — so every local run starts pristine, exactly like a fresh CI container.
 
-Why the drop matters: `courtops_test` persists between local runs, so without a
-reset its rows accumulate. Tests that create a fixed-name tournament then hit a
-409 ("name already exists") on the second run, and count assertions drift as
-unrelated rows pile up — the order-independent "flake" that only ever bit local
-runs (CI spins up a clean Postgres each time, so it never saw it). Set
-KEEP_TEST_DB=1 to skip the drop and inspect a failed run's data post-mortem.
+Each pytest process gets its own DB by default (`courtops_test_<pid>`). A shared
+name was unsafe: two concurrent runs dropped each other's DB mid-suite, and a
+crashed run left rows that made later count assertions drift. Set
+TEST_PGDATABASE to pin a name, or KEEP_TEST_DB=1 to keep the auto-named DB for
+post-mortem inspection (it is dropped at session end otherwise).
 """
 import os
-
-os.environ["PGDATABASE"] = os.getenv("TEST_PGDATABASE", "courtops_test")
-
 import sys
 from pathlib import Path
+
+_TEST_DB_EXPLICIT = os.getenv("TEST_PGDATABASE")
+_TEST_DB = _TEST_DB_EXPLICIT or f"courtops_test_{os.getpid()}"
+os.environ["PGDATABASE"] = _TEST_DB
 
 _BACKEND = Path(__file__).resolve().parents[1]
 if str(_BACKEND) not in sys.path:
@@ -37,9 +37,9 @@ def _reset_test_database() -> None:
     to touch anything not clearly a test database — a misconfigured PGDATABASE
     must never drop the working `courtops` DB."""
     name = settings.dbname
-    if not name.endswith("_test"):
+    if not (name.endswith("_test") or "_test_" in name):
         raise RuntimeError(
-            f"refusing to reset {name!r}: the test DB name must end in '_test' "
+            f"refusing to reset {name!r}: the test DB name must contain '_test' "
             "(check PGDATABASE / TEST_PGDATABASE)"
         )
     with psycopg.connect(settings.admin_dsn, autocommit=True) as conn:
@@ -57,8 +57,27 @@ def _reset_test_database() -> None:
 if not os.getenv("KEEP_TEST_DB"):
     _reset_test_database()
 
-migrate.main()  # create + migrate courtops_test
+migrate.main()  # create + migrate the session DB
 seed.main()     # idempotent seed (rates, sites, demo tournament)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Drop an auto-named session DB so repeated runs do not accumulate it."""
+    if os.getenv("KEEP_TEST_DB") or _TEST_DB_EXPLICIT:
+        return
+    if not _TEST_DB.startswith("courtops_test_"):
+        return
+    try:
+        with psycopg.connect(settings.admin_dsn, autocommit=True) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                    "WHERE datname = %s AND pid <> pg_backend_pid()",
+                    (_TEST_DB,),
+                )
+                cur.execute(f'DROP DATABASE IF EXISTS "{_TEST_DB}"')
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
 from ..export_audit import log_export
+from ..export_gate import csv_safe
 from ..models import PaymentBatchCreate, PayrollMarkPaid
 from ..security import require_admin
 from .assignments import _ASG_SELECT, _audit, _summaries, _summary
@@ -169,7 +170,7 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
         return "" if v is None else f"{float(v):.2f}"
 
     for r in recs:
-        w.writerow([
+        w.writerow([csv_safe(v) for v in [
             r["official_name"], r["days_worked"], r["no_show_days"],
             money(r["pay"]), money(r["mileage"]), money(r["total"]),
             r["rule_version"] or "",
@@ -178,7 +179,7 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
             r["paid_at"].isoformat() if r["paid_at"] else "",
             r["paid_method"] or "", r["paid_note"] or "",
             r["batch_reference"] or "",
-        ])
+        ]])
     body = buf.getvalue().encode("utf-8-sig")
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", t["name"]).strip("-") or "tournament"
     return Response(content=body, media_type="text/csv",

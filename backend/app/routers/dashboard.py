@@ -354,7 +354,10 @@ def dashboard(tournament_id: int, conn=Depends(db_dep)):
         # Coverage gaps: play-window days with no official assigned at all.
         cur.execute(
             "SELECT DISTINCT ad.work_date FROM assignment_day ad "
-            "JOIN assignment a ON a.id = ad.assignment_id WHERE a.tournament_id = %s",
+            "JOIN assignment a ON a.id = ad.assignment_id "
+            "WHERE a.tournament_id = %s "
+            "  AND a.response_status <> 'declined' "
+            "  AND ad.actual_status <> 'no_show'",
             (tournament_id,),
         )
         worked = {r["work_date"] for r in cur.fetchall()}

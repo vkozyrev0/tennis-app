@@ -6,7 +6,7 @@ import { LIST_HEADER_ROW_HEIGHT } from "./layout.js";
 
 export { applySavedRow, saveInGridCell, LIST_PAGE_SIZE, listPagePath };
 
-// Tabulator grid factories (plan P2 #11a) — extracted from app.js.
+// AG Grid factories (plan P2 #11a) — extracted from app.js.
 //
 // Owns ALL generic grid wiring: the Setup master/detail CRUD (`wireEntity`),
 // the workspace list grid (`makeListGrid`), and the read-only summary grid
@@ -83,6 +83,11 @@ export function createGridFactories(ctx) {
       getRow: () => _agRow(params.node, params.api, rowEl()),
       restoreOldValue: () => { if (params.node) params.node.setDataValue(field, params.oldValue); },
       setValue: (v) => { if (params.node) params.node.setDataValue(field, v); },
+      // Tabulator's cell.edit() — the inbox ✎ buttons call this to open the editor.
+      edit: () => {
+        if (!params.api || !params.node || params.node.rowIndex == null) return;
+        params.api.startEditingCell({ rowIndex: params.node.rowIndex, colKey: field });
+      },
     };
   }
 
@@ -103,10 +108,28 @@ export function createGridFactories(ctx) {
   // Exact-match dropdown filter. `predicate(selected, _v, rowData)` overrides the
   // default `String(rowData[field]) === selected` when supplied (Tabulator's
   // headerFilterFunc), so gender/signed-in style virtual columns filter correctly.
-  function _agListFilter(predicate, field) {
+  function _agListFilter(predicate, field, values) {
+    const pairs = _valuePairs(values);
     const C = class {
-      init(params) { this.params = params; this.sel = ""; this.gui = document.createElement("div");
-        this.gui.className = "ag-filter-body-wrapper ag-custom-filter"; }
+      init(params) {
+        this.params = params; this.sel = "";
+        this.gui = document.createElement("div");
+        this.gui.className = "ag-filter-body-wrapper ag-custom-filter";
+        // The filter button opens this popup; floating filters are off globally,
+        // so the select must live here or the filter has no control at all.
+        const sel = document.createElement("select");
+        sel.className = "ag-input-field-input ag-list-filter";
+        sel.name = "ag-list-filter"; sel.setAttribute("autocomplete", "off");
+        sel.setAttribute("aria-label", "Filter");
+        if (!pairs.some(([v]) => v === "")) sel.appendChild(new Option("All", ""));
+        for (const [v, label] of pairs) sel.appendChild(new Option(label, v));
+        sel.addEventListener("change", () => {
+          this.sel = sel.value;
+          this.params.filterChangedCallback();
+        });
+        this.gui.appendChild(sel);
+        this.eSelect = sel;
+      }
       getGui() { return this.gui; }
       isFilterActive() { return this.sel !== "" && this.sel != null; }
       doesFilterPass(p) {
@@ -115,7 +138,7 @@ export function createGridFactories(ctx) {
         return String(data[field] ?? "") === String(this.sel);
       }
       getModel() { return this.isFilterActive() ? { value: this.sel } : null; }
-      setModel(m) { this.sel = m ? m.value : ""; }
+      setModel(m) { this.sel = m ? m.value : ""; if (this.eSelect) this.eSelect.value = this.sel; }
       onFloating(v) { this.sel = v; this.params.filterChangedCallback(); }   // called by floating UI
     };
     C.__kind = "list";   // setHeaderFilterValue → model { value }
@@ -205,17 +228,50 @@ export function createGridFactories(ctx) {
         const list = document.createElement("div"); list.className = "ag-autocomplete-list";
         wrap.append(input, list);
         const cur = this.opts.find((o) => o.value === this.value); if (cur) input.value = cur.label;
+        this.visibleOpts = [];
+        this.activeIdx = -1;
         const render = () => {
           const q = input.value.trim().toLowerCase();
           list.innerHTML = "";
-          if (params.clearable) { const c = document.createElement("div"); c.className = "ag-autocomplete-opt muted";
-            c.textContent = "— clear —"; c.onmousedown = (e) => { e.preventDefault(); this.value = ""; params.stopEditing(); }; list.appendChild(c); }
+          this.visibleOpts = [];
+          this.activeIdx = -1;
+          const add = (label, value, muted) => {
+            const d = document.createElement("div");
+            d.className = "ag-autocomplete-opt" + (muted ? " muted" : "");
+            d.textContent = label;
+            d.onmousedown = (e) => { e.preventDefault(); this.value = value; params.stopEditing(); };
+            list.appendChild(d);
+            this.visibleOpts.push({ el: d, value });
+          };
+          if (params.clearable) add("— clear —", "", true);
           for (const o of (q ? this.opts.filter((o) => o.label.toLowerCase().includes(q)) : this.opts).slice(0, 50)) {
-            const d = document.createElement("div"); d.className = "ag-autocomplete-opt"; d.textContent = o.label;
-            d.onmousedown = (e) => { e.preventDefault(); this.value = o.value; params.stopEditing(); }; list.appendChild(d);
+            add(o.label, o.value, false);
           }
         };
-        input.addEventListener("input", render); render();
+        input.addEventListener("input", render);
+        input.addEventListener("keydown", (e) => {
+          const n = this.visibleOpts.length;
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            if (!n) return;
+            const step = e.key === "ArrowDown" ? 1 : -1;
+            this.activeIdx = this.activeIdx < 0
+              ? (step > 0 ? 0 : n - 1)
+              : (this.activeIdx + step + n) % n;
+            this.visibleOpts.forEach((o, i) => o.el.classList.toggle("hi", i === this.activeIdx));
+            const el = this.visibleOpts[this.activeIdx].el;
+            if (el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+            return;
+          }
+          if (e.key === "Enter" && this.activeIdx >= 0) {
+            e.preventDefault();
+            this.value = this.visibleOpts[this.activeIdx].value;
+            params.stopEditing();
+            return;
+          }
+          if (e.key === "Escape") { e.preventDefault(); params.stopEditing(true); }
+        });
+        render();
         this.wrap = wrap; this.input = input;
       }
       getGui() { return this.wrap; }
@@ -337,6 +393,10 @@ export function createGridFactories(ctx) {
           cd.valueFormatter = (p) => formatLocaleDate(p.value) || (p.value == null ? "" : String(p.value));
         }
         cd.valueParser = (p) => dateCellParser(p.newValue, p.oldValue);
+      } else if (col.editor === "number") {
+        cd.cellEditor = "agNumberCellEditor";
+        cd.cellEditorParams = (params) => (typeof col.editorParams === "function"
+          ? col.editorParams(_agCell(params)) : (col.editorParams || {}));
       } else {
         cd.cellEditor = "agTextCellEditor";
       }
@@ -347,7 +407,7 @@ export function createGridFactories(ctx) {
     if (col.headerFilter) {
       if (col.headerFilter === "list") {
         const vals = (col.headerFilterParams && col.headerFilterParams.values) || [];
-        cd.filter = _agListFilter(col.headerFilterFunc, col.field);
+        cd.filter = _agListFilter(col.headerFilterFunc, col.field, vals);
         cd.floatingFilterComponent = _agListFloating(vals);
       } else if (typeof col.headerFilterFunc === "function") {
         cd.filter = _agTextFuncFilter(col.headerFilterFunc, col.field);
@@ -376,7 +436,9 @@ export function createGridFactories(ctx) {
       const row = document.createElement("div"); row.className = "ag-collapse-row";
       const k = document.createElement("span"); k.className = "ag-collapse-key"; k.textContent = m.headerName;
       const val = document.createElement("span"); val.className = "ag-collapse-val";
-      if (v instanceof HTMLElement) val.appendChild(v); else val.innerHTML = String(v);
+      if (v instanceof HTMLElement) val.appendChild(v);
+      else if (m.html) val.innerHTML = String(v);
+      else val.textContent = String(v);
       row.append(k, val); pop.appendChild(row);
     }
     if (!pop.childElementCount) { const e = document.createElement("div"); e.className = "ag-collapse-row muted"; e.textContent = "No additional fields"; pop.appendChild(e); }
@@ -401,8 +463,18 @@ export function createGridFactories(ctx) {
     const _collapseMeta = tabOpts.responsive === false ? [] : (tabOpts.columns || [])
       .filter((c) => typeof c.responsive === "number" && c.responsive >= 1 && c.field && !c.columns)
       .sort((a, b) => b.responsive - a.responsive)
-      .map((c) => ({ colId: c.field, headerName: c.title || c.field,
-        value: (data) => { try { return c.formatter ? c.formatter(_agCell({ data, value: data[c.field], colDef: { field: c.field } })) : (data[c.field] ?? ""); } catch (_) { return data[c.field] ?? ""; } } }));
+      .map((c) => ({ colId: c.field, headerName: c.title || c.field, html: !!c.formatter,
+        value: (data) => {
+          try {
+            return c.formatter
+              ? c.formatter(_agCell({ data, value: data[c.field], colDef: { field: c.field } }))
+              : (data[c.field] ?? "");
+          } catch (_) {
+            const s = document.createElement("span");
+            s.textContent = String(data[c.field] ?? "");
+            return s;
+          }
+        } }));
     if (_collapseMeta.length) {
       colDefs.unshift({
         colId: "_expand", pinned: "left", width: 36, minWidth: 36, sortable: false, filter: false,
@@ -562,6 +634,7 @@ export function createGridFactories(ctx) {
       },
       scrollToRow: (id) => { const n = api && api.getRowNode(String(id)); if (n) api.ensureNodeVisible(n); },
       download: (_fmt, name) => api && api.exportDataAsCsv({ fileName: name }),
+      destroy: () => { if (api) api.destroy(); api = null; },
     };
   }
 
@@ -1010,7 +1083,9 @@ export function createGridFactories(ctx) {
         if (cfg.afterChange) cfg.afterChange();
       } catch (err) { setMsg(cfg.msgId, err.message, false); }
     }
+    let refreshSeq = 0;
     async function refresh() {
+      const seq = ++refreshSeq;
       // Note: Tabulator 6.3.1 doesn't expose `setPlaceholder` at runtime. The
       // empty-state text is set once at construction via the `placeholder`
       // option (above). An earlier audit (P36) tried to swap to "Loading…"
@@ -1034,9 +1109,11 @@ export function createGridFactories(ctx) {
       } else {
         items = await api(cfg.path);
       }
+      if (seq !== refreshSeq) return;
       if (cfg.onLoad) cfg.onLoad(items, { q });
       if (built) await table.setData(items);
       else pending = items;
+      if (seq !== refreshSeq) return;
       applySelection();
     }
     form.addEventListener("submit", async (e) => {

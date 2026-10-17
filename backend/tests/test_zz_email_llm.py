@@ -188,7 +188,6 @@ def test_docs_inventory_cites_shipped_inbox_idle_mail():
     assert "inbox_person" in model
     assert "outlook_feed" in model
     assert "deleted_at" in model
-    assert "985" in coverage
     assert "test_zz_inbox_people" in coverage
     assert "Get all" in ingest
     assert "outlook" in ingest.lower()

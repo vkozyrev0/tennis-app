@@ -518,7 +518,7 @@ def test_td_inbox_leftover_unmatched_and_file_block():
         "from_address": "parent@example.com",
     }))
     sug = _ok(client.post(f"/api/emails/{leftover['id']}/suggest"), 200)
-    assert sug.get("classification") in {"other", "unclassified", "hotel"} or "classification" in sug
+    assert sug.get("classification") == "other"
     leftover_put = client.put(f"/api/emails/{leftover['id']}", json={
         "tournament_id": tid, "classification": "other", "status": "new",
     })

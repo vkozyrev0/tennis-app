@@ -60,7 +60,9 @@ export function createShell() {
             document.dispatchEvent(new CustomEvent("auth-expired"));
           }
         }
-        throw new Error(humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));
+        const err = new Error(humanizeDetail(detail, `${res.status} ${res.statusText}`.trim()));
+        err.status = res.status;
+        throw err;
       }
       return body;
     } finally {

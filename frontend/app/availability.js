@@ -50,6 +50,7 @@ export function createAvailabilityPanel(ctx) {
   // Official ids that have at least one assigned day in this tournament (set in
   // loadAvailability), so the table + gap callout can flag the unstaffed.
   let availAssignedIds = new Set();
+  let availAssignmentsOk = true;
   function renderAvailTable() {
     const byOff = {};
     for (const r of availAll) {
@@ -69,7 +70,12 @@ export function createAvailabilityPanel(ctx) {
     // Gap callout: how many available officials aren't staffed yet.
     const gap = rows.filter((r) => !r.assigned);
     const el = document.getElementById("avail-gap");
-    if (gap.length) {
+    if (!availAssignmentsOk) {
+      el.hidden = false;
+      el.className = "msg bad";
+      el.textContent = "Assignment status unavailable — staffing gaps are hidden until the assignments load.";
+    } else if (gap.length) {
+      el.className = "";
       el.hidden = false;
       el.innerHTML = `⚠ ${gap.length} of ${rows.length} available official(s) have no assigned day yet: ` +
         hstr`<strong>${gap.map((r) => r.official_name).join("; ")}</strong>. ` +
@@ -116,7 +122,8 @@ export function createAvailabilityPanel(ctx) {
       api(`/tournaments/${getActive().id}/assignments`),
     ]);
     availAll = availR.status === "fulfilled" ? availR.value : [];
-    const asgList = asgR.status === "fulfilled" ? asgR.value : [];
+    availAssignmentsOk = asgR.status === "fulfilled";
+    const asgList = availAssignmentsOk ? asgR.value : [];
     // An official counts as "assigned" only with at least one working day.
     availAssignedIds = new Set(asgList.filter((a) => a.days && a.days.length).map((a) => a.official_id));
     // Pick the current value once and feed it through both renderers, instead of
@@ -153,7 +160,9 @@ export function createAvailabilityPanel(ctx) {
         // Non-assigned cells are clickable to staff this official on this day.
         const click = !s;
         if (click) cls.push("hm-clickable");
-        const attrs = click ? hstr` data-oid="${o.official_id}" data-date="${d}" data-name="${o.official_name}"` : "";
+        const attrs = click
+          ? hstr` data-oid="${o.official_id}" data-date="${d}" data-name="${o.official_name}" tabindex="0" role="button"`
+          : "";
         const title = `${o.official_name} · ${fmtDOW(d)}: ` +
           (a ? "available" : "not declared") + (s ? ", assigned" : " — click to assign");
         return hstr`<td class="${cls.join(" ")}"${raw(attrs)} title="${title}">${s ? "●" : ""}</td>`;
@@ -183,7 +192,14 @@ export function createAvailabilityPanel(ctx) {
     if (!cell) { if (!e.target.closest || !e.target.closest(".cov-pop")) _closeHmPop(); return; }
     _openAssignCell(cell);
   });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") _closeHmPop(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { _closeHmPop(); return; }
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const cell = e.target.closest && e.target.closest("#avail-heatmap .hm-clickable");
+    if (!cell) return;
+    e.preventDefault();
+    _openAssignCell(cell);
+  });
 
   async function _openAssignCell(cell) {
     _closeHmPop();

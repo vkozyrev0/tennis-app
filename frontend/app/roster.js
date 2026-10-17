@@ -120,9 +120,10 @@ export function createRosterPanel(ctx) {
     if (!rows.length) { el.textContent = ""; return; }
     const sel = rows.filter((r) => r.selection_status === "selected");
     const inN = sel.filter((r) => r.signed_in).length;
+    const capped = rows.length >= LIST_PAGE_SIZE ? ` · first ${rows.length} loaded, filter to narrow` : "";
     el.textContent =
       `${rows.length} on roster · ${n("selected")} selected · ${n("alternate")} alternate · ${n("withdrawn")} withdrawn` +
-      (sel.length ? ` · checked in ${inN}/${sel.length}` : "");
+      (sel.length ? ` · checked in ${inN}/${sel.length}` : "") + capped;
   }
   const rosterName = (e) => [e.last_name, e.first_name].filter(Boolean).join(", ") || e.usta_number;
 
@@ -497,8 +498,23 @@ export function createRosterPanel(ctx) {
     toast(`Adding both — confirm this player, then ${who1 || "the partner"} opens next`, true);
   }
 
+  // The grid and the count strip load one page (LIST_PAGE_SIZE). Exports fetch
+  // every page so a roster above that cap is not silently truncated.
+  async function _allRosterRows() {
+    const q = document.getElementById("roster-filter")?.value.trim() || "";
+    const out = [];
+    for (let offset = 0; ; offset += LIST_PAGE_SIZE) {
+      const page = await api(listPagePath(`/tournaments/${getActive().id}/players`, {
+        q, limit: LIST_PAGE_SIZE, offset,
+      }));
+      out.push(...page);
+      if (page.length < LIST_PAGE_SIZE) break;
+    }
+    return out;
+  }
+
   // Sign-in sheet: the workbook's roster format (status/events/size/hotel/lodging),
-  // joining the loaded roster with this tournament's player-hotel rows.
+  // joining the full roster with this tournament's player-hotel rows.
   const SIGNIN_HEADERS = ["Status", "Events", "Player", "USTA #", "City", "State",
     "Division", "T-shirt", "Hotel", "Lodging plan", "Dietary"];
   function rosterSignInTemplate() { csvDownload([SIGNIN_HEADERS], "sign-in-sheet-template"); }
@@ -510,8 +526,11 @@ export function createRosterPanel(ctx) {
         hotelByPlayer[r.player_id] = { hotel: r.hotel_name || "", lodging: r.lodging_plan || "" };
       }
     } catch { /* hotels optional — sheet still useful without them */ }
+    let all;
+    try { all = await _allRosterRows(); }
+    catch (e) { toast(e.message, false); return; }
     const rows = [SIGNIN_HEADERS.slice()];
-    for (const e of [...rosterRows].sort((a, b) =>
+    for (const e of all.sort((a, b) =>
       (a.last_name || "").localeCompare(b.last_name || "") || (a.first_name || "").localeCompare(b.first_name || ""))) {
       const h = hotelByPlayer[e.player_id] || {};
       const p = getPlayersById()[e.player_id] || {};
@@ -522,13 +541,35 @@ export function createRosterPanel(ctx) {
         h.hotel || "", h.lodging || "", e.dietary_preference || "",
       ]);
     }
-    csvDownload(rows, `sign-in-sheet-${(getActive().name || "").replace(/\s+/g, "_")}`);
+    await csvDownload(rows, `sign-in-sheet-${(getActive().name || "").replace(/\s+/g, "_")}`);
+  }
+
+  // Roster CSV goes through the H4.1 audit + H4.2 minors-PII gate (roster is a
+  // PII resource); the grid facade's native AG export would bypass both.
+  const ROSTER_HEADERS = ["Player", "USTA #", "Division", "Gender", "Status",
+    "Checked in", "T-shirt", "Dietary", "Lodging"];
+  async function rosterCsvExport() {
+    if (!getActive()) { toast("Select a tournament first", false); return; }
+    let all;
+    try { all = await _allRosterRows(); }
+    catch (e) { toast(e.message, false); return; }
+    const rows = [ROSTER_HEADERS.slice()];
+    for (const e of all) {
+      rows.push([
+        rosterName(e), e.usta_number || "", e.age_division || "", rowGender(e) || "",
+        e.selection_status || "", e.signed_in ? "yes" : "no",
+        e.t_shirt_size || "", e.dietary_preference || "",
+        e.lodging_plan || e.lodging_plan_raw || "",
+      ]);
+    }
+    await csvDownload(rows, "roster", { resource: "roster" });
   }
 
   return {
     loadRoster,
     rosterSignInExport,
     rosterSignInTemplate,
+    rosterCsvExport,
     rosterGrid,
     inboxAddToRoster,
     inboxAddBothToRoster,

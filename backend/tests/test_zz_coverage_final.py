@@ -195,7 +195,9 @@ def test_import_merged_row_and_unknown_type_and_merge_notes(monkeypatch):
 
     monkeypatch.setattr(psycopg.Cursor, "execute", wrapped)
     e2 = client.post(f"/api/import/batches/{bid5}/merge")
-    assert e2.status_code in (200, 500)
+    # A bookkeeping failure is rolled back to the savepoint; the merge still
+    # succeeds for the remaining rows.
+    assert e2.status_code == 200, e2.text
 
 
 def test_emails_bulk_confirm_skip_and_upsert_error_and_populate(monkeypatch):
@@ -238,7 +240,8 @@ def test_emails_bulk_confirm_skip_and_upsert_error_and_populate(monkeypatch):
     cl = _ok(client.post("/api/emails/bulk/classify", json={
         "email_ids": [e3["id"]], "only_unclassified": False,
     }), 200)
-    assert cl["classified"] == 0 or cl["classified"] >= 0
+    # already `other` and the suggester also says `other` → skipped
+    assert cl["classified"] == 0
 
     # withdrawal populate twice → already exists (ON CONFLICT DO NOTHING)
     p = _ok(client.post("/api/players", json={

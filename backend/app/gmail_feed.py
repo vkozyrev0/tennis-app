@@ -24,6 +24,7 @@ from .crypto import encrypt as _enc
 from .email_ingest import IngestPayload, html_to_text, ingest_email
 
 _FEED_ID = 1
+ALLOWED_IMAP_HOSTS = frozenset({"imap.gmail.com", "imap.googlemail.com"})
 _DEFAULTS = {
     "enabled": False,
     "gmail_address": None,
@@ -264,7 +265,11 @@ def _imap_fetch(
     secret = _dec(row.get("secret_enc")) or ""
     if not address or not secret:
         raise RuntimeError("Gmail address and app password are required")
-    host = row.get("imap_host") or "imap.gmail.com"
+    host = str(row.get("imap_host") or "imap.gmail.com").strip().lower()
+    # The feed decrypts and sends the stored app password to this host. Restrict
+    # it so an admin cannot redirect the credential to a server they control.
+    if host not in ALLOWED_IMAP_HOSTS:
+        raise RuntimeError("Gmail feed host must be imap.gmail.com")
     port = int(row.get("imap_port") or 993)
     mailbox = row.get("mailbox") or "INBOX"
     factory = imap_factory or imaplib.IMAP4_SSL

@@ -48,43 +48,66 @@ def upsert_inbox_people(cur, email_id, pairs, gender=None) -> list[dict]:
         if not name and not usta:
             continue
         first, last = split_name(name)
-        row = None
+        # ON CONFLICT against the two partial unique indexes removes the
+        # select-then-insert race: two emails naming the same new player used to
+        # make one ingest fail on the unique index.
         if usta:
-            cur.execute(f"SELECT {_COLS} FROM inbox_person WHERE usta_number = %s", (usta,))
-            row = cur.fetchone()
-        if row is None and name:
-            cur.execute(
-                f"SELECT {_COLS} FROM inbox_person "
-                "WHERE usta_number IS NULL AND lower(name) = lower(%s)",
-                (name,),
-            )
-            row = cur.fetchone()
-        if row:
-            cur.execute(
-                f"""
-                UPDATE inbox_person SET
-                    name = COALESCE(%s, name),
-                    first_name = COALESCE(%s, first_name),
-                    last_name = COALESCE(%s, last_name),
-                    usta_number = COALESCE(%s, usta_number),
-                    gender = COALESCE(gender, %s),
-                    source_email_id = COALESCE(%s, source_email_id)
-                WHERE id = %s
-                RETURNING {_COLS}
-                """,
-                (name, first, last, usta, g, email_id, row["id"]),
-            )
+            row = None
+            if name:
+                # Attach a later-seen USTA to an existing name-only row. The
+                # UPDATE is atomic; a concurrent insert falls through to the
+                # ON CONFLICT path below.
+                cur.execute(
+                    f"""
+                    UPDATE inbox_person SET
+                        usta_number = %s,
+                        name = COALESCE(%s, name),
+                        first_name = COALESCE(%s, first_name),
+                        last_name = COALESCE(%s, last_name),
+                        gender = COALESCE(gender, %s),
+                        source_email_id = COALESCE(%s, source_email_id)
+                    WHERE usta_number IS NULL AND lower(name) = lower(%s)
+                    RETURNING {_COLS}
+                    """,
+                    (usta, name, first, last, g, email_id, name),
+                )
+                row = cur.fetchone()
+            if row is None:
+                cur.execute(
+                    f"""
+                    INSERT INTO inbox_person
+                        (name, first_name, last_name, usta_number, gender, source_email_id)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (usta_number) WHERE usta_number IS NOT NULL
+                    DO UPDATE SET
+                        name = COALESCE(EXCLUDED.name, inbox_person.name),
+                        first_name = COALESCE(EXCLUDED.first_name, inbox_person.first_name),
+                        last_name = COALESCE(EXCLUDED.last_name, inbox_person.last_name),
+                        gender = COALESCE(inbox_person.gender, EXCLUDED.gender),
+                        source_email_id = COALESCE(EXCLUDED.source_email_id, inbox_person.source_email_id)
+                    RETURNING {_COLS}
+                    """,
+                    (name or usta, first, last, usta, g, email_id),
+                )
+                row = cur.fetchone()
         else:
             cur.execute(
                 f"""
                 INSERT INTO inbox_person
                     (name, first_name, last_name, usta_number, gender, source_email_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, NULL, %s, %s)
+                ON CONFLICT (lower(name)) WHERE usta_number IS NULL
+                DO UPDATE SET
+                    first_name = COALESCE(EXCLUDED.first_name, inbox_person.first_name),
+                    last_name = COALESCE(EXCLUDED.last_name, inbox_person.last_name),
+                    gender = COALESCE(inbox_person.gender, EXCLUDED.gender),
+                    source_email_id = COALESCE(EXCLUDED.source_email_id, inbox_person.source_email_id)
                 RETURNING {_COLS}
                 """,
-                (name or usta, first, last, usta, g, email_id),
+                (name, first, last, g, email_id),
             )
-        out.append(_as_out(cur.fetchone()))
+            row = cur.fetchone()
+        out.append(_as_out(row))
     return out
 
 

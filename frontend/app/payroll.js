@@ -6,7 +6,6 @@
  *   api: Function,
  *   setMsg: Function,
  *   confirmDialog: Function,
- *   markInvalid: Function,
  *   money: Function,
  *   html: Function,
  *   hstr: Function,
@@ -20,7 +19,7 @@
  */
 export function createPayrollPanel(ctx) {
   const {
-    api, setMsg, confirmDialog, markInvalid, money, hstr, raw,
+    api, setMsg, confirmDialog, money, hstr, raw,
     makeReadGrid, printDoc, fmtMDY: _fmtMDY, getActive,
   } = ctx;
 
@@ -253,7 +252,20 @@ export function createPayrollPanel(ctx) {
       m.querySelector("#batch-ok").addEventListener("click", () => {
         const reference = m.querySelector("#batch-ref").value.trim();
         const paid_on = m.querySelector("#batch-date").value;
-        if (!reference || !paid_on) { markInvalid(m.querySelector("#batch-ref"), "reference and date are required"); return; }
+        if (!reference || !paid_on) {
+          let err = m.querySelector(".batch-err");
+          if (!err) {
+            err = document.createElement("p");
+            err.className = "msg bad batch-err";
+            m.querySelector(".modal-box").appendChild(err);
+          }
+          err.textContent = "reference and date are required";
+          const ref = m.querySelector("#batch-ref");
+          ref.setAttribute("aria-invalid", "true");
+          ref.classList.add("field-error");
+          ref.focus();
+          return;
+        }
         close({ reference, method: m.querySelector("#batch-method").value, paid_on,
                 note: m.querySelector("#batch-note").value.trim() || null });
       });

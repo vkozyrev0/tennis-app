@@ -86,6 +86,9 @@ not log in — email is the only player-facing channel; everything else is TD-si
 ## Cross-cutting themes (not stated, but implied)
 - The unifying engine on the player side is an **email triage agent**: read an
   inbound email, classify its intent, extract fields, route to the right list.
+  **Shipped today:** keyword triage suggests a label and extracts fields; a
+  human files every message. The optional leftover-LLM pass refines `other`.
+  No agent routes a row by itself.
 - A single **player identity** (USTA number) ties the doubles/withdrawal/late/
   avoidance/t-shirt/hotel lists together.
 - Junior data involves **minors' PII** (names, addresses, contact info) — a

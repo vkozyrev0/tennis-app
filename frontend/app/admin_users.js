@@ -3,6 +3,42 @@
 export function installAdminUsers(ctx) {
   const { api, setMsg, toast, confirmDialog, markInvalid, formObj, onSubmit, hstr, raw } = ctx;
 
+  // Masked new-password dialog. window.prompt showed the password on screen and
+  // had no confirmation or length check.
+  function _promptPassword(username) {
+    return new Promise((resolve) => {
+      const m = document.createElement("div"); m.className = "modal";
+      m.innerHTML = '<div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="upw-title">' +
+        '<h3 class="detail-title" id="upw-title">Reset password</h3>' +
+        hstr`<p class="muted">Set a new password for ${username}.</p>` +
+        '<div class="row"><label>New password <input id="upw-new" type="password" autocomplete="new-password" minlength="8" /></label></div>' +
+        '<div class="row"><label>Confirm password <input id="upw-confirm" type="password" autocomplete="new-password" minlength="8" /></label></div>' +
+        '<p class="msg bad" id="upw-msg" hidden></p>' +
+        '<div class="modal-actions"><button type="button" id="upw-ok">Reset password</button>' +
+        '<button type="button" id="upw-cancel" class="cancel">Cancel</button></div></div>';
+      document.body.appendChild(m);
+      const close = (v) => { m.remove(); resolve(v); };
+      const input = m.querySelector("#upw-new");
+      const confirm = m.querySelector("#upw-confirm");
+      const msg = m.querySelector("#upw-msg");
+      const ok = () => {
+        if (input.value.length < 8) {
+          msg.hidden = false; msg.textContent = "Password must be at least 8 characters."; input.focus(); return;
+        }
+        if (input.value !== confirm.value) {
+          msg.hidden = false; msg.textContent = "Passwords do not match."; confirm.focus(); return;
+        }
+        close(input.value);
+      };
+      m.querySelector("#upw-ok").addEventListener("click", ok);
+      m.querySelector("#upw-cancel").addEventListener("click", () => close(null));
+      m.addEventListener("click", (e) => { if (e.target === m) close(null); });
+      m.addEventListener("keydown", (e) => { if (e.key === "Escape") close(null); });
+      confirm.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ok(); } });
+      input.focus();
+    });
+  }
+
   // --- Admin users (Setup; multi-user TD access, D8) ---
   const userForm = document.getElementById("user-form");
   async function loadUsers() {
@@ -26,7 +62,7 @@ export function installAdminUsers(ctx) {
       const reset = document.createElement("button");
       reset.type = "button"; reset.className = "btn-link"; reset.textContent = "Reset password";
       reset.addEventListener("click", async () => {
-        const pw = window.prompt(`New password for ${u.username}:`);
+        const pw = await _promptPassword(u.username);
         if (!pw) return;
         try {
           await api(`/admin/users/${u.id}/password`, { method: "POST", body: JSON.stringify({ password: pw }) });

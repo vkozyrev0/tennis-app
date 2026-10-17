@@ -14,7 +14,9 @@ export function createTournamentSitesPanel(ctx) {
   let tSitesSelected = new Set();
   async function loadTSites() {
     if (!getActive()) return;
-    tSitesSelected = new Set((await api(`/tournaments/${getActive().id}/sites`)).map((s) => s.id));
+    try {
+      tSitesSelected = new Set((await api(`/tournaments/${getActive().id}/sites`)).map((s) => s.id));
+    } catch (e) { setMsg("t-sites-msg", e.message, false); return; }
     renderTSites();
   }
   // Membership grid: the "Add / ✓ In" toggle lives in an action column; members

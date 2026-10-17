@@ -1,8 +1,10 @@
 # Email auto-ingest (D4)
 
 Dedicated tournament addresses can forward into the **review inbox** without
-manual paste. Classification is still the local keyword suggester (no LLM);
-a human files each message into structured lists.
+manual paste. Classification runs the local keyword suggester first; when
+`EMAIL_LLM=1` an optional leftover pass sends the clipped body to the selected
+small-LLM provider (DeepSeek by default, or the on-box sidecar). A human files
+each message into structured lists.
 
 A **Gmail IMAP feed** (Inbox → Gmail) is one mailbox path: the TD stores a
 Gmail address + App Password (encrypted) and a UID cursor. Inbox **Get mails**
@@ -143,7 +145,9 @@ your mail host) can use the JSON endpoint.
 - Ingest logs only `id`, `tournament_id`, `classification` — **not** subject/body.  
 - Endpoint is **not** admin-cookie auth; protect the token like a password.  
 - Prefer a **dedicated** tournament address (not the TD’s personal mailbox).  
-- Human review still files every row; no LLM reads content.
+- Human review still files every row; when `EMAIL_LLM=1` the clipped leftover
+  body goes to the selected provider (DeepSeek by default, off-box; the local
+  sidecar keeps it on-box).
 
 Before real junior data on a shared host: non-default admin password, real
 `PII_ENCRYPTION_KEY`, TLS at the edge, and a retention plan

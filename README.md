@@ -1,7 +1,7 @@
 # CourtOps Tennis
 
 [![docker](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml/badge.svg)](https://github.com/vkozyrev0/tennis-app/actions/workflows/docker.yml)
-[![Docker Hub](https://img.shields.io/docker/image-size/vkozyrev0/tennis-app/latest?logo=docker&label=docker%20hub)](https://hub.docker.com/r/vkozyrev0/tennis-app)
+[![Docker Hub](https://img.shields.io/docker/image-size/vkozyrev0/tennis-app/latest?logo=docker&label=docker%20hub%20snapshot)](https://hub.docker.com/r/vkozyrev0/tennis-app)
 
 Back-office tooling for a USTA **Tournament Director (TD)**. Two loosely-coupled
 halves:
@@ -22,7 +22,9 @@ surface for officials.
 
 **Live demo:** [https://courtops-poc.fly.dev](https://courtops-poc.fly.dev)
 (Fly.io POC — see [docs/deploy.md](docs/deploy.md)). Local sign-in is
-`admin / admin`; the public host uses a non-default `ADMIN_PASSWORD`.
+`admin / admin`; the public host uses a non-default `ADMIN_PASSWORD`. The hosted
+demo runs **`ENV=dev`** with the **DeepSeek** leftover-email pass enabled: it is
+a demo, not a COPPA-ready deployment, and leftover email text leaves the box.
 
 ## Stack
 
@@ -45,8 +47,10 @@ selected with `EMAIL_LLM_PROVIDER`:
 `EMAIL_LLM_BASE_URL` / `EMAIL_LLM_MODEL` still override the endpoint outright.
 **The key is never committed**: it comes from the environment (`DEEPSEEK_API_KEY`,
 or a Fly secret on a deployed instance), and `backend/.env.example` holds the
-name with an empty placeholder. `backend/tests/test_secret_guard.py` fails if the
-value — or anything shaped like a key — appears in a tracked file.
+name with an empty placeholder. `backend/tests/test_secret_guard.py` always fails
+if anything shaped like a key appears in a tracked file; when `DEEPSEEK_API_KEY`
+is exported it also checks the live value (CI has no secret, so that half is
+local-only).
 
 > **PII:** on the default DeepSeek path the leftover email text (which can carry
 > junior names and USTA numbers) leaves this machine and goes to a third-party
@@ -56,15 +60,18 @@ value — or anything shaped like a key — appears in a tracked file.
 
 ## Run it in one container (Postgres + server + website)
 
-The whole POC — database, API, and frontend — runs from a single image. Pull the
-prebuilt image from Docker Hub (no clone/build needed):
+The whole POC — database, API, and frontend — runs from a single image. The
+Docker Hub tag is a **snapshot from 2026-06-28**, before the Gmail/Outlook feeds
+and the DeepSeek pass; use it for a quick look, or build from a checkout for the
+current code:
 
 ```bash
-docker run --rm -p 8000:8000 vkozyrev0/tennis-app:latest
+docker run --rm -p 8000:8000 vkozyrev0/tennis-app:latest   # 2026-06-28 snapshot
 # open http://localhost:8000 — sign in as admin / admin
 ```
 
-Or build it yourself from a checkout:
+Build the current code yourself from a checkout (CI also publishes
+`ghcr.io/vkozyrev0/tennis-app:latest`; that package is private):
 
 ```bash
 docker build -t courtops:poc .
@@ -93,7 +100,7 @@ the `web` container; do not use a host-installed Postgres for this path):
 
 Open http://127.0.0.1:8000 — sign in as `admin` / `admin`.
 
-## Local dev (without Docker)
+## Local dev (without Docker; host Postgres required)
 
 ```bash
 cd backend
@@ -123,7 +130,7 @@ Prefer **one at a time** (parallel logins trip the process-local throttle):
 
 ```bash
 # Optional if the live DB is not admin/admin:
-#   set ADMIN_PASSWORD=…   (PowerShell: $env:ADMIN_PASSWORD="...")
+#   export ADMIN_PASSWORD=…   (PowerShell: $env:ADMIN_PASSWORD="...")
 backend/.venv/Scripts/python.exe scripts/live_feature_smoke.py
 backend/.venv/Scripts/python.exe scripts/ux_walkthrough.py
 backend/.venv/Scripts/python.exe scripts/e2e_td_scenario.py

@@ -98,12 +98,27 @@ def test_doubles_to_singles_preserves_case():
     assert doubles_to_singles("G14 DOUBLES") == "G14 SINGLES"
 
 
+_SIDECAR_ENV = {
+    "EMAIL_LLM": "1",
+    "EMAIL_LLM_BASE_URL": "http://127.0.0.1:8080/v1",
+    "EMAIL_LLM_TOKEN": "dev-local-llm",
+    "EMAIL_LLM_TIMEOUT": "60",
+}
+
+
 def _sidecar_ready() -> bool:
-    os.environ.setdefault("EMAIL_LLM", "1")
-    os.environ.setdefault("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
-    os.environ.setdefault("EMAIL_LLM_TOKEN", "dev-local-llm")
-    os.environ.setdefault("EMAIL_LLM_TIMEOUT", "60")
-    return probe_llm(timeout=5) == "ok"
+    # Decoration-time probe: set the vars for the probe, then restore the
+    # process env so the rest of the suite is not left with the LLM enabled.
+    saved = {k: os.environ.get(k) for k in _SIDECAR_ENV}
+    os.environ.update(_SIDECAR_ENV)
+    try:
+        return probe_llm(timeout=5) == "ok"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @pytest.mark.skipif(not _sidecar_ready(), reason="local llama.cpp sidecar not reachable")
@@ -112,8 +127,9 @@ def _sidecar_ready() -> bool:
     [s["i"] for s in _SINGLES],
     ids=[f"{s['i']:02d}-src{s['source_i']:02d}-{s['intent']}" for s in _SINGLES],
 )
-def test_tiny_llm_singles_copy_matches_gold(i):
-    os.environ["EMAIL_LLM"] = "1"
+def test_tiny_llm_singles_copy_matches_gold(i, monkeypatch):
+    for k, v in _SIDECAR_ENV.items():
+        monkeypatch.setenv(k, v)
     s = _SINGLES[i]
     parsed = leftover_model_intent(s["subject"], s["body"])
     assert parsed is not None, f"singles {i} leftover_model_intent returned None"

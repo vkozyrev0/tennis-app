@@ -28,6 +28,7 @@ def enums():
 @router.get("/api/health")
 def health():
     import psycopg
+    from fastapi.responses import JSONResponse
     from psycopg.rows import dict_row
 
     from ..config import settings
@@ -48,9 +49,12 @@ def health():
             info["db"] = "ok"
         finally:
             conn.close()
-    except Exception as e:  # pragma: no cover - exercised when DB is down
+    except Exception:  # pragma: no cover - exercised when DB is down
         info["status"] = "degraded"
-        info["error"] = str(e)
+    if info["db"] != "ok":
+        # A 200 here kept a dead container "healthy" and leaked DB detail to
+        # anonymous callers; the orchestration probes need a failure status.
+        return JSONResponse(status_code=503, content=info)
     return info
 
 

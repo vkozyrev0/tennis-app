@@ -22,6 +22,13 @@ from app.db import get_conn
 TARGETS: list[tuple[str, str, list[str]]] = [
     ("email_message", "id", ["body"]),
     ("player", "id", ["emails", "phones", "birthdate"]),
+    # 0037 encrypts the history copy too; rotating only `player` would leave
+    # historical birthdates unreadable once the old key is retired.
+    ("player_history", "id", ["birthdate"]),
+    # Mailbox credentials use the same Fernet; a retired key would silently
+    # break Gmail/Outlook fetching.
+    ("gmail_feed", "id", ["secret_enc"]),
+    ("outlook_feed", "id", ["secret_enc"]),
 ]
 
 

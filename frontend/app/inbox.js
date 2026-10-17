@@ -1807,6 +1807,7 @@ export function createInboxPanel(ctx) {
   _inboxPopulateTournamentDropdown();
   let _inboxFilterInit = false;
   const _INBOX_PAGE = 200;  // server-side cap; search to reach older mail
+  let _inboxLoadSeq = 0;
   async function loadInbox() {
     if (!getActive()) return;
     _defaultMailWindow();
@@ -1823,6 +1824,7 @@ export function createInboxPanel(ctx) {
     if (_inboxUnmatchedOnly) params.set("unmatched", "true");
     // Need X-Total-Count for the "showing N of M" note — fetch directly.
     _progress(1);
+    const seq = ++_inboxLoadSeq;
     let rows, total;
     try {
       const res = await fetch("/api/emails?" + params.toString(), { credentials: "same-origin" });
@@ -1840,10 +1842,17 @@ export function createInboxPanel(ctx) {
       total = res.headers.get("X-Total-Count");
       if (total != null) total = parseInt(total, 10);
       rows = await res.json();
+    } catch (e) {
+      const note = document.getElementById("inbox-search-note");
+      if (note) { note.hidden = false; note.textContent = "Could not load the inbox: " + e.message; }
+      return;
     } finally {
       _progress(-1);
     }
+    // A newer load (tournament switch, search) superseded this response.
+    if (seq !== _inboxLoadSeq) return;
     await _loadInboxPeople();
+    if (seq !== _inboxLoadSeq) return;
     _inboxRowsById.clear();
     for (const r of rows) _rememberInboxRow(r);
     inboxGrid.setData(rows);

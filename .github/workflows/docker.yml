@@ -48,6 +48,14 @@ jobs:
       - name: Lint Python (backend + scripts)
         run: python -m ruff check .
 
+      # D12: the pinned lock must resolve, not just exist.
+      - name: Check the pinned lock resolves
+        run: pip install --dry-run -r backend/requirements.lock
+
+      # D15: current-status lines must match the tree.
+      - name: Check docs current-status counts
+        run: python scripts/check_docs_counts.py
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -60,6 +68,15 @@ jobs:
 
       - name: Lint frontend JS + node tooling
         run: npx eslint .
+
+      # The app has no build step, so these DOM-free tests are the only
+      # regression net for the frontend modules and the CI-gate guard itself.
+      - name: Run frontend unit tests
+        run: |
+          for f in frontend/app/*.test.mjs scripts/*.test.mjs; do
+            echo "== $f"
+            node "$f"
+          done
 
   # Run the backend suite first; the image build/push is gated on it (needs: test).
   test:
@@ -102,6 +119,10 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: python -m pytest -q
+
+      # D15: the collected count must match every current-status line.
+      - name: Check docs current-status counts
+        run: python scripts/check_docs_counts.py --collect
 
   build:
     needs: [lint, test]

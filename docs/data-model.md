@@ -223,8 +223,9 @@ the product rule (missing distance stays a flag).
 > "file from email" picker — late entries, withdrawals, scheduling avoidances,
 > division flexibility, player hotel stays (+ CVB analytics), pairing avoidances
 > (groups), the cumulative t-shirt list, and **doubles** (mutual two-sided
-> verification + random FIFO queue). Human-review workflow, no auto-parsing
-> (D5/§5.1). Future enhancement: a triage agent that auto-suggests classification.
+> verification + random FIFO queue). Human-review workflow: keyword triage
+> suggests, a human files. When `EMAIL_LLM=1` an optional leftover pass can call
+> DeepSeek (off-box, the default) or the on-box sidecar.
 
 ### Player  ✅ *(built — mutable, with history)*
 One stable identity across every list. **USTA number is the natural key**
@@ -240,7 +241,8 @@ even a USTA number may be corrected — so edits must be **historized** (see
 | `birthdate` | optional at the API boundary; required on the Setup-page form (inline-create from roster/inbox flows may upsert without it). **Encrypted at rest** — the column is `text` holding a Fernet token, not `date` (migration 0037, PII H2) |
 | `birthdate_precision` | `day` (default) \| `year` (Initial import carries only year-of-birth → stored `YYYY-01-01`) — migration 0028 |
 | `city`, `state` | optional address-of-record (migration 0019) |
-| `emails`, `phones`, `district`, `section`, `wtn_singles`, `wtn_singles_conf`, `wtn_doubles`, `wtn_doubles_conf` | USTA "Full Player Data" catalog extensions (migration 0028 — see Player catalog extensions below) |
+| `emails`, `phones` | USTA "Full Player Data" catalog extensions (migration 0028) — **encrypted at rest** (Fernet, the same H2 path as `birthdate`) |
+| `district`, `section`, `wtn_singles`, `wtn_singles_conf`, `wtn_doubles`, `wtn_doubles_conf` | USTA "Full Player Data" catalog extensions (migration 0028 — see Player catalog extensions below) |
 | `updated_at` | timestamp of the current version; sent back as `X-If-Updated-At` for optimistic concurrency on PUT |
 | `created_at` | timestamptz, default now() |
 
@@ -324,9 +326,9 @@ Provenance / review inbox (audit §4.3). Messages land here via **Inbox paste**,
 PDF import, `POST /api/ingest/email`, **Gmail IMAP** (`ingest_source=gmail`,
 0057), or **Outlook Graph** (`ingest_source=outlook`, 0058). A human still
 **files** each message into a list. Keyword triage runs first; leftover
-`other` may use a **local** tiny-LLM (`EMAIL_LLM=1`, D5 — junior PII stays
-on-box). Inbox **Clear** sets `deleted_at` (0059); it does not delete provider
-mail.
+`other` may use a small LLM (`EMAIL_LLM=1`). The default DeepSeek provider is
+off-box; `EMAIL_LLM_PROVIDER=local` keeps the text on-box. Inbox **Clear** sets
+`deleted_at` (0059); it does not delete provider mail.
 | Field | Notes |
 |-------|-------|
 | `id` | PK |
@@ -342,8 +344,10 @@ mail.
 
 > **Triage:** `POST /api/emails/{id}/suggest` runs `app/triage.py` first
 > (local keywords). When `EMAIL_LLM=1` and the heuristic is leftover `other`,
-> the on-box Qwen 1.5B sidecar may upgrade the intent. Cloud LLM is not used
-> (D5). A human still confirms. See [email-llm-prompt.md](email-llm-prompt.md).
+> the selected small-LLM provider may upgrade the intent. The default is the
+> **DeepSeek API** (off-box); `EMAIL_LLM_PROVIDER=local` uses the on-box Qwen
+> 1.5B sidecar. A human still confirms. See
+> [email-llm-prompt.md](email-llm-prompt.md).
 >
 > Player auto-detection persists onto this row — see **EmailMessage detection
 > columns** (migrations 0030/0031/0039/0041/0042) at the bottom of this doc.

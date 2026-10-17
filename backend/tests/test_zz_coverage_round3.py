@@ -250,7 +250,8 @@ def test_emails_bulk_confirm_upsert_and_already_filed():
     })
     pop1 = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e2["id"]]}), 200)
     pop2 = _ok(client.post("/api/emails/bulk/populate", json={"email_ids": [e2["id"]]}), 200)
-    assert pop2["skipped"] or pop1["filed"] >= 0
+    assert pop1["filed"] == 1
+    assert len(pop2["skipped"]) == 1
 
 
 def test_roster_import_http_error_and_check(monkeypatch):

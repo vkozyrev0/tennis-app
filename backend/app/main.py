@@ -91,6 +91,21 @@ for r in (sites, tournaments, officials, players, rates, hotels, room_blocks,
 # even after a hard refresh. For production, replace with hashed filenames
 # (e.g. /app.js?v=<git-sha>) and let Cache-Control: immutable do its job.
 @app.middleware("http")
+async def _limit_request_body(request: Request, call_next):
+    """Refuse an oversized API body before FastAPI reads it into memory."""
+    from fastapi.responses import JSONResponse
+
+    from .config import MAX_UPLOAD_BYTES
+    length = request.headers.get("content-length")
+    if length and length.isdigit() and int(length) > MAX_UPLOAD_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"request body too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"},
+        )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def _no_cache_frontend(request: Request, call_next):
     response = await call_next(request)
     if not request.url.path.startswith("/api"):

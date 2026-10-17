@@ -165,7 +165,8 @@ export function createPartBPanels(ctx) {
     const box = document.getElementById("wd-suggest");
     if (!box || !getActive()) return;
     const div = wd && wd.age_division;
-    let sameDiv, others;
+    let sameDiv = [];
+    let others;
     try {
       if (div) sameDiv = await api(`/tournaments/${getActive().id}/alternates?age_division=${encodeURIComponent(div)}`);
       const all = await api(`/tournaments/${getActive().id}/alternates`);

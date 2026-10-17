@@ -76,16 +76,15 @@ def my_profile(user=Depends(get_current_user), conn=Depends(db_dep)):
 def update_my_profile(body: OfficialCreate, user=Depends(get_current_user), conn=Depends(db_dep)):
     oid = _my_official_id(user)
     with conn.cursor() as cur:
-        # Audit N5: the previous UPDATE dropped lat/lng, so an official editing
-        # their own profile silently zeroed their geocoded location on the
-        # admin-side round-trip. Persist every column on OfficialCreate.
+        # lat/lng are admin/server-owned (geocoding drives mileage). A
+        # self-service edit must not move the official and inflate a claim, so
+        # this UPDATE leaves the stored coordinates untouched.
         cur.execute(
             f"""
             UPDATE official SET
                 first_name=%(first_name)s, last_name=%(last_name)s, street=%(street)s,
                 city=%(city)s, state=%(state)s, zip=%(zip)s, phone=%(phone)s,
-                email=%(email)s, dietary_restrictions=%(dietary_restrictions)s,
-                lat=%(lat)s, lng=%(lng)s
+                email=%(email)s, dietary_restrictions=%(dietary_restrictions)s
             WHERE id=%(id)s RETURNING {_OFF_COLS}
             """,
             {**body.model_dump(), "id": oid},

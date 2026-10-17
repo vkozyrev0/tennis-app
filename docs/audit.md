@@ -10,6 +10,12 @@
 > open) and `changelog.md` (chronological log). The line-level critique
 > register that ran during the post-launch polish phase is folded into
 > `changelog.md` under "Audit passes 1–8".
+>
+> **Superseded 2026-10-17:** D3's "Google Maps geocoding" is scaffolded, but
+> `GEOCODER=google` address lookup still raises `NotImplementedError`. D5's
+> "no model sees the data" no longer holds: the optional leftover-email pass
+> sends clipped text to DeepSeek by default. See `roadmap.md` and
+> `coppa-policy.md` for current behavior.
 
 The single register of everything that needs a decision or a fix. Audits the
 vision for **validity** (is it buildable / well-defined?), **internal

@@ -716,7 +716,34 @@ def test_auth_gc_and_session_days(monkeypatch):
     assert auth_mod._session_days() == 3
 
 
-def test_login_lockout_and_logout_clears_cookie():
+def test_health_returns_503_when_db_is_down(monkeypatch):
+    import psycopg
+
+    def _boom(*_a, **_k):
+        raise psycopg.OperationalError("down")
+
+    monkeypatch.setattr(psycopg, "connect", _boom)
+    r = client.get("/api/health")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["db"] == "down" and body["status"] == "degraded"
+    assert "error" not in body
+
+
+def test_session_cookie_flags_and_logout_invalidates():
+    c = TestClient(app)
+    r = c.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    assert r.status_code == 200, r.text
+    cookie = r.headers.get("set-cookie", "").lower()
+    assert "httponly" in cookie
+    assert "samesite=strict" in cookie
+    assert c.get("/api/auth/me").status_code == 200
+    out = c.post("/api/auth/logout")
+    assert out.status_code == 200, out.text
+    assert c.get("/api/auth/me").status_code == 401
+
+
+def test_login_lockout():
     user = "lock_" + uuid.uuid4().hex[:8]
     for _ in range(5):
         r = client.post("/api/auth/login", json={"username": user, "password": "wrong"})

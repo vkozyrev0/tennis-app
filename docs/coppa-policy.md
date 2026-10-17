@@ -89,6 +89,11 @@ controls below — it is not a full COPPA compliance certificate.
 - **Security headers (D17):** CSP (`script-src 'self'`, styles allow inline),
   `X-Frame-Options: DENY`, `nosniff`, referrer + permissions policy; HSTS when
   `ENV=prod` (or `COURTOPS_HSTS=1`).
+- **Leftover-email LLM (third-party processor):** when `EMAIL_LLM=1`, the
+  clipped body of an `other` email goes to the configured provider. The
+  **default is DeepSeek**, off-box. Set `EMAIL_LLM=0` or
+  `EMAIL_LLM_PROVIDER=local` before real under-13 data. The hosted demo runs
+  `ENV=dev` with DeepSeek enabled and is not COPPA-ready.
 
 Still open (not this thin policy): least-privilege multi-user (H4.3); optional
 broader view logging (catalog GET / history); deploy-time disk encryption + KMS
@@ -106,6 +111,9 @@ today SameSite=Strict + same-origin).
 5. Schedule retention sweep; set `EMAIL_RETENTION_DAYS` deliberately
 6. Only then set **`ALLOW_UNDER13_PII=1`** if under-13 juniors will be stored
 7. Prefer header-only email ingest (`INGEST_ALLOW_QUERY_TOKEN` off)
+8. Decide the LLM path before real under-13 data: **`EMAIL_LLM=0`**, or
+   **`EMAIL_LLM_PROVIDER=local`** so the clipped body stays on-box. DeepSeek is
+   the default and sends that text to a third party.
 
 ---
 

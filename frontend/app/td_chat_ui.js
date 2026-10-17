@@ -83,6 +83,11 @@ export function createTdChatPanel(ctx) {
     const tid = getActive() && getActive().id;
     _log("user", msg);
     if (input) input.value = "";
+    // A new turn supersedes the previous turn's proposals; a failed or timed-out
+    // turn must not leave stale writes one click from confirmation.
+    _lastProposed = [];
+    const confirmBar = document.getElementById("td-chat-confirm-bar");
+    if (confirmBar) confirmBar.hidden = true;
     setChatPending(true);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), CHAT_CLIENT_TIMEOUT_MS);
@@ -110,14 +115,20 @@ export function createTdChatPanel(ctx) {
       const err = aborted ? "Intelligence timed out. Try again." : (e && e.message) || String(e);
       toast(err, false);
       _log("assistant", "Error: " + err);
+      _lastProposed = [];
+      if (confirmBar) confirmBar.hidden = true;
     } finally {
       clearTimeout(timer);
       setChatPending(false);
     }
   }
 
+  let _confirming = false;
   async function confirmWrites() {
-    if (!_lastProposed.length) return;
+    if (!_lastProposed.length || _confirming) return;
+    _confirming = true;
+    const btn = document.getElementById("td-chat-confirm");
+    if (btn) btn.disabled = true;
     const tid = getActive() && getActive().id;
     try {
       const r = await api("/td-chat/execute", {
@@ -131,6 +142,9 @@ export function createTdChatPanel(ctx) {
       toast("Chat actions applied", true);
     } catch (e) {
       toast(e.message, false);
+    } finally {
+      _confirming = false;
+      if (btn) btn.disabled = false;
     }
   }
 

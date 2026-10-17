@@ -9,6 +9,38 @@ dated entries; pre-2026-06-04 history is digested at the bottom.
 
 ---
 
+## 2026-10-17 — App-wide audit: PII copies, XSS sinks, broken controls, test isolation
+
+A five-surface audit (backend/security, frontend, tests, docs, presentation
+material) produced 100+ findings. The fixed set is listed in
+[audit-register.md](audit-register.md) under "2026-10-17 audit pass"; the
+deferrals are D20–D28 there. Highest-impact fixes:
+
+- **PII copies:** staged import rows now encrypt emails/phones/DOB/body and
+  clear the payload after merge; retention redacts `to_address` and the
+  `detected_*` PII and deletes old staged batches; player deletion redacts
+  linked email rows and promoted inbox people; key rotation now covers
+  `player_history.birthdate` and the Gmail/Outlook mailbox secrets.
+- **Security:** closed a stored XSS in the print window and the mobile row
+  expander, neutralized CSV formula cells on both client and server, routed the
+  roster CSV through the export audit/PII gate, restricted the Gmail IMAP host,
+  blocked a malformed Fernet key at prod boot, capped request bodies at 25 MB,
+  and stopped an official from rewriting their own `lat/lng` (mileage).
+- **Correctness/UX:** list-type header filters now render a select; the number
+  editor is a number editor; typeahead works from the keyboard; session expiry
+  runs logout cleanup; loader races and error states are handled; import deep
+  links and discard confirmation work; declared/no-show officials no longer
+  count as coverage or occupy rooms; extended player fields persist; health
+  returns 503 when the DB is down.
+- **Tests/infra:** each pytest process gets its own DB (concurrent runs no
+  longer destroy each other); new auth-matrix, cookie/logout, COPPA
+  update/import, export-gate, rotation, staging, and retention tests; CI now
+  runs the Node suite and dry-run-resolves the regenerated requirements lock.
+- **Docs:** current-status counts re-synced (1065 tests / 114 files / 0060);
+  the no-LLM claims, the design encryption claim, the Docker Hub snapshot, the
+  compose profile command, and the COPPA third-party LLM gate now match the
+  shipped code.
+
 ## 2026-09-23 — What still hung the inbox fetch: an unbounded IMAP socket and an unbounded model pass
 
 Both remaining hangs were reproduced with a probe before being fixed, and both are now bounded with tests that fail against the old code.

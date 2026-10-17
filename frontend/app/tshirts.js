@@ -76,7 +76,11 @@ export function createTshirtsPanel(ctx) {
     tshirtGrid.setData(tshirtRows);
     tshirtGrid.setFilter(tshirtMatches);
   }
-  async function loadTshirts() { tshirtRows = await api("/tshirts"); renderTshirts(); }
+  async function loadTshirts() {
+    try { tshirtRows = await api("/tshirts"); }
+    catch (e) { toast(e.message, false); return; }
+    renderTshirts();
+  }
   document.getElementById("tshirt-filter")?.addEventListener("input", () => tshirtGrid.setFilter(tshirtMatches));
   document.getElementById("tshirt-order-csv")?.addEventListener("click", tshirtOrderExport);
 

@@ -104,6 +104,22 @@ function gateProblems(text) {
     if (!cmds.includes(JS_CMD)) problems.push(`lint job does not run '${JS_CMD}'`);
     if (/^\s*if:/m.test(lint.join("\n"))) problems.push("lint job is conditional (has an if:)");
     if (!/^\s*-\s*name:\s*Checkout/m.test(lint.join("\n"))) problems.push("lint job does not check out the repo");
+    if (!/frontend\/app\/\*\.test\.mjs/.test(lint.join("\n"))) {
+      problems.push("lint job does not run the frontend unit tests");
+    }
+    if (!cmds.includes("pip install --dry-run -r backend/requirements.lock")) {
+      problems.push("lint job does not dry-run-resolve the pinned lock");
+    }
+    if (!cmds.includes("python scripts/check_docs_counts.py")) {
+      problems.push("lint job does not check the docs current-status counts");
+    }
+  }
+
+  // --- the collected count check needs the test DB ---
+  const test = byName.get("test");
+  if (!test) problems.push("no test job");
+  else if (!runCommands(test).includes("python scripts/check_docs_counts.py --collect")) {
+    problems.push("test job does not verify the collected docs count");
   }
 
   // --- the image build must depend on it ---
@@ -176,6 +192,12 @@ test("the checks reject a continue-on-error step", () => {
 test("the checks reject a changed lint command", () => {
   const broken = workflowText.replace(`run: ${JS_CMD}`, "run: npx eslint frontend");
   assert.notEqual(broken, workflowText, "fixture: no eslint command to change");
+  assert.notDeepEqual(gateProblems(broken), []);
+});
+
+test("the checks reject a workflow that drops the frontend unit tests", () => {
+  const broken = workflowText.replace("frontend/app/*.test.mjs", "frontend/app/REMOVED.test.mjs");
+  assert.notEqual(broken, workflowText, "fixture: no frontend test glob to rewrite");
   assert.notDeepEqual(gateProblems(broken), []);
 });
 

@@ -327,6 +327,22 @@ def test_default_tournament_env(monkeypatch):
     assert data["tournament_id"] == t["id"]
 
 
+def test_stale_default_tournament_falls_back_to_unscoped(monkeypatch):
+    monkeypatch.setenv("INGEST_DEFAULT_TOURNAMENT_ID", "99999999")
+    mid = f"stale-{uuid.uuid4().hex}@example.com"
+    data = _ok(client.post(
+        "/api/ingest/email",
+        headers=_headers(),
+        json={
+            "message_id": mid,
+            "subject": "no tournament",
+            "body": "unscoped mail",
+            "from_address": "p@example.com",
+        },
+    ), 201)
+    assert data["tournament_id"] is None
+
+
 def test_form_mailgun_style():
     t = _tournament(ingest_address="mg-route")
     mid = f"mg-{uuid.uuid4().hex}@mailgun"

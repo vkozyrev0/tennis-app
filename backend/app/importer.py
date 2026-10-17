@@ -11,7 +11,8 @@ import re
 from openpyxl import Workbook, load_workbook
 
 from .coppa import refuse_under13_birthdate  # D16 under-13 gate
-from .crypto import encrypt as _enc_pii  # PII H2: player contact fields
+from .crypto import decrypt as _dec_pii  # PII H2: player contact fields
+from .crypto import encrypt as _enc_pii
 from .playerops import upsert_hotel, upsert_player
 from .shirtops import norm_shirt as _norm_shirt  # audit A51, shared with roster.py
 
@@ -51,6 +52,28 @@ _PLAYER = [
 # Audit F14: re-export the shared helper so the existing module-local name
 # keeps working without a churn rewrite at every call site.
 from .playerops import norm_gender as _norm_gender  # noqa: E402, F401
+
+# Staged rows are JSONB. Encrypt the PII values at rest, decrypt on read (grid,
+# validation, merge), and clear the row after a successful merge.
+_STAGED_PII_KEYS = frozenset({"emails", "phones", "birthdate", "year_of_birth", "body"})
+
+
+def encrypt_staged(data: dict) -> dict:
+    out = dict(data or {})
+    for k in _STAGED_PII_KEYS:
+        v = out.get(k)
+        if isinstance(v, str) and v:
+            out[k] = _enc_pii(v)
+    return out
+
+
+def decrypt_staged(data: dict) -> dict:
+    out = dict(data or {})
+    for k in _STAGED_PII_KEYS:
+        v = out.get(k)
+        if isinstance(v, str) and v:
+            out[k] = _dec_pii(v)
+    return out
 
 
 def _alias_map(cols):
