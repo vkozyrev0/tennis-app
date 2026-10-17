@@ -21,7 +21,8 @@
 # which are inherent to bundling the database in the image.
 
 # ---- builder: assemble + strip the venv (runtime deps only) ----
-FROM postgres:16-alpine AS builder
+# Pinned by digest (D26): the tag moving must not silently change the runtime.
+FROM postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea AS builder
 RUN apk add --no-cache python3 py3-pip
 ENV VIRTUAL_ENV=/opt/venv PATH="/opt/venv/bin:$PATH"
 RUN python3 -m venv "$VIRTUAL_ENV"
@@ -35,7 +36,8 @@ RUN pip install --no-cache-dir --upgrade pip \
     && find "$VIRTUAL_ENV" -name '*.pyc' -delete
 
 # ---- final: postgres + bash + python runtime + the prebuilt venv ----
-FROM postgres:16-alpine
+# Same digest as the builder stage (D26).
+FROM postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
 
 # bash: the entrypoint is a bash script (Alpine ships only busybox sh).
 # su-exec: entrypoint starts as root (Fly volume chown) then drops to postgres.

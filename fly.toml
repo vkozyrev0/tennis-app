@@ -33,6 +33,10 @@ primary_region = "iad"
 
 [env]
   PORT = "8000"
+  # Trust the Fly edge proxy's X-Forwarded-For so the login throttle keys on the
+  # real client instead of the shared proxy address (D22). The app port is only
+  # reachable through that proxy, so accepting its forwarded header is safe.
+  FORWARDED_ALLOW_IPS = "*"
   # Persist the DB on the volume (not the image-layer baked path).
   PGDATA = "/data/pgdata"
   # ENV=dev is the image default; the prod boot-guard requires TLS/non-default DB

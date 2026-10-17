@@ -21,6 +21,10 @@ services:
     envVars:
       - key: PORT
         value: "8000"
+      # Trust Render's proxy X-Forwarded-For so the login throttle keys on the
+      # real client, not the shared proxy address (D22).
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"
       # ENV=dev is the image default; see fly.toml note on the prod boot-guard.
     disk:
       name: courtops-data

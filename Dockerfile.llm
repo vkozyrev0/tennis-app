@@ -1,13 +1,15 @@
 # Internal llama.cpp sidecar (Qwen2.5-1.5B-Instruct Q4_K_M).
 # Used by fly.llm.toml (courtops-llm) and local docker compose.
 # The GGUF is NOT baked in — first boot downloads it onto /models.
-FROM ghcr.io/ggml-org/llama.cpp:server
+# Both the server image (D26) and the model file are pinned by digest/checksum.
+FROM ghcr.io/ggml-org/llama.cpp:server@sha256:f41d47eee678c02656eefc9ed8cce76cab584aa7032805eeef0e6639fcfda485
 
 USER root
 COPY docker/llm-entrypoint.sh /usr/local/bin/llm-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/llm-entrypoint.sh && chmod +x /usr/local/bin/llm-entrypoint.sh
 
 ENV GGUF_URL=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+    GGUF_SHA256=6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e \
     GGUF_PATH=/models/model.gguf \
     LLAMA_HOST=:: \
     LLAMA_PORT=8080
