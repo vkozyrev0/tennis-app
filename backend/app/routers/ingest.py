@@ -138,7 +138,10 @@ def ingest_email_json(
 ):
     """Ingest one email from a JSON body (preferred)."""
     data = body.model_dump(exclude={"auto_classify"})
-    payload = payload_from_mapping(data, source="webhook")
+    try:
+        payload = payload_from_mapping(data, source="webhook")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _run_ingest(conn, payload, response=response, auto_classify=body.auto_classify)
 
 
@@ -174,7 +177,10 @@ async def ingest_email_form(
     auto_classify = str(form_map.get("auto_classify", "true")).lower() not in {
         "0", "false", "no",
     }
-    payload = payload_from_mapping(form_map, source="form")
+    try:
+        payload = payload_from_mapping(form_map, source="form")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _run_ingest(conn, payload, response=response, auto_classify=auto_classify)
 
 

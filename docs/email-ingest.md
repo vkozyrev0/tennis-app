@@ -59,6 +59,9 @@ Priority for `tournament_id`:
 3. `INGEST_DEFAULT_TOURNAMENT_ID`  
 4. Otherwise the email still lands with `tournament_id = null` (unscoped inbox)
 
+A `tournament_id` that is present but not an integer is rejected with **400**
+on both endpoints; it is never silently replaced by the default tournament.
+
 ## Endpoints
 
 | Method | Path | Body |
@@ -197,8 +200,9 @@ Inbox → Gmail page. Inbox **Get mails** passes the active tournament so new
 mail (and previously unscoped duplicates) land in that event's grid.
 **Clear inbox** hides CourtOps `email_message` rows (`deleted_at`) for that
 tournament only — it does not IMAP-delete or Graph-delete the Gmail / Outlook /
-Hotmail mailbox. **Get all** restores those copies and fetches from the event
-start (or 90 days).
+Hotmail mailbox. **Get all** restores those copies, inside that same
+event-start (or 90 day) window, and fetches from the event start (or 90
+days). Copies of the event that fall outside the window stay hidden.
 
 ## Outlook / Microsoft Graph feed
 

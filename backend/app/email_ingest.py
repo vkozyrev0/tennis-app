@@ -221,7 +221,11 @@ def payload_from_mapping(data: dict[str, Any], *, source: str = "webhook") -> In
         try:
             tournament_id = int(tid_raw)
         except (TypeError, ValueError):
-            tournament_id = None
+            # A provider that sends "macon" instead of an id must hear about it
+            # rather than land in the default tournament without a word.
+            raise ValueError(
+                f"tournament_id must be an integer, got {str(tid_raw)[:40]!r}"
+            ) from None
 
     received_at = parse_received_at(g(
         "received_at", "timestamp", "Date", "date", "DateHeader",
@@ -332,14 +336,24 @@ def _duplicate_hit(row: dict) -> dict:
     }
 
 
-def restore_hidden(cur, tournament_id: int) -> int:
-    """Un-hide CourtOps copies for one tournament. Mailboxes are not touched."""
+def restore_hidden(cur, tournament_id: int, since=None, until=None) -> int:
+    """Un-hide CourtOps copies for one tournament inside a window.
+
+    Clear inbox hides every copy of the event. Get all rests on the widening
+    window, so mapping that same window here keeps a restore to the mail the
+    press actually asked for. Mailboxes are not touched.
+    """
+    clauses = ["tournament_id = %s", "deleted_at IS NOT NULL"]
+    params: list = [tournament_id]
+    if since is not None:
+        clauses.append("received_at >= %s")
+        params.append(since)
+    if until is not None:
+        clauses.append("received_at <= %s")
+        params.append(until)
     cur.execute(
-        """
-        UPDATE email_message SET deleted_at = NULL
-        WHERE tournament_id = %s AND deleted_at IS NOT NULL
-        """,
-        (tournament_id,),
+        "UPDATE email_message SET deleted_at = NULL WHERE " + " AND ".join(clauses),
+        params,
     )
     return cur.rowcount or 0
 

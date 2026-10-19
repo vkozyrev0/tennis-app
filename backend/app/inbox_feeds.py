@@ -125,7 +125,7 @@ def fetch_inbox_mails(
             skipped.append("outlook")
         restored = 0
         if get_all and tournament_id is not None:
-            restored = restore_hidden(cur, tournament_id)
+            restored = restore_hidden(cur, tournament_id, start, end)
         reprocessed = 0
         reprocess_remaining = 0
         if reprocess and tournament_id is not None and (start is not None or end is not None):

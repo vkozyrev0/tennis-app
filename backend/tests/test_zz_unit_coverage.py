@@ -217,13 +217,15 @@ def test_ingest_helpers_cover_edge_shapes():
     p = payload_from_mapping({
         "body-html": "<p>Hello</p>",
         "to": '["first@x.com"]',
-        "tournament_id": "not-int",
         "subject": "Hi",
         "from": "p@x.com",
     })
     assert p.body and "Hello" in p.body
     assert p.to_address == "first@x.com"
     assert p.tournament_id is None
+    # A routing id that is present but not a number is refused, not dropped.
+    with pytest.raises(ValueError, match="tournament_id"):
+        payload_from_mapping({"subject": "Hi", "tournament_id": "not-int"})
     payload_from_mapping({"to": "[not-json", "subject": "x"})
     monkey_id = default_tournament_id()
     assert monkey_id is None or isinstance(monkey_id, int)

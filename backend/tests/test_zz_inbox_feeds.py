@@ -710,3 +710,47 @@ def test_reprocess_keeps_the_heuristic_downgrade(monkeypatch, _admin):
     )
     # Ingest and reprocess agree: one named player is not enough for doubles.
     assert row["classification"] == "other"
+
+
+def test_restore_hidden_only_returns_mail_inside_the_window():
+    """Get all restores the window it asked for, not every hidden copy."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import get_conn
+    from app.email_ingest import restore_hidden
+
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            t = client.post("/api/tournaments", json={
+                "name": "Restore " + uuid.uuid4().hex[:6], "type": "junior",
+                "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+            }).json()
+            tag = uuid.uuid4().hex[:8]
+            now = datetime.now(timezone.utc)
+            ids = {}
+            for label, when in (("old", now - timedelta(days=200)),
+                                ("new", now - timedelta(days=1))):
+                cur.execute(
+                    "INSERT INTO email_message (tournament_id, message_id, subject, "
+                    "body, classification, status, received_at) "
+                    "VALUES (%s, %s, %s, 'x', 'other', 'new', %s) RETURNING id",
+                    (t["id"], f"<restore-{tag}-{label}@example.com>", label, when),
+                )
+                ids[label] = cur.fetchone()["id"]
+            cur.execute(
+                "UPDATE email_message SET deleted_at = now() WHERE id = ANY(%s)",
+                (list(ids.values()),),
+            )
+            restored = restore_hidden(
+                cur, t["id"], now - timedelta(days=30), now,
+            )
+            cur.execute(
+                "SELECT id, deleted_at FROM email_message WHERE id = ANY(%s)",
+                (list(ids.values()),),
+            )
+            rows = {r["id"]: r["deleted_at"] for r in cur.fetchall()}
+        conn.commit()
+    assert restored == 1
+    assert rows[ids["new"]] is None
+    assert rows[ids["old"]] is not None

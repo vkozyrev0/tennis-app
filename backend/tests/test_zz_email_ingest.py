@@ -564,3 +564,21 @@ def test_sendgrid_headers_block_supplies_the_message_id():
         "headers": "MIME-Version: 1.0\r\nMessage-Id: <sg-1@sendgrid.net>\r\nSubject: Late entry",
     })
     assert p.message_id == "sg-1@sendgrid.net"
+
+
+def test_bad_tournament_id_is_rejected_not_dropped():
+    """A non-numeric id on either endpoint is a 400, not a silent default."""
+    for path, kwargs in (
+        ("/api/ingest/email", {"json": {
+            "message_id": f"<bad-{uuid.uuid4().hex}@example.com>",
+            "from_address": "a@b.com", "subject": "Route me",
+            "body": "body", "tournament_id": "macon2026"}}),
+        ("/api/ingest/email/form", {"data": {
+            "message_id": f"<bad-{uuid.uuid4().hex}@example.com>",
+            "from": "a@b.com", "subject": "Route me",
+            "text": "body", "tournament_id": "macon2026"}}),
+    ):
+        r = client.post(path, headers=_headers(), **kwargs)
+        assert r.status_code in (400, 422), (path, r.status_code, r.text)
+        if r.status_code == 400:
+            assert "tournament_id" in r.text
