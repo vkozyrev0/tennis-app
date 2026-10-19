@@ -25,6 +25,9 @@ npm-debug.log*
 # Browser-verification screenshots from scripts/ui_smoke.mjs
 .ui-smoke/
 
+# Working notes from audit passes (scratch; the findings live in docs/audit-register.md)
+.audit/
+
 # Env / secrets
 .env
 backend/.env
