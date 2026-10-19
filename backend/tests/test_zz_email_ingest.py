@@ -503,6 +503,7 @@ def test_duplicate_pdf_row_keeps_its_body(monkeypatch):
             )
             row = cur.fetchone()
         conn.commit()
+    # A row the feed matched without a Message-Id keeps the copy it has.
     assert again["duplicate"] is True
     assert again["id"] == first["id"]
     assert decrypt(row["body"]) == "original body"
