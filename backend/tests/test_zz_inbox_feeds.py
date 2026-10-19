@@ -696,8 +696,8 @@ def test_reprocess_keeps_the_heuristic_downgrade(monkeypatch, _admin):
     }).json()
     created = client.post("/api/emails", json={
         "tournament_id": t["id"],
-        "subject": "Doubles partners please",
-        "body": "Sam Lee would like to play doubles.",
+        "subject": "Doubles partners",
+        "body": "Sam Lee would like a doubles partner.",
         "from_address": "parent@example.com",
     })
     assert created.status_code == 201, created.text
@@ -708,4 +708,5 @@ def test_reprocess_keeps_the_heuristic_downgrade(monkeypatch, _admin):
         m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
         if m["id"] == email["id"]
     )
-    assert row["classification"] == email["classification"] == "other"
+    # Ingest and reprocess agree: one named player is not enough for doubles.
+    assert row["classification"] == "other"

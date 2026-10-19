@@ -79,11 +79,24 @@ def _stamp_extracted_fields_with_leftover(
     if not llm_enabled():
         return fields
     parsed = leftover_model_intent(subject, body)
+    return _apply_leftover_players(cur, email_id, subject, body, fields, classification, parsed)
+
+
+def _apply_leftover_players(cur, email_id, subject, body, fields, classification, parsed,
+                            *, accepted: bool = True):
+    """Merge leftover names into the row.
+
+    Names follow the label the row now carries: ``accepted`` says the answer
+    was confident and agreed with the label, so an 'other' row or a rejected
+    answer attaches nobody.
+    """
+    if not accepted or classification == "other":
+        return fields
     leftover = (parsed or {}).get("players") or []
     if not leftover:
         return fields
     from .email_extract import merge_leftover_players
-    merged = merge_leftover_players(pairs, leftover)
+    merged = merge_leftover_players(fields.get("detected_name_pairs") or [], leftover)
     if not merged:
         return fields
     fields["detected_name_pairs"] = merged
@@ -108,14 +121,14 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
     """Re-run classify + leftover LLM on one stored email. No new row.
 
     Leftover is called even when the heuristic is not ``other`` (prompt change).
-    Cache is bypassed so a new leftover prompt is not skipped.
+    Cache is bypassed so a new leftover prompt is not skipped. That call is the
+    row's only model call: the heuristic runs without the optional pass so a
+    leftover row costs one round trip, not two.
     """
     import time as _time
 
     from .crypto import decrypt as _dec_body
-    from .email_extract import merge_leftover_players
     from .email_llm import leftover_model_intent, llm_enabled
-    from .triage import classify
 
     cur.execute(
         "SELECT id, subject, body, detected_player_id FROM email_message "
@@ -127,10 +140,13 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
         return None
     body = _dec_body(row.get("body"))
     t0 = _time.perf_counter()
-    # classify(), not _classify_raw(): the raw pass skips the doubles player
-    # count, the singles downgrade and the withdrawal name check, so a reprocess
-    # could label a row differently from the ingest that created it.
-    heuristic = classify(row.get("subject"), body)
+    # classify() applies the doubles player count, the singles downgrade and the
+    # withdrawal name check that _classify_raw() skips, so ingest and reprocess
+    # agree. Its model pass is left off because the leftover call below runs for
+    # every row anyway; leaving it on doubled the calls per row.
+    from .triage import classify
+
+    heuristic = classify(row.get("subject"), body, leftover=False)
     leftover_called = False
     leftover_hit = False
     parsed = None
@@ -158,24 +174,12 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
         row.get("detected_player_id"),
     )
     model_conf = float((parsed or {}).get("confidence") or 0)
-    leftover_players = (parsed or {}).get("players") or []
-    # Only names that came with the label this row now carries; a rejected or
-    # 'other' model answer must not attach people to the row.
-    if leftover_players and cls != "other" and model_conf >= 0.6:
-        merged = merge_leftover_players(
-            fields.get("detected_name_pairs") or [], leftover_players,
-        )
-        if merged:
-            fields["detected_name_pairs"] = merged
-            cur.execute(
-                "UPDATE email_message SET detected_name_pairs = %s::jsonb "
-                "WHERE id = %s",
-                (json.dumps(merged), email_id),
-            )
-            upsert_inbox_people(
-                cur, email_id, merged,
-                infer_gender_from_email(row.get("subject"), body),
-            )
+    # One answer per row: this parse already holds the model's names, so do not
+    # let the stamping helper spend a second model call on the same row.
+    fields = _apply_leftover_players(
+        cur, email_id, row.get("subject"), body, fields, cls, parsed,
+        accepted=model_conf >= 0.6,
+    )
     return {
         "id": email_id,
         "classification": cls,
