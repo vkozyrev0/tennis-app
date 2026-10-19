@@ -115,7 +115,7 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
     from .crypto import decrypt as _dec_body
     from .email_extract import merge_leftover_players
     from .email_llm import leftover_model_intent, llm_enabled
-    from .triage import _classify_raw
+    from .triage import classify
 
     cur.execute(
         "SELECT id, subject, body, detected_player_id FROM email_message "
@@ -127,7 +127,10 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
         return None
     body = _dec_body(row.get("body"))
     t0 = _time.perf_counter()
-    heuristic = _classify_raw(row.get("subject"), body)
+    # classify(), not _classify_raw(): the raw pass skips the doubles player
+    # count, the singles downgrade and the withdrawal name check, so a reprocess
+    # could label a row differently from the ingest that created it.
+    heuristic = classify(row.get("subject"), body)
     leftover_called = False
     leftover_hit = False
     parsed = None
@@ -139,7 +142,11 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
         leftover_hit = parsed is not None
     cls = heuristic
     if parsed and float(parsed.get("confidence") or 0) >= 0.6:
-        cls = parsed.get("intent") or heuristic
+        intent = parsed.get("intent") or heuristic
+        # The heuristic already accepted this label; a model 'other' is a
+        # non-answer, not an override (maybe_intent treats it the same way).
+        if intent != "other":
+            cls = intent
     ms = int((_time.perf_counter() - t0) * 1000)
     cur.execute(
         "UPDATE email_message SET classification = %s, classified_ms = %s "
@@ -150,8 +157,11 @@ def reprocess_email(cur, email_id: int, *, use_leftover: bool = True) -> dict | 
         cur, email_id, row.get("subject"), body, cls,
         row.get("detected_player_id"),
     )
+    model_conf = float((parsed or {}).get("confidence") or 0)
     leftover_players = (parsed or {}).get("players") or []
-    if leftover_players:
+    # Only names that came with the label this row now carries; a rejected or
+    # 'other' model answer must not attach people to the row.
+    if leftover_players and cls != "other" and model_conf >= 0.6:
         merged = merge_leftover_players(
             fields.get("detected_name_pairs") or [], leftover_players,
         )

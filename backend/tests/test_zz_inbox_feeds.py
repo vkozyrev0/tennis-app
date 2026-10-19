@@ -679,3 +679,33 @@ def test_bulk_reprocess_without_a_model_is_unbounded_work_but_no_calls(monkeypat
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM email_message WHERE id = ANY(%s) AND classification IS NOT NULL", (made,))
             assert cur.fetchone()["n"] == 3
+
+
+@_needs_db
+def test_reprocess_keeps_the_heuristic_downgrade(monkeypatch, _admin):
+    """Reprocess applies the same post-filters as ingest.
+
+    Reprocess ran `_classify_raw`, skipping the doubles player-count rule, so a
+    one-name doubles email was `other` at ingest and `doubles` after reprocess.
+    """
+    monkeypatch.delenv("EMAIL_LLM", raising=False)
+    monkeypatch.setattr("app.routers.emails_bulk.probe_llm", lambda timeout=1.5: "off")
+    t = client.post("/api/tournaments", json={
+        "name": "Reprocess " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Doubles partners please",
+        "body": "Sam Lee would like to play doubles.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    r = client.post("/api/emails/bulk/reprocess", json={"email_ids": [email["id"]]})
+    assert r.status_code == 200, r.text
+    row = next(
+        m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+        if m["id"] == email["id"]
+    )
+    assert row["classification"] == email["classification"] == "other"

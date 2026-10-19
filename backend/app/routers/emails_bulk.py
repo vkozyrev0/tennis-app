@@ -19,7 +19,7 @@ from ..email_extract import (
     extract_withdrawal_reason,
     infer_gender_from_email,
 )
-from ..email_llm import probe_llm
+from ..email_llm import pass_budget, probe_llm
 from ..email_stamp import _stamp_extracted_fields, reprocess_email
 from ..email_targets import (
     FILE_NEEDS_PLAYER,
@@ -247,10 +247,13 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
     the new classification per changed email + a count, so the inbox can then run
     detect-players + populate to file them — the full bulk-triage chain."""
     if not body.email_ids:
-        return {"classified": 0, "changed": [], "counts": {}}
+        return {"classified": 0, "changed": [], "counts": {}, "budget": None}
     changed: list[dict] = []
     counts: dict = {}
-    with conn.cursor() as cur:
+    # Bound the model work: every 'other' row may reach the leftover pass, and
+    # the selection is whatever the caller sent. Rows past the budget are still
+    # classified by the heuristic.
+    with pass_budget() as budget, conn.cursor() as cur:
         cur.execute(
             "SELECT id, subject, body, classification FROM email_message WHERE id = ANY(%s)",
             (body.email_ids,),
@@ -278,7 +281,8 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
             _stamp_extracted_fields(cur, em["id"], em["subject"], body_txt, cls, pid)
             changed.append({"id": em["id"], "classification": cls, "classified_ms": ms})
             counts[cls] = counts.get(cls, 0) + 1
-    return {"classified": len(changed), "changed": changed, "counts": counts}
+    return {"classified": len(changed), "changed": changed, "counts": counts,
+            "budget": budget.as_dict()}
 
 
 @router.post("/bulk/populate")
