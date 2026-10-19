@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
+import math
 import os
 import re
 import time
@@ -29,6 +31,8 @@ import urllib.request
 from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import urlparse
+
+log = logging.getLogger("courtops.email_llm")
 
 INTENTS = frozenset({
     "withdrawal", "doubles", "late_entry", "pairing_avoidance",
@@ -223,7 +227,40 @@ Subject: {subject}
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
-_JSON_OBJ = re.compile(r"\{.*\}", re.S)
+_JSON_OBJ = re.compile(r"\{")
+
+
+def _first_json_object(s: str) -> str | None:
+    """The first complete {...} group in `s`, braces balanced.
+
+    A greedy regex spans every object in a two-reply answer (not parseable) and
+    a non-greedy one stops at the first nested ``}``. Both lose real replies.
+    """
+    start = s.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start:i + 1]
+    return None
 _QUOTE_MARKERS = (
     "\n-----Original Message-----",
     "\n________________________________",
@@ -381,8 +418,7 @@ def parse_llm_json(raw: str | None) -> dict | None:
     m = _FENCE.search(s)
     blob = m.group(1) if m else None
     if blob is None:
-        m2 = _JSON_OBJ.search(s)
-        blob = m2.group(0) if m2 else None
+        blob = _first_json_object(s)
     if not blob:
         return None
     try:
@@ -392,6 +428,8 @@ def parse_llm_json(raw: str | None) -> dict | None:
     if not isinstance(data, dict):
         return None
     intent = str(data.get("intent") or "other").strip().lower().replace(" ", "_")
+    if intent == "withdraw":
+        intent = "withdrawal"
     if intent not in INTENTS:
         intent = "other"
     raw_players = data.get("players")
@@ -415,6 +453,9 @@ def parse_llm_json(raw: str | None) -> dict | None:
     try:
         conf = float(data.get("confidence") if data.get("confidence") is not None else 0)
     except (TypeError, ValueError):
+        conf = 0.0
+    # json.loads accepts NaN/Infinity; a NaN confidence passed the >= 0.6 gate.
+    if not math.isfinite(conf):
         conf = 0.0
     conf = max(0.0, min(1.0, conf))
     reason = data.get("reason")
@@ -656,7 +697,12 @@ def leftover_prompt(subject: str | None, body: str | None) -> str:
 
 
 # Last leftover parse for this process — classify() then suggest() can share it.
+# Failures are remembered by clip too, but only a hit is reused as an answer:
+# a single-entry store of (subj, "") -> None answered for every empty or
+# HTML-only body thereafter. Only the most recent failure is remembered, so a
+# run of distinct failures asks again rather than replaying the last one.
 _LEFTOVER_LAST: tuple | None = None
+_LEFTOVER_FAILED: tuple | None = None
 
 
 def leftover_model_intent(
@@ -667,13 +713,15 @@ def leftover_model_intent(
     ``bypass_cache`` (date-range reprocess after a leftover-prompt change)
     always hits the sidecar even if this process already parsed the same clip.
     """
-    global _LEFTOVER_LAST
+    global _LEFTOVER_LAST, _LEFTOVER_FAILED
     if not llm_enabled():
         return None
     subj, clipped = clip_email_text(subject, body)
     key = (subj, clipped)
     if not bypass_cache and _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
         return _LEFTOVER_LAST[1]
+    if not bypass_cache and _LEFTOVER_FAILED == key:
+        return None
     # A pass that has spent its budget classifies this copy with the heuristic
     # only. The cache is left untouched so a later pass still gets a real answer.
     if not budget_allows():
@@ -681,12 +729,18 @@ def leftover_model_intent(
     prompt = leftover_prompt(subj, clipped)
     try:
         raw = _complete(prompt)
-    except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError):
-        _LEFTOVER_LAST = (key, None)
+    except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError) as e:
+        _LEFTOVER_FAILED = key
+        log.warning("leftover model call failed: %s", type(e).__name__)
         return None
     budget_spend()
     parsed = parse_llm_json(raw)
+    if parsed is None:
+        _LEFTOVER_FAILED = key
+        log.warning("leftover model reply did not parse")
+        return None
     _LEFTOVER_LAST = (key, parsed)
+    _LEFTOVER_FAILED = None
     return parsed
 
 
