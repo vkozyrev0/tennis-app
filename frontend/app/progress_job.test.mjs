@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   jobLabel, isAbortError, createJobTracker, runTrackedJob, startJobPulse,
 } from "./progress_job.js";
+import { completedView, mailFetchPhases, phaseView } from "./mail_progress.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -122,7 +123,7 @@ await test("inbox batch actions and Help wire the progress modal + Cancel", () =
   assert.match(inbox, /leftoverCalls/);
   // Get mails fills the bar from the server's real counts (mail_progress.js)
   // instead of rotating phase labels as a stand-in for progress.
-  assert.match(inbox, /completedView\(mailFetchPhases\(r\.progress, \{ finished: true \}\), "download"\)/);
+  assert.match(inbox, /mailFetchPhases/);
   assert.match(inbox, /getFullYear/);
   assert.match(inbox, /fallback === "tournament"/);
   assert.match(inbox, /No stored copies/);
@@ -146,6 +147,37 @@ await test("inbox batch actions and Help wire the progress modal + Cancel", () =
   const imp = readFileSync(join(here, "import_ui.js"), "utf8");
   assert.match(imp, /runMailJob/);
   assert.match(imp, /emails_pdf/);
+});
+
+await test("Get mails: the bar is unknown in flight, then reads the real total", async () => {
+  const tracker = createJobTracker();
+  let before = null;
+  const start = phaseView(mailFetchPhases(null), "download");
+  await runTrackedJob(tracker, { phase: start.phase }, async ({ update }) => {
+    before = tracker.snapshot();
+    const done = completedView(mailFetchPhases({
+      gmail: { downloaded: 12, imported: 10, duplicates: 2 },
+      outlook: { downloaded: 7, imported: 7, duplicates: 0 },
+    }, { finished: true }), "download");
+    update({ phase: done.label, current: done.current, total: done.total });
+  });
+  assert.equal(before.indeterminate, true, "the count is unknown before the response");
+  const done = completedView(mailFetchPhases({
+    gmail: { downloaded: 12, imported: 10, duplicates: 2 },
+    outlook: { downloaded: 7, imported: 7, duplicates: 0 },
+  }, { finished: true }), "download");
+  assert.deepEqual([done.current, done.total], [19, 19]);
+});
+
+await test("a fetch that downloads nothing still completes the bar", async () => {
+  const tracker = createJobTracker();
+  const done = completedView(mailFetchPhases({
+    gmail: { downloaded: 0, imported: 0, duplicates: 0 }, outlook: null,
+  }, { finished: true }), "download");
+  await runTrackedJob(tracker, { phase: done.label }, ({ update }) => {
+    update({ current: done.current, total: done.total });
+  });
+  assert.deepEqual([done.current, done.total], [1, 1]);
 });
 
 console.log(`\n${passed} progress-job checks passed`);
