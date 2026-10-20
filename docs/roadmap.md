@@ -11,7 +11,7 @@ phase delivers something usable on its own and de-risks the next. Cross-refs:
 > (see *On hold*). Later rounds — **D11**
 > frontend split, security/COPPA/export audit, email auto-ingest app side, Fly
 > persistent volume + inbox triage UX — are in [changelog.md](changelog.md).
-> Suite: **1081** tests / **117** files, the figure in [test-coverage.md](test-coverage.md)
+> Suite: **1105** tests / **118** files, the figure in [test-coverage.md](test-coverage.md)
 > (collected 2026-10-17; file count and migration head **0061** rechecked
 > 2026-10-17). CI (`.github/workflows/docker.yml`)
 > gates the image build and publishes `ghcr.io/vkozyrev0/tennis-app:latest` on

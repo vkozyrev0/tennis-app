@@ -43,7 +43,7 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 18 | [import-page-redesign.md](import-page-redesign.md) | Import page redesign notes. |
 | 19 | [performance-notes.md](performance-notes.md) | Performance findings and measurements. |
 
-Backend suite **1081** tests / **117** files (migrations through **0061**); see
+Backend suite **1105** tests / **118** files (migrations through **0061**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
 (`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`,
 `inactivity`, `inbox`, …). Inbox **Get mails** can pull **Gmail** and **Outlook**;

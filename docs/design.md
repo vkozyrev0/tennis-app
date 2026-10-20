@@ -45,7 +45,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (bundled in the all-in-one `web` container) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (930 LOC, ES module) + **62** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (931 LOC, ES module) + **63** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -96,11 +96,11 @@ backend/
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1081 tests / 117 files)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1105 tests / 118 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # 930 LOC composition root (D11; counted 2026-10-17)
-  app/                 # 62 ESM modules (*.js; createX / installX + helpers), including:
+  app.js               # 931 LOC composition root (D11; counted 2026-10-17)
+  app/                 # 63 ESM modules (*.js; createX / installX + helpers), including:
     util.js, shirts.js, roster_prefill.js, origin_col.js
     html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
     grids.js, auth.js, state.js, player_list.js, catalog.js, labels.js
@@ -374,7 +374,7 @@ The assignment-change audit-action enum gains `finalized` / `unfinalized` / `pai
 ## 8. Frontend design
 
 **No build, one page, composition root.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (930 LOC,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (931 LOC,
 loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
 `setActive`, factory wiring, and `init()`. Behaviour lives in 61
 `frontend/app/*.js` modules (`createXPanel(ctx)` / `installX(ctx)` and
