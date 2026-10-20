@@ -73,6 +73,17 @@ def _event_lookback_start(cur, tournament_id: int | None) -> datetime:
     return datetime.combine(raw, time.min, tzinfo=timezone.utc)
 
 
+def _feed_progress(out: dict | None) -> dict | None:
+    """The counts a feed's fetch reported, or None when the feed was skipped."""
+    if out is None:
+        return None
+    return {
+        "downloaded": int(out.get("fetched") or 0),
+        "imported": int(out.get("imported") or 0),
+        "duplicates": int(out.get("duplicates") or 0),
+    }
+
+
 def fetch_inbox_mails(
     cur,
     *,
@@ -150,4 +161,5 @@ def fetch_inbox_mails(
         "reprocess_remaining": reprocess_remaining,
         "leftover_skipped": budget.denied,
         "llm_budget": budget.as_dict(),
+        "progress": {"gmail": _feed_progress(gmail_out), "outlook": _feed_progress(outlook_out)},
     }
