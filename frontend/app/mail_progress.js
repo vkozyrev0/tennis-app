@@ -14,6 +14,7 @@ function phaseList(phases) {
     key: String((p && p.key) || i),
     label: String((p && p.label) || "Working"),
     total: num(p && p.total),
+    done: num(p && p.done),
   }));
 }
 
@@ -46,9 +47,10 @@ export function progressFor(phases, currentKey, innerDone = 0) {
   const after = countedAfter(list, idx);
   if (total > 0) {
     const done = completedBefore(list, idx);
+    const inner = Math.max(num(innerDone), list[idx].done);
     return {
       phase: label,
-      current: done + Math.min(num(innerDone), total),
+      current: done + Math.min(inner, total),
       total: done + total + after,
       label,
       determined: true,
@@ -101,11 +103,17 @@ function feedCounts(raw) {
  * null before the response. Its `total` is then 0 (unknown), and after the
  * response it is what both feeds downloaded: the server classifies each of
  * those mails inside the same request, so that count is the whole job.
+ *
+ * `finished` marks the job done, so a run that downloaded nothing reads as
+ * complete instead of leaving the bar pulsing.
  */
-export function mailFetchPhases(fetched) {
+export function mailFetchPhases(fetched, { finished = false } = {}) {
   const gmail = feedCounts(fetched && fetched.gmail);
   const outlook = feedCounts(fetched && fetched.outlook);
   const downloaded = (gmail ? gmail.downloaded : 0) + (outlook ? outlook.downloaded : 0);
+  if (finished && downloaded === 0) {
+    return [{ key: "download", label: "Loading mail from Gmail and Outlook", total: 1, done: 1 }];
+  }
   return [{ key: "download", label: "Loading mail from Gmail and Outlook", total: downloaded }];
 }
 
@@ -127,10 +135,11 @@ export function describeFetch(fetched) {
   const counts = countsFor(fetched);
   const feeds = Object.keys(counts);
   if (!feeds.length) return "no new mail downloaded";
-  const part = (key) => `${counts[key].label}, ${counts[key].imported} imported, `
+  const figures = (key) => `${counts[key].downloaded} downloaded, `
+    + `${counts[key].imported} imported, `
     + `${counts[key].duplicates} ${counts[key].duplicates === 1 ? "duplicate" : "duplicates"}`;
   const downloaded = feeds.reduce((n, k) => n + counts[k].downloaded, 0);
-  if (feeds.length === 1) return `download: ${part(feeds[0])}`;
-  const perFeed = feeds.map((k) => `${k === "gmail" ? "Gmail" : "Outlook"}: ${part(k)}`).join("; ");
+  if (feeds.length === 1) return `download: ${figures(feeds[0])}`;
+  const perFeed = feeds.map((k) => `${counts[k].label.split(" ")[0]}: ${figures(k)}`).join("; ");
   return `download: ${downloaded} downloaded (${perFeed})`;
 }

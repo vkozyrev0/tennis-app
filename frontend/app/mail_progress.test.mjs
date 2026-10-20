@@ -103,8 +103,10 @@ test("a fetch of 12 Gmail and 7 Outlook mail fills the bar to 19", () => {
 
 test("a finished fetch with no downloads completes, not a pulsing bar", () => {
   const fetched = { gmail: { downloaded: 0, imported: 0, duplicates: 0 }, outlook: null };
-  const list = mailFetchPhases(fetched);
-  assert.deepEqual(phaseView(list, "download", 1), { phase: "Loading mail from Gmail and Outlook", current: 1, total: 1, label: "Loading mail from Gmail and Outlook", determined: true });
+  assert.deepEqual(completedView(mailFetchPhases(fetched, { finished: true }), "download"), {
+    phase: "Loading mail from Gmail and Outlook", current: 1, total: 1,
+    label: "Loading mail from Gmail and Outlook", determined: true,
+  });
 });
 
 test("a skipped feed is not shown as a number", () => {
@@ -121,7 +123,7 @@ test("the status line names every feed that ran, per feed", () => {
   assert.match(two, /Gmail: .*10 imported, 2 duplicates/);
   assert.match(two, /Outlook: .*6 imported, 1 duplicate/);
   const one = describeFetch({ gmail: { downloaded: 1, imported: 1, duplicates: 0 }, outlook: null });
-  assert.match(one, /Gmail 1 downloaded, 1 imported, 0 duplicates/);
+  assert.equal(one, "download: 1 downloaded, 1 imported, 0 duplicates");
   assert.doesNotMatch(one, /Outlook/);
   assert.match(describeFetch({ gmail: null, outlook: null }), /no new mail/);
 });

@@ -1330,7 +1330,7 @@ export function createInboxPanel(ctx) {
       // counts, then the job finishes.
       const job = await _runMailJob("Processing mail", { phase: start.phase }, async ({ signal, update }) => {
         const r = await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal });
-        const done = completedView(mailFetchPhases(r.progress), "download");
+        const done = completedView(mailFetchPhases(r.progress, { finished: true }), "download");
         update({ phase: done.label, current: done.current, total: done.total });
         return r;
       });
