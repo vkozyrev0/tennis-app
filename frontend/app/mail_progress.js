@@ -143,3 +143,63 @@ export function describeFetch(fetched) {
   const perFeed = feeds.map((k) => `${counts[k].label.split(" ")[0]}: ${figures(k)}`).join("; ");
   return `download: ${downloaded} downloaded (${perFeed})`;
 }
+
+function feedLabel(feed) {
+  if (feed === "gmail") return "Gmail";
+  if (feed === "outlook") return "Outlook";
+  return "Mailbox";
+}
+
+/**
+ * The two bars for a running mail job. Reading ends when the mailboxes have
+ * been downloaded; processing then runs over the batch. A stage that has not
+ * started is indeterminate, not empty, so the overlay never shows a second bar
+ * at zero before there is anything to count.
+ *
+ * `job` is the server's job snapshot (see `job_progress.snapshot`). A missing
+ * field reads as "not known yet", never as a completed stage.
+ */
+export function jobBars(job) {
+  if (!job) {
+    return { reading: unknown("Reading mail"), processing: unknown("Processing mail") };
+  }
+  const reading = job.reading || {};
+  const feeds = reading.feeds || {};
+  const names = Object.keys(feeds).filter((f) => f !== "all");
+  const discovered = num(reading.discovered);
+  const read = num(reading.read);
+  const readingLabel = names.length === 1
+    ? `Reading ${feedLabel(names[0])}`
+    : "Reading mail";
+  const readingView = discovered > 0
+    ? { phase: readingLabel, current: Math.min(read, discovered), total: discovered,
+        label: readingLabel, determined: true }
+    : unknown(readingLabel);
+
+  const proc = job.processing || {};
+  const total = num(proc.total);
+  const done = num(proc.done);
+  const processingView = total > 0
+    ? { phase: "Processing mail", current: Math.min(done, total), total,
+        label: "Processing mail", determined: true }
+    : unknown("Processing mail");
+
+  const started = job.stage === "processing";
+  // Before processing begins the second bar has no count of its own and says so.
+  const processing = !started && job.state === "running"
+    ? unknown("Waiting for mail")
+    : processingView;
+  return { reading: readingView, processing, state: job.state, stage: job.stage };
+}
+
+/** The reading bar's numbers from a job, or null when it has none yet. */
+export function readOnlyBars(job) {
+  const bars = jobBars(job);
+  return { reading: bars.reading };
+}
+
+/** Milliseconds between polls for a running job. */
+export function pollDelayMs(state) {
+  if (state === "running") return 400;
+  return 0;
+}

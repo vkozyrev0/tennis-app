@@ -1,7 +1,7 @@
 // The mail overlay's progress model: real counts, monotonic, never NaN.
 // Run: node frontend/app/mail_progress.test.mjs
 import assert from "node:assert/strict";
-import {
+import { jobBars, pollDelayMs,
   completedView, countsFor, describeFetch, mailFetchPhases, phaseView, progressFor,
 } from "./mail_progress.js";
 
@@ -129,3 +129,47 @@ test("the status line names every feed that ran, per feed", () => {
 });
 
 console.log(`\n${passed} mail-progress checks passed`);
+
+test("reading and processing are two bars with their own counts", () => {
+  const bars = jobBars({
+    state: "running", stage: "processing",
+    reading: { discovered: 10, read: 10, feeds: { gmail: { read: 4 }, outlook: { read: 6 } } },
+    processing: { total: 10, done: 3 },
+  });
+  assert.deepEqual([bars.reading.current, bars.reading.total], [10, 10]);
+  assert.deepEqual([bars.processing.current, bars.processing.total], [3, 10]);
+  assert.match(bars.reading.phase, /Reading/);
+  assert.match(bars.processing.phase, /Processing/);
+});
+
+test("the processing bar waits, indeterminate, while mail is still being read", () => {
+  const bars = jobBars({
+    state: "running", stage: "reading",
+    reading: { discovered: 8, read: 2, feeds: { gmail: { read: 2 } } },
+    processing: { total: 0, done: 0 },
+  });
+  assert.deepEqual([bars.reading.current, bars.reading.total], [2, 8]);
+  assert.equal(bars.processing.determined, false);
+  assert.match(bars.processing.phase, /Waiting/);
+});
+
+test("one feed names itself; a spread counts stays generic", () => {
+  const one = jobBars({ state: "running", stage: "reading",
+    reading: { discovered: 5, read: 1, feeds: { gmail: {} } }, processing: { total: 0, done: 0 } });
+  assert.equal(one.reading.phase, "Reading Gmail");
+  const two = jobBars({ state: "running", stage: "reading",
+    reading: { discovered: 5, read: 1, feeds: { gmail: {}, outlook: {} } }, processing: { total: 0, done: 0 } });
+  assert.equal(two.reading.phase, "Reading mail");
+});
+
+test("a job with no counts yet does not read as finished", () => {
+  const bars = jobBars({ state: "running", stage: "reading", reading: {}, processing: {} });
+  assert.equal(bars.reading.determined, false);
+  assert.equal(bars.processing.determined, false);
+});
+
+test("polling stops once the job is no longer running", () => {
+  assert.ok(pollDelayMs("running") > 0);
+  assert.equal(pollDelayMs("finished"), 0);
+  assert.equal(pollDelayMs("failed"), 0);
+});

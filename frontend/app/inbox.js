@@ -1,7 +1,7 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
 import { runReprocessPass } from "./classify_batch.js";
 import { enhanceSelect } from "./combobox.js";
-import { completedView, describeFetch, mailFetchPhases, phaseView } from "./mail_progress.js";
+import { describeFetch, jobBars, pollDelayMs } from "./mail_progress.js";
 import {
   bulkBarHidden,
   selectHintHidden,
@@ -44,13 +44,22 @@ export function createInboxPanel(ctx) {
     // Pairing-avoidance member rows live in createPairingDoublesPanel (owns that
     // form); the inbox prefills them when a pairing email is opened.
     getPairingMembersBox, getPairingMemberRow,
-    sizeLists, runMailJob,
+    sizeLists, runMailJob, runStagedJob,
   } = ctx;
   const _runMailJob = typeof runMailJob === "function"
     ? runMailJob
     : async (_title, _opts, fn) => {
         const result = await fn({
           signal: undefined, update() {}, snapshot: () => ({ cancelled: false }),
+        });
+        return { ok: true, cancelled: false, result };
+      };
+  // Two-bar variant: the reading and processing bars report their own counts.
+  const _runStagedJob = typeof runStagedJob === "function"
+    ? runStagedJob
+    : async (_title, _opts, fn) => {
+        const result = await fn({
+          signal: undefined, update() {}, stages() {}, snapshot: () => ({ cancelled: false }),
         });
         return { ok: true, cancelled: false, result };
       };
@@ -1322,17 +1331,32 @@ export function createInboxPanel(ctx) {
     if (getBtn) getBtn.disabled = true;
     if (rpBtn) rpBtn.disabled = true;
     setMsg("inbox-feed-msg", reprocess ? "reprocessing date range…" : "fetching Gmail and Outlook…", true);
-    const phases = mailFetchPhases(null);
-    const start = phaseView(phases, "download");
     try {
-      // The browser cannot know the count until the POST answers, so this
-      // phase is indeterminate; the response then fills the bar with the real
-      // counts, then the job finishes.
-      const job = await _runMailJob("Processing mail", { phase: start.phase }, async ({ signal, update }) => {
-        const r = await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal });
-        const done = completedView(mailFetchPhases(r.progress, { finished: true }), "download");
-        update({ phase: done.label, current: done.current, total: done.total });
-        return r;
+      // The server runs the pass as a job and reports its counts as it goes:
+      // reading (mailbox download) and then processing (the model pass). The
+      // overlay polls the job, so both bars move while the work runs.
+      const job = await _runStagedJob("Processing mail", null, async ({ signal, stages }) => {
+        const started = await api("/inbox-feeds/fetch/start?" + q.toString(), {
+          method: "POST", signal,
+        });
+        const token = started.token;
+        const stop = () => api(`/inbox-feeds/jobs/${token}/cancel`, { method: "POST" });
+        if (signal) signal.addEventListener("abort", () => { stop().catch(() => {}); }, { once: true });
+        for (;;) {
+          if (signal && signal.aborted) {
+            await stop().catch(() => {});
+            throw Object.assign(new Error("cancelled"), { name: "AbortError" });
+          }
+          const snap = await api(`/inbox-feeds/jobs/${token}`, { signal });
+          stages(jobBars(snap));
+          if (snap.state === "running") {
+            await new Promise((r) => setTimeout(r, pollDelayMs(snap.state)));
+            continue;
+          }
+          if (snap.state === "cancelled") throw Object.assign(new Error("cancelled"), { name: "AbortError" });
+          if (snap.state === "failed") throw new Error(snap.error || "the mail job failed");
+          return snap.result || {};
+        }
       });
       if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
       const r = job.result;
@@ -1397,8 +1421,8 @@ export function createInboxPanel(ctx) {
           update({ phase: "No stored copies", current: 0, total: 0 });
           return { ids, leftover, leftoverCalls: 0, fallback, rangeLabel, download };
         }
-        const analyzed = phaseView([{ key: "analyze", label: "Analyzing..." }], "analyze");
-        update({ phase: analyzed.label, current: analyzed.current, total: analyzed.total });
+        const phase = "Analyzing...";
+        update({ phase, current: 0, total: ids.length });
         if (fallback === "tournament") {
           toast(`No stored copies in ${rangeLabel} — reprocessing ${ids.length} from this tournament`, true);
         }
@@ -1418,7 +1442,7 @@ export function createInboxPanel(ctx) {
           body: JSON.stringify({ email_ids: batch }),
           signal: sig,
         }), {
-          onProgress: ({ parsed: done, total }) => update({ phase: analyzed.label, current: done, total }),
+          onProgress: ({ parsed: done, total }) => update({ phase, current: done, total }),
           isCancelled: () => Boolean(signal && signal.aborted),
           signal,
         });

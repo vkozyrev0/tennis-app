@@ -143,6 +143,48 @@ export async function runTrackedJob(tracker, opts, fn) {
 /**
  * Bind the tracker to #job-progress-modal. Cancel / Escape abort the job.
  */
+// A two-stage job shows its own bars in the modal: reading (mailbox download)
+// and processing (the model pass). Each is a labelled <progress> the caller
+// fills from real counts. A job that only reports one number keeps using the
+// single `job-progress-bar`, so the other flows are unchanged.
+export function applyStageBars(stages) {
+  const set = (barId, labelId, view, label) => {
+    const bar = document.getElementById(barId);
+    const text = document.getElementById(labelId);
+    if (!bar) return;
+    if (!view || view.total <= 0) {
+      bar.removeAttribute("value");
+      bar.max = 1;
+      bar.setAttribute("data-busy", "1");
+    } else {
+      bar.removeAttribute("data-busy");
+      bar.max = view.total;
+      bar.value = Math.max(0, Math.min(view.current, view.total));
+    }
+    if (text) text.textContent = label;
+  };
+  if (!stages) return;
+  set("job-read-bar", "job-read-label", stages.reading, stageText(stages.reading));
+  set("job-process-bar", "job-process-label", stages.processing, stageText(stages.processing));
+}
+
+function stageText(view) {
+  if (!view) return "";
+  if (view.total > 0) return `${view.phase} — ${Math.max(0, view.current)} of ${view.total}`;
+  return view.phase;
+}
+
+export function stageBarsVisible(on) {
+  const read = document.getElementById("job-read-stage");
+  const proc = document.getElementById("job-process-stage");
+  const single = document.getElementById("job-progress-bar");
+  const label = document.getElementById("job-progress-label");
+  if (read) read.hidden = !on;
+  if (proc) proc.hidden = !on;
+  if (single) single.hidden = on;
+  if (label) label.hidden = on;
+}
+
 export function createProgressModal() {
   const tracker = createJobTracker();
   const modal = document.getElementById("job-progress-modal");
@@ -167,6 +209,7 @@ export function createProgressModal() {
       }
     }
     if (modal) modal.hidden = !s.open;
+    if (!s.open) stageBarsVisible(false);
   }
 
   function onCancel() { tracker.cancel(); render(); }
@@ -202,5 +245,23 @@ export function createProgressModal() {
     return out;
   }
 
-  return { run, tracker, render };
+  async function runStages(title, opts, fn) {
+    stageBarsVisible(true);
+    const o = { ...(opts || {}), phase: (opts && opts.phase) || title || "Working", onPulse: render };
+    if (titleEl) titleEl.textContent = title || o.phase;
+    const out = await runTrackedJob(tracker, o, async (job) => {
+      render();
+      return fn({
+        signal: job.signal,
+        update: (p) => job.update(p),
+        stages: (s) => applyStageBars(s),
+        snapshot: job.snapshot,
+      });
+    });
+    stageBarsVisible(false);
+    render();
+    return out;
+  }
+
+  return { run, runStages, tracker, render };
 }
