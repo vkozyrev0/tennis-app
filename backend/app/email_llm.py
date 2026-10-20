@@ -549,6 +549,28 @@ def is_deepseek_url(url: str) -> bool:
     return (urlparse(url).hostname or "").lower() == DEEPSEEK_HOST
 
 
+def _is_reasoning_model(model: str, base: str) -> bool:
+    """True when the endpoint may emit a separate reasoning stream.
+
+    DeepSeek's chat models and the llama.cpp sidecar's small instruct models do
+    not, but a reasoning model behind either endpoint does: it spends tokens in
+    ``reasoning_content`` before the answer, so a max_tokens sized for the
+    answer alone can truncate before the model ever writes one. This list is a
+    guess for any id it does not name, so the token ceiling stays generous.
+    """
+    name = (model or "").lower()
+    if is_deepseek_url(base) and "reasoner" in name:
+        return True
+    return any(mark in name for mark in ("reason", "r1", "thinking", "cot"))
+
+
+def _max_tokens(base: str, model: str, wanted: int) -> int:
+    """The answer budget, raised for a model that reasons before answering."""
+    if _is_reasoning_model(model, base):
+        return int(os.getenv("EMAIL_LLM_REASONING_MAX_TOKENS", "2048"))
+    return wanted
+
+
 def llm_model(base: str | None = None) -> str:
     """EMAIL_LLM_MODEL wins; otherwise the provider's own default id."""
     explicit = os.getenv("EMAIL_LLM_MODEL", "").strip()
@@ -653,11 +675,12 @@ def _post_chat(
     The key travels only in the Authorization header."""
     base = (base or llm_base_url()).rstrip("/")
     _assert_local_url(base)
+    chosen = model or llm_model(base)
     payload = {
-        "model": model or llm_model(base),
+        "model": chosen,
         "messages": messages,
         "temperature": 0,
-        "max_tokens": max_tokens,
+        "max_tokens": _max_tokens(base, chosen, max_tokens),
     }
     headers = {"Content-Type": "application/json"}
     token = llm_api_key(base)
@@ -671,7 +694,29 @@ def _post_chat(
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
+    first = (data.get("choices") or [{}])[0] or {}
+    message = first.get("message") or {}
+    # A reasoning model returns its scratchpad in reasoning_content and the
+    # answer in content. Only content is the answer: reasoning is not in the
+    # intent vocabulary, and joining it would put prose in front of the JSON.
+    answer = message.get("content")
+    if isinstance(answer, list):
+        # Newer OpenAI-compatible servers send content as typed parts.
+        answer = "".join(
+            p.get("text") or "" for p in answer if isinstance(p, dict)
+        )
+    text = answer if isinstance(answer, str) else ""
+    if not text.strip():
+        finish = str(first.get("finish_reason") or "")
+        spent = message.get("reasoning_content")
+        # Truncated on reasoning alone: say so, so the caller does not treat an
+        # empty answer as "the model found nothing".
+        if finish == "length" and isinstance(spent, str) and spent.strip():
+            raise RuntimeError(
+                "model used its whole token budget reasoning; raise "
+                "EMAIL_LLM_REASONING_MAX_TOKENS"
+            )
+    return text or ""
 
 
 def _complete(prompt: str) -> str:
