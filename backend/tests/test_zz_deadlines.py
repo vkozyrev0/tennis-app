@@ -2,15 +2,16 @@
 
 `GET /api/dashboard/deadlines` lists registration / late-entry / play-start dates
 that are coming up (or just passed) across not-yet-finished tournaments. Dates
-are set RELATIVE to today so the test is clock-independent.
+are set RELATIVE to the venue's today, which is the clock the API answers from.
 
 Named to sort last (same rationale as the other test_zz modules)."""
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clock import today_venue
 from app.main import app
 
 client = TestClient(app)
@@ -32,7 +33,10 @@ def _ok(r, code=201):
 
 
 def _iso(days):
-    return (date.today() + timedelta(days=days)).isoformat()
+    # `date.today()` is the runner's local date. The API reads the venue's date,
+    # so the two disagree for a few hours each night (UTC evening vs New York),
+    # and every relative fixture then lands one day off.
+    return (today_venue() + timedelta(days=days)).isoformat()
 
 
 def _tournament(name, play_start_days, play_end_days, reg=None, late=None):
