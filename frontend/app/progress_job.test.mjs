@@ -120,7 +120,9 @@ await test("inbox batch actions and Help wire the progress modal + Cancel", () =
   assert.match(inbox, /inbox-feeds\/reprocess-ids/);
   assert.match(inbox, /Analyzing\.\.\./);
   assert.match(inbox, /leftoverCalls/);
-  assert.match(inbox, /phase: phases\[0\], phases/);
+  // Get mails fills the bar from the server's real counts (mail_progress.js)
+  // instead of rotating phase labels as a stand-in for progress.
+  assert.match(inbox, /completedView\(mailFetchPhases\(r\.progress\), "download"\)/);
   assert.match(inbox, /getFullYear/);
   assert.match(inbox, /fallback === "tournament"/);
   assert.match(inbox, /No stored copies/);
