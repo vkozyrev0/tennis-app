@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
+import math
 import os
 import re
 import time
@@ -29,6 +31,8 @@ import urllib.request
 from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import urlparse
+
+log = logging.getLogger("courtops.email_llm")
 
 INTENTS = frozenset({
     "withdrawal", "doubles", "late_entry", "pairing_avoidance",
@@ -223,7 +227,40 @@ Subject: {subject}
 """
 
 _FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
-_JSON_OBJ = re.compile(r"\{.*\}", re.S)
+_JSON_OBJ = re.compile(r"\{")
+
+
+def _first_json_object(s: str) -> str | None:
+    """The first complete {...} group in `s`, braces balanced.
+
+    A greedy regex spans every object in a two-reply answer (not parseable) and
+    a non-greedy one stops at the first nested ``}``. Both lose real replies.
+    """
+    start = s.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start:i + 1]
+    return None
 _QUOTE_MARKERS = (
     "\n-----Original Message-----",
     "\n________________________________",
@@ -381,8 +418,7 @@ def parse_llm_json(raw: str | None) -> dict | None:
     m = _FENCE.search(s)
     blob = m.group(1) if m else None
     if blob is None:
-        m2 = _JSON_OBJ.search(s)
-        blob = m2.group(0) if m2 else None
+        blob = _first_json_object(s)
     if not blob:
         return None
     try:
@@ -392,6 +428,8 @@ def parse_llm_json(raw: str | None) -> dict | None:
     if not isinstance(data, dict):
         return None
     intent = str(data.get("intent") or "other").strip().lower().replace(" ", "_")
+    if intent == "withdraw":
+        intent = "withdrawal"
     if intent not in INTENTS:
         intent = "other"
     raw_players = data.get("players")
@@ -415,6 +453,9 @@ def parse_llm_json(raw: str | None) -> dict | None:
     try:
         conf = float(data.get("confidence") if data.get("confidence") is not None else 0)
     except (TypeError, ValueError):
+        conf = 0.0
+    # json.loads accepts NaN/Infinity; a NaN confidence passed the >= 0.6 gate.
+    if not math.isfinite(conf):
         conf = 0.0
     conf = max(0.0, min(1.0, conf))
     reason = data.get("reason")
@@ -506,6 +547,28 @@ def llm_base_url() -> str:
 def is_deepseek_url(url: str) -> bool:
     """True when the endpoint is the DeepSeek API (not the local sidecar)."""
     return (urlparse(url).hostname or "").lower() == DEEPSEEK_HOST
+
+
+def _is_reasoning_model(model: str, base: str) -> bool:
+    """True when the endpoint may emit a separate reasoning stream.
+
+    DeepSeek's chat models and the llama.cpp sidecar's small instruct models do
+    not, but a reasoning model behind either endpoint does: it spends tokens in
+    ``reasoning_content`` before the answer, so a max_tokens sized for the
+    answer alone can truncate before the model ever writes one. This list is a
+    guess for any id it does not name, so the token ceiling stays generous.
+    """
+    name = (model or "").lower()
+    if is_deepseek_url(base) and "reasoner" in name:
+        return True
+    return any(mark in name for mark in ("reason", "r1", "thinking", "cot"))
+
+
+def _max_tokens(base: str, model: str, wanted: int) -> int:
+    """The answer budget, raised for a model that reasons before answering."""
+    if _is_reasoning_model(model, base):
+        return int(os.getenv("EMAIL_LLM_REASONING_MAX_TOKENS", "2048"))
+    return wanted
 
 
 def llm_model(base: str | None = None) -> str:
@@ -612,11 +675,12 @@ def _post_chat(
     The key travels only in the Authorization header."""
     base = (base or llm_base_url()).rstrip("/")
     _assert_local_url(base)
+    chosen = model or llm_model(base)
     payload = {
-        "model": model or llm_model(base),
+        "model": chosen,
         "messages": messages,
         "temperature": 0,
-        "max_tokens": max_tokens,
+        "max_tokens": _max_tokens(base, chosen, max_tokens),
     }
     headers = {"Content-Type": "application/json"}
     token = llm_api_key(base)
@@ -630,7 +694,29 @@ def _post_chat(
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = json.loads(resp.read().decode("utf-8"))
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content")) or ""
+    first = (data.get("choices") or [{}])[0] or {}
+    message = first.get("message") or {}
+    # A reasoning model returns its scratchpad in reasoning_content and the
+    # answer in content. Only content is the answer: reasoning is not in the
+    # intent vocabulary, and joining it would put prose in front of the JSON.
+    answer = message.get("content")
+    if isinstance(answer, list):
+        # Newer OpenAI-compatible servers send content as typed parts.
+        answer = "".join(
+            p.get("text") or "" for p in answer if isinstance(p, dict)
+        )
+    text = answer if isinstance(answer, str) else ""
+    if not text.strip():
+        finish = str(first.get("finish_reason") or "")
+        spent = message.get("reasoning_content")
+        # Truncated on reasoning alone: say so, so the caller does not treat an
+        # empty answer as "the model found nothing".
+        if finish == "length" and isinstance(spent, str) and spent.strip():
+            raise RuntimeError(
+                "model used its whole token budget reasoning; raise "
+                "EMAIL_LLM_REASONING_MAX_TOKENS"
+            )
+    return text or ""
 
 
 def _complete(prompt: str) -> str:
@@ -656,7 +742,12 @@ def leftover_prompt(subject: str | None, body: str | None) -> str:
 
 
 # Last leftover parse for this process — classify() then suggest() can share it.
+# Failures are remembered by clip too, but only a hit is reused as an answer:
+# a single-entry store of (subj, "") -> None answered for every empty or
+# HTML-only body thereafter. Only the most recent failure is remembered, so a
+# run of distinct failures asks again rather than replaying the last one.
 _LEFTOVER_LAST: tuple | None = None
+_LEFTOVER_FAILED: tuple | None = None
 
 
 def leftover_model_intent(
@@ -667,13 +758,15 @@ def leftover_model_intent(
     ``bypass_cache`` (date-range reprocess after a leftover-prompt change)
     always hits the sidecar even if this process already parsed the same clip.
     """
-    global _LEFTOVER_LAST
+    global _LEFTOVER_LAST, _LEFTOVER_FAILED
     if not llm_enabled():
         return None
     subj, clipped = clip_email_text(subject, body)
     key = (subj, clipped)
     if not bypass_cache and _LEFTOVER_LAST and _LEFTOVER_LAST[0] == key:
         return _LEFTOVER_LAST[1]
+    if not bypass_cache and _LEFTOVER_FAILED == key:
+        return None
     # A pass that has spent its budget classifies this copy with the heuristic
     # only. The cache is left untouched so a later pass still gets a real answer.
     if not budget_allows():
@@ -681,12 +774,18 @@ def leftover_model_intent(
     prompt = leftover_prompt(subj, clipped)
     try:
         raw = _complete(prompt)
-    except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError):
-        _LEFTOVER_LAST = (key, None)
+    except (urllib.error.URLError, TimeoutError, RuntimeError, json.JSONDecodeError, OSError) as e:
+        _LEFTOVER_FAILED = key
+        log.warning("leftover model call failed: %s", type(e).__name__)
         return None
     budget_spend()
     parsed = parse_llm_json(raw)
+    if parsed is None:
+        _LEFTOVER_FAILED = key
+        log.warning("leftover model reply did not parse")
+        return None
     _LEFTOVER_LAST = (key, parsed)
+    _LEFTOVER_FAILED = None
     return parsed
 
 

@@ -25,6 +25,19 @@ from .email_ingest import IngestPayload, html_to_text, ingest_email
 
 _FEED_ID = 1
 ALLOWED_IMAP_HOSTS = frozenset({"imap.gmail.com", "imap.googlemail.com"})
+# A local test mailbox (a fake IMAP server in a dev stack) is reachable only
+# when the operator names its host explicitly. Outside dev the allow-list stands.
+LOCAL_IMAP_ENV = "GMAIL_LOCAL_IMAP_HOST"
+
+
+def _allowed_imap_hosts() -> frozenset[str]:
+    extra = os.getenv(LOCAL_IMAP_ENV, "").strip().lower()
+    if not extra:
+        return ALLOWED_IMAP_HOSTS
+    from .config import settings
+    if settings.is_prod():
+        return ALLOWED_IMAP_HOSTS
+    return ALLOWED_IMAP_HOSTS | {extra}
 _DEFAULTS = {
     "enabled": False,
     "gmail_address": None,
@@ -259,6 +272,7 @@ def _imap_fetch(
     imap_factory: Callable[..., Any] | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> tuple[list[tuple[int, bytes]], list[int], int | None]:
     """Return [(uid, rfc822), ...], the target UIDs in order, and uidvalidity.
 
@@ -273,7 +287,7 @@ def _imap_fetch(
     host = str(row.get("imap_host") or "imap.gmail.com").strip().lower()
     # The feed decrypts and sends the stored app password to this host. Restrict
     # it so an admin cannot redirect the credential to a server they control.
-    if host not in ALLOWED_IMAP_HOSTS:
+    if host not in _allowed_imap_hosts():
         raise RuntimeError("Gmail feed host must be imap.gmail.com")
     port = int(row.get("imap_port") or 993)
     mailbox = row.get("mailbox") or "INBOX"
@@ -331,7 +345,11 @@ def _imap_fetch(
         cap = _MAX_WINDOW_BATCH if date_window else _MAX_BATCH
         uids = uids[:cap]
         messages: list[tuple[int, bytes]] = []
-        for uid in uids:
+        # The count is known after SEARCH, so the reader can show real numbers
+        # while the FETCH loop runs rather than only when it returns.
+        if on_progress is not None:
+            on_progress(len(uids), 0)
+        for done, uid in enumerate(uids, start=1):
             typ, fetched = imap.uid("FETCH", str(uid), "(RFC822)")
             if typ != "OK" or not fetched:
                 continue
@@ -342,6 +360,8 @@ def _imap_fetch(
                     break
             if raw:
                 messages.append((uid, raw))
+            if on_progress is not None:
+                on_progress(len(uids), done)
         return messages, uids, uv
     finally:
         try:
@@ -368,6 +388,7 @@ def _download_window(
     since: datetime | None = None,
     until: datetime | None = None,
     tournament_id: int | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> _Window:
     """Download phase: search + fetch the whole window, decode to payloads.
 
@@ -376,6 +397,7 @@ def _download_window(
     """
     messages, uids, uv = _imap_fetch(
         row, imap_factory=imap_factory, since=since, until=until,
+        on_progress=on_progress,
     )
     payloads: list[tuple[int, IngestPayload]] = []
     errors: list[str] = []
@@ -409,7 +431,9 @@ def _download_window(
 
 def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
                  since: datetime | None = None, until: datetime | None = None,
-                 tournament_id: int | None = None) -> dict:
+                 tournament_id: int | None = None,
+                 on_download: Callable[[int, int], None] | None = None,
+                 on_classify: Callable[[int, int], None] | None = None) -> dict:
     """Pull new IMAP messages and ingest them. Updates the UID cursor."""
     row = load_feed(cur)
     if not row.get("enabled"):
@@ -418,7 +442,7 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
     try:
         window = _download_window(
             row, imap_factory=imap_factory, since=since, until=until,
-            tournament_id=tid,
+            tournament_id=tid, on_progress=on_download,
         )
     except Exception as exc:
         cur.execute(
@@ -438,7 +462,9 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
     dupes = 0
     errors = window.errors
     failure_uid: int | None = None
-    for uid, payload in window.payloads:
+    if on_classify is not None:
+        on_classify(len(window.payloads), 0)
+    for done, (uid, payload) in enumerate(window.payloads, start=1):
         try:
             result = ingest_email(cur, payload, auto_classify=True)
             if result.get("duplicate"):
@@ -449,6 +475,8 @@ def fetch_latest(cur, *, imap_factory: Callable[..., Any] | None = None,
             errors.append(str(exc)[:200])
             if failure_uid is None:
                 failure_uid = uid
+        if on_classify is not None:
+            on_classify(len(window.payloads), done)
     # D23: an ingest failure inside the window must not let the cursor jump over
     # that message. Keep it at the first failure (never below the prior cursor).
     cursor = window.cursor

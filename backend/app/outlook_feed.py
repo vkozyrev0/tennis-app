@@ -375,6 +375,7 @@ def _graph_fetch(
     http: HttpFn,
     since: datetime | None = None,
     until: datetime | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
 ) -> tuple[list[dict], datetime | None]:
     mailbox = (row.get("mailbox") or "").strip()
     if not mailbox:
@@ -453,12 +454,18 @@ def _graph_fetch(
     # pages is a hard ceiling that cannot truncate a legitimate fetch.
     seen_links: set[str] = {mail_url}
     pages_left = cap + 1
+    # Graph does not advertise a total, so a page walk counts messages read
+    # against a lower bound it only learns as it goes.
+    read = 0
     while True:
         before = len(raw_msgs)
         chunk = mail_payload.get("value") or []
         if isinstance(chunk, list):
             raw_msgs.extend(chunk)
         pages_left -= 1
+        read = len(raw_msgs)
+        if on_progress is not None:
+            on_progress(read, read)
         if len(raw_msgs) <= before:
             break
         nxt = mail_payload.get("@odata.nextLink") if date_window else None
@@ -504,7 +511,9 @@ def _graph_fetch(
 
 def fetch_latest(cur, *, http: HttpFn | None = None,
                  since: datetime | None = None, until: datetime | None = None,
-                 tournament_id: int | None = None) -> dict:
+                 tournament_id: int | None = None,
+                 on_download: Callable[[int, int], None] | None = None,
+                 on_classify: Callable[[int, int], None] | None = None) -> dict:
     """Pull new Graph messages and ingest them. Updates the receivedDateTime cursor."""
     row = load_feed(cur)
     if not row.get("enabled"):
@@ -515,7 +524,7 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
     # below — no per-message classification happens inside the download loop.
     try:
         messages, new_cursor = _graph_fetch(
-            row, http=http_fn, since=since, until=until,
+            row, http=http_fn, since=since, until=until, on_progress=on_download,
         )
     except Exception as exc:
         secret = _secret_plain(row)
@@ -539,7 +548,9 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
     errors: list[str] = []
     tid = tournament_id if tournament_id is not None else row.get("tournament_id")
     failure_at: datetime | None = None
-    for item in messages:
+    if on_classify is not None:
+        on_classify(len(messages), 0)
+    for done, item in enumerate(messages, start=1):
         dt = parse_received_at(item.get("receivedDateTime"))
         try:
             payload = graph_message_to_payload(item, tournament_id=tid)
@@ -552,6 +563,8 @@ def fetch_latest(cur, *, http: HttpFn | None = None,
             errors.append(_redact(str(exc)[:200]))
             if failure_at is None and dt is not None:
                 failure_at = dt
+        if on_classify is not None:
+            on_classify(len(messages), done)
     # D23: the timestamp cursor may not move past a message that failed to
     # ingest. Cap it just below the first failure and never below the stored
     # cursor, so the retry range still includes the failed message.

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.crypto import decrypt
 from app.db import get_conn
 from app.main import app
+from app.triage import classify_timed
 
 client = TestClient(app)
 
@@ -420,3 +421,164 @@ def test_query_token_rejected_in_prod(monkeypatch):
         json={"message_id": mid + "-q", "subject": "hi", "body": "override ok"},
     )
     assert r3.status_code == 201, r3.text
+
+
+def test_webhook_model_work_is_bounded(monkeypatch):
+    """A webhook classifies at most the pass budget's worth of leftovers.
+
+    `pass_budget` was set for the feed and bulk paths only, so a webhook batch
+    made one model round trip per 'other' email inside one request; a slow
+    endpoint held the request (and its DB transaction) for minutes.
+    """
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.setenv("EMAIL_LLM_MAX_CALLS", "2")
+    monkeypatch.setenv("EMAIL_LLM_PASS_SECONDS", "120")
+    monkeypatch.delenv("EMAIL_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+    calls = {"n": 0}
+
+    def fake_complete(prompt):
+        calls["n"] += 1
+        return '{"intent":"other","confidence":0.2}'
+
+    monkeypatch.setattr("app.email_llm._complete", fake_complete)
+    monkeypatch.setattr("app.email_llm._LEFTOVER_LAST", None)
+    seen = []
+
+    def spy(subject, body):
+        from app.email_llm import active_budget
+        seen.append(active_budget())
+        return classify_timed(subject, body)
+
+    monkeypatch.setattr("app.email_ingest.classify_timed", spy)
+
+    t = _tournament()
+    tag = uuid.uuid4().hex[:8]
+    _ok(client.post("/api/ingest/email", headers=_headers(), json={
+        "message_id": f"<bound-{tag}-0@example.com>",
+        "from_address": "parent@example.com",
+        "tournament_id": t["id"],
+        "subject": f"Note on the schedule {tag}",
+        "body": "Something that matches no keyword.",
+    }))
+    assert seen and seen[-1] is not None, "ingest classify ran without a pass budget"
+    assert seen[-1].max_calls == 2
+    assert seen[-1].calls == 1
+
+
+def test_duplicate_pdf_row_keeps_its_body(monkeypatch):
+    """A PDF row matched by tournament + sender + subject is left alone.
+
+    Gmail reports no Message-ID for some mail, so the same PDF thread comes back
+    through the feed. Refilling the body and subject replaced the stored copy
+    with the new one, and the wide subject match compared twice-lowercased text.
+    """
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, ingest_email
+
+    t = _tournament()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            first = ingest_email(cur, IngestPayload(
+                message_id=None,
+                from_address="Pdf Parent <pdf@example.com>",
+                to_address=None,
+                subject="Mixed Case Withdrawal",
+                body="original body",
+                tournament_id=t["id"],
+                ingest_source="pdf",
+            ))
+            again = ingest_email(cur, IngestPayload(
+                message_id="<feed-pdf-1@gmail.com>",
+                from_address="pdf@example.com",
+                to_address="td@example.com",
+                subject="Mixed Case Withdrawal",
+                body="body from the feed",
+                tournament_id=t["id"],
+                ingest_source="gmail",
+            ))
+            cur.execute(
+                "SELECT id, body, subject, classification FROM email_message WHERE id = %s",
+                (first["id"],),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    # A row the feed matched without a Message-Id keeps the copy it has.
+    assert again["duplicate"] is True
+    assert again["id"] == first["id"]
+    assert decrypt(row["body"]) == "original body"
+    assert row["subject"] == "Mixed Case Withdrawal"
+
+
+def test_restored_hidden_copy_stays_with_its_event():
+    """Clear on event A then Get mails on event B keeps A's mail in A.
+
+    Restoring a hidden copy re-homed it onto whichever event fetched last, so
+    mail the TD cleared under one tournament reappeared under another.
+    """
+    from app.db import get_conn
+    from app.email_ingest import IngestPayload, ingest_email
+
+    a = _tournament()
+    b = _tournament()
+    mid = f"<hidden-{uuid.uuid4().hex[:8]}@example.com>"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            first = ingest_email(cur, IngestPayload(
+                message_id=mid, from_address="p@example.com", to_address=None,
+                subject="Cleared under A", body="body", tournament_id=a["id"],
+                ingest_source="gmail",
+            ))
+            cur.execute("UPDATE email_message SET deleted_at = now() WHERE id = %s",
+                        (first["id"],))
+            restored = ingest_email(cur, IngestPayload(
+                message_id=mid, from_address="p@example.com", to_address=None,
+                subject="Cleared under A", body="body", tournament_id=b["id"],
+                ingest_source="gmail",
+            ))
+            cur.execute("SELECT tournament_id, deleted_at FROM email_message WHERE id = %s",
+                        (first["id"],))
+            row = cur.fetchone()
+        conn.commit()
+    assert restored["duplicate"] is False
+    assert row["tournament_id"] == a["id"]
+    assert row["deleted_at"] is None
+
+
+def test_list_valued_to_address_routes(monkeypatch):
+    """A JSON 'to' list picks the first address instead of stringifying it."""
+    from app.email_ingest import payload_from_mapping
+
+    p = payload_from_mapping({"to": ["B <b@x.com>", "c@y.com"]})
+    assert p.to_address == "B <b@x.com>"
+
+
+def test_sendgrid_headers_block_supplies_the_message_id():
+    """SendGrid posts raw RFC822 headers; Message-Id comes from that block."""
+    from app.email_ingest import payload_from_mapping
+
+    p = payload_from_mapping({
+        "to": "macon@inbox.example.com",
+        "subject": "Late entry",
+        "text": "Can we still register?",
+        "headers": "MIME-Version: 1.0\r\nMessage-Id: <sg-1@sendgrid.net>\r\nSubject: Late entry",
+    })
+    assert p.message_id == "sg-1@sendgrid.net"
+
+
+def test_bad_tournament_id_is_rejected_not_dropped():
+    """A non-numeric id on either endpoint is a 400, not a silent default."""
+    for path, kwargs in (
+        ("/api/ingest/email", {"json": {
+            "message_id": f"<bad-{uuid.uuid4().hex}@example.com>",
+            "from_address": "a@b.com", "subject": "Route me",
+            "body": "body", "tournament_id": "macon2026"}}),
+        ("/api/ingest/email/form", {"data": {
+            "message_id": f"<bad-{uuid.uuid4().hex}@example.com>",
+            "from": "a@b.com", "subject": "Route me",
+            "text": "body", "tournament_id": "macon2026"}}),
+    ):
+        r = client.post(path, headers=_headers(), **kwargs)
+        assert r.status_code in (400, 422), (path, r.status_code, r.text)
+        if r.status_code == 400:
+            assert "tournament_id" in r.text

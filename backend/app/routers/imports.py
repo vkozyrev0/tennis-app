@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from .. import importer
 from ..db import db_dep
+from ..email_llm import pass_budget
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -242,7 +243,7 @@ def _staged_rows_for_merge(cur, batch_id: int, only: list[int] | None):
 @router.post("/batches/{batch_id}/conflicts")
 def preview_conflicts(batch_id: int, body: ImportMergeOptions | None = None, conn=Depends(db_dep)):
     """Dry-run merge: return duplicate/conflict notes without writing live tables."""
-    with conn.cursor() as cur:
+    with pass_budget(), conn.cursor() as cur:
         cur.execute("SELECT tournament_id, import_type, status FROM import_batch WHERE id = %s",
                     (batch_id,))
         batch = cur.fetchone()
@@ -275,7 +276,9 @@ def merge_batch(batch_id: int, body: ImportMergeOptions | None = None, conn=Depe
     """Merge the valid, not-yet-merged rows into the main tables (per-row savepoint).
     With `row_ids`, merge only those (still valid+unmerged) — the preview grid
     passes the 'ready' ids so client-flagged rows are skipped without deleting."""
-    with conn.cursor() as cur:
+    # One model budget for the batch: the PDF-email import classifies per row,
+    # and an unbounded batch made one round trip per parsed email.
+    with pass_budget(), conn.cursor() as cur:
         cur.execute("SELECT tournament_id, import_type, status FROM import_batch WHERE id = %s",
                     (batch_id,))
         batch = cur.fetchone()

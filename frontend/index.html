@@ -1692,8 +1692,16 @@
        aria-labelledby="job-progress-title" aria-describedby="job-progress-label">
     <div class="modal-box">
       <h3 id="job-progress-title">Processing mail</h3>
-      <p id="job-progress-label" class="muted">Working…</p>
-      <progress id="job-progress-bar" max="1" value="0"></progress>
+      <div class="job-stage" id="job-read-stage">
+        <p class="job-stage-label" id="job-read-label">Reading mail</p>
+        <progress id="job-read-bar" max="1" value="0"></progress>
+      </div>
+      <div class="job-stage" id="job-process-stage">
+        <p class="job-stage-label" id="job-process-label">Processing mail</p>
+        <progress id="job-process-bar" max="1" value="0"></progress>
+      </div>
+      <p id="job-progress-label" class="muted" hidden>Working…</p>
+      <progress id="job-progress-bar" max="1" value="0" hidden></progress>
       <div class="modal-actions">
         <button type="button" id="job-progress-cancel" class="cancel">Cancel</button>
       </div>

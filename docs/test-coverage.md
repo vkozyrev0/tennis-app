@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-10-17):** **1081 tests** collected (`pytest --collect-only -q`).
+**Status (2026-10-20):** **1105 tests** collected (`pytest --collect-only -q`).
 Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
 `backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
 `# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
@@ -43,7 +43,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-The names in that `test_zz_*.py` cell are examples, not the full tree. There are **117** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
+The names in that `test_zz_*.py` cell are examples, not the full tree. There are **118** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
 
 **Frontend unit checks (JS):** pure frontend logic factored out and asserted by
 DOM-free node test files (independent of AG Grid):
@@ -71,7 +71,7 @@ DOM-free node test files (independent of AG Grid):
 - `frontend/app/td_helpers.test.mjs` — blank-email guard, menu clamp, locale dates.
 - `frontend/app/modules.test.mjs` — the ESM graph itself: every relative import resolves, every named import is a real export, and every `create*` factory wired in `app.js` is passed the context keys it destructures.
 
-That is **25** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
+That is **26** `frontend/app/*.test.mjs` files. Run: `node frontend/app/<name>.test.mjs`.
 
 **Lint (required before every check-in):** `python -m ruff check .` (config in
 `ruff.toml`) and `npx eslint .` (config in `eslint.config.mjs`). CI runs
@@ -263,7 +263,7 @@ isolation; this one proves they compose.
 
 | Surface | Coverage status | Why |
 |---------|----------------|-----|
-| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | Node checks cover the 25 `frontend/app/*.test.mjs` files; `scripts/ui_smoke.mjs` drives the running app in Chromium via Playwright. | Manual QA still covers visual polish; the browser smoke fails on uncaught errors, HTTP errors after sign-in, and empty tabs. |
+| Frontend JavaScript (`app.js`, `app/grids.js`, `util.js`, `shirts.js`, …) | Node checks cover the 26 `frontend/app/*.test.mjs` files; `scripts/ui_smoke.mjs` drives the running app in Chromium via Playwright. | Manual QA still covers visual polish; the browser smoke fails on uncaught errors, HTTP errors after sign-in, and empty tabs. |
 | Print stylesheet | **Visual / manual.** | Print fidelity validated in the preview during the Reports + Confidential-hotel-report polish passes. |
 | Browser-side ARIA tab semantics + focus-trap | **Manual.** | Verified via DevTools + screen reader during the eighth audit pass. |
 | Cookie / CSRF flow | **Partial.** | Auth gating + session rotation covered (`test_auth_gating_and_official_self_service`, `test_account_reset_invalidates_sessions`). CSRF deferred per the original audit. |
@@ -275,7 +275,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (1081 tests / 117 files)
+python -m pytest -q                                    # the whole suite (1105 tests / 118 files)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -464,7 +464,7 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **1081 tests** across **117** files (see the status line at the top).
+Total suite count: **1105 tests** across **118** files (see the status line at the top).
 Recent inbox/mail additions (2026-09-08): `test_zz_inbox_people` (parallel
 name+USTA list + promote to Players), `test_zz_outlook_feed`, `test_zz_inbox_feeds`,
 `test_zz_gmail_feed` (Get mails / Get all, mailbox-safe Clear).

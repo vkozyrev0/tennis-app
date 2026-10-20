@@ -1,6 +1,7 @@
 // Review inbox panel (D11) — classify, detect, bulk ops, detail drawer.
 import { runReprocessPass } from "./classify_batch.js";
 import { enhanceSelect } from "./combobox.js";
+import { describeFetch, jobBars, pollDelayMs } from "./mail_progress.js";
 import {
   bulkBarHidden,
   selectHintHidden,
@@ -43,13 +44,22 @@ export function createInboxPanel(ctx) {
     // Pairing-avoidance member rows live in createPairingDoublesPanel (owns that
     // form); the inbox prefills them when a pairing email is opened.
     getPairingMembersBox, getPairingMemberRow,
-    sizeLists, runMailJob,
+    sizeLists, runMailJob, runStagedJob,
   } = ctx;
   const _runMailJob = typeof runMailJob === "function"
     ? runMailJob
     : async (_title, _opts, fn) => {
         const result = await fn({
           signal: undefined, update() {}, snapshot: () => ({ cancelled: false }),
+        });
+        return { ok: true, cancelled: false, result };
+      };
+  // Two-bar variant: the reading and processing bars report their own counts.
+  const _runStagedJob = typeof runStagedJob === "function"
+    ? runStagedJob
+    : async (_title, _opts, fn) => {
+        const result = await fn({
+          signal: undefined, update() {}, stages() {}, snapshot: () => ({ cancelled: false }),
         });
         return { ok: true, cancelled: false, result };
       };
@@ -1321,14 +1331,36 @@ export function createInboxPanel(ctx) {
     if (getBtn) getBtn.disabled = true;
     if (rpBtn) rpBtn.disabled = true;
     setMsg("inbox-feed-msg", reprocess ? "reprocessing date range…" : "fetching Gmail and Outlook…", true);
-    const phases = reprocess
-      ? ["Connecting mailbox", "Fetching mailbox", "Reprocessing stored mail"]
-      : ["Connecting mailbox", "Fetching Gmail", "Fetching Outlook", "Classifying leftover mail"];
     try {
-      const job = await _runMailJob("Processing mail", { phase: phases[0], phases }, ({ signal }) =>
-        api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal }));
+      // The server runs the pass as a job and reports its counts as it goes:
+      // reading (mailbox download) and then processing (the model pass). The
+      // overlay polls the job, so both bars move while the work runs.
+      const job = await _runStagedJob("Processing mail", null, async ({ signal, stages }) => {
+        const started = await api("/inbox-feeds/fetch/start?" + q.toString(), {
+          method: "POST", signal,
+        });
+        const token = started.token;
+        const stop = () => api(`/inbox-feeds/jobs/${token}/cancel`, { method: "POST" });
+        if (signal) signal.addEventListener("abort", () => { stop().catch(() => {}); }, { once: true });
+        for (;;) {
+          if (signal && signal.aborted) {
+            await stop().catch(() => {});
+            throw Object.assign(new Error("cancelled"), { name: "AbortError" });
+          }
+          const snap = await api(`/inbox-feeds/jobs/${token}`, { signal });
+          stages(jobBars(snap));
+          if (snap.state === "running") {
+            await new Promise((r) => setTimeout(r, pollDelayMs(snap.state)));
+            continue;
+          }
+          if (snap.state === "cancelled") throw Object.assign(new Error("cancelled"), { name: "AbortError" });
+          if (snap.state === "failed") throw new Error(snap.error || "the mail job failed");
+          return snap.result || {};
+        }
+      });
       if (job.cancelled) { setMsg("inbox-feed-msg", "cancelled", false); return; }
       const r = job.result;
+      const download = describeFetch(r.progress);
       const n = r.imported ?? 0;
       const d = r.duplicates ?? 0;
       const skipped = (r.skipped || []).join(", ");
@@ -1337,7 +1369,7 @@ export function createInboxPanel(ctx) {
       const rpLeft = r.reprocess_remaining ?? 0;
       const llmSkipped = r.leftover_skipped ?? 0;
       setMsg("inbox-feed-msg",
-        `imported ${n} new` + (restored ? ` · restored ${restored}` : "") +
+        `imported ${n} new · ${download}` + (restored ? ` · restored ${restored}` : "") +
         (d ? ` · ${d} already in inbox` : "") +
         (rp ? ` · reprocessed ${rp}` : "") +
         (rpLeft ? ` · ${rpLeft} left for the leftover pass — press Reprocess range` : "") +
@@ -1377,16 +1409,17 @@ export function createInboxPanel(ctx) {
     setMsg("inbox-feed-msg", "reprocessing date range…", true);
     try {
       const job = await _runMailJob("Processing mail", { phase: "Fetching mailbox" }, async ({ signal, update }) => {
-        await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal });
+        const fetched = await api("/inbox-feeds/fetch?" + q.toString(), { method: "POST", signal });
         update({ phase: "Listing stored mail" });
         const listed = await api("/inbox-feeds/reprocess-ids?" + q.toString(), { signal });
         const ids = listed.ids || [];
         const leftover = listed.leftover || "off";
         const fallback = listed.fallback || null;
         const rangeLabel = [since, until].filter(Boolean).join(" … ") || "this range";
+        const download = describeFetch(fetched.progress);
         if (!ids.length) {
           update({ phase: "No stored copies", current: 0, total: 0 });
-          return { ids, leftover, leftoverCalls: 0, fallback, rangeLabel };
+          return { ids, leftover, leftoverCalls: 0, fallback, rangeLabel, download };
         }
         const phase = "Analyzing...";
         update({ phase, current: 0, total: ids.length });
@@ -1404,7 +1437,6 @@ export function createInboxPanel(ctx) {
         // remainder and advances the bar by COPIES PARSED — it only reaches
         // the total when nothing is left, and it stops instead of spinning if
         // a request makes no progress.
-        update({ phase, current: 0, total: ids.length });
         const pass = await runReprocessPass(ids, (batch, sig) => api("/emails/bulk/reprocess", {
           method: "POST",
           body: JSON.stringify({ email_ids: batch }),
@@ -1415,7 +1447,7 @@ export function createInboxPanel(ctx) {
           signal,
         });
         return {
-          ids, leftover, fallback, rangeLabel,
+          ids, leftover, fallback, rangeLabel, download,
           leftoverCalls: pass.leftoverCalls,
           parsed: pass.parsed,
           remaining: pass.remaining,
@@ -1429,10 +1461,11 @@ export function createInboxPanel(ctx) {
       const calls = r.leftoverCalls || 0;
       const left = r.remaining || 0;
       const rangeLabel = r.rangeLabel || "this range";
-      const tail = (left ? ` · ${left} left — press again for the rest` : "")
+      const tail = ` · ${r.download || "no new mail downloaded"}`
+        + (left ? ` · ${left} left — press again for the rest` : "")
         + (calls ? ` · leftover LLM ${calls}` : " · leftover LLM 0");
       if (!n) {
-        setMsg("inbox-feed-msg", `no stored copies in ${rangeLabel}`, false);
+        setMsg("inbox-feed-msg", `no stored copies in ${rangeLabel}` + tail, false);
       } else if (r.fallback === "tournament") {
         setMsg("inbox-feed-msg",
           `reprocessed ${r.parsed || 0} of ${n} tournament copies (none in ${rangeLabel})` + tail,

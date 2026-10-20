@@ -7,6 +7,7 @@ from typing import Any, Callable
 from . import gmail_feed, outlook_feed
 from .email_ingest import restore_hidden
 from .email_llm import pass_budget
+from .inbox_progress import NullReporter, feed_callbacks, finalize_feed
 
 HttpFn = Callable[..., Any]
 
@@ -73,6 +74,17 @@ def _event_lookback_start(cur, tournament_id: int | None) -> datetime:
     return datetime.combine(raw, time.min, tzinfo=timezone.utc)
 
 
+def _feed_progress(out: dict | None) -> dict | None:
+    """The counts a feed's fetch reported, or None when the feed was skipped."""
+    if out is None:
+        return None
+    return {
+        "downloaded": int(out.get("fetched") or 0),
+        "imported": int(out.get("imported") or 0),
+        "duplicates": int(out.get("duplicates") or 0),
+    }
+
+
 def fetch_inbox_mails(
     cur,
     *,
@@ -83,6 +95,7 @@ def fetch_inbox_mails(
     reprocess: bool = False,
     imap_factory: Callable[..., Any] | None = None,
     http: HttpFn | None = None,
+    reporter=None,
 ) -> dict:
     """Fetch enabled, configured feeds for [since, until]. Skip the rest.
 
@@ -92,6 +105,8 @@ def fetch_inbox_mails(
     ``reprocess`` re-runs classify + leftover stamp on CourtOps copies in the
     window after the mailbox fetch (no duplicate rows).
     """
+    if reporter is not None:
+        reporter.stage("reading")
     start, end = as_window(since, until)
     if get_all:
         event_start = _event_lookback_start(cur, tournament_id)
@@ -107,25 +122,30 @@ def fetch_inbox_mails(
     # bounds. Copies the budget refuses are still imported, classified by the
     # heuristic, and counted in `leftover_skipped` for the status line.
     with pass_budget() as budget:
+        reporter = reporter or NullReporter()
         grow = gmail_feed.load_feed(cur)
         if gmail_ready(grow):
+            on_dl, on_cls = feed_callbacks(reporter, "gmail")
             gmail_out = gmail_feed.fetch_latest(
                 cur, imap_factory=imap_factory, since=start, until=end,
-                tournament_id=tournament_id,
+                tournament_id=tournament_id, on_download=on_dl, on_classify=on_cls,
             )
+            finalize_feed(reporter, "gmail", gmail_out)
         else:
             skipped.append("gmail")
         orow = outlook_feed.load_feed(cur)
         if outlook_ready(orow):
+            on_dl, on_cls = feed_callbacks(reporter, "outlook")
             outlook_out = outlook_feed.fetch_latest(
                 cur, http=http, since=start, until=end,
-                tournament_id=tournament_id,
+                tournament_id=tournament_id, on_download=on_dl, on_classify=on_cls,
             )
+            finalize_feed(reporter, "outlook", outlook_out)
         else:
             skipped.append("outlook")
         restored = 0
         if get_all and tournament_id is not None:
-            restored = restore_hidden(cur, tournament_id)
+            restored = restore_hidden(cur, tournament_id, start, end)
         reprocessed = 0
         reprocess_remaining = 0
         if reprocess and tournament_id is not None and (start is not None or end is not None):
@@ -150,4 +170,5 @@ def fetch_inbox_mails(
         "reprocess_remaining": reprocess_remaining,
         "leftover_skipped": budget.denied,
         "llm_budget": budget.as_dict(),
+        "progress": {"gmail": _feed_progress(gmail_out), "outlook": _feed_progress(outlook_out)},
     }

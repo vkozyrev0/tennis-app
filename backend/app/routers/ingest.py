@@ -33,6 +33,7 @@ from ..email_ingest import (
     ingest_email,
     payload_from_mapping,
 )
+from ..email_llm import pass_budget
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 log = logging.getLogger("courtops.ingest")
@@ -137,7 +138,10 @@ def ingest_email_json(
 ):
     """Ingest one email from a JSON body (preferred)."""
     data = body.model_dump(exclude={"auto_classify"})
-    payload = payload_from_mapping(data, source="webhook")
+    try:
+        payload = payload_from_mapping(data, source="webhook")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _run_ingest(conn, payload, response=response, auto_classify=body.auto_classify)
 
 
@@ -173,14 +177,24 @@ async def ingest_email_form(
     auto_classify = str(form_map.get("auto_classify", "true")).lower() not in {
         "0", "false", "no",
     }
-    payload = payload_from_mapping(form_map, source="form")
+    try:
+        payload = payload_from_mapping(form_map, source="form")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return _run_ingest(conn, payload, response=response, auto_classify=auto_classify)
 
 
 def _run_ingest(conn, payload, *, response: Response, auto_classify: bool) -> IngestResult:
+    # A webhook is one email, but the classify step can call the model, and a
+    # call costs up to EMAIL_LLM_TIMEOUT. Bound it the way the feed paths are
+    # bounded so a wedged provider cannot hold the request and its transaction.
     try:
         with conn.cursor() as cur:
-            result = ingest_email(cur, payload, auto_classify=auto_classify)
+            if not auto_classify:
+                result = ingest_email(cur, payload, auto_classify=False)
+            else:
+                with pass_budget():
+                    result = ingest_email(cur, payload, auto_classify=True)
     except LookupError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except ValueError as e:

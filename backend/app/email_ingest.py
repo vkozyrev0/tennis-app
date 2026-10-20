@@ -28,6 +28,15 @@ from .inbox_person import upsert_inbox_people
 from .triage import classify_timed
 
 _MSG_ID_RE = re.compile(r"<([^>]+)>")
+_HDR_MSG_ID_RE = re.compile(r"^message-id:[ \t]*(\S.*?)[ \t]*$", re.I | re.M)
+
+
+def _header_block_message_id(headers: Any) -> str | None:
+    """Message-Id out of a raw RFC822 header block (SendGrid's ``headers``)."""
+    if not isinstance(headers, str) or not headers:
+        return None
+    m = _HDR_MSG_ID_RE.search(headers.replace("\r\n", "\n"))
+    return m.group(1) if m else None
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"[ \t]+\n")
 
@@ -182,25 +191,27 @@ def payload_from_mapping(data: dict[str, Any], *, source: str = "webhook") -> In
 
     mid = normalize_message_id(_first_nonempty(
         g("message_id"), g("Message-Id"), g("Message-ID"), g("message-id"),
-        g("MessageID"), g("headers[Message-Id]"),
+        g("MessageID"), g("headers[Message-Id]"), _header_block_message_id(g("headers")),
     ))
 
     from_addr = _first_nonempty(
         g("from_address"), g("from"), g("sender"), g("From"),
     )
-    to_addr = _first_nonempty(
-        g("to_address"), g("to"), g("recipient"), g("recipients"),
-        g("To"), g("envelope[to]"),
-    )
-    # If "to" is a list/JSON array string, take the first.
-    if to_addr and to_addr.startswith("["):
+    to_raw = g("to_address") or g("to") or g("recipient") or g("recipients") \
+        or g("To") or g("envelope[to]")
+    # "to" may arrive as a list or a JSON array string (SendGrid, some
+    # forwarders). Take the first recipient so routing sees a real address;
+    # stringifying the list yielded "['a', 'b']", which matches no tournament.
+    if isinstance(to_raw, (list, tuple)):
+        to_raw = next((v for v in to_raw if v), None)
+    elif isinstance(to_raw, str) and to_raw.lstrip().startswith("["):
         try:
-            import json
-            arr = json.loads(to_addr)
+            arr = json.loads(to_raw)
             if isinstance(arr, list) and arr:
-                to_addr = str(arr[0])
-        except Exception:
+                to_raw = arr[0]
+        except ValueError:
             pass
+    to_addr = _first_nonempty(to_raw)
 
     subject = _first_nonempty(g("subject"), g("Subject"))
 
@@ -210,7 +221,11 @@ def payload_from_mapping(data: dict[str, Any], *, source: str = "webhook") -> In
         try:
             tournament_id = int(tid_raw)
         except (TypeError, ValueError):
-            tournament_id = None
+            # A provider that sends "macon" instead of an id must hear about it
+            # rather than land in the default tournament without a word.
+            raise ValueError(
+                f"tournament_id must be an integer, got {str(tid_raw)[:40]!r}"
+            ) from None
 
     received_at = parse_received_at(g(
         "received_at", "timestamp", "Date", "date", "DateHeader",
@@ -321,14 +336,24 @@ def _duplicate_hit(row: dict) -> dict:
     }
 
 
-def restore_hidden(cur, tournament_id: int) -> int:
-    """Un-hide CourtOps copies for one tournament. Mailboxes are not touched."""
+def restore_hidden(cur, tournament_id: int, since=None, until=None) -> int:
+    """Un-hide CourtOps copies for one tournament inside a window.
+
+    Clear inbox hides every copy of the event. Get all rests on the widening
+    window, so mapping that same window here keeps a restore to the mail the
+    press actually asked for. Mailboxes are not touched.
+    """
+    clauses = ["tournament_id = %s", "deleted_at IS NOT NULL"]
+    params: list = [tournament_id]
+    if since is not None:
+        clauses.append("received_at >= %s")
+        params.append(since)
+    if until is not None:
+        clauses.append("received_at <= %s")
+        params.append(until)
     cur.execute(
-        """
-        UPDATE email_message SET deleted_at = NULL
-        WHERE tournament_id = %s AND deleted_at IS NOT NULL
-        """,
-        (tournament_id,),
+        "UPDATE email_message SET deleted_at = NULL WHERE " + " AND ".join(clauses),
+        params,
     )
     return cur.rowcount or 0
 
@@ -349,9 +374,10 @@ def _reuse_existing(cur, existing: dict, tournament_id: int | None) -> dict:
     if hidden:
         sets.append("deleted_at = NULL")
         existing["deleted_at"] = None
-    if tournament_id is not None and (
-        existing.get("tournament_id") is None or hidden
-    ):
+    # An unscoped row takes the tournament of whoever claims it first; a hidden
+    # copy keeps its own, unless it is being restored into the same event.
+    # Re-homing on every Get mails moved a hidden row from event A into event B.
+    if unscoped:
         sets.append("tournament_id = %s")
         params.append(tournament_id)
         existing["tournament_id"] = tournament_id

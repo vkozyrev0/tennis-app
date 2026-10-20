@@ -134,7 +134,12 @@ def _singles_only(text: str) -> bool:
     return bool(_SINGLES_WORD_RE.search(text)) and not _DOUBLES_WORD_RE.search(text)
 
 
-def classify(subject: str | None, body: str | None) -> str:
+def classify(subject: str | None, body: str | None, *, leftover: bool = True) -> str:
+    """Rule label with the post-filters, then the optional model pass.
+
+    ``leftover=False`` keeps the filters but skips the model, for a caller that
+    asks the model itself once per row.
+    """
     label = _classify_raw(subject, body)
     text = f"{subject or ''} {body or ''}"
     # Require the right number of identifiable PLAYERS, else fall back to UNKNOWN
@@ -160,7 +165,7 @@ def classify(subject: str | None, body: str | None) -> str:
         # when the quoted original (with the name) was stripped.
         if not re.search(r"withdrawal\s+request", subject or "", re.I):
             label = "other"
-    if label != "other":
+    if label != "other" or not leftover:
         return label
     # Optional small-LLM second pass for leftovers only (EMAIL_LLM=1;
     # DeepSeek by default, the on-box sidecar under EMAIL_LLM_PROVIDER=local).

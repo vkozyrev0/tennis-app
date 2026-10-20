@@ -6,11 +6,12 @@ days, incomplete roster entries), plus grand totals.
 
 Clock-independent: dates are relative to today. Named to sort last."""
 import uuid
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clock import today_venue
 from app.main import app
 from tests.venue_site import attach_venue_site
 
@@ -37,11 +38,11 @@ def _iso(d):
 
 
 def _future_tournament(reg_in_days=None):
-    start = date.today() + timedelta(days=20)
+    start = today_venue() + timedelta(days=20)
     body = {"name": "Dig " + uuid.uuid4().hex[:8], "type": "junior",
             "play_start_date": _iso(start), "play_end_date": _iso(start + timedelta(days=2))}
     if reg_in_days is not None:
-        body["registration_deadline"] = _iso(date.today() + timedelta(days=reg_in_days))
+        body["registration_deadline"] = _iso(today_venue() + timedelta(days=reg_in_days))
     return _ok(client.post("/api/tournaments", json=body))
 
 
@@ -64,7 +65,7 @@ def test_active_tournament_appears_with_uncovered_days():
 
 
 def test_finished_tournament_excluded():
-    start = date.today() - timedelta(days=30)
+    start = today_venue() - timedelta(days=30)
     t = _ok(client.post("/api/tournaments", json={
         "name": "Past " + uuid.uuid4().hex[:8], "type": "junior",
         "play_start_date": _iso(start), "play_end_date": _iso(start + timedelta(days=2))}))
@@ -106,7 +107,7 @@ def test_conflicts_in_digest_tasks_and_totals():
     site = attach_venue_site(client, _ok, t["id"])
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                        json={"official_id": o["id"], "site_id": site["id"]}))
-    day = _iso(date.today() + timedelta(days=20))  # within the play window
+    day = _iso(today_venue() + timedelta(days=20))  # within the play window
     _ok(client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": day, "working_as": "chair_umpire"}))
     dg = _digest()

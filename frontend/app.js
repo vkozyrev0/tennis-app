@@ -674,7 +674,7 @@ function _importRefresh() {
     distancesCrud.refresh().catch(() => {});
   }
 }
-const { run: runMailJob } = createProgressModal();
+const { run: runMailJob, runStages: runStagedJob } = createProgressModal();
 const { gotoImport, buildImportPage } = createImportPage({
   api, setMsg, toast, confirmDialog, html, hstr, raw, esc,
   makeMenuButton, makeGrid, scheduleComboSync, activateGroup,
@@ -749,6 +749,7 @@ const { loadInbox, invalidatePickCache, verifyEmailTargets } = createInboxPanel(
   getPairingMemberRow: () => _pairingRefs.pairingMemberRow,
   sizeLists,
   runMailJob,
+  runStagedJob,
 });
 _rosterRefs.loadInbox = loadInbox;
 

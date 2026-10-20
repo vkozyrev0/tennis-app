@@ -106,6 +106,60 @@ def test_fetch_inbox_mails_forwards_tournament_id(monkeypatch):
     assert out["reprocessed"] == 0
 
 
+@_needs_db
+def test_get_mails_reports_the_counts_each_feed_downloaded(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    from app import outlook_feed as of
+
+    monkeypatch.setattr(gf, "load_feed", lambda cur: {
+        "enabled": True, "gmail_address": "a@b.com", "secret_enc": "x",
+    })
+    monkeypatch.setattr(of, "load_feed", lambda cur: {
+        "enabled": True, "mailbox": "td@x.com", "secret_enc": "x",
+    })
+    monkeypatch.setattr(gf, "fetch_latest", lambda cur, **kw: {
+        "fetched": 12, "imported": 10, "duplicates": 2,
+    })
+    monkeypatch.setattr(of, "fetch_latest", lambda cur, **kw: {
+        "fetched": 7, "imported": 5, "duplicates": 2,
+    })
+    r = client.post("/api/inbox-feeds/fetch?since=2026-09-01&until=2026-09-08")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["progress"] == {
+        "gmail": {"downloaded": 12, "imported": 10, "duplicates": 2},
+        "outlook": {"downloaded": 7, "imported": 5, "duplicates": 2},
+    }
+    # The existing keys keep their values; progress is additive only.
+    assert body["imported"] == 15
+    assert body["duplicates"] == 4
+    assert body["skipped"] == []
+    assert body["gmail"]["fetched"] == 12
+    assert body["outlook"]["fetched"] == 7
+
+
+@_needs_db
+def test_get_mails_reports_no_counts_for_a_skipped_feed(monkeypatch, _admin):
+    from app import gmail_feed as gf
+    from app import outlook_feed as of
+
+    monkeypatch.setattr(gf, "load_feed", lambda cur: {
+        "enabled": True, "gmail_address": "a@b.com", "secret_enc": "x",
+    })
+    monkeypatch.setattr(of, "load_feed", lambda cur: {
+        "enabled": False, "mailbox": "", "secret_enc": None,
+    })
+    monkeypatch.setattr(gf, "fetch_latest", lambda cur, **kw: {
+        "fetched": 3, "imported": 2, "duplicates": 1,
+    })
+    r = client.post("/api/inbox-feeds/fetch?since=2026-09-01&until=2026-09-08")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["progress"]["gmail"] == {"downloaded": 3, "imported": 2, "duplicates": 1}
+    assert body["progress"]["outlook"] is None
+    assert body["skipped"] == ["outlook"]
+
+
 def test_ready_helpers_require_enabled_and_credentials():
     assert gmail_ready(None) is False
     assert gmail_ready({"enabled": True, "gmail_address": "a@b.com", "secret_enc": None}) is False
@@ -679,3 +733,78 @@ def test_bulk_reprocess_without_a_model_is_unbounded_work_but_no_calls(monkeypat
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM email_message WHERE id = ANY(%s) AND classification IS NOT NULL", (made,))
             assert cur.fetchone()["n"] == 3
+
+
+@_needs_db
+def test_reprocess_keeps_the_heuristic_downgrade(monkeypatch, _admin):
+    """Reprocess applies the same post-filters as ingest.
+
+    Reprocess ran `_classify_raw`, skipping the doubles player-count rule, so a
+    one-name doubles email was `other` at ingest and `doubles` after reprocess.
+    """
+    monkeypatch.delenv("EMAIL_LLM", raising=False)
+    monkeypatch.setattr("app.routers.emails_bulk.probe_llm", lambda timeout=1.5: "off")
+    t = client.post("/api/tournaments", json={
+        "name": "Reprocess " + uuid.uuid4().hex[:6], "type": "junior",
+        "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+    }).json()
+    created = client.post("/api/emails", json={
+        "tournament_id": t["id"],
+        "subject": "Doubles partners",
+        "body": "Sam Lee would like a doubles partner.",
+        "from_address": "parent@example.com",
+    })
+    assert created.status_code == 201, created.text
+    email = created.json()
+    r = client.post("/api/emails/bulk/reprocess", json={"email_ids": [email["id"]]})
+    assert r.status_code == 200, r.text
+    row = next(
+        m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
+        if m["id"] == email["id"]
+    )
+    # Ingest and reprocess agree: one named player is not enough for doubles.
+    assert row["classification"] == "other"
+
+
+def test_restore_hidden_only_returns_mail_inside_the_window():
+    """Get all restores the window it asked for, not every hidden copy."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.db import get_conn
+    from app.email_ingest import restore_hidden
+
+    client.post("/api/auth/login", json={"username": "admin", "password": "admin"})
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            t = client.post("/api/tournaments", json={
+                "name": "Restore " + uuid.uuid4().hex[:6], "type": "junior",
+                "play_start_date": "2026-09-01", "play_end_date": "2026-09-04",
+            }).json()
+            tag = uuid.uuid4().hex[:8]
+            now = datetime.now(timezone.utc)
+            ids = {}
+            for label, when in (("old", now - timedelta(days=200)),
+                                ("new", now - timedelta(days=1))):
+                cur.execute(
+                    "INSERT INTO email_message (tournament_id, message_id, subject, "
+                    "body, classification, status, received_at) "
+                    "VALUES (%s, %s, %s, 'x', 'other', 'new', %s) RETURNING id",
+                    (t["id"], f"<restore-{tag}-{label}@example.com>", label, when),
+                )
+                ids[label] = cur.fetchone()["id"]
+            cur.execute(
+                "UPDATE email_message SET deleted_at = now() WHERE id = ANY(%s)",
+                (list(ids.values()),),
+            )
+            restored = restore_hidden(
+                cur, t["id"], now - timedelta(days=30), now,
+            )
+            cur.execute(
+                "SELECT id, deleted_at FROM email_message WHERE id = ANY(%s)",
+                (list(ids.values()),),
+            )
+            rows = {r["id"]: r["deleted_at"] for r in cur.fetchall()}
+        conn.commit()
+    assert restored == 1
+    assert rows[ids["new"]] is None
+    assert rows[ids["old"]] is not None

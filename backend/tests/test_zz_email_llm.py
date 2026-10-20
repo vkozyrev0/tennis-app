@@ -616,3 +616,133 @@ def test_health_endpoint_stays_ok_with_llm_down(monkeypatch):
     assert r.status_code == 200
     assert r.json()["llm"] == "down"
     assert c.get("/api/health/llm").json()["status"] == "down"
+
+
+def test_parse_llm_json_keeps_two_replies_apart():
+    """A model that answers twice must not collapse to 'unparseable'.
+
+    The greedy object regex used to span from the first '{' to the last '}',
+    which is not valid JSON, so a two-reply answer became None.
+    """
+    two = '{"intent":"doubles","confidence":0.8} {"intent":"other","confidence":0.2}'
+    assert parse_llm_json(two)["intent"] == "doubles"
+
+
+def test_parse_llm_json_clamps_a_non_finite_confidence():
+    """NaN/Infinity are valid to json.loads; they must not become confidence 1.0."""
+    parsed = parse_llm_json('{"intent":"doubles","confidence":NaN}')
+    assert parsed["confidence"] == 0.0
+
+
+def test_failed_model_call_does_not_answer_for_every_empty_body(monkeypatch):
+    """A failure is remembered for its own clip only.
+
+    The single-entry cache kept (subject, "") -> None after one failure, so
+    every later empty or HTML-only body skipped the model and was classified by
+    the heuristic alone, with nothing logged.
+    """
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.setenv("EMAIL_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setattr("app.email_llm._LEFTOVER_LAST", None)
+    calls = {"n": 0}
+
+    def fake_complete(prompt):
+        calls["n"] += 1
+        return '{"intent":"hotel","confidence":0.9}'
+
+    monkeypatch.setattr("app.email_llm._complete", fake_complete)
+    import app.email_llm as llm
+
+    def boom(prompt):
+        raise TimeoutError("nope")
+
+    monkeypatch.setattr("app.email_llm._complete", boom)
+    assert llm.leftover_model_intent("Failed subject", None) is None
+
+    monkeypatch.setattr("app.email_llm._complete", fake_complete)
+    parsed = llm.leftover_model_intent("Another subject", None)
+    assert parsed is not None and parsed["intent"] == "hotel"
+    llm._LEFTOVER_LAST = None
+
+
+def test_reasoning_content_is_not_the_answer(monkeypatch):
+    """A reasoning model's scratchpad must never be parsed as the reply."""
+    from app import email_llm
+
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.delenv("EMAIL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "unit-test-deepseek-key")
+    monkeypatch.setenv("EMAIL_LLM_MODEL", "deepseek-reasoner")
+    reply = {
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {
+                "content": '{"intent":"withdrawal","players":[],"confidence":0.9}',
+                "reasoning_content": "Weighing {not json} withdrawal",
+            },
+        }],
+    }
+    monkeypatch.setattr("app.email_llm.urllib.request.urlopen", _json_ok(reply))
+    assert email_llm._complete("Body: x") == \
+        '{"intent":"withdrawal","players":[],"confidence":0.9}'
+
+
+def test_a_reply_truncated_while_reasoning_is_an_error_not_an_empty_answer(monkeypatch):
+    """An empty content after a length stop is a budget failure to surface."""
+    from app import email_llm
+
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.delenv("EMAIL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "unit-test-deepseek-key")
+    monkeypatch.setenv("EMAIL_LLM_MODEL", "deepseek-reasoner")
+    reply = {
+        "choices": [{
+            "finish_reason": "length",
+            "message": {"content": "", "reasoning_content": "thinking and thinking"},
+        }],
+    }
+    monkeypatch.setattr("app.email_llm.urllib.request.urlopen", _json_ok(reply))
+    with pytest.raises(RuntimeError, match="reasoning"):
+        email_llm._complete("Body: x")
+
+
+def test_a_reasoning_model_gets_a_budget_for_thinking_plus_answer(monkeypatch):
+    from app import email_llm
+
+    monkeypatch.setenv("EMAIL_LLM", "1")
+    monkeypatch.delenv("EMAIL_LLM_BASE_URL", raising=False)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "unit-test-deepseek-key")
+    monkeypatch.setenv("EMAIL_LLM_MODEL", "deepseek-reasoner")
+    monkeypatch.delenv("EMAIL_LLM_REASONING_MAX_TOKENS", raising=False)
+    seen = {}
+    monkeypatch.setattr("app.email_llm.urllib.request.urlopen", _json_ok(
+        {"choices": [{"message": {"content": "{}"}}]}, seen=seen))
+    email_llm._complete("Body: x")
+    assert seen["body"]["max_tokens"] == 2048
+
+    # The default model keeps the small answer budget.
+    monkeypatch.delenv("EMAIL_LLM_MODEL", raising=False)
+    seen.clear()
+    monkeypatch.setattr("app.email_llm.urllib.request.urlopen", _json_ok(
+        {"choices": [{"message": {"content": "{}"}}]}, seen=seen))
+    email_llm._complete("Body: x")
+    assert seen["body"]["max_tokens"] == 192
+
+
+def _json_ok(payload, seen=None):
+    """A urlopen stand-in that answers with `payload` and records the request."""
+    class _Resp:
+        def read(self):
+            return json.dumps(payload).encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _urlopen(req, timeout=0):
+        if seen is not None:
+            seen["body"] = json.loads(req.data.decode())
+        return _Resp()
+    return _urlopen
