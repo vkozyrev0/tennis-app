@@ -20,6 +20,15 @@ html:has(body:not(.is-signed-out)) { overflow: hidden; }
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  /* The sweep is the only "a request is running" signal. Killing the animation
+     left the bar parked off-screen at its final keyframe, so the app looked
+     idle mid-request. Keep a static full-width bar: state change without motion. */
+  .progress.active::before {
+    animation: none !important;
+    left: 0 !important;
+    width: 100% !important;
+    opacity: 0.7;
+  }
 }
 
 /* Global `hidden` attribute enforcement.
@@ -31,6 +40,16 @@ html:has(body:not(.is-signed-out)) { overflow: hidden; }
 
 /* Keyboard focus visibility (was missing) */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Base link color. Unclassed anchors (help copy, Gmail setup) otherwise keep
+   the UA's #0000EE, which is illegible on the dark card. Classed links
+   (.skip-link, .chase-link, .inbox-summary a, …) override this. */
+a { color: var(--link); }
+
+/* WCAG 2.5.8: bare disclosure rows ("How this page works", "Quick-assign…")
+   measured 18–23px tall. Padding grows the hit area without touching the
+   marker; rules that set their own padding (.bulk-invite > summary) win. */
+summary { padding-block: 0.2rem; }
 
 /* a11y #5: skip-to-main link. Visually hidden until keyboard-focused, then
    pops in at the top-left so a keyboard user can jump past the nav. */
@@ -138,18 +157,13 @@ html:has(body:not(.is-signed-out)) { overflow: hidden; }
   display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px;
   font-size: 0.78rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
 }
-.badge-ok { background: #e3f3e6; color: #1d6b2c; }
-.badge-warn { background: #fdf2d6; color: #6d5613; }   /* a11y #2: ≥4.5:1 on its background */
-.badge-bad { background: #fde3e3; color: #a02020; }
-.badge-info { background: #e3eefb; color: #1d4f91; }
-.badge-muted { background: #eceff2; color: #54616e; }
-/* Dark-mode badges: deeper backgrounds with lighter ink so the same status
-   palette doesn't pop as a bright square against the dark surface. */
-:root[data-theme="dark"] .badge-ok { background: #1d3a26; color: #9fdca8; }
-:root[data-theme="dark"] .badge-warn { background: #3a2f15; color: #f3d27d; }
-:root[data-theme="dark"] .badge-bad { background: #3a1f1f; color: #ed9b9b; }
-:root[data-theme="dark"] .badge-info { background: #1d2a3f; color: #9ec0ed; }
-:root[data-theme="dark"] .badge-muted { background: #232b34; color: #aab6c4; }
+.badge-ok { background: var(--badge-ok-bg); color: var(--badge-ok-ink); }
+.badge-warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
+.badge-bad { background: var(--badge-bad-bg); color: var(--badge-bad-ink); }
+.badge-info { background: var(--badge-info-bg); color: var(--badge-info-ink); }
+.badge-muted { background: var(--badge-muted-bg); color: var(--badge-muted-ink); }
+/* Badge tones are tokens now, so a new badge variant cannot miss dark mode:
+   the theme swap happens in tokens.css next to every other surface color. */
 
 /* Theme-aware "warn block" used by .needs-active-note (audit P37).
    a11y #1: bumped --warn-ink to clear AA (4.5:1) on light --warn-bg. */
@@ -173,6 +187,16 @@ h1, h2, h3, h4 {
 main h2, main h3, main h4, .panel h2, .panel h3, .card h2, .card h3 {
   scroll-margin-top: calc(var(--nav-sticky-crumbs, 9.75rem) + 0.5rem);
 }
+
+/* Panel titles are the page's h2 so the outline never jumps h1 → h3. Keep the
+   compact section-title size the panels were designed around; the dashboard's
+   tournament h2 keeps the larger display size it had. */
+.panel h2 { font-size: 1.17em; }
+#dash-greeting { font-size: 1.5em; }
+/* Subsections promoted from h4 to h3 under a panel's h2 keep the compact size
+   and the h4 rhythm (h3 would otherwise render at the page-title size and the
+   `.card h3 { margin-top: 0 }` reset would collapse the space above it). */
+.panel h3.subsection { font-size: 1em; margin: 1.33em 0; }
 
 header {
   background: var(--court, var(--accent));
@@ -224,7 +248,7 @@ header h1 {
   letter-spacing: 0.04em;
 }
 .brand-org {
-  font-size: 0.68rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -252,7 +276,7 @@ header h1 {
 /* Inbox Review reading pane — proportional type on a paper surface.
    Latest ask is the first block; quoted thread sits in a collapsed
    disclosure with a quote rail. */
-.inbox-detail-subject { margin: 0 0 0.4rem 0; }
+.inbox-detail-subject { margin: 0 0 0.4rem 0; font-size: 1em; }
 .inbox-detail-meta {
   display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; align-items: center;
   font-size: 0.85rem; margin-bottom: 0.6rem;
@@ -478,12 +502,12 @@ header h1 {
   cursor: pointer;
   white-space: nowrap;
 }
-.hdr-btn:hover { background: rgba(255, 255, 255, 0.32); }
+.hdr-btn:hover { background: rgba(255, 255, 255, 0.18); }
 .hdr-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 /* The hotkey chip inside the shortcuts button — readable on accent green. */
 .hdr-btn kbd,
 #shortcuts-btn kbd {
-  background: rgba(255, 255, 255, 0.95); color: var(--accent); border: 0;
+  background: rgba(255, 255, 255, 0.95); color: var(--court); border: 0;
   box-shadow: none; padding: 0 0.3rem; font-size: 0.7rem; font-weight: 700;
   line-height: 1.3; border-radius: 3px;
 }
@@ -520,12 +544,6 @@ header h1 {
   margin: 0 auto 0.85rem;
 }
 .login-card h2 { margin: 0.15rem 0 0.35rem; font-size: 1.45rem; }
-.login-kicker {
-  margin: 0;
-  font-size: 0.72rem; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--muted);
-}
 .login-lede { margin: 0 0 1rem; }
 .login-hint { margin: 1rem 0 0; font-size: 0.8rem; }
 
@@ -807,7 +825,7 @@ body.nav-l2-solo .gbtn[aria-current="true"] {
   border-radius: 999px;
   background: var(--accent);
   color: #fff;
-  font-size: 0.64rem;
+  font-size: 0.6875rem;
   font-weight: 700;
   line-height: 1;
   vertical-align: middle;
@@ -900,6 +918,10 @@ body.is-official > header { grid-area: hdr; }
 body.is-official > #official-app {
   grid-area: main;
   min-height: 0;
+  /* A grid item's default min-width is its content, so the profile form's
+     two-column rows (each label sized by its <input>) forced this pane to
+     459px inside a 390px phone and clipped the right-hand fields. */
+  min-width: 0;
   overflow: auto;
 }
 
@@ -940,8 +962,10 @@ main { padding: 1.25rem max(1.75rem, env(safe-area-inset-right, 0px)) 1.25rem ma
 }
 .detail-close:hover { color: var(--ink); }
 
-.list-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
-.list-toolbar .filter { flex: 1; }
+/* Toolbar rows wrap instead of pushing the document wider than a phone: the
+   filter shrinks first, then the buttons move to a second line. */
+.list-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; }
+.list-toolbar .filter { flex: 1; min-width: 0; }
 .list-toolbar .export-btn { margin: 0; }  /* don't let the export-btn margin stretch the row */
 /* Global filter inputs read as "search across the whole list" — magnifier
    icon + slight indent — so the per-column header filters look distinct. */
@@ -984,6 +1008,29 @@ input, select, textarea {
   letter-spacing: normal;
   color: var(--ink);
   background: var(--field-bg);
+  /* WCAG 2.5.8: number/text fields in toolbars measured 23.8px tall. */
+  min-height: 1.5rem;
+}
+
+/* Checkboxes and radios: 13px is the UA default and reads as a speck next to
+   24px buttons. AG Grid draws its own checkbox and is excluded. */
+input[type="checkbox"]:not(.ag-checkbox-input),
+input[type="radio"]:not(.ag-radio-input) {
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;   /* the 24px field floor above would stretch the box */
+  margin: 0 0.15rem 0 0;
+  accent-color: var(--accent);
+  vertical-align: -0.15em;
+}
+/* A checkbox is 16px, so the label must carry the hit area: every wrapping
+   label is at least a 24px row, which is what WCAG 2.5.8 measures. */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.5rem;
 }
 
 /* type-in dropdowns (searchable comboboxes) */
@@ -995,7 +1042,7 @@ input, select, textarea {
 .combo::after {
   content: "▾"; position: absolute; right: 0.45rem; top: 50%;
   transform: translateY(-30%); pointer-events: none;
-  color: var(--muted); font-size: 0.65rem;
+  color: var(--muted); font-size: 0.6875rem;
 }
 .combo-input { width: 100%; padding-right: 1.2rem; cursor: pointer; }
 /* LastPass/1Password inject an account menu over CourtOps combos (Reassign). */
@@ -1104,7 +1151,14 @@ button[type="submit"],
   border-radius: 5px;
   box-sizing: border-box;
   vertical-align: middle;
+  /* WCAG 2.5.8 floor for every button variant; icon/touch variants set a
+     larger explicit size and are unaffected. */
+  min-height: 1.5rem;
 }
+/* Buttons that carry no variant class (panel toolbars: Invite selected,
+   Finalize all, Save inventory, the report exports) never matched the reset
+   list above and sat at 21–23px. */
+button { min-height: 1.5rem; }
 .btn:disabled,
 .new-btn:disabled,
 .btn-small:disabled,
@@ -1160,6 +1214,11 @@ button[type="submit"]:hover:not(:disabled),
   border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 0.78rem;
+  /* WCAG 2.5.8: compact toolbar actions measured 21px tall. */
+  min-height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .btn--secondary:hover:not(:disabled),
 .btn.btn--secondary:hover:not(:disabled),
@@ -1181,7 +1240,10 @@ button[type="submit"]:hover:not(:disabled),
   font-size: 0.8rem;
 }
 .export-btn {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem;   /* WCAG 2.5.8: export/toolbar buttons measured 23px */
   margin: 0.5rem 0 0.25rem;
 }
 a.export-btn { text-decoration: none; }
@@ -1235,6 +1297,10 @@ a.export-btn { text-decoration: none; }
   /* a11y: --link clears 4.5:1 on dark card; --accent does not. */
   color: var(--link);
   font-size: 0.82rem;
+  /* WCAG 2.5.8: standalone row actions measured 19px tall. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
 }
 .btn--link:hover:not(:disabled),
 .btn.btn--link:hover:not(:disabled),
@@ -1348,7 +1414,7 @@ button.touch-btn:hover:not(:disabled) {
 }
 .grid-empty-icon {
   display: block; font-size: 1.6rem; margin-bottom: 0.45rem;
-  opacity: 0.45; color: var(--accent);
+  opacity: 0.45; color: var(--link);
 }
 .grid-actions { display: flex; gap: 0.15rem; justify-content: flex-start; align-items: center; }
 /* a11y 6th-pass: keep the action icons visible in the AG grid cell
@@ -1439,7 +1505,7 @@ table.shortcuts td { padding: 0.3rem 0; color: var(--ink); }
 .help-nav-item:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .help-nav-item.is-active {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
+  color: var(--link);
   font-weight: 650;
 }
 .help-nav-item:focus-visible {
@@ -1533,7 +1599,7 @@ table.shortcuts td { padding: 0.3rem 0; color: var(--ink); }
   font-size: 0.8rem;
   font-weight: 600;
   background: color-mix(in srgb, var(--accent) 14%, var(--card));
-  color: var(--accent);
+  color: var(--link);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 .help-arrow { color: var(--muted); font-weight: 600; }
@@ -1671,11 +1737,28 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
   #active-tournament, #context-bar .combo-input { min-width: 0; flex: 1; }
 }
 
+/* Phone: the sticky chrome was eating 302px of an 844px viewport (36%), and
+   the document does not scroll (main does), so a shorter header is the only
+   way to give the content back. Drop the diagnostics cluster, the org
+   subtitle and the tournament type/date line — all three are repeated inside
+   the panels that need them. */
+@media (max-width: 600px) {
+  .health-cluster { display: none; }
+  .brand-org { display: none; }
+  #context-bar .ctx-info { display: none; }
+  header { padding-top: max(0.25rem, env(safe-area-inset-top, 0px)); padding-bottom: 0.2rem; }
+  .brand-logo { height: 1.85rem; }
+}
+
 /* Detail-pane modal on narrow viewports: stack form rows vertically so the
    2-3 fields per .row don't squish to 100px each (design-crit #9). */
 @media (max-width: 600px) {
   .detail-pane { width: calc(100vw - 1rem); padding: 0.85rem 1rem; }
   .detail-pane .row label { flex: 1 1 100%; }
+  /* The official portal's profile form uses the same .row pattern but lives
+     outside .detail-pane, so it never stacked. */
+  #official-app .row label { flex: 1 1 100%; }
+  #official-app input, #official-app select { min-width: 0; }
 }
 
 /* ---- list scroll container (own scrollbar; header stays pinned) ---- */
@@ -1704,6 +1787,14 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .tbl-scroll .list-table { border: 0; }
 .tbl-scroll .list-table th { top: -1px; }
 
+/* The staffing-plan table is wider than a phone. Scroll it inside the card so
+   the document keeps a 1:1 width at 390px (WCAG 1.4.10 reflow). */
+.report-tablewrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ---- list table ---- */
 .list-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .list-table th, .list-table td {
@@ -1713,9 +1804,16 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 }
 .list-table th {
   color: var(--muted); font-weight: 650;
-  font-size: 8pt; line-height: 1.15;
+  font-size: 8.25pt; line-height: 1.15;
   padding: 0.2rem 0.4rem;
   position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+/* Row headers (scope="row") are labels for their row, not column headers:
+   undo the sticky/muted/8pt column treatment. */
+.list-table tbody th {
+  position: static; background: transparent; z-index: auto;
+  color: var(--ink); font-size: inherit; font-weight: 600;
+  padding: 0.4rem 0.5rem;
 }
 .list-table tbody tr:nth-of-type(even) { background: var(--zebra); }  /* zebra */
 .list-table tbody tr { cursor: pointer; }
@@ -1807,7 +1905,7 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .import-tabs-wrap { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.4rem; }
 .import-tabs { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px;
   border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; }
-.import-tabgroup-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+.import-tabgroup-label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--muted, #8a8a8a); margin: 0 0.15rem; white-space: nowrap; }
 .import-tabgroup-label:not(:first-child) { margin-left: 0.5rem; padding-left: 0.5rem; border-left: 1px solid var(--border); }
 .import-tab { display: inline-flex; align-items: center; gap: 0.3rem; border: 1px solid transparent;
@@ -1818,13 +1916,16 @@ form textarea { width: 100%; box-sizing: border-box; font-family: inherit; font-
 .import-tab-ico { font-size: 0.95em; line-height: 1; }
 .import-tab-badge { display: inline-flex; align-items: center; justify-content: center;
   min-width: 1.05rem; height: 1.05rem; padding: 0 0.25rem; border-radius: 999px;
-  background: var(--accent); color: var(--accent-ink); font-size: 0.62rem; font-weight: 700; }
+  background: var(--accent); color: var(--accent-ink); font-size: 0.6875rem; font-weight: 700; }
 .import-tabpanel { min-width: 0; }
 .import-tabpanel .import-section { border-bottom: 0; padding-top: 0; }
-.import-scope-chip { font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+.import-scope-chip { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
   padding: 0.05rem 0.3rem; border-radius: 999px; vertical-align: middle;
-  background: rgba(120, 140, 200, 0.18); color: #4a5a90; }
-.import-scope-chip.setup { background: rgba(120, 180, 120, 0.2); color: #3a7a3a; }
+  background: rgba(120, 140, 200, 0.18); color: #3d4d80; }
+.import-scope-chip.setup { background: rgba(120, 180, 120, 0.2); color: #2f6630; }
+/* Dark twins: the light ink sat at 1.94:1 on the dark card. */
+:root[data-theme="dark"] .import-scope-chip { background: rgba(120, 140, 200, 0.22); color: #9db4f0; }
+:root[data-theme="dark"] .import-scope-chip.setup { background: rgba(120, 180, 120, 0.22); color: #8ed3a5; }
 /* Bulk-set-a-column control in the preview toolbar. */
 .import-bulkset { display: inline-flex; align-items: center; gap: 0.25rem; }
 .import-bulkset-val { width: 8rem; max-width: 30vw; }
@@ -1928,7 +2029,7 @@ td.toggle { white-space: nowrap; }
 .check input { margin: 0; }
 
 .muted { color: var(--muted); font-size: 0.85rem; }
-.warn { color: var(--bad); font-weight: 600; }
+.warn { color: var(--bad-ink); font-weight: 600; }
 
 .asg {
   border: 1px solid var(--border);
@@ -1939,7 +2040,7 @@ td.toggle { white-space: nowrap; }
   background: var(--elev);
 }
 .asg[data-resp="accepted"] { border-left-color: var(--ok); }
-.asg[data-resp="pending"] { border-left-color: #d8a400; }
+.asg[data-resp="pending"] { border-left-color: var(--warn-border, #d8a400); }
 .asg[data-resp="declined"] { border-left-color: var(--bad); }
 /* Title row: name + response chip | primary actions + ⋯ menu */
 .asg-head {
@@ -1987,10 +2088,16 @@ td.toggle { white-space: nowrap; }
   padding: 0.1rem 0.5rem;
   font-size: 0.8rem;
 }
-.chip-x { border: 0; background: transparent; color: var(--bad); cursor: pointer; font-size: 0.9rem; padding: 0 0 0 0.1rem; }
+.chip-x {
+  border: 0; background: transparent; color: var(--bad-ink); cursor: pointer;
+  font-size: 0.9rem; padding: 0; margin-left: 0.1rem;
+  /* WCAG 2.5.8: the glyph was a 10×16 hit area; give it a 24px box. */
+  min-width: 1.5rem; min-height: 1.5rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 
 /* Day-of truth on assignment day chips (P4-1). */
-.chip.st-no_show { text-decoration: line-through; border-color: var(--bad); color: var(--bad); }
+.chip.st-no_show { text-decoration: line-through; border-color: var(--bad); color: var(--bad-ink); }
 .chip.st-worked { border-color: var(--ok); }
 .chip.st-early_departure { border-style: dashed; }
 .chip .chip-status { font-size: 0.75rem; padding: 0 0.15rem; margin-left: 0.15rem; }
@@ -2005,7 +2112,7 @@ td.toggle { white-space: nowrap; }
    needs `flex: 1; margin: 0` to fill the leading space and push the actions
    right. Distinct from `.h3-flex` (which makes the h3 itself a flex CONTAINER
    for inline action buttons inside the heading). Critique pass 3 regression. */
-.report-toolbar > h3 { flex: 1; margin: 0; }
+.report-toolbar > h2 { flex: 1; margin: 0; }
 #report-print, #report-csv {
   padding: 0.3rem 0.7rem; background: var(--accent); color: var(--accent-ink);
   border: 0; border-radius: 5px; font: inherit; font-size: 0.8rem; cursor: pointer;
@@ -2067,8 +2174,8 @@ td.toggle { white-space: nowrap; }
 
 /* ---- Inbox player-detection confidence hint (dot after the name) ---- */
 .match-hint { font-size: 0.8em; cursor: help; vertical-align: 0.05em; }
-.match-ok   { color: var(--ok); }
-.match-warn { color: #b8860b; }   /* amber — surname-only guesses to verify */
+.match-ok   { color: var(--ok-ink); }
+.match-warn { color: #8a6500; }   /* amber — surname-only guesses to verify */
 :root[data-theme="dark"] .match-warn { color: #f3d27d; }
 .match-info { color: var(--link); }
 
@@ -2179,13 +2286,44 @@ td.toggle { white-space: nowrap; }
   /* Narrow: L1 returns to a top strip so the sideline doesn't steal grid width. */
   body:not(.is-signed-out):not(.is-official) {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto;
     grid-template-areas:
       "hdr"
       "l1"
       "l2"
       "crumbs"
       "main";
+    /* One scroll surface: the document. Pinning body to 100dvh and scrolling
+       main stacked a page scroll, a main scroll and a grid scroll on a phone.
+       The header stays sticky; the nav strips scroll away with the content. */
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    /* The document now scrolls under a sticky header, so a focused heading
+       needs that much scroll margin or it lands out of sight. The 44px touch
+       chrome below makes that header ~203px tall on a 390px viewport. */
+    --nav-sticky-crumbs: 13rem;
+  }
+  html:has(body:not(.is-signed-out)) { overflow: auto; }
+  body:not(.is-signed-out):not(.is-official) > .menu-l1,
+  body:not(.is-signed-out):not(.is-official) > .menu,
+  body:not(.is-signed-out):not(.is-official) > .crumbs { position: static; }
+  body:not(.is-signed-out):not(.is-official) > #main-app { overflow: visible; }
+  /* The official portal scrolls the document too, so a phone has one scroll
+     model across both shells instead of a pinned app frame here and a
+     scrolling page there. */
+  body.is-official {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+    grid-template-rows: auto auto;
+  }
+  body.is-official > #official-app {
+    overflow: visible;
+    /* `main { margin: 0 auto }` gives this grid item auto inline margins, which
+       switch justify-self off stretch: the pane shrank to its content (459px)
+       instead of filling the 375px track, and the profile fields clipped. */
+    margin: 0;
   }
   body:not(.is-signed-out):not(.is-official) > .menu-l1 {
     flex-direction: row;
@@ -2220,6 +2358,16 @@ td.toggle { white-space: nowrap; }
   .login-card { margin: 2rem 1rem; }
   .health-cluster { margin-left: 0; }
   main { padding: 1rem; }
+
+  /* Touch targets. Chrome and icon controls get the 44px AAA size; dense
+     inline and in-grid actions get the 24px AA floor (WCAG 2.5.5 / 2.5.8). */
+  :root { --chrome-ctrl-h: 2.75rem; }
+  .hdr-btn { min-width: 44px; }
+  .btn-icon { min-width: 44px; min-height: 44px; }
+  .btn-icon.inbox-affordance { min-width: 24px; min-height: 24px; }
+  .inbox-summary a { display: inline-block; min-height: 24px; padding-block: 2px; }
+  input[type="checkbox"]:not(.ag-checkbox-input),
+  input[type="radio"]:not(.ag-radio-input) { width: 1.5rem; height: 1.5rem; }
 }
 
 /* ---- print: show only the active report ---- */
@@ -2236,7 +2384,7 @@ td.toggle { white-space: nowrap; }
   main { padding: 0; max-width: none; }
   .card { border: 0; box-shadow: none; padding: 0; }
   /* don't clip scrollable tables when printing the report */
-  .list-scroll, .tbl-scroll { max-height: none !important; overflow: visible !important; border: 0; }
+  .list-scroll, .tbl-scroll, .report-tablewrap { max-height: none !important; overflow: visible !important; border: 0; }
 }
 
 /* Assignment response-status bar: a summary line + filter chips that let the TD
@@ -2247,15 +2395,14 @@ td.toggle { white-space: nowrap; }
   border-bottom: 1px solid var(--border);
 }
 .respbar-summary { font-size: 0.9rem; color: var(--muted); }
-.respbar-summary .resp-ok { color: var(--ok); font-weight: 600; }
-.respbar-summary .resp-bad { color: var(--bad); font-weight: 700; }
-.respbar-summary .chase-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.respbar-summary .resp-ok { color: var(--ok-ink); font-weight: 600; }
+.respbar-summary .resp-bad { color: var(--bad-ink); font-weight: 700; }
+.respbar-summary .chase-link { color: var(--link); font-weight: 600; text-decoration: none; }
 .respbar-summary .chase-link:hover { text-decoration: underline; }
 /* Inbox aging callout */
 .inbox-aging { margin: 0.3rem 0 0.6rem; padding: 0.45rem 0.7rem; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid var(--warn-border, #d8a400); }
-.ia-head { font-weight: 700; font-size: 0.86rem; color: #8a6500; margin-bottom: 0.3rem; }
-:root[data-theme="dark"] .ia-head { color: #e8c779; }
+.ia-head { font-weight: 700; font-size: 0.86rem; color: var(--warn-ink); margin-bottom: 0.3rem; }
 .ia-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .ia-item { font-size: 0.84rem; cursor: pointer; padding: 0.15rem 0.3rem; border-radius: 5px; }
 .ia-item:hover { background: rgba(0,0,0,0.05); }
@@ -2268,12 +2415,11 @@ td.toggle { white-space: nowrap; }
 .asg-nologin { margin: 0.3rem 0 0.6rem; padding: 0.45rem 0.7rem; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid var(--warn-border, #d8a400);
   display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; font-size: 0.86rem; }
-.asg-nologin-text { color: #8a6500; flex: 1; }
-:root[data-theme="dark"] .asg-nologin-text { color: #e8c779; }
+.asg-nologin-text { color: var(--warn-ink); flex: 1; }
 /* Bulk-invite picker (Assignments panel) */
 .bulk-invite { margin: 0.4rem 0 0.6rem; border: 1px solid var(--line); border-radius: 8px; }
 .bulk-invite > summary { cursor: pointer; padding: 0.45rem 0.7rem; font-weight: 600;
-  font-size: 0.88rem; color: var(--accent); user-select: none; }
+  font-size: 0.88rem; color: var(--link); user-select: none; }
 .bulk-invite[open] > summary { border-bottom: 1px solid var(--line); }
 .bulk-body { padding: 0.6rem 0.7rem; }
 .bulk-toolbar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
@@ -2299,7 +2445,7 @@ td.toggle { white-space: nowrap; }
 .wd-alt-name { font-weight: 600; font-size: 0.88rem; }
 .wd-alt-name .p360-link { cursor: pointer; }
 .wd-alt-div { font-size: 0.78rem; color: var(--muted); }
-.wd-best-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+.wd-best-tag { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   padding: 1px 5px; border-radius: 6px; background: var(--accent); color: #fff; margin-left: 3px; }
 .wd-alt .wd-promote { margin-left: auto; padding: 0.25rem 0.6rem; font-size: 0.78rem;
   background: var(--accent); color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
@@ -2322,11 +2468,9 @@ td.toggle { white-space: nowrap; }
 .rc-row:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
 .rc-name { font-weight: 600; }
 .rc-issues { margin-left: auto; display: flex; gap: 0.3rem; flex-wrap: wrap; }
-.rc-issue { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
-  padding: 1px 6px; border-radius: 6px; background: #f3e6c4; color: #8a6500; }
-.rc-issue-pay { background: #f6d4d4; color: #8a1f1f; }
-:root[data-theme="dark"] .rc-issue { background: #4a3a16; color: #e8c779; }
-:root[data-theme="dark"] .rc-issue-pay { background: #4a1d1d; color: #f0b0b0; }
+.rc-issue { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+  padding: 1px 6px; border-radius: 6px; background: var(--status-warn-bg); color: var(--status-warn-ink); }
+.rc-issue-pay { background: var(--status-bad-bg); color: var(--status-bad-ink); }
 /* Missing distances */
 .md-sub { margin: 0 0 0.4rem; font-size: 0.84rem; }
 .md-table { margin-bottom: 0.8rem; }
@@ -2349,12 +2493,12 @@ td.toggle { white-space: nowrap; }
 .conflict-summary { color: #9a2020; font-weight: 700; margin: 0.2rem 0 0.6rem; }
 :root[data-theme="dark"] .conflict-summary { color: #f08a8a; }
 .conflict-group { margin-bottom: 0.7rem; }
-.conflict-group h5 { margin: 0 0 0.25rem; font-size: 0.86rem; }
+.conflict-group h4 { margin: 0 0 0.25rem; font-size: 0.86rem; }
 .conflict-group ul { margin: 0; padding-left: 1.1rem; font-size: 0.85rem; }
 .conflict-group li { margin: 0.12rem 0; }
 .conflict-group li.conflict-hard { color: #9a2020; }
 :root[data-theme="dark"] .conflict-group li.conflict-hard { color: #f0a0a0; }
-.conflict-badge { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+.conflict-badge { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
   padding: 1px 5px; border-radius: 5px; background: #f6d4d4; color: #8a1f1f; margin-left: 4px; }
 .conflict-badge.soft { background: var(--warn-bg); color: var(--warn-ink); }
 :root[data-theme="dark"] .conflict-badge { background: #4a1d1d; color: #f0b0b0; }
@@ -2365,13 +2509,11 @@ td.toggle { white-space: nowrap; }
 .avail-heatmap .hm-name { text-align: left; padding: 0.25rem 0.5rem; white-space: nowrap;
   position: sticky; left: 0; background: var(--card, #fff); z-index: 1; font-weight: 600; }
 .avail-heatmap .hm-day { padding: 0.25rem 0.4rem; white-space: nowrap; font-weight: 600; }
-.avail-heatmap .hm-cell { width: 2.6rem; height: 1.7rem; text-align: center; color: var(--accent);
+.avail-heatmap .hm-cell { width: 2.6rem; height: 1.7rem; text-align: center; color: var(--link);
   font-size: 0.7rem; background: var(--bg, #fafafa); }
-.avail-heatmap .hm-avail { background: #cdeacd; }
-:root[data-theme="dark"] .avail-heatmap .hm-avail { background: #1f4a2c; }
-.avail-heatmap .hm-asg { color: #15803d; font-weight: 800; }
+.avail-heatmap .hm-avail { background: var(--heat-avail-bg); }
+.avail-heatmap .hm-asg { color: var(--heat-assigned-ink); font-weight: 800; }
 .avail-heatmap .hm-asg-only { outline: 2px solid var(--warn-border, #d8a400); outline-offset: -2px; }
-:root[data-theme="dark"] .avail-heatmap .hm-asg-only { color: #f0c000; }
 .avail-heatmap .hm-off.hm-hotel { }
 .hm-hotel-tag { font-size: 0.75rem; }
 .avail-heatmap tfoot .hm-tot { text-align: center; font-size: 0.76rem; color: var(--muted);
@@ -2393,7 +2535,7 @@ td.toggle { white-space: nowrap; }
 .cov-cand { display: flex; align-items: center; gap: 0.5rem; }
 .cov-cand-name { flex: 1; }
 /* .cov-fill-btn → Button utilities (.btn--primary alias) */
-.cov-tag { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+.cov-tag { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   padding: 1px 4px; border-radius: 5px; background: var(--sel); color: var(--muted); }
 .cov-tag-ok { background: #e7f5ec; color: #1f7a44; }
 .cov-tag-warn { background: var(--warn-bg); color: var(--warn-ink); }
@@ -2404,14 +2546,16 @@ td.toggle { white-space: nowrap; }
   background: var(--warn-bg); border: 1px solid var(--warn-border);
   color: var(--warn-ink); border-radius: 5px;
 }
-.asg-prompt { font-size: 0.85rem; color: var(--accent); font-weight: 600; margin: 0.25rem 0; }
+.asg-prompt { font-size: 0.85rem; color: var(--link); font-weight: 600; margin: 0.25rem 0; }
 .asg-contact { font-size: 0.82rem; color: var(--muted); margin-top: 0.1rem; }
-.asg-contact a { color: var(--accent); text-decoration: none; }
+.asg-contact a { color: var(--link); text-decoration: none; }
 .asg-contact a:hover { text-decoration: underline; }
 .respbar-filters { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; margin-left: auto; }
 .chip-toggle {
   border: 1px solid var(--border); background: var(--card); color: inherit;
   border-radius: 999px; padding: 0.2rem 0.7rem; font-size: 0.85rem; cursor: pointer;
+  /* WCAG 2.5.8: filter chips measured 23px tall. */
+  min-height: 1.5rem; display: inline-flex; align-items: center;
 }
 .chip-toggle:hover:not(:disabled) { border-color: var(--accent); }
 .chip-toggle.is-on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -2441,10 +2585,10 @@ td.toggle { white-space: nowrap; }
 
 /* Inbox progress summary (unfiled / filed / follow-up counts). */
 .inbox-summary { font-size: 0.88rem; color: var(--muted); margin: 0.2rem 0 0.5rem; }
-.inbox-summary a { color: var(--accent); text-decoration: none; }
+.inbox-summary a { color: var(--link); text-decoration: none; }
 .inbox-summary a:hover { text-decoration: underline; }
 .inbox-summary .inbox-sum-todo { font-weight: 700; }
-.inbox-summary .resp-ok { color: var(--ok); }
+.inbox-summary .resp-ok { color: var(--ok-ink); }
 .inbox-unmatched-toggle { font-size: 0.85rem; color: var(--muted); display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; }
 .inbox-axes {
   font-size: 0.8rem; color: var(--muted); margin: 0 0 0.6rem; line-height: 1.45;
@@ -2468,7 +2612,7 @@ td.toggle { white-space: nowrap; }
 .inbox-triage-hint kbd {
   font-size: 0.75rem; padding: 0.05rem 0.3rem; margin: 0 0.05rem;
 }
-.inbox-triage-hint-em { color: var(--accent); font-weight: 600; }
+.inbox-triage-hint-em { color: var(--link); font-weight: 600; }
 /* Rows present, nothing checked — points at progressive bulk bar. */
 .inbox-select-hint {
   margin: 0 0 0.45rem; padding: 0.4rem 0.65rem;
@@ -2573,7 +2717,7 @@ td.toggle { white-space: nowrap; }
   white-space: normal; max-width: 36rem; line-height: 1.45;
   display: inline-block; text-align: center; padding: 0.5rem 1rem;
 }
-.origin-email { color: var(--accent); cursor: help; }
+.origin-email { color: var(--link); cursor: help; }
 
 /* Home dashboard tiles + overview */
 .dash-hero { margin-bottom: 0.85rem; }
@@ -2583,9 +2727,13 @@ td.toggle { white-space: nowrap; }
 .dash-hero .muted { margin: 0; }
 .dash-tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.6rem 0 1.2rem; }
 .dash-tile {
-  flex: 1 1 130px; min-width: 120px; display: flex; flex-direction: column; gap: 0.15rem;
+  /* rem, not px: at 200% text a 130px basis kept seven tiles on the row and the
+     longest word ("uncovered") overflowed into its neighbour. A typographic
+     basis lets the row reflow to fewer, wider tiles. */
+  flex: 1 1 8.5rem; min-width: 7.5rem; display: flex; flex-direction: column; gap: 0.15rem;
   padding: 0.7rem 0.8rem; border: 1px solid var(--border); border-radius: var(--radius, 8px);
   background: var(--card); color: inherit; cursor: pointer; text-align: left;
+  min-height: 5.2rem; height: auto;
 }
 .dash-tile:hover { border-color: var(--accent); }
 .dash-tile.alert { border-color: var(--warn-border); background: var(--warn-bg); }
@@ -2595,7 +2743,7 @@ td.toggle { white-space: nowrap; }
   font-variant-numeric: tabular-nums;
 }
 .dash-tile.alert .dash-num { color: var(--bad); }
-.dash-tile .dash-label { font-size: 0.8rem; color: var(--muted); }
+.dash-tile .dash-label { font-size: 0.8rem; color: var(--muted); overflow-wrap: anywhere; }
 .dash-trow { cursor: pointer; }
 .dash-trow:hover td { background: var(--sel); }
 .dash-trow.is-active td { font-weight: 600; }
@@ -2607,31 +2755,54 @@ td.toggle { white-space: nowrap; }
 .dash-dl-list { list-style: none; margin: 0.3rem 0 0; padding: 0; }
 .dash-dl-item { padding: 0.2rem 0.3rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
 .dash-dl-item:hover, .dash-dl-item:focus-visible { background: rgba(0,0,0,0.05); }
-.dash-deadlines .resp-bad { color: var(--bad); font-weight: 700; }
+.dash-deadlines .resp-bad { color: var(--bad-ink); font-weight: 700; }
 
 /* Official workload (dashboard) */
 .wl-sub { margin: 0.2rem 0 0.4rem; font-size: 0.84rem; }
-.wl-table .wl-off-link { color: var(--accent); cursor: pointer; font-weight: 600; }
+/* A real <button> so the 360 opens from the keyboard; the resets keep it
+   looking like the text link it replaced. */
+.wl-table .wl-off-link {
+  color: var(--link); cursor: pointer; font-weight: 600;
+  background: none; border: 0; padding: 0; font: inherit; font-weight: 600;
+  text-align: left;
+  /* WCAG 2.5.8: the name link measured 20px tall. */
+  min-height: 1.5rem; display: inline-flex; align-items: center;
+}
 .wl-table .wl-off-link:hover { text-decoration: underline; }
+/* The responses column collapsed to ~70px on a phone, wrapping "1 accepted ·
+   0 pending · 0 declined" into one character per line and 136px-tall rows.
+   Hold the table at a readable width and let #dash-workload scroll instead. */
+.wl-table { min-width: 38rem; }
+.wl-table td:last-child, .wl-table th:last-child { white-space: nowrap; }
+/* On a phone, drop the three secondary columns (Assigns, Events, the load bar)
+   so the table fits the pane outright instead of panning sideways. Days and
+   Responses are what the TD scans; the row still opens the official's 360. */
+@media (max-width: 600px) {
+  .wl-table { min-width: 0; }
+  .wl-table th:nth-child(3), .wl-table td:nth-child(3),
+  .wl-table th:nth-child(4), .wl-table td:nth-child(4),
+  .wl-table th:nth-child(5), .wl-table td:nth-child(5) { display: none; }
+  .wl-table td:last-child, .wl-table th:last-child { white-space: normal; }
+}
 .wl-table tr.wl-zero td { color: var(--muted); }
 .wl-barcell { width: 30%; min-width: 80px; }
 .wl-bar { display: inline-block; height: 0.7rem; border-radius: 4px; background: var(--accent); min-width: 2px; vertical-align: middle; }
 /* Pre-tournament readiness scorecard (dashboard) */
 .dash-readiness { margin: 0.4rem 0 1rem; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .rdy-head { padding: 0.45rem 0.7rem; font-weight: 700; font-size: 0.92rem; }
-.rdy-head.rdy-pass { background: #e7f5ec; color: #1f7a44; }
+.rdy-head.rdy-pass { background: var(--status-ok-bg); color: var(--status-ok-ink); }
 .rdy-head.rdy-warn { background: var(--warn-bg); color: var(--warn-ink); }
-.rdy-head.rdy-fail { background: #fbe4e4; color: #9a2020; }
-:root[data-theme="dark"] .rdy-head.rdy-pass { background: #16301f; color: #8ed3a5; }
-:root[data-theme="dark"] .rdy-head.rdy-fail { background: #3a1818; color: #f0a0a0; }
+.rdy-head.rdy-fail { background: var(--status-bad-bg); color: var(--status-bad-ink); }
 .rdy-list { list-style: none; margin: 0; padding: 0.35rem 0.5rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .rdy-row { display: flex; align-items: center; gap: 0.55rem; padding: 0.25rem 0.4rem; border-radius: 6px;
   cursor: pointer; font-size: 0.86rem; }
 .rdy-row:hover, .rdy-row:focus-visible { background: var(--sel); }
 .rdy-icon { width: 1.1rem; text-align: center; font-weight: 800; }
-.rdy-row.rdy-pass .rdy-icon { color: #1f7a44; }
-.rdy-row.rdy-warn .rdy-icon { color: #c08a00; }
-.rdy-row.rdy-fail .rdy-icon { color: #c0392b; }
+/* Status marks read from the shared ink tokens, so a status tone is defined
+   once (with its dark twin) and every consumer inherits it. */
+.rdy-row.rdy-pass .rdy-icon { color: var(--status-ok-ink); }
+.rdy-row.rdy-warn .rdy-icon { color: var(--status-warn-ink); }
+.rdy-row.rdy-fail .rdy-icon { color: var(--status-bad-ink); }
 .rdy-label { font-weight: 600; min-width: 9rem; }
 .rdy-detail { color: var(--muted); }
 /* "Needs attention" cards laid side-by-side on wide screens (they stacked into
@@ -2650,12 +2821,14 @@ td.toggle { white-space: nowrap; }
    inside the card instead of pushing the whole page wide (the all-tournaments
    overview + the cross-tournament workload were the 375px overflow culprits). */
 .dash-tablewrap, #dash-workload { overflow-x: auto; }
+/* Wide tables that are not grids: pan inside their own box rather than
+   pushing the page (the official's season table needs this on a phone). */
+.table-scroll { overflow-x: auto; max-width: 100%; }
 
 /* Declined-assignment alert (dashboard) */
 .dash-declined { margin: 0.4rem 0 1rem; padding: 0.5rem 0.7rem; border-radius: 8px;
   background: var(--warn-bg); border: 1px solid var(--bad, #c0392b); }
-.dash-dec-head { font-weight: 700; font-size: 0.9rem; color: var(--bad, #c0392b); margin-bottom: 0.3rem; }
-:root[data-theme="dark"] .dash-dec-head { color: #f08a8a; }
+.dash-dec-head { font-weight: 700; font-size: 0.9rem; color: var(--bad-ink); margin-bottom: 0.3rem; }
 .dash-dec-list { list-style: none; margin: 0 0 0.45rem; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .dash-dec-item { font-size: 0.86rem; }
 .dash-dec-name { font-weight: 600; }
@@ -2668,7 +2841,7 @@ td.toggle { white-space: nowrap; }
 .dash-pend-item { font-size: 0.86rem; }
 .dash-pend-name { font-weight: 600; }
 .dash-pend-slot { font-size: 0.76rem; color: var(--muted); }
-.dash-pend-nudge { font-size: 0.78rem; color: var(--accent); text-decoration: none; margin-left: 0.3rem; }
+.dash-pend-nudge { font-size: 0.8125rem; color: var(--link); text-decoration: none; margin-left: 0.3rem; padding: 0.15rem 0.15rem; }
 .dash-pend-nudge:hover { text-decoration: underline; }
 .dash-pend-ago { font-size: 0.72rem; color: var(--muted); font-style: italic; }
 /* Cross-tournament digest */
@@ -2698,7 +2871,7 @@ td.toggle { white-space: nowrap; }
 .p360-sec ul { margin: 0.2rem 0 0.6rem; padding-left: 1.1rem; }
 .p360-sec li { font-size: 0.9rem; margin: 0.1rem 0; }
 .p360-reqhead { border-top: 1px solid var(--border); padding-top: 0.6rem; margin-top: 0.8rem; }
-.p360-link { color: var(--accent); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.p360-link { color: var(--link); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
 .p360-link:hover, .p360-link:focus-visible { text-decoration-style: solid; }
 
 /* Global player search (context bar) */
@@ -2717,7 +2890,7 @@ td.toggle { white-space: nowrap; }
 .ps-item:hover, .ps-item:focus-visible { background: var(--sel); }
 .ps-name { font-weight: 600; font-size: 0.85rem; }
 .ps-meta { font-size: 0.76rem; color: var(--muted); }
-.ps-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+.ps-tag { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   padding: 1px 5px; border-radius: 6px; vertical-align: middle; margin-left: 4px; }
 .ps-tag-player { background: #e3eefb; color: #1d4f91; }
 .ps-tag-official { background: #e7f5ec; color: #1f7a44; }
@@ -2754,12 +2927,12 @@ td.toggle { white-space: nowrap; }
   font-variant-numeric: tabular-nums;
 }
 .dayof-stat-l { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.dayof-stat.ok   .dayof-stat-n { color: var(--accent); }
+.dayof-stat.ok   .dayof-stat-n { color: var(--ok-ink); }
 .dayof-stat.warn .dayof-stat-n { color: #c47f1a; }
 
 .dayof-coverage { margin-bottom: 0.85rem; }
 .dayof-gaps { margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.dayof-gaps.ok { color: var(--accent); font-weight: 600; }
+.dayof-gaps.ok { color: var(--ok-ink); font-weight: 600; }
 .dayof-gaps-l { color: var(--muted); }
 .dayof-qa summary { cursor: pointer; font-weight: 600; }
 .dayof-qa-body { padding: 0.6rem 0; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }

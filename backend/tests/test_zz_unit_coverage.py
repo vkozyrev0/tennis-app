@@ -315,13 +315,20 @@ def test_health_llm_probe_exception(monkeypatch):
     assert r.json()["llm"] == "down"
 
 
-def test_frontend_no_cache_middleware():
+def test_frontend_cache_headers():
+    # Bare asset paths (the ES-module graph) revalidate; ?v= is the cache-buster
+    # and may be held for a year. Neither may be cached without asking the server.
     r = client.get("/")
     assert r.status_code == 200
-    assert "no-store" in r.headers.get("Cache-Control", "")
+    assert r.headers.get("Cache-Control") == "no-cache"
+    versioned = client.get("/styles.css?v=999")
+    assert versioned.status_code == 200
+    assert "immutable" in versioned.headers.get("Cache-Control", "")
     enums = client.get("/api/enums")
     assert enums.status_code == 200
     assert "gender" in enums.json()
+    # API responses keep their own caching contract.
+    assert "immutable" not in enums.headers.get("Cache-Control", "")
 
 
 # ----- gmail helpers -----

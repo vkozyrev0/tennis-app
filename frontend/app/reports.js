@@ -174,22 +174,22 @@ export function createReportsPanel(ctx) {
     const name = (c) => html`<strong>${c.official_name}</strong>`;
     const groups = [];
     if (rep.double_bookings.length) {
-      groups.push(html`<div class="conflict-group"><h5>⛔ Double-booked (${rep.double_bookings.length}${rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : ""})</h5><ul>${rep.double_bookings.map((c) =>
+      groups.push(html`<div class="conflict-group"><h4>⛔ Double-booked (${rep.double_bookings.length}${rep.counts.hard_double_bookings ? `, ${rep.counts.hard_double_bookings} impossible` : ""})</h4><ul>${rep.double_bookings.map((c) =>
         html`<li class="${c.different_site ? "conflict-hard" : ""}">${name(c)} on <strong>${fmtDOW(c.work_date)}</strong> — also at ${c.other_tournament || "another event"}${c.other_site ? html` (${c.other_site})` : ""}${c.different_site ? raw(' <span class="conflict-badge">different site — impossible</span>') : raw(' <span class="conflict-badge soft">same/again — verify</span>')}</li>`)}</ul></div>`);
     }
     if (rep.uncertified.length) {
-      groups.push(html`<div class="conflict-group"><h5>⚠ Uncertified for the role (${rep.uncertified.length})</h5><ul>${rep.uncertified.map((c) =>
+      groups.push(html`<div class="conflict-group"><h4>⚠ Uncertified for the role (${rep.uncertified.length})</h4><ul>${rep.uncertified.map((c) =>
         html`<li>${name(c)} works <strong>${certLabel(c.working_as)}</strong> on ${fmtDOW(c.work_date)} without that certification</li>`)}</ul></div>`);
     }
     if (rep.outside_availability.length) {
-      groups.push(html`<div class="conflict-group"><h5>📅 Worked outside declared availability (${rep.outside_availability.length})</h5><ul>${rep.outside_availability.map((c) =>
+      groups.push(html`<div class="conflict-group"><h4>📅 Worked outside declared availability (${rep.outside_availability.length})</h4><ul>${rep.outside_availability.map((c) =>
         html`<li>${name(c)} is assigned <strong>${fmtDOW(c.work_date)}</strong> but didn't declare it available</li>`)}</ul></div>`);
     }
     if (rep.out_of_window.length) {
-      groups.push(html`<div class="conflict-group"><h5>🗓 Day outside the play window (${rep.out_of_window.length})</h5><ul>${rep.out_of_window.map((c) => html`<li>${name(c)} has a worked day outside the tournament dates</li>`)}</ul></div>`);
+      groups.push(html`<div class="conflict-group"><h4>🗓 Day outside the play window (${rep.out_of_window.length})</h4><ul>${rep.out_of_window.map((c) => html`<li>${name(c)} has a worked day outside the tournament dates</li>`)}</ul></div>`);
     }
     if (rep.hotel_mismatch.length) {
-      groups.push(html`<div class="conflict-group"><h5>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h5><ul>${rep.hotel_mismatch.map((c) => html`<li>${name(c)} works days outside their room-block check-in/out</li>`)}</ul></div>`);
+      groups.push(html`<div class="conflict-group"><h4>🛏 Hotel dates don't cover worked days (${rep.hotel_mismatch.length})</h4><ul>${rep.hotel_mismatch.map((c) => html`<li>${name(c)} works days outside their room-block check-in/out</li>`)}</ul></div>`);
     }
     box.innerHTML = html`<p class="conflict-summary">⚠ ${rep.counts.total} issue(s) to resolve before the event.</p>${groups}`;
   }

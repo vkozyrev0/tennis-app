@@ -35,6 +35,20 @@ RUN pip install --no-cache-dir --upgrade pip \
     && find "$VIRTUAL_ENV" -name '__pycache__' -type d -prune -exec rm -rf {} + \
     && find "$VIRTUAL_ENV" -name '*.pyc' -delete
 
+# ---- frontend bundle: 63 ES modules -> one script ----
+# Node exists only in this throwaway stage. The app stays build-free in
+# development; the image ships frontend/dist so the browser makes one script
+# request instead of 65. --ignore-scripts skips Playwright's browser download;
+# esbuild resolves its platform binary from the optional @esbuild/linux-x64
+# package at runtime.
+FROM node:24-alpine AS jsbuild
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY frontend frontend
+COPY build build
+RUN node build/frontend.mjs
+
 # ---- final: postgres + bash + python runtime + the prebuilt venv ----
 # Same digest as the builder stage (D26).
 FROM postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
@@ -49,6 +63,7 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /app
 COPY backend  backend
 COPY frontend frontend
+COPY --from=jsbuild /src/frontend/dist frontend/dist
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 # Normalize line endings: a Windows checkout (autocrlf) can give the script CRLF,
 # which breaks the `#!/usr/bin/env bash` shebang inside the container. Strip CRs

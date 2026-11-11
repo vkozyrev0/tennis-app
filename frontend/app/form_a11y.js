@@ -67,6 +67,37 @@ export function ensureFieldIdentity(el) {
   return el;
 }
 
+function hasAccessibleName(el) {
+  if (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby")) return true;
+  if (el.closest("label")) return true;
+  if (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) return true;
+  return false;
+}
+
+/** Controls generated inside a data table (shirt inventory, bulk-set inputs,
+ *  mileage overrides) had no accessible name — a screen reader announced
+ *  "spin button, 6" with no size or column. Name them from the row header and
+ *  the column header, which every one of those tables already renders. */
+export function labelFromTable(el) {
+  if (!el || !el.matches || !el.matches("input, select, textarea")) return false;
+  const type = String(el.type || "").toLowerCase();
+  if (type === "hidden" || type === "submit" || type === "button" || type === "reset") return false;
+  if (hasAccessibleName(el)) return false;
+  const cell = el.closest("td, th");
+  const row = el.closest("tr");
+  const table = el.closest("table");
+  if (!cell || !row || !table) return false;
+  const rowHead = row.querySelector("th[scope='row']") || row.cells[0];
+  const rowText = rowHead ? rowHead.textContent.replace(/\s+/g, " ").trim() : "";
+  const headRow = table.tHead && table.tHead.rows[0];
+  const colText = headRow && headRow.cells[cell.cellIndex]
+    ? headRow.cells[cell.cellIndex].textContent.replace(/\s+/g, " ").trim() : "";
+  const name = [colText, rowText].filter(Boolean).join(", ");
+  if (!name) return false;
+  el.setAttribute("aria-label", name);
+  return true;
+}
+
 export function stampFormControls(root = (typeof document !== "undefined" ? document : null)) {
   if (!root || !root.querySelectorAll) return 0;
   let n = 0;
@@ -74,6 +105,7 @@ export function stampFormControls(root = (typeof document !== "undefined" ? docu
     const beforeId = el.id;
     const beforeName = el.getAttribute("name");
     ensureFieldIdentity(el);
+    labelFromTable(el);
     if ((!beforeId && !beforeName) && (el.id || el.getAttribute("name"))) n++;
     if (!el.hasAttribute("autocomplete")) {
       const ac = suggestedAutocomplete(el);

@@ -25,6 +25,11 @@ export default [
       "**/*.min.js",
       "**/.venv/**",
       "**/site-packages/**",
+      // Playwright scratch scripts written by `npm run ui-smoke` and audit
+      // passes (both git-ignored; ESLint would otherwise lint them and fail a
+      // local `npm run lint`).
+      ".ui-smoke/**",
+      ".audit/**",
     ],
   },
 
@@ -76,9 +81,9 @@ export default [
   },
 
   {
-    // Repo tooling that runs under node: the Playwright UI smoke and this
-    // config file itself.
-    files: ["scripts/**/*.mjs", "eslint.config.mjs"],
+    // Repo tooling that runs under node: the Playwright UI smoke, the frontend
+    // bundle builder, and this config file itself.
+    files: ["scripts/**/*.mjs", "build/**/*.mjs", "eslint.config.mjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

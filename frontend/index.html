@@ -9,9 +9,9 @@
   <!-- AG Grid Community — every grid in the app. -->
   <link rel="stylesheet" href="/vendor/ag-grid.css" />
   <link rel="stylesheet" href="/vendor/ag-theme-quartz.css" />
-  <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=3" />
-  <link rel="stylesheet" href="/tokens.css?v=9" />
-  <link rel="stylesheet" href="/styles.css?v=133" />
+  <link rel="stylesheet" href="/vendor/ag-theme-courtops.css?v=5" />
+  <link rel="stylesheet" href="/tokens.css?v=13" />
+  <link rel="stylesheet" href="/styles.css?v=145" />
 </head>
 <body class="is-signed-out">
   <!-- Icon sprite — one <symbol> per level-1 menu group. Stroke-based 24×24
@@ -118,7 +118,7 @@
   <header>
     <div class="hdr-bar">
       <h1>
-        <img class="brand-logo" src="/brand/my-ad-mark.png" width="40" height="35" alt="" fetchpriority="high" />
+        <img class="brand-logo" src="/brand/my-ad-mark@2x.png" width="40" height="35" alt="" fetchpriority="high" />
         <span class="brand-lockup">
           <span class="brand-product"><span class="brand-name">CourtOps</span><span class="brand-mark">Tennis</span></span>
           <span class="brand-org">My Ad, LLC</span>
@@ -162,8 +162,7 @@
   </header>
 
   <section id="login-view" class="login-card">
-    <img class="login-logo" src="/brand/my-ad-llc.png" width="220" height="177" alt="My Ad, LLC" fetchpriority="high" />
-    <p class="login-kicker">Tournament Director Desk</p>
+    <img class="login-logo" src="/brand/my-ad-llc@2x.png" width="220" height="177" alt="My Ad, LLC" fetchpriority="high" />
     <h2>Sign In</h2>
     <p class="muted login-lede">Staff the event, file the inbox, keep the day on the rails.</p>
     <form id="login-form" autocomplete="on">
@@ -307,7 +306,7 @@
 
     <section class="panel" id="panel-td-chat" aria-label="Chat">
       <div class="card td-chat-card">
-        <h3>Chat</h3>
+        <h2>Chat</h2>
         <p class="muted">Ask about tournament status, or to add or remove a roster player. Writes wait for Confirm. Uses on-box Intelligence, not the cloud.</p>
         <p id="td-chat-verdict" class="td-chat-verdict muted" hidden></p>
         <div id="td-chat-log" class="td-chat-log" role="log" aria-live="polite">
@@ -321,7 +320,7 @@
           <span class="muted">Mutating calls (add/remove player) do not apply until you confirm.</span>
         </div>
         <div class="td-chat-compose">
-          <textarea id="td-chat-input" rows="2" autocomplete="off" placeholder="e.g. How is this tournament looking? Add Jane Roe USTA 1234567 G16…"></textarea>
+          <textarea id="td-chat-input" rows="2" autocomplete="off" aria-label="Message to the TD assistant" placeholder="e.g. How is this tournament looking? Add Jane Roe USTA 1234567 G16…"></textarea>
           <button type="button" id="td-chat-send" class="btn btn--primary">Send</button>
         </div>
       </div>
@@ -595,7 +594,7 @@
     <!-- T-shirts (Setup: cumulative, cross-tournament) -->
     <section class="panel" id="panel-tshirts">
       <div class="card">
-        <h3>T-shirt sizes — cumulative (all tournaments)</h3>
+        <h2>T-shirt sizes — cumulative (all tournaments)</h2>
         <p class="muted">Derived from each tournament's roster (selected players only — no withdrawals/alternates), so a player's most recent size is known even when they're a late entry next time.</p>
         <div id="tshirt-summary" class="tshirt-summary"></div>
         <button type="button" id="tshirt-order-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> Order CSV (size → qty)</button>
@@ -610,7 +609,7 @@
     <!-- Users (Setup: admin/TD accounts — multi-user access, D8) -->
     <section class="panel" id="panel-users">
       <div class="card">
-        <h3>Admin users (TD access)</h3>
+        <h2>Admin users (TD access)</h2>
         <p class="muted">Each person who runs tournaments gets their own admin login instead of a shared password. Officials' logins are managed from the Official detail.</p>
         <form id="user-form" autocomplete="off" class="inline-form">
           <div class="row">
@@ -628,7 +627,7 @@
 
     <section class="panel" id="panel-gmail">
       <div class="card">
-        <h3>Gmail inbox feed</h3>
+        <h2>Gmail inbox feed</h2>
         <p class="muted">Connect the TD Gmail so CourtOps can pull new parent/player mail into the review inbox. Credentials stay on this server (the app password is encrypted). <strong>Get latest</strong> only fetches messages newer than the stored IMAP UID cursor.</p>
         <p class="muted" id="gmail-feed-status"></p>
         <form id="gmail-feed-form" autocomplete="off" class="inline-form">
@@ -691,7 +690,7 @@
 
     <section class="panel" id="panel-outlook">
       <div class="card">
-        <h3>Outlook / Microsoft inbox feed</h3>
+        <h2>Outlook / Microsoft inbox feed</h2>
         <p class="muted">Connect the TD Microsoft 365 mailbox so CourtOps can pull new parent/player mail into the review inbox via Microsoft Graph (app-only). Credentials stay on this server (the client secret is encrypted). <strong>Get latest</strong> only fetches messages newer than the stored received-time cursor. This is not interactive Microsoft login.</p>
         <p class="muted" id="outlook-feed-status"></p>
         <form id="outlook-feed-form" autocomplete="off" class="inline-form">
@@ -758,7 +757,7 @@
 
     <section class="panel" id="panel-notices">
       <div class="card">
-        <h3>Notices</h3>
+        <h2>Notices</h2>
         <p class="muted">Toasts from this browser session — timed-out messages stay here so nothing is lost. This is a session log, not the assignment / export audit trail.</p>
         <div class="actions-row">
           <button type="button" id="notices-clear" class="export-btn">Clear log</button>
@@ -774,7 +773,7 @@
     <!-- ============ IMPORT ============ -->
     <section class="panel" id="panel-import">
       <div class="card">
-        <h3>Import</h3>
+        <h2>Import</h2>
         <p class="muted">Upload data from a spreadsheet (<strong>CSV or Excel</strong>) into the
           <strong>active tournament</strong> (chosen in the bar above). For each type:
           download a blank <strong>template</strong>, fill it in, <strong>upload</strong> (rows are
@@ -795,7 +794,7 @@
     <section class="panel tpanel" id="panel-t-sites">
       <div class="needs-active-note">Select a tournament in the bar above to manage its sites.</div>
       <div class="t-content card">
-        <h3>Sites used by <span class="t-name"></span></h3>
+        <h2>Sites used by <span class="t-name"></span></h2>
         <p class="muted">Toggle which sites this tournament uses. Filter the grid to find a site.</p>
         <input class="filter" id="t-sites-filter" type="search" autocomplete="off" placeholder="Filter sites…" aria-label="Filter sites" />
         <table class="list-table" id="t-sites-table"><thead><tr><th></th><th>Code</th><th>Name</th><th>City</th></tr></thead><tbody></tbody></table>
@@ -803,7 +802,7 @@
         <!-- B1: per-tournament division → site assignment. Each division row
              gets a Site dropdown; "Unassigned" is the default. Drives the
              multi-site t-shirt-by-location report below. -->
-        <h4 class="section-spacer">Division → site (which division plays where) <span id="t-site-div-count" class="section-count"></span></h4>
+        <h3 class="section-spacer subsection">Division → site (which division plays where) <span id="t-site-div-count" class="section-count"></span></h3>
         <p class="muted">Assign each division to one of the sites above. The Tournament → T-shirts page reads this to print the per-site quantities.</p>
         <table class="list-table" id="t-site-divisions-table">
           <thead><tr><th>Division</th><th>Type</th><th>Site</th></tr></thead>
@@ -817,7 +816,7 @@
     <section class="panel tpanel" id="panel-t-roster" data-import-type="roster_initial,roster,roster_correction">
       <div class="needs-active-note">Select a tournament in the bar above to manage its roster.</div>
       <div class="t-content">
-        <h3>Roster — <span class="t-name"></span> <span class="h3-subtitle">(players entered in <em>this</em> tournament — drawn from the Setup players catalog; import on Setup → Import)</span></h3>
+        <h2>Roster — <span class="t-name"></span> <span class="h3-subtitle">(players entered in <em>this</em> tournament — drawn from the Setup players catalog; import on Setup → Import)</span></h2>
         <p id="roster-counts" class="muted roster-counts" aria-live="polite"></p>
         <div id="roster-completeness" class="roster-complete no-print"></div>
         <div class="master-detail">
@@ -907,7 +906,7 @@
     <section class="panel tpanel" id="panel-t-assignments">
       <div class="needs-active-note">Select a tournament in the bar above to manage official assignments.</div>
       <div class="t-content card">
-        <h3>Official assignments — <span class="t-name"></span></h3>
+        <h2>Official assignments — <span class="t-name"></span></h2>
         <form id="asg-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>Official <select name="official_id" id="asg-official" required></select></label>
@@ -953,7 +952,7 @@
     <section class="panel tpanel" id="panel-t-roomblocks">
       <div class="needs-active-note">Select a tournament in the bar above to manage its room blocks.</div>
       <div class="t-content card">
-        <h3>Room blocks — <span class="t-name"></span> <span class="h3-subtitle">(rooms reserved at hotels for this tournament)</span></h3>
+        <h2>Room blocks — <span class="t-name"></span> <span class="h3-subtitle">(rooms reserved at hotels for this tournament)</span></h2>
         <form id="trb-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>Hotel <select name="hotel_id" id="trb-hotel" required></select></label>
@@ -980,7 +979,7 @@
     <section class="panel tpanel" id="panel-t-staff">
       <div class="needs-active-note">Select a tournament in the bar above to manage staff.</div>
       <div class="t-content card">
-        <h3>Staff — <span class="t-name"></span> <span class="h3-subtitle">(non-official support roles for the staffing plan)</span></h3>
+        <h2>Staff — <span class="t-name"></span> <span class="h3-subtitle">(non-official support roles for the staffing plan)</span></h2>
         <form id="staff-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>Name <input name="name" autocomplete="off" required /></label>
@@ -1014,7 +1013,7 @@
     <section class="panel tpanel" id="panel-t-incidents">
       <div class="needs-active-note">Select a tournament in the bar above to log incidents.</div>
       <div class="t-content card">
-        <h3>Incidents — <span class="t-name"></span> <span class="h3-subtitle">(day-of log: weather, injuries, disputes — quick one-liners, resolve later)</span></h3>
+        <h2>Incidents — <span class="t-name"></span> <span class="h3-subtitle">(day-of log: weather, injuries, disputes — quick one-liners, resolve later)</span></h2>
         <form id="incident-form" autocomplete="off" class="inline-form">
           <div class="row">
             <label>Category
@@ -1049,7 +1048,7 @@
     <section class="panel tpanel" id="panel-t-payroll">
       <div class="needs-active-note">Select a tournament in the bar above to run payroll.</div>
       <div class="t-content card">
-        <h3>Payroll — <span class="t-name"></span> <span class="h3-subtitle">(finalize freezes each official's computed pay so later edits can't move approved money)</span></h3>
+        <h2>Payroll — <span class="t-name"></span> <span class="h3-subtitle">(finalize freezes each official's computed pay so later edits can't move approved money)</span></h2>
         <div class="actions-row">
           <button type="button" id="payroll-finalize-all">Finalize all</button>
           <button type="button" id="payroll-batch-new" class="secondary" title="Settle every finalized, not-yet-paid record together in one payment batch (a check run, an ACH file)">New batch…</button>
@@ -1067,7 +1066,7 @@
     <section class="panel tpanel" id="panel-t-availability">
       <div class="needs-active-note">Select a tournament in the bar above to manage availability.</div>
       <div class="t-content card">
-        <h3>Availability — <span class="t-name"></span></h3>
+        <h2>Availability — <span class="t-name"></span></h2>
         <div class="row">
           <label>Official <select id="avail-official"></select></label>
           <label>Hotel needed <input type="checkbox" id="avail-hotel" /></label>
@@ -1092,10 +1091,10 @@
           <button type="button" id="avail-save">Save availability</button>
           <span class="msg" id="avail-msg"></span>
         </div>
-        <h4>Availability heatmap <span class="h3-subtitle">(who's free which day — green = available, ● = assigned)</span></h4>
+        <h3 class="subsection">Availability heatmap <span class="h3-subtitle">(who's free which day — green = available, ● = assigned)</span></h3>
         <p id="avail-gap" class="avail-gap" hidden></p>
         <div id="avail-heatmap" class="avail-heatmap-wrap"></div>
-        <h4>All availability</h4>
+        <h3 class="subsection">All availability</h3>
         <table id="avail-table" class="list-table"><thead><tr><th>Official</th><th>Available dates</th><th>Hotel</th><th>Assigned</th></tr></thead><tbody></tbody></table>
       </div>
     </section>
@@ -1104,9 +1103,9 @@
     <section class="panel tpanel" id="panel-t-tshirt-order" data-import-type="tshirt_hotel_dietary">
       <div class="needs-active-note">Select a tournament in the bar above to manage its t-shirt order.</div>
       <div class="t-content card">
-        <h3>T-shirts — <span class="t-name"></span>
+        <h2>T-shirts — <span class="t-name"></span>
           <span class="h3-subtitle">(per-tournament inventory + order tracking)</span>
-        </h3>
+        </h2>
         <p class="muted">Edit the on-hand count for each size, then "Place order" to snapshot today's requested numbers. After that, withdrawals + late entries will shift the requested column; the snapshot column shows what you actually ordered.</p>
         <div id="tshirt-order-status" class="muted mb-half"></div>
         <div class="actions-row mb-half">
@@ -1131,7 +1130,7 @@
              division's assigned site folded in. Assign divisions on the
              Tournament → Sites page. Players in unassigned divisions land
              in an "Unassigned" bucket. -->
-        <h4 class="section-spacer">T-shirts by site <span class="muted">(per division assignment on Tournament → Sites)</span></h4>
+        <h3 class="section-spacer subsection">T-shirts by site <span class="muted">(per division assignment on Tournament → Sites)</span></h3>
         <div class="actions-row mb-half">
           <label>Site filter <select id="tshirt-by-site-filter" aria-label="Filter by site"><option value="">— all sites —</option></select></label>
           <button type="button" id="tshirt-by-site-csv" class="export-btn no-print"><span aria-hidden="true">⬇</span> CSV</button>
@@ -1154,7 +1153,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to use the review inbox.</div>
       <div class="t-content card">
         <div class="inbox-chrome">
-        <h3>Review inbox — <span class="t-name"></span></h3>
+        <h2>Review inbox — <span class="t-name"></span></h2>
         <div class="muted">Classify, match a player, file into a list.
           <details class="inline-help"><summary>How this page works</summary>
           <strong>Mailbox</strong> pulls Gmail/Outlook for the dates. <strong>Add</strong> pastes
@@ -1270,9 +1269,9 @@
         </table>
         <!-- Click "Review" on a row to open it. Modal overlay so the list
              below stays in place; Esc closes. -->
-        <div id="inbox-detail" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="inbox-detail-subject" aria-live="polite">
+        <div id="inbox-detail" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="inbox-detail-subject">
           <div class="modal-box modal-box--wide">
-          <h4 id="inbox-detail-subject" class="inbox-detail-subject">Email detail</h4>
+          <h3 id="inbox-detail-subject" class="inbox-detail-subject subsection">Email detail</h3>
           <div class="inbox-detail-meta">
             <span><span class="muted">From:</span> <strong id="inbox-detail-from"></strong></span>
             <span><span class="muted">To:</span> <strong id="inbox-detail-to"></strong></span>
@@ -1342,7 +1341,7 @@
     <section class="panel tpanel" id="panel-t-late" data-import-type="late_entries">
       <div class="needs-active-note">Select a tournament in the bar above to manage late entries.</div>
       <div class="t-content card">
-        <h3>Late entries — <span class="t-name"></span></h3>
+        <h2>Late entries — <span class="t-name"></span></h2>
         <form id="late-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
           <div class="row">
@@ -1369,7 +1368,7 @@
     <section class="panel tpanel" id="panel-t-withdrawals" data-import-type="withdrawals">
       <div class="needs-active-note">Select a tournament in the bar above to manage withdrawals.</div>
       <div class="t-content card">
-        <h3>Withdrawals — <span class="t-name"></span></h3>
+        <h2>Withdrawals — <span class="t-name"></span></h2>
         <p class="muted">A reason is required unless the player was an alternate. Recording a withdrawal sets their roster status to <em>withdrawn</em>.</p>
         <form id="withdrawal-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1395,7 +1394,7 @@
     <section class="panel tpanel" id="panel-t-sched" data-import-type="scheduling_avoidances">
       <div class="needs-active-note">Select a tournament in the bar above to manage scheduling avoidances.</div>
       <div class="t-content card">
-        <h3>Scheduling avoidances — <span class="t-name"></span></h3>
+        <h2>Scheduling avoidances — <span class="t-name"></span></h2>
         <p class="muted">Days/times a player cannot play (adult tournaments).</p>
         <form id="sched-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1419,7 +1418,7 @@
     <section class="panel tpanel" id="panel-t-divflex" data-import-type="division_flexibility">
       <div class="needs-active-note">Select a tournament in the bar above to manage division flexibility.</div>
       <div class="t-content card">
-        <h3>Division flexibility — <span class="t-name"></span></h3>
+        <h2>Division flexibility — <span class="t-name"></span></h2>
         <p class="muted">Players willing to play other divisions if theirs is undersubscribed.</p>
         <form id="divflex-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1443,7 +1442,7 @@
     <section class="panel tpanel" id="panel-t-pairing" data-import-type="pairing_avoidances">
       <div class="needs-active-note">Select a tournament in the bar above to manage pairing avoidances.</div>
       <div class="t-content card">
-        <h3>Pairing avoidances — <span class="t-name"></span></h3>
+        <h2>Pairing avoidances — <span class="t-name"></span></h2>
         <p class="muted">A group of 2+ players (same club or siblings) who must not meet in the first round.</p>
         <form id="pairing-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1472,7 +1471,7 @@
     <section class="panel tpanel" id="panel-t-doubles" data-import-type="doubles_requests">
       <div class="needs-active-note">Select a tournament in the bar above to manage doubles pairing.</div>
       <div class="t-content card">
-        <h3>Doubles pairing — <span class="t-name"></span></h3>
+        <h2>Doubles pairing — <span class="t-name"></span></h2>
         <p class="muted">Mutual partnerships verify when <em>both</em> players' emails are on file (each naming the other). Random requests pair FIFO per division and are binding.</p>
         <form id="doubles-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1487,13 +1486,13 @@
           <div class="actions-row"><button type="submit">Save</button><button type="button" class="cancel">Cancel</button><span class="msg" id="doubles-msg"></span></div>
         </form>
 
-        <h4>Pending requests &amp; random queue</h4>
+        <h3 class="subsection">Pending requests &amp; random queue</h3>
         <table id="doubles-req-table" class="list-table">
           <thead><tr><th>Player</th><th>USTA #</th><th>Division</th><th>Type</th><th>Partner / status</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
 
-        <h4>Verified pairs</h4>
+        <h3 class="subsection">Verified pairs</h3>
         <table id="doubles-pair-table" class="list-table">
           <thead><tr><th>Division</th><th>Type</th><th>Player 1</th><th>Player 2</th><th></th></tr></thead>
           <tbody></tbody>
@@ -1505,9 +1504,9 @@
     <section class="panel tpanel" id="panel-t-photels">
       <div class="needs-active-note">Select a tournament in the bar above to record player hotels.</div>
       <div class="t-content card">
-        <h3 class="h3-flex">Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
+        <h2 class="h3-flex">Player hotels — <span class="t-name"></span> <span class="h3-subtitle">(where players reported they're staying)</span>
           <button type="button" id="photel-report-btn" class="export-btn no-print h3-action" title="Open a confidential hotel report (summary + initials-only detail) ready to print"><span aria-hidden="true">⎙</span> Confidential report</button>
-        </h3>
+        </h2>
         <p class="muted">Players report which hotel they booked; totals across all tournaments feed CVB negotiations.</p>
         <form id="photel-form" autocomplete="off" class="inline-form">
           <input type="hidden" name="source_email_id" />
@@ -1535,17 +1534,17 @@
           <thead><tr><th>Player</th><th>USTA #</th><th>Hotel</th><th>Lodging plan</th><th></th></tr></thead>
           <tbody></tbody>
         </table>
-        <h4>Hotel summary — this tournament (selected players)</h4>
+        <h3 class="subsection">Hotel summary — this tournament (selected players)</h3>
         <table id="hotel-summary-table" class="list-table">
           <thead><tr><th>Hotel</th><th>Players</th></tr></thead>
           <tbody></tbody>
         </table>
-        <h4>Lodging plan summary — this tournament (selected players)</h4>
+        <h3 class="subsection">Lodging plan summary — this tournament (selected players)</h3>
         <table id="lodging-summary-table" class="list-table">
           <thead><tr><th>Lodging plan</th><th>Players</th></tr></thead>
           <tbody></tbody>
         </table>
-        <h4>CVB hotel totals (all tournaments)</h4>
+        <h3 class="subsection">CVB hotel totals (all tournaments)</h3>
         <table id="cvb-table" class="list-table">
           <thead><tr><th>Hotel</th><th>Stays</th></tr></thead>
           <tbody></tbody>
@@ -1558,7 +1557,7 @@
       <div class="needs-active-note">Select a tournament in the bar above to view its reports.</div>
       <div class="t-content card" id="report-card">
         <div class="report-toolbar no-print">
-          <h3><span class="t-name"></span> — Staffing Plan</h3>
+          <h2><span class="t-name"></span> — Staffing Plan</h2>
           <button type="button" id="report-print">Print</button>
           <button type="button" id="report-pdf" title="Open a clean, self-contained report to save as PDF"><span aria-hidden="true">⬇</span> PDF</button>
           <button type="button" id="report-csv" title="Download the current staffing plan with all officials + days filled in"><span aria-hidden="true">⬇</span> CSV</button>
@@ -1569,67 +1568,81 @@
           <label class="cov-min-ctl" title="Highlight any day/site below this many officials">Min officials/day <input type="number" id="report-min-cov" min="0" step="1" /></label>
         </div>
         <div id="report-meta" class="muted"></div>
-        <table id="report-table" class="list-table">
-          <thead><tr>
-            <th>Official</th><th>Days (role)</th><th>Site</th><th>Hotel</th>
-            <th>Dietary</th><th>Pay</th><th>Mileage</th><th>Total</th><th>Flags</th>
-          </tr></thead>
-          <tbody></tbody>
-          <tfoot><tr id="report-coverage"></tr><tr id="report-totals"></tr></tfoot>
-        </table>
+        <div class="report-tablewrap">
+          <table id="report-table" class="list-table">
+            <thead><tr>
+              <th>Official</th><th>Days (role)</th><th>Site</th><th>Hotel</th>
+              <th>Dietary</th><th>Pay</th><th>Mileage</th><th>Total</th><th>Flags</th>
+            </tr></thead>
+            <tbody></tbody>
+            <tfoot><tr id="report-coverage"></tr><tr id="report-totals"></tr></tfoot>
+          </table>
+        </div>
         <p id="report-coverage-note" class="avail-gap" hidden></p>
 
-        <h4>Staffing conflicts</h4>
+        <h3 class="subsection">Staffing conflicts</h3>
         <div id="report-conflicts"></div>
 
-        <h4>Day-by-day schedule <span class="h3-subtitle">(who works each day — the day-of sheet)</span></h4>
+        <h3 class="subsection">Day-by-day schedule <span class="h3-subtitle">(who works each day — the day-of sheet)</span></h3>
         <div id="report-schedule"></div>
 
-        <h4>Dietary summary <span class="h3-subtitle">(officials' restrictions, for catering)</span></h4>
+        <h3 class="subsection">Dietary summary <span class="h3-subtitle">(officials' restrictions, for catering)</span></h3>
         <div id="report-dietary"></div>
 
-        <h4>Missing distances <span class="h3-subtitle">(no mileage on file — reimbursement can't compute)</span></h4>
+        <h3 class="subsection">Missing distances <span class="h3-subtitle">(no mileage on file — reimbursement can't compute)</span></h3>
         <div id="report-missing-dist"></div>
 
-        <h4>Coverage by site &amp; day</h4>
-        <table id="site-coverage-table" class="list-table">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+        <h3 class="subsection">Coverage by site &amp; day</h3>
+        <div class="report-tablewrap">
+          <table id="site-coverage-table" class="list-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
 
-        <h4>Coverage by role &amp; day</h4>
-        <table id="role-coverage-table" class="list-table">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
+        <h3 class="subsection">Coverage by role &amp; day</h3>
+        <div class="report-tablewrap">
+          <table id="role-coverage-table" class="list-table">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
 
-        <h4>Certification pool — all officials</h4>
-        <table id="cert-pool-table" class="list-table">
-          <thead></thead>
-          <tbody></tbody>
-          <tfoot><tr id="cert-pool-totals"></tr></tfoot>
-        </table>
+        <h3 class="subsection">Certification pool — all officials</h3>
+        <div class="report-tablewrap">
+          <table id="cert-pool-table" class="list-table">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot><tr id="cert-pool-totals"></tr></tfoot>
+          </table>
+        </div>
         <p id="cert-pool-note" class="avail-gap" hidden></p>
 
-        <h4>Officials needing accommodation</h4>
-        <table id="lodging-table" class="list-table">
-          <thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <h3 class="subsection">Officials needing accommodation</h3>
+        <div class="report-tablewrap">
+          <table id="lodging-table" class="list-table">
+            <thead><tr><th>Official</th><th>Hotel</th><th>Nights (worked days)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
 
-        <h4>Room-block pickup (officials)</h4>
+        <h3 class="subsection">Room-block pickup (officials)</h3>
         <p id="pickup-note" class="muted" hidden></p>
-        <table id="pickup-table" class="list-table">
-          <thead><tr><th>Hotel</th><th>Confirmation</th><th>Dates</th><th class="num">Reserved</th><th class="num">Assigned</th><th class="num">Unused</th></tr></thead>
-          <tbody></tbody>
-          <tfoot><tr id="pickup-totals"></tr></tfoot>
-        </table>
+        <div class="report-tablewrap">
+          <table id="pickup-table" class="list-table">
+            <thead><tr><th>Hotel</th><th>Confirmation</th><th>Dates</th><th class="num">Reserved</th><th class="num">Assigned</th><th class="num">Unused</th></tr></thead>
+            <tbody></tbody>
+            <tfoot><tr id="pickup-totals"></tr></tfoot>
+          </table>
+        </div>
 
-        <h4>Other staff</h4>
-        <table id="report-staff-table" class="list-table">
-          <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <h3 class="subsection">Other staff</h3>
+        <div class="report-tablewrap">
+          <table id="report-staff-table" class="list-table">
+            <thead><tr><th>Name</th><th>Role</th><th>Phone</th><th>Email</th><th>Notes</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
@@ -1761,7 +1774,6 @@
        pick a suggestion or type a free-form value for edge cases. -->
   <datalist id="divisions-list"></datalist>
   <datalist id="events-list"></datalist>
-  <script src="/vendor/ag-grid-community.min.js"></script>
   <!-- Audit A47: app.js is now an ES module so it can import from /app/*.js.
        util.js holds the dependency-free helpers (esc, date formatters, csv
        download, error humanizer). The rest of app.js stays a single module
@@ -1773,6 +1785,7 @@
   <!-- Cache-buster: bump on every edit that touches app.js or its imports.
        ESM URLs are key in the browser's module map, so the only reliable
        way to invalidate is a fresh query string. -->
-  <script type="module" src="/app.js?v=287"></script>
+  <script defer fetchpriority="low" src="/vendor/ag-grid-community.min.js"></script>
+<script type="module" src="/app.entry.js"></script>
 </body>
 </html>

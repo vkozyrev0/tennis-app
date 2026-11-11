@@ -532,6 +532,7 @@ export function createAssignmentsPanel(ctx) {
       fix.innerHTML = hstr`<span class="muted">No mileage on file — </span>`;
       const mi = document.createElement("input");
       mi.type = "number"; mi.min = "0"; mi.step = "0.1"; mi.placeholder = "one-way miles";
+      mi.setAttribute("aria-label", `One-way miles to ${a.site_name || "this site"}`);
       mi.style.maxWidth = "9rem";
       const btn = document.createElement("button");
       btn.type = "button"; btn.className = "btn-link"; btn.textContent = "add distance";

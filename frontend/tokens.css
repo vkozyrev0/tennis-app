@@ -28,6 +28,12 @@
   --border: #cfd9d3;
   --ok: #2e7d32;
   --bad: #c62828;
+  /* Ink twins of --ok/--bad for TEXT. --ok/--bad stay as fill colors (toasts,
+     badges) where they carry white ink; the *-ink values clear 4.5:1 against
+     --card and --elev in this theme. Using a fill token as a text color is what
+     put green body text at 3.4:1 in dark mode. */
+  --ok-ink: #1f7a44;
+  --bad-ink: #b3261e;
   --sel: #e7f1ea;
   --field-bg: #ffffff;   /* input/select/textarea background */
   --zebra: #f4f8f6;      /* even table rows */
@@ -40,6 +46,28 @@
   --panel: #f4f8f6;      /* inset panels, e.g. the dashboard digest */
   --shadow-card: 0 1px 2px rgba(23, 36, 29, 0.06);
   --radius: 8px;
+  /* Status surfaces: readiness heads, issue chips, the availability heatmap.
+     bg + ink pairs so a component never has to invent a tone (and never misses
+     its dark twin). --warn-* lives in styles.css next to its first user. */
+  --status-ok-bg: #e7f5ec;
+  --status-ok-ink: #166534;
+  --status-bad-bg: #fbe4e4;
+  --status-bad-ink: #9a2020;
+  --status-warn-bg: #f3e6c4;
+  --status-warn-ink: #6f5200;
+  --heat-avail-bg: #cdeacd;
+  --heat-assigned-ink: #0f5c2c;
+  /* Status badges (selection status, match confidence, import scope). */
+  --badge-ok-bg: #e3f3e6;
+  --badge-ok-ink: #1d6b2c;
+  --badge-warn-bg: #fdf2d6;
+  --badge-warn-ink: #6d5613;
+  --badge-bad-bg: #fde3e3;
+  --badge-bad-ink: #a02020;
+  --badge-info-bg: #e3eefb;
+  --badge-info-ink: #1d4f91;
+  --badge-muted-bg: #eceff2;
+  --badge-muted-ink: #54616e;
   /* Type: scoreboard display on Windows (Bahnschrift) / condensed on Mac;
      body stays the platform UI face so dense tables stay native-sharp. */
   --font-display: "Bahnschrift", "Segoe UI Variable Display", "Avenir Next Condensed",
@@ -86,6 +114,8 @@
   --border: #2a3831;
   --ok: #198754;            /* same — pill.ok white text was failing at 2.31:1 against the old #5bbf6a */
   --bad: #e26d6d;
+  --ok-ink: #7ddc9a;        /* text twin: ~8:1 on the dark card */
+  --bad-ink: #f09090;       /* text twin: ~5.7:1 on --btn-bg, ~7:1 on the card */
   --sel: #24362e;          /* tinted toward accent so selection reads above zebra */
   --field-bg: #0f1612;
   --zebra: #1b2621;
@@ -94,6 +124,26 @@
   --btn-bg: #24302a;     /* dark raised surface so secondary btn text (--ink) is legible */
   --panel: #17201b;      /* = --card; the digest panel was rendering near-white */
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --status-ok-bg: #16301f;
+  --status-ok-ink: #8ed3a5;
+  --status-bad-bg: #3a1818;
+  --status-bad-ink: #f0a0a0;
+  --status-warn-bg: #4a3a16;
+  --status-warn-ink: #e8c779;
+  --heat-avail-bg: #1f4a2c;
+  --heat-assigned-ink: #7ddc9a;
+  /* Deeper badge fills with lighter ink so a status square doesn't glare
+     against the dark surface. */
+  --badge-ok-bg: #1d3a26;
+  --badge-ok-ink: #9fdca8;
+  --badge-warn-bg: #3a2f15;
+  --badge-warn-ink: #f3d27d;
+  --badge-bad-bg: #3a1f1f;
+  --badge-bad-ink: #ed9b9b;
+  --badge-info-bg: #1d2a3f;
+  --badge-info-ink: #9ec0ed;
+  --badge-muted-bg: #232b34;
+  --badge-muted-ink: #aab6c4;
   color-scheme: dark;    /* makes the date-picker calendar icon (and scrollbars) visible on dark */
 }
 

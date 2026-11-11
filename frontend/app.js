@@ -298,8 +298,9 @@ document.querySelectorAll(".tab").forEach((t) => {
     panel.setAttribute("aria-labelledby", t.id);
     if (!panel.hasAttribute("tabindex")) panel.setAttribute("tabindex", "-1");
     // a11y #11: give each panel a sr-only <h2> so the document outline
-    // doesn't skip from h1 → h3. Uses the tab's label as the heading text.
-    if (!panel.querySelector("h2.sr-only")) {
+    // doesn't skip from h1 → h3. Panels whose own title is already an h2
+    // (all the workspace pages) keep that one instead of a duplicate.
+    if (!panel.querySelector("h2")) {
       const h2 = document.createElement("h2");
       h2.className = "sr-only";
       h2.textContent = t.textContent.trim();

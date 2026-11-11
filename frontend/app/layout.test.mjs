@@ -115,11 +115,11 @@ test("inbox grid is a sized grid-mount; action cells keep pointer-events", () =>
   assert.match(css, /#panel-t-inbox \.inbox-chrome/);
 });
 
-test("grid headers stay 8pt in a 20px Quartz header row", () => {
+test("grid headers stay 8.25pt (11px) in a 20px Quartz header row", () => {
   const theme = readFileSync(join(here, "../vendor/ag-theme-courtops.css"), "utf8");
   assert.match(theme, /--ag-header-height:\s*20px/);
-  assert.match(theme, /--ag-font-size:\s*8pt/);
-  assert.match(theme, /font-size:\s*8pt/);
+  assert.match(theme, /--ag-font-size:\s*8\.25pt/);
+  assert.match(theme, /font-size:\s*8\.25pt/);
   assert.match(theme, /--ag-icon-size:\s*12px/);
   assert.doesNotMatch(theme, /--ag-header-height:\s*16px/);
   const html = readFileSync(join(here, "../index.html"), "utf8");
@@ -136,7 +136,7 @@ test("grid headers stay 8pt in a 20px Quartz header row", () => {
 test("header labels cannot wrap to a second line or auto-grow", () => {
   const theme = readFileSync(join(here, "../vendor/ag-theme-courtops.css"), "utf8");
   assert.match(theme, /white-space:\s*nowrap\s*!important/);
-  assert.match(theme, /font-size:\s*8pt\s*!important/);
+  assert.match(theme, /font-size:\s*8\.25pt\s*!important/);
   assert.match(theme, /ag-header-row-column-filter/);
   const grids = readFileSync(join(here, "grids.js"), "utf8");
   assert.match(grids, /wrapHeaderText:\s*false/);
@@ -152,8 +152,8 @@ test("header labels cannot wrap to a second line or auto-grow", () => {
 
 test("header and login use the My Ad, LLC brand assets", () => {
   const html = readFileSync(join(here, "../index.html"), "utf8");
-  assert.match(html, /\/brand\/my-ad-mark\.png/);
-  assert.match(html, /\/brand\/my-ad-llc\.png/);
+  assert.match(html, /\/brand\/my-ad-mark@2x\.png/);
+  assert.match(html, /\/brand\/my-ad-llc@2x\.png/);
   assert.match(html, /\/brand\/favicon\.png/);
   assert.match(html, /My Ad, LLC/);
 });

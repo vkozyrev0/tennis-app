@@ -491,6 +491,9 @@ export function createInboxPanel(ctx) {
     { title: "Received", field: "received_at", width: 84, minWidth: 78, widthGrow: 0, formatter: (c) => hstr`${(c.getData().received_at || "").slice(0, 10)}` },
     { title: "From", field: "from_address", minWidth: 96, widthGrow: 1 },
     { title: "Source", field: "ingest_source", width: 72, minWidth: 64, widthGrow: 0, responsive: 2,
+      // Source and Confidence fold into the ▸ popup on a laptop too: 13 columns
+      // needed 1742px in a 1188px grid, so Received/From/Subject were ellipses.
+      collapseAt: "(max-width: 1500px)",
       formatter: (c) => {
         const label = inboxSourceLabel(c.getData().ingest_source);
         return hstr`<span class="badge" title="How this email arrived">${label}</span>`;
@@ -557,6 +560,7 @@ export function createInboxPanel(ctx) {
       headerFilter: "list", headerFilterParams: { values: EMAIL_CLASS_VALUES, clearable: true } },
     // How confident the auto-detection of the player is (see inboxConfidence).
     { title: "Confidence", field: "_conf", width: 108, minWidth: 96, widthGrow: 0, headerSort: false, hozAlign: "center",
+      responsive: 3, collapseAt: "(max-width: 1500px)",
       formatter: (c) => {
         const m = c.getData();
         const k = _inboxConfidence(m);

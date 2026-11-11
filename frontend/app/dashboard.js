@@ -120,7 +120,7 @@ export function createDashboardPanel(ctx) {
       const bar = `<span class="wl-bar" style="width:${Math.round((o.days / maxDays) * 100)}%"></span>`;
       const mix = o.assignments
         ? `<span class="muted">${o.accepted} accepted · ${o.pending} pending · ${o.declined} declined</span>` : "";
-      return html`<tr class="${cls}"><td><span class="wl-off-link" data-oid="${o.official_id}">${o.official_name}</span></td><td class="num">${o.days}</td><td class="num">${o.assignments}</td><td class="num">${o.tournaments}</td><td class="wl-barcell">${raw(bar)}</td><td>${raw(mix)}</td></tr>`;
+      return html`<tr class="${cls}"><td><button type="button" class="wl-off-link" data-oid="${o.official_id}">${o.official_name}</button></td><td class="num">${o.days}</td><td class="num">${o.assignments}</td><td class="num">${o.tournaments}</td><td class="wl-barcell">${raw(bar)}</td><td>${raw(mix)}</td></tr>`;
     });
     box.innerHTML = html`<p class="muted wl-sub">${t.assigned} of ${t.officials} official(s) staffed · ${t.days} day(s) across ${t.assignments} assignment(s)${t.unused ? html` · <span class="warn">${t.unused} unused</span>` : ""}.</p><table class="list-table wl-table"><thead><tr><th>Official</th><th class="num">Days</th><th class="num">Assigns</th><th class="num">Events</th><th>Load</th><th>Responses</th></tr></thead><tbody>${rows}</tbody></table>`;
     box.querySelectorAll(".wl-off-link[data-oid]").forEach((el) =>

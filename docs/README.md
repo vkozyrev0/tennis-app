@@ -74,8 +74,8 @@ uvicorn app.main:app --reload --port 8000              # serves API at /api + fr
 # Then open http://localhost:8000 and sign in with: admin / admin
 ```
 
-Frontend has no build step — it's pure HTML/CSS/JS served straight from
-`frontend/`. AG Grid Community 32.3.5 is vendored.
+Frontend needs no build step in development — it's pure HTML/CSS/JS served straight from
+`frontend/`. AG Grid Community 32.3.5 is vendored. The Docker image bundles the modules into one script (`npm run build`).
 
 For a believable **live** demo to click around (staffed event, full roster,
 active inbox, problems to resolve), run `python demo_seed.py` from `backend/`.
@@ -98,8 +98,7 @@ npm ci && npx eslint .        # Frontend JS + node tooling: flat config in eslin
 Add `--fix` to either command to apply the safe autofixes, then re-run without
 it to confirm zero findings. The rule selection is explicit in both config files
 (no ambient defaults, no blanket ignores). `ruff` is pinned in CI
-(`pip install ruff==0.16.8`); ESLint is pinned in `package.json`. npm is lint
-tooling only — the frontend keeps its no-build-step shape.
+(`pip install ruff==0.16.8`); ESLint is pinned in `package.json`. npm supplies the linter and the optional production bundle; development stays build-free.
 
 ## Tests
 

@@ -195,12 +195,31 @@ export function createShell() {
     });
   }
 
+  // Baseline taken when the user first focuses a control. Comparing values to
+  // `defaultValue` instead made a freshly loaded page look dirty: selects have
+  // `defaultSelected === undefined`, combo mirrors hold a programmatic label,
+  // and number fields hold "" against "0" — 43 controls across hidden forms.
+  // The browser then prompted "Leave site?" on every close and reload.
+  const _pristine = new WeakMap();
+  const readControl = (el) => {
+    if (el.type === "checkbox" || el.type === "radio") return el.checked ? "1" : "0";
+    if (el.tagName === "SELECT") return [...el.options].map((o) => (o.selected ? "1" : "0")).join("");
+    return el.value || "";
+  };
+  const remember = (el) => {
+    if (!el || !el.form || !el.name) return;
+    if (!_pristine.has(el)) _pristine.set(el, readControl(el));
+  };
+  document.addEventListener("focusin", (e) => remember(e.target), true);
+  document.addEventListener("reset", (e) => {
+    const els = e.target && e.target.elements ? [...e.target.elements] : [];
+    els.forEach((el) => _pristine.delete(el));
+  }, true);
+
   function controlDirty(el) {
     if (!el || el.disabled || !el.name) return false;
-    if (el.tagName === "BUTTON" || el.type === "submit" || el.type === "button" || el.type === "hidden") return false;
-    if (el.type === "checkbox" || el.type === "radio") return el.checked !== el.defaultChecked;
-    if (el.tagName === "SELECT") return [...el.options].some((o) => o.selected !== o.defaultSelected);
-    return (el.value || "") !== (el.defaultValue || "");
+    if (!_pristine.has(el)) return false;
+    return readControl(el) !== _pristine.get(el);
   }
 
   function pageHasUnsavedEdits() {

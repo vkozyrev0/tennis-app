@@ -18,7 +18,7 @@
 import { esc } from "./util.js";
 
 const PRINT_BASE_CSS = `
-      body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
+      body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: #1f2933; margin: 1.4cm; font-size: 12px; }
       h1 { font-size: 18px; margin: 0 0 0.1rem; }
       h2 { font-size: 13px; margin: 1.1rem 0 0.3rem; border-bottom: 1.5px solid #2e6f40; padding-bottom: .15rem; color: #2e6f40; }
       .sub, .meta { color: #556070; font-size: 11px; margin-bottom: 0.9rem; }
