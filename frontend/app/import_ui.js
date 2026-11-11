@@ -315,7 +315,7 @@ export function createImportPage(ctx) {
       : '<span class="import-scope-chip setup" title="Global Setup catalog — no active tournament needed">Setup catalog</span>';
     // a11y 9th-pass: tabindex="-1" makes the heading programmatically focusable so
     // gotoImport() can land focus here after switching tabs.
-    sec.innerHTML = hstr`<h4 tabindex="-1">${t.label} ${raw(needsT)}</h4><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
+    sec.innerHTML = hstr`<h3 class="subsection" tabindex="-1">${t.label} ${raw(needsT)}</h3><p class="muted">${t.desc} <span class="muted">Columns: ${t.columns.join(", ")}${t.required.length ? ` (required: ${t.required.join(", ")})` : ""}.</span></p>`;
     const row = document.createElement("div"); row.className = "export-grid";
     if (t.key !== "emails_pdf") {
       for (const fmt of ["csv", "xlsx"]) {
@@ -328,6 +328,7 @@ export function createImportPage(ctx) {
     // CSV/XLSX for the row-shaped importers; PDF upload only for emails_pdf.
     const file = document.createElement("input"); file.type = "file";
     file.accept = t.key === "emails_pdf" ? ".pdf" : ".csv,.xlsx,.xlsm";
+    file.setAttribute("aria-label", `Choose a ${t.label} file to upload`);
     const up = document.createElement("button"); up.type = "button"; up.className = "export-btn"; up.textContent = "Upload & stage";
     const msg = document.createElement("span"); msg.className = "msg";
     row.append(file, up, msg);
@@ -432,7 +433,7 @@ export function createImportPage(ctx) {
       // land at the right place. The activation cascade (group → tab → import-tab
       // clicks → buildImportPage → redraws) keeps resetting focus during the
       // ~200 ms it takes to settle, so re-apply a few times. Cheap + idempotent.
-      const h = target.querySelector("h4");
+      const h = target.querySelector("h3");
       const reapply = () => { if (h && document.activeElement !== h) h.focus({ preventScroll: true }); };
       reapply();
       [40, 120, 250, 450].forEach((ms) => setTimeout(reapply, ms));

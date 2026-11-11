@@ -45,7 +45,7 @@ The tool stops at producing structured, auditable lists + a staffing plan.
 |---|---|---|
 | DB | **PostgreSQL 16** (bundled in the all-in-one `web` container) | Plain SQL migrations, no ORM. |
 | API | **FastAPI + psycopg 3** + **Pydantic** | One connection per request; raw SQL. |
-| Frontend | **Vanilla HTML/CSS/JS**, no build step | Thin `app.js` composition root (931 LOC, ES module) + **63** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. |
+| Frontend | **Vanilla HTML/CSS/JS**, no build step in development | Thin `app.js` composition root (932 LOC, ES module) + **63** ESM modules under `frontend/app/` (`*.js`; the `*.test.mjs` files sit beside them); **AG Grid Community 32.3.5** vendored for grids. The Docker image bundles the modules into one script. |
 | Auth | pbkdf2-sha256 + server-side cookie session | POC: `admin/admin`. |
 | Deps | `requirements.txt` | fastapi, uvicorn[standard], psycopg[binary], pydantic, python-dotenv, pytest, httpx, openpyxl (xlsx import), pdfplumber (PDF email import), python-multipart (uploads), cryptography (PII Fernet). |
 
@@ -99,7 +99,7 @@ backend/
   tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1105 tests / 118 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
-  app.js               # 931 LOC composition root (D11; counted 2026-10-17)
+  app.js               # 932 LOC composition root (D11; counted 2026-10-17)
   app/                 # 63 ESM modules (*.js; createX / installX + helpers), including:
     util.js, shirts.js, roster_prefill.js, origin_col.js
     html.js, ui.js, combobox.js, print.js, shell.js, export_csv.js
@@ -111,6 +111,8 @@ frontend/
     player360.js, setup_crud.js, official_app.js, …
   styles.css, tokens.css
   vendor/ag-grid-community.min.js, ag-grid.css, ag-theme-quartz.css   # vendored grid lib
+build/
+  frontend.mjs         # esbuild bundle -> frontend/dist (Docker image only; git-ignored)
 scripts/
   e2e_td_scenario.py   # standalone black-box end-to-end driver (external HTTP client)
 docs/                  # this file + the others
@@ -374,7 +376,7 @@ The assignment-change audit-action enum gains `finalized` / `unfinalized` / `pai
 ## 8. Frontend design
 
 **No build, one page, composition root.** `index.html` contains every panel
-(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (931 LOC,
+(hidden/shown by a two-level menu: L1 groups → tabs). `app.js` (932 LOC,
 loaded as `<script type="module">`) is the **orchestrator**: caches, menu/tabs,
 `setActive`, factory wiring, and `init()`. Behaviour lives in 61
 `frontend/app/*.js` modules (`createXPanel(ctx)` / `installX(ctx)` and

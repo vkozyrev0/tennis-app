@@ -1,11 +1,11 @@
 /* CourtOps compact Quartz — load AFTER vendor/ag-theme-quartz.css.
    Quartz sizes the header as font-size + grid-size × 4.25 (≈48px at 14px).
-   8pt labels + 12px icons in ONE 20px header row. Body rows stay 32px.
+   8.25pt labels + 12px icons in ONE 20px header row. Body rows stay 32px.
    Grids must use theme:"legacy" or the JS Theming API keeps 14px. */
 .ag-theme-quartz,
 .ag-theme-quartz-dark {
   --ag-font-family: inherit;
-  --ag-font-size: 8pt;
+  --ag-font-size: 8.25pt;
   --ag-grid-size: 4px;
   --ag-icon-size: 12px;
   --ag-header-height: 20px;
@@ -40,7 +40,7 @@
   --ag-disabled-foreground-color: #6b6f76;
 }
 
-/* 8pt + nowrap on the whole header tree so Theming-API / Quartz 14px cannot
+/* 8.25pt + nowrap on the whole header tree so Theming-API / Quartz 14px cannot
    win, and labels cannot wrap into a second line. */
 .ag-theme-quartz .ag-header,
 .ag-theme-quartz .ag-header-row,
@@ -50,7 +50,7 @@
 .ag-theme-quartz .ag-header-group-text,
 .ag-theme-quartz .ag-header-group-cell-label,
 .ag-theme-quartz .ag-header-cell-label {
-  font-size: 8pt !important;
+  font-size: 8.25pt !important;
   font-weight: 650;
   line-height: 1.1 !important;
   letter-spacing: 0.01em;
@@ -96,7 +96,7 @@
   background: var(--ag-background-color, var(--card));
   color: inherit;
   font: inherit;
-  font-size: 8pt;
+  font-size: 8.25pt;
   padding: 0 0.2rem;
 }
 

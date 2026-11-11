@@ -104,9 +104,9 @@ export function createTshirtsPanel(ctx) {
       const dCls = (delta == null || delta === 0) ? "" : (delta > 0 ? "warn" : "muted");
       const dStr = (delta == null) ? "—" : (delta > 0 ? `+${delta}` : `${delta}`);
       return html`<tr>
-      <td><strong>${r.size}</strong> <span class="muted">${r.label}</span></td>
+      <th scope="row"><strong>${r.size}</strong> <span class="muted">${r.label}</span></th>
       <td class="num">${r.requested}</td>
-      <td class="num"><input type="number" min="0" step="1" data-size="${r.size}" value="${r.on_hand}" style="width:5rem;text-align:right" /></td>
+      <td class="num"><input type="number" min="0" step="1" data-size="${r.size}" value="${r.on_hand}" style="width:5rem;text-align:right" aria-label="On hand — ${r.size} ${r.label}" /></td>
       <td class="num">${r.to_order}</td>
       <td class="num order-snapshot" style="${hasSnapshot ? "" : "display:none"}">${snap == null ? "—" : snap}</td>
       <td class="num order-snapshot ${dCls}" style="${hasSnapshot ? "" : "display:none"}">${dStr}</td>

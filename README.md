@@ -29,7 +29,7 @@ a demo, not a COPPA-ready deployment, and leftover email text leaves the box.
 ## Stack
 
 **Postgres 16** (Docker) · **FastAPI + psycopg 3** (Pydantic) · **vanilla
-HTML/CSS/JS** frontend (no build step; **AG Grid Community 32.3.5** vendored — the
+HTML/CSS/JS** frontend (no build step in development; the Docker image bundles it into one script; **AG Grid Community 32.3.5** vendored — the
 only third-party frontend lib). POC auth defaults to `admin / admin` — harden
 before any shared deployment.
 
@@ -190,10 +190,10 @@ pycodestyle/pyflakes/isort families (target Python 3.12), and
 `allowEmptyCatch` / `_`-prefix options for the codebase's existing idioms.
 
 `ruff` is pinned in CI (`pip install ruff==0.16.8`; any 0.16.x locally). ESLint
-is pinned in `package.json` and installed by `npm ci`. The frontend still has
-**no build step**: npm supplies the linter only, `node_modules/` sits at the
+is pinned in `package.json` and installed by `npm ci`. The frontend has
+**no build step in development**: npm supplies the linter and the optional production bundle, `node_modules/` sits at the
 repo root (outside the served `frontend/` tree), and nothing in `frontend/`
-changes shape because of it.
+changes shape because of it. The Docker image runs `npm run build` in a throwaway Node stage and ships the bundle.
 
 The gate itself is guarded: `node scripts/ci_gate.test.mjs` reads
 `.github/workflows/docker.yml` and asserts the `lint` job exists on the PR/push

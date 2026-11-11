@@ -45,8 +45,7 @@ export function createGridFactories(ctx) {
   // has handleThemeGridOptionChange but treats theme:"legacy" as a Theme object
   // (that string is v33.2+). Passing it throws (startUse is not a function)
   // and no grid mounts.
-  function _agLegacyCssTheme() {
-    const g = typeof agGrid === "undefined" ? null : agGrid;
+  function _agLegacyCssTheme() {    const g = typeof agGrid === "undefined" ? null : agGrid;
     if (!g) return undefined;
     const ver = String(g.version || g.VERSION || "");
     const maj = parseInt(ver.split(".")[0], 10);
@@ -464,6 +463,9 @@ export function createGridFactories(ctx) {
       .filter((c) => typeof c.responsive === "number" && c.responsive >= 1 && c.field && !c.columns)
       .sort((a, b) => b.responsive - a.responsive)
       .map((c) => ({ colId: c.field, headerName: c.title || c.field, html: !!c.formatter,
+        // Per-column breakpoint: a column can collapse on a laptop while its
+        // neighbours wait for the phone breakpoint (the inbox needs that).
+        at: c.collapseAt || tabOpts.collapseAt || "(max-width: 760px)",
         value: (data) => {
           try {
             return c.formatter
@@ -482,7 +484,12 @@ export function createGridFactories(ctx) {
         cellRenderer: (params) => {
           const b = document.createElement("button"); b.type = "button"; b.className = "btn-icon rcollapse-toggle";
           b.textContent = "▸"; b.title = "Show more"; b.setAttribute("aria-label", "Show hidden fields");
-          b.addEventListener("click", (ev) => { ev.stopPropagation(); _showCollapsePopup(b, params.data, _collapseMeta); });
+          b.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            // Only the columns this viewport actually collapsed belong in the popup.
+            const shown = _collapseMeta.filter((m) => window.matchMedia(m.at).matches);
+            _showCollapsePopup(b, params.data, shown);
+          });
           return b;
         },
       });
@@ -562,18 +569,30 @@ export function createGridFactories(ctx) {
     if (legacyTheme !== undefined) opts.theme = legacyTheme;
     api = agGrid.createGrid(mount, opts);
     mount.__agApi = api;   // debug/test hook (read model row count without DOM)
-    // Toggle the collapse on/off at the mobile breakpoint: hide the collapsible
-    // columns + show the ▸ expander on narrow screens, reverse on wide.
-    if (_collapseMeta.length) {
-      const ids = _collapseMeta.map((m) => m.colId);
-      const mq = window.matchMedia(tabOpts.collapseAt || "(max-width: 760px)");
+    // AG Grid's root template hard-codes role="treegrid", which implies an
+    // expandable hierarchy these flat lists do not have. Keep the grid/row/
+    // gridcell roles and the aria-rowcount it already maintains.
+    const agRoot = mount.querySelector(".ag-root");
+    if (agRoot) agRoot.setAttribute("role", "grid");
+    _wireCollapse();
+    function _wireCollapse() {
+      // Toggle the collapse on/off per column breakpoint: hide the collapsible
+      // columns + show the ▸ expander when its query matches, reverse on wide.
+      if (!_collapseMeta.length) return;
       const applyCollapse = () => {
         if (!api) return;
-        api.setColumnsVisible(ids, !mq.matches);
-        api.setColumnsVisible(["_expand"], mq.matches);
+        let anyHidden = false;
+        for (const m of _collapseMeta) {
+          const hide = window.matchMedia(m.at).matches;
+          api.setColumnsVisible([m.colId], !hide);
+          if (hide) anyHidden = true;
+        }
+        api.setColumnsVisible(["_expand"], anyHidden);
       };
       applyCollapse();
-      mq.addEventListener("change", applyCollapse);
+      for (const q of new Set(_collapseMeta.map((m) => m.at))) {
+        window.matchMedia(q).addEventListener("change", applyCollapse);
+      }
     }
     const activeRows = () => { const out = []; if (api) api.forEachNodeAfterFilterAndSort((n) => out.push(n)); return out; };
     return {

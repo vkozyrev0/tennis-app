@@ -3,10 +3,12 @@
 Run from the backend/ dir:  uvicorn app.main:app --reload
 Serves the JSON API under /api and the pure HTML/CSS frontend at /.
 """
+import re
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from .config import settings
 from .db_errors import install as install_db_error_handlers
@@ -105,13 +107,25 @@ async def _limit_request_body(request: Request, call_next):
     return await call_next(request)
 
 
+# Frontend assets. `?v=N` is the cache-buster (index.html bumps it per change),
+# so a versioned URL can be cached for a year; everything else — notably the
+# ES-module graph, whose imports are bare paths — must revalidate so a deploy
+# can't leave the browser running a stale module against fresh HTML.
+_VERSIONED_ASSET = re.compile(r"(?:^|&)v=[\w.-]+")
+
+
 @app.middleware("http")
-async def _no_cache_frontend(request: Request, call_next):
+async def _frontend_cache(request: Request, call_next):
     response = await call_next(request)
     if not request.url.path.startswith("/api"):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
+        if _VERSIONED_ASSET.search(request.url.query):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        # StaticFiles never sets these, but a proxy may have.
+        for stale in ("pragma", "expires"):
+            if stale in response.headers:
+                del response.headers[stale]
     return response
 
 
@@ -130,5 +144,37 @@ async def _security_headers(request: Request, call_next):
 
 # Serve the pure HTML/CSS frontend (repo-root/frontend) at "/".
 _FRONTEND = Path(__file__).resolve().parents[2] / "frontend"
+_BUNDLE = _FRONTEND / "dist" / "app.bundle.js"
+
+
+@app.get("/app.entry.js", include_in_schema=False)
+def app_entry(request: Request):
+    """One entry script for the SPA.
+
+    The Docker image ships the esbuild bundle (npm run build), so the browser
+    makes one script request instead of one per module. A local checkout with
+    no frontend/dist gets a one-line loader, keeping development build-free.
+
+    The bundle revalidates with its ETag: Starlette's FileResponse does not
+    answer If-None-Match itself, so the check is done here.
+    """
+    from fastapi.responses import FileResponse, Response
+
+    if _BUNDLE.is_file():
+        response = FileResponse(
+            _BUNDLE, media_type="text/javascript", stat_result=_BUNDLE.stat(),
+        )
+        etag = response.headers.get("etag")
+        if etag and request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        return response
+    return Response('import "/app.js";\n', media_type="text/javascript")
+
+
 if _FRONTEND.is_dir():
     app.mount("/", StaticFiles(directory=str(_FRONTEND), html=True), name="frontend")
+
+# Added last so it is the outermost middleware and compresses every response,
+# including the ones the middlewares above touch. The frontend ships ~3 MB of
+# unminified JS/CSS; gzip takes the 1.6 MB AG Grid bundle to roughly a quarter.
+app.add_middleware(GZipMiddleware, minimum_size=1024)

@@ -6,12 +6,13 @@ models/
 .github/
 .archive/
 .claude/
-# Node dev-tooling for the linters only - never part of the served app.
+# Node dev-tooling. package.json + the lock are kept: the jsbuild stage runs
+# `npm ci` and bundles the frontend. node_modules is rebuilt in that stage.
 node_modules/
-package.json
-package-lock.json
 eslint.config.mjs
 ruff.toml
+# The bundle is built in the jsbuild stage, never copied from the host.
+frontend/dist/
 **/__pycache__/
 **/*.pyc
 **/.pytest_cache/

@@ -13,10 +13,16 @@ export function syncThemeColor() {
   meta.content = signedOut ? "#1b4d32" : (dark ? "#0f1612" : "#eef3f0");
 }
 
-export function applyTheme(t) {
+export function applyTheme(t, { persist = true } = {}) {
   const dark = t === "dark";
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-  try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch { /* ignore */ }
+  // Set inline too: Firefox keeps native scrollbar/control colors from the
+  // computed color-scheme until a style recalc, so toggling only the data
+  // attribute left light scrollbars on a dark grid.
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  if (persist) {
+    try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch { /* ignore */ }
+  }
   syncThemeColor();
   const btn = document.getElementById("theme-toggle");
   if (!btn) return;
@@ -32,10 +38,21 @@ export function applyTheme(t) {
   else if (!btn.querySelector("svg")) btn.textContent = label;
 }
 
+// Stored choice wins; otherwise follow the OS so a first visit on a dark
+// desktop doesn't open a light app. Boot applies without persisting, so the
+// OS preference keeps being honoured until the user actually picks a theme.
+function initialTheme() {
+  try {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark" || saved === "light") return saved;
+  } catch { /* ignore */ }
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch { return "light"; }
+}
+
 export function installTheme() {
-  applyTheme((() => {
-    try { return localStorage.getItem("theme"); } catch { return null; }
-  })() || "light");
+  applyTheme(initialTheme(), { persist: false });
 
   document.addEventListener("DOMContentLoaded", () => {
     const btn = document.getElementById("theme-toggle");

@@ -99,7 +99,14 @@ export function enhanceDetailDialogs() {
     _detailPanesHoisted = true;
   }
   function _setBackgroundInert(on) {
-    if (on) _hoistDetailPanes();
+    if (on) {
+      _hoistDetailPanes();
+      // A .modal nested inside <main> would be inerted along with the
+      // background, leaving an open dialog that cannot take focus or clicks
+      // (#inbox-detail lives inside the inbox panel). Move it beside the
+      // body-level dialogs before the inert attributes go on.
+      for (const m of document.querySelectorAll("main .modal")) document.body.appendChild(m);
+    }
     if (on) {
       const sbw = window.innerWidth - document.documentElement.clientWidth;
       if (sbw > 0) document.body.style.paddingRight = sbw + "px";
@@ -195,8 +202,14 @@ export function enhanceDetailDialogs() {
       if (nowOpen === open) return;
       open = nowOpen;
       if (open) {
-        if (!m.hasAttribute("role")) m.setAttribute("role", "dialog");
-        if (!m.hasAttribute("aria-modal")) m.setAttribute("aria-modal", "true");
+        // Some dialogs (Help, payroll, admin users) already put the role on
+        // their inner .modal-box, which is also where the label lives. Adding
+        // a second role to the wrapper made screen readers announce the dialog
+        // twice, so only adopt the wrapper when it has no dialog inside.
+        if (!m.querySelector('[role="dialog"]')) {
+          if (!m.hasAttribute("role")) m.setAttribute("role", "dialog");
+          if (!m.hasAttribute("aria-modal")) m.setAttribute("aria-modal", "true");
+        }
         _lastModalFocus = document.activeElement;
         _refreshBackgroundInert();
         requestAnimationFrame(() => {
