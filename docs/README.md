@@ -45,7 +45,7 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 20 | [security-review-2026-11-15.md](security-review-2026-11-15.md) | External pentest (Shannon) of the local stack: 26 findings, fixes, accepted risk. |
 | 21 | [shannon.md](shannon.md) | The external pentester itself: install, the read-write mount patch and why, upgrade runbook. |
 
-Backend suite **1105** tests / **118** files (migrations through **0061**); see
+Backend suite **1119** tests / **119** files (migrations through **0061**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`
 (`util`, `html`, `ui`, `help`, `shortcuts`, `combobox`, `print`, `grids`, `auth`,
 `inactivity`, `inbox`, …). Inbox **Get mails** can pull **Gmail** and **Outlook**;

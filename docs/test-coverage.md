@@ -1,7 +1,7 @@
 # CourtOps Tennis — Test Coverage
 
 **Suite:** `backend/tests/` · **Runner:** `python -m pytest -q` ·
-**Status (2026-10-20):** **1105 tests** collected (`pytest --collect-only -q`).
+**Status (2026-10-20):** **1119 tests** collected (`pytest --collect-only -q`).
 Line coverage of `backend/app` is gated at **100%** (`--cov-fail-under=100` in
 `backend/pytest.ini` + `pytest-cov` in `requirements.txt`). The only shipped
 `# pragma: no cover` is health.py when the DB is down. CI still runs `pytest -q`
@@ -43,7 +43,7 @@ detection, 0041/0042), `test_zz_email_extract` (pure extractor units), and
 `chase_pending`, `payroll`, `soft_delete`, `dashboard`, `doubles_corpus`, and
 `import_export` (the staged CSV/XLSX/PDF import + export endpoints). |
 
-The names in that `test_zz_*.py` cell are examples, not the full tree. There are **118** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
+The names in that `test_zz_*.py` cell are examples, not the full tree. There are **119** `backend/tests/test_*.py` files (status line). Suites called out at the bottom of this file include inbox people, Gmail/Outlook feeds, export and access audit, COPPA, and security headers. Nothing uses `pytest.mark.xfail`. DB-backed modules use `skipif` when Postgres is down; that is the harness, not a standing skip.
 
 **Frontend unit checks (JS):** pure frontend logic factored out and asserted by
 DOM-free node test files (independent of AG Grid):
@@ -275,7 +275,7 @@ isolation; this one proves they compose.
 ```bash
 cd backend
 source .venv/Scripts/activate                          # Windows: .venv\Scripts\activate
-python -m pytest -q                                    # the whole suite (1105 tests / 118 files)
+python -m pytest -q                                    # the whole suite (1119 tests / 119 files)
 python -m pytest tests/test_td_e2e.py -v               # just the end-to-end walk
 python -m pytest -k "import" -v                        # just the importer tests
 python -m pytest tests/test_smoke.py::test_player_put_optimistic_concurrency -v
@@ -464,7 +464,7 @@ labels) — through `_parse_pdf_emails` → triage → pair detection.
 
 ---
 
-Total suite count: **1105 tests** across **118** files (see the status line at the top).
+Total suite count: **1119 tests** across **119** files (see the status line at the top).
 Recent inbox/mail additions (2026-09-08): `test_zz_inbox_people` (parallel
 name+USTA list + promote to Players), `test_zz_outlook_feed`, `test_zz_inbox_feeds`,
 `test_zz_gmail_feed` (Get mails / Get all, mailbox-safe Clear).
@@ -503,3 +503,13 @@ which usernames exist).
 `test_zz_extract_robustness.py` (2) — extractor ReDoS/crash robustness: pathological
 and malformed inputs to the email extractor return cleanly without catastrophic
 backtracking or exceptions.
+
+`test_zz_pentest_followups.py` (14) - the seven open pentest findings: the PII
+blind on the roster, alternates and Player 360 request tabs; the blind on the
+withdrawal and late-entry lists; assignment delete refused while a payroll
+record exists; single finalize refused unless the official accepted (override
+forces it) and the tournament is live; peer admin delete needs a password
+outside a demo deployment; purge and retention dry-run by default, need one
+scope to write and the password outside a demo deployment; a filed email cannot
+be hard-deleted and allowed deletes are audited; roster entry writes refuse a
+soft-deleted tournament; filing refuses an email from another tournament.

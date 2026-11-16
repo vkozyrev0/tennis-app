@@ -96,7 +96,7 @@ backend/
   reset_demo.py        # truncate (preserving migration-seeded catalogs) + seed
   demo_seed.py         # rich, coherent "live event" demo on top of reset_demo
   backfill_distances.py
-  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1105 tests / 118 files)
+  tests/               # pytest: test_smoke.py, test_td_e2e.py, test_config_guard.py, test_zz_*.py (1119 tests / 119 files)
 frontend/
   index.html           # the single page (all panels, hidden/shown via tabs)
   app.js               # 932 LOC composition root (D11; counted 2026-10-17)
