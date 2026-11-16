@@ -362,7 +362,8 @@ def test_td_chat_remove_prepend_and_fake_resp(monkeypatch):
             "mutating": True,
             "json": {"usta_number": "j" + uuid.uuid4().hex[:9],
                      "first_name": "H", "last_name": "And", "gender": "female"},
-        }], confirm=True)
+        }], confirm=True, user={"id": 1, "username": "admin", "role": "admin",
+                                "can_export_pii": True})
         assert out[0]["status"] in (201, 400, 409, 422)
 
 

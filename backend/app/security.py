@@ -212,3 +212,22 @@ def note_reauth_failure(user_id: int) -> None:
 def clear_reauth_failures(user_id: int) -> None:
     with _pw_lock:
         _pw_fails.pop(user_id, None)
+
+
+def verify_caller_password(cur, user: dict, supplied: str | None, *, action: str) -> None:
+    """Prove the caller's own password before a re-auth-gated write.
+
+    400 when the field is absent, 403 on a mismatch (recorded so the next call
+    is throttled). Lives here rather than in a router: three routers now gate a
+    destructive write on it.
+    """
+    if not supplied:
+        raise HTTPException(
+            status_code=400,
+            detail=f"current_password is required to {action}",
+        )
+    cur.execute("SELECT password_hash FROM user_account WHERE id = %s", (user["id"],))
+    row = cur.fetchone()
+    if row is None or not verify_pw(supplied, row["password_hash"]):
+        note_reauth_failure(user["id"])
+        raise HTTPException(status_code=403, detail="current password is incorrect")

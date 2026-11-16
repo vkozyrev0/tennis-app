@@ -25,6 +25,19 @@ def _ok(r, code=201):
     return r.json()
 
 
+def _accept(assignment_id):
+    """The official confirmed the job. Finalize now requires that (AUTHZ-20)."""
+    from app.db import get_conn
+
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE assignment SET response_status = 'accepted', responded_at = now() "
+            "WHERE id = %s",
+            (assignment_id,),
+        )
+        conn.commit()
+
+
 def _staffed(n_days=2):
     o = _ok(client.post("/api/officials", json={
         "first_name": "Pay", "last_name": "R" + uuid.uuid4().hex[:6]}))
@@ -35,6 +48,7 @@ def _staffed(n_days=2):
         "play_start_date": "2026-09-01", "play_end_date": "2026-09-04"}))
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                         json={"official_id": o["id"]}))
+    _accept(a["id"])
     s = None
     for i in range(n_days):
         s = _ok(client.post(f"/api/assignments/{a['id']}/days",
@@ -118,6 +132,7 @@ def test_finalize_all_is_idempotent_and_skips_finalized():
                     json={"cert_type": "roving_official"}))
     a2 = _ok(client.post(f"/api/tournaments/{t1['id']}/assignments",
                          json={"official_id": o2["id"]}))
+    _accept(a2["id"])
     _ok(client.post(f"/api/assignments/{a2['id']}/days",
                     json={"work_date": "2026-09-02", "working_as": "roving_official"}))
     _ok(client.post(f"/api/assignments/{a1['id']}/finalize"))   # one already done
@@ -137,6 +152,7 @@ def test_finalize_all_totals_match_single_finalize():
                     json={"cert_type": "roving_official"}))
     a2 = _ok(client.post(f"/api/tournaments/{t1['id']}/assignments",
                          json={"official_id": o2["id"]}))
+    _accept(a2["id"])
     _ok(client.post(f"/api/assignments/{a2['id']}/days",
                     json={"work_date": "2026-09-02", "working_as": "roving_official"}))
     live = _ok(client.get(f"/api/tournaments/{t1['id']}/payroll"), 200)
@@ -157,9 +173,12 @@ def test_payroll_lifecycle_lands_in_assignment_audit():
 
 
 def test_multiple_orphaned_records_all_survive_in_summary():
-    # Two officials finalized, then BOTH assignments deleted: each record's
-    # assignment_id goes NULL (FK SET NULL). UNIQUE permits many NULLs, so the
-    # summary must not collapse them onto one key — both must still show.
+    # Two officials finalized, then BOTH assignment links are cleared (the FK is
+    # ON DELETE SET NULL; the API now refuses that delete, AUTHZ-18, so the
+    # pre-existing orphan state is reproduced directly). UNIQUE permits many
+    # NULLs, so the summary must not collapse them onto one key — both must show.
+    from app.db import get_conn
+
     t = _ok(client.post("/api/tournaments", json={
         "name": "ORPH " + uuid.uuid4().hex[:6], "type": "junior",
         "play_start_date": "2026-09-01", "play_end_date": "2026-09-02"}))
@@ -171,10 +190,13 @@ def test_multiple_orphaned_records_all_survive_in_summary():
                         json={"cert_type": "roving_official"}))
         a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                             json={"official_id": o["id"]}))
+        _accept(a["id"])
         _ok(client.post(f"/api/assignments/{a['id']}/days",
                         json={"work_date": "2026-09-01", "working_as": "roving_official"}))
         recs.append(_ok(client.post(f"/api/assignments/{a['id']}/finalize")))
-        assert client.delete(f"/api/assignments/{a['id']}").status_code == 204
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM assignment WHERE id = %s", (a["id"],))
+            conn.commit()
     rows = _ok(client.get(f"/api/tournaments/{t['id']}/payroll"), 200)
     orphans = [r for r in rows if r.get("orphaned")]
     assert len(orphans) == 2, rows                      # neither dropped
@@ -227,6 +249,7 @@ def _two_finalized():
                         json={"cert_type": "roving_official"}))
         a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments",
                             json={"official_id": o["id"]}))
+        _accept(a["id"])
         _ok(client.post(f"/api/assignments/{a['id']}/days",
                         json={"work_date": "2026-09-01", "working_as": "roving_official"}))
         recs.append(_ok(client.post(f"/api/assignments/{a['id']}/finalize")))

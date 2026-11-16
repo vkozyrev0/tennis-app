@@ -102,7 +102,7 @@ def create_doubles_request(tournament_id: int, body: DoublesRequestCreate, conn=
             (tournament_id, body.age_division, pid, partner, body.wants_random, body.source_email_id),
         )
         req_id = cur.fetchone()["id"]
-        mark_email_filed(cur, body.source_email_id, "doubles")
+        mark_email_filed(cur, body.source_email_id, "doubles", tournament_id)
 
         paired_id = None
         if body.wants_random:
@@ -174,7 +174,7 @@ def create_doubles_pair(tournament_id: int, body: DoublesPairCreate, conn=Depend
         existing = cur.fetchone()
         pair_id = existing["id"] if existing else _make_pair(
             cur, tournament_id, body.age_division, p1, p2, "mutual")
-        mark_email_filed(cur, body.source_email_id, "doubles")
+        mark_email_filed(cur, body.source_email_id, "doubles", tournament_id)
         cur.execute(_PAIR + " WHERE d.id = %s", (pair_id,))
         return {"pair": cur.fetchone(), "already_existed": existing is not None}
 

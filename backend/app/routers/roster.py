@@ -10,9 +10,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 from .. import importer
 from ..bulk_ops import savepoint
 from ..db import db_dep
+from ..export_gate import ROSTER_PII_FIELDS, pii_blind, redact_fields
 from ..models import RosterEntryCreate, RosterEntryOut, RosterSignIn
 from ..playerops import upsert_player
 from ..query_helpers import like_escape, paged_select, person_like_sql
+from ..security import require_admin
 from ..shirtops import norm_shirt as _norm_shirt
 
 router = APIRouter(tags=["roster"])
@@ -100,9 +102,25 @@ LEFT JOIN LATERAL (
 _SELECT = f"SELECT {_COLS} {_FROM}"
 
 
+def _live_entry(cur, entry_id: int) -> dict | None:
+    """The entry, only while its tournament is not soft-deleted (AUTHZ-24).
+
+    list_roster and add_roster_entry already refuse a trashed tournament; the
+    per-entry write paths used to reach into it anyway.
+    """
+    cur.execute(
+        "SELECT e.id, e.tournament_id, e.player_id, e.selection_status "
+        "FROM tournament_entry e JOIN tournament t ON t.id = e.tournament_id "
+        "WHERE e.id = %s AND t.deleted_at IS NULL",
+        (entry_id,),
+    )
+    return cur.fetchone()
+
+
 @router.get("/api/tournaments/{tournament_id}/players", response_model=list[RosterEntryOut])
 def list_roster(tournament_id: int, response: Response, q: str | None = None,
-                limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                limit: int | None = None, offset: int = 0,
+                user=Depends(require_admin), conn=Depends(db_dep)):
     # AUTHZ-04: a soft-deleted tournament must not keep serving its roster.
     with conn.cursor() as cur:
         cur.execute(
@@ -122,10 +140,14 @@ def list_roster(tournament_id: int, response: Response, q: str | None = None,
         params += [like] * (n + 5)
     where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        return paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+        rows = paged_select(cur, response, cols=_COLS, from_sql=_FROM,
                             where=where, params=params,
                             order_by=" ORDER BY p.last_name, p.first_name",
                             limit=limit, offset=offset)
+    # AUTHZ-16: dietary / lodging are household PII; a revoked-export admin
+    # still gets the operational columns.
+    blind = pii_blind(user)
+    return [redact_fields(r, ROSTER_PII_FIELDS, blind=blind) for r in rows]
 
 
 @router.get("/api/tournaments/{tournament_id}/roster-completeness")
@@ -190,7 +212,7 @@ def roster_completeness(tournament_id: int, conn=Depends(db_dep)):
 @router.get("/api/tournaments/{tournament_id}/alternates",
             response_model=list[RosterEntryOut])
 def list_alternates(tournament_id: int, age_division: str | None = None,
-                    conn=Depends(db_dep)):
+                    user=Depends(require_admin), conn=Depends(db_dep)):
     """Alternates waiting for a slot — the promote-on-withdrawal helper. When
     `age_division` is given (the withdrawing player's division), only same-division
     alternates are returned, ordered FIFO by entry id (first added = next in line)
@@ -203,7 +225,10 @@ def list_alternates(tournament_id: int, age_division: str | None = None,
     sql += " ORDER BY e.id"
     with conn.cursor() as cur:
         cur.execute(sql, params)
-        return cur.fetchall()
+        rows = cur.fetchall()
+    # AUTHZ-16: the alternates grid is the same roster row shape.
+    blind = pii_blind(user)
+    return [redact_fields(r, ROSTER_PII_FIELDS, blind=blind) for r in rows]
 
 
 @router.post("/api/tournaments/{tournament_id}/players",
@@ -255,11 +280,7 @@ def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_
             # player_id re-pointed an entry at another tournament's player, and
             # flipping a withdrawn entry back to selected silently reversed a
             # recorded withdrawal that promote_alternate deliberately refuses.
-            cur.execute(
-                "SELECT player_id, selection_status FROM tournament_entry WHERE id = %s",
-                (entry_id,),
-            )
-            current = cur.fetchone()
+            current = _live_entry(cur, entry_id)
             if current is None:
                 raise HTTPException(status_code=404, detail="roster entry not found")
             if body.player_id != current["player_id"]:
@@ -306,6 +327,8 @@ def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_
 @router.delete("/api/roster/{entry_id}", status_code=204)
 def delete_roster_entry(entry_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
+        if _live_entry(cur, entry_id) is None:
+            raise HTTPException(status_code=404, detail="roster entry not found")
         cur.execute("DELETE FROM tournament_entry WHERE id = %s", (entry_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="roster entry not found")
@@ -318,6 +341,8 @@ def set_signed_in(entry_id: int, body: RosterSignIn, conn=Depends(db_dep)):
     SHEET exports already existed; this records the result in-app so the
     no-show list is queryable."""
     with conn.cursor() as cur:
+        if _live_entry(cur, entry_id) is None:
+            raise HTTPException(status_code=404, detail="roster entry not found")
         cur.execute(
             "UPDATE tournament_entry SET signed_in = %s WHERE id = %s RETURNING id",
             (body.signed_in, entry_id),
@@ -335,8 +360,7 @@ def promote_alternate(entry_id: int, conn=Depends(db_dep)):
     selected entry is a no-op error, and a withdrawn one is rejected so a
     withdrawal isn't silently reversed."""
     with conn.cursor() as cur:
-        cur.execute("SELECT selection_status FROM tournament_entry WHERE id = %s", (entry_id,))
-        row = cur.fetchone()
+        row = _live_entry(cur, entry_id)
         if row is None:
             raise HTTPException(status_code=404, detail="roster entry not found")
         if row["selection_status"] != "alternate":

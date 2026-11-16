@@ -90,7 +90,8 @@ def test_purge_redacts_filed_emails_but_not_new_ones():
         "status": "filed", "detected_player_id": None})
     fresh = _email("New one", "still under review")
 
-    res = _ok(client.post("/api/emails/purge?older_than_days=0"), 200)
+    res = _ok(client.post(
+        f"/api/emails/purge?older_than_days=0&dry_run=false&tournament_id={t['id']}"), 200)
     assert res["purged"] >= 1
 
     rows = {m["id"]: m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()}
@@ -170,7 +171,8 @@ def test_retention_sweep_redacts_derived_pii_and_inbox_people():
                     (e["id"],))
         conn.commit()
 
-    res = _ok(client.post("/api/retention/sweep?dry_run=false"), 200)
+    res = _ok(client.post(
+        f"/api/retention/sweep?dry_run=false&tournament_id={t['id']}"), 200)
     assert any(r["target"] == "inbox_people" for r in res["results"])
 
     row = next(m for m in client.get(f"/api/emails?tournament_id={t['id']}").json()
@@ -190,7 +192,7 @@ def test_retention_sweep_redacts_concluded_not_recent():
     recent_t = _tourney("2030-06-01", "2030-06-04")        # future → not eligible
     e_old = _filed_email(old_t["id"], "erase me")
     e_recent = _filed_email(recent_t["id"], "keep me")
-    res = _ok(client.post("/api/retention/sweep?dry_run=false"), 200)
+    res = _ok(client.post("/api/retention/sweep?dry_run=false&all_tournaments=true"), 200)
     assert res["results"][0]["redacted"] >= 1
     old_row = next(m for m in client.get(f"/api/emails?tournament_id={old_t['id']}").json()
                    if m["id"] == e_old["id"])

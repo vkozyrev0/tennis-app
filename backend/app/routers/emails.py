@@ -59,7 +59,13 @@ from ..models import (
 )
 from ..playerops import mark_email_filed
 from ..query_helpers import like_escape, paged_select
-from ..security import require_admin
+from ..security import (
+    assert_reauth_allowed,
+    clear_reauth_failures,
+    demo_credentials_allowed,
+    require_admin,
+    verify_caller_password,
+)
 from ..triage import classify_timed
 
 # C2: re-export bulk extractors for registry-consistency tests.
@@ -443,7 +449,7 @@ def apply_correction(email_id: int, user=Depends(require_admin), conn=Depends(db
             )
         # Through the shared helper (not an inline UPDATE) so the "filed" rule
         # can't drift between single-file, amend, and bulk paths (plan P1 #6).
-        mark_email_filed(cur, em["id"], em["classification"])
+        mark_email_filed(cur, em["id"], em["classification"], em["tournament_id"])
         return {"updated_row_id": row["id"], "list": em["classification"]}
 
 
@@ -521,49 +527,106 @@ def clear_inbox(tournament_id: int, user=Depends(require_admin), conn=Depends(db
 
 
 @router.delete("/{email_id}", status_code=204)
-def delete_email(email_id: int, conn=Depends(db_dep)):
+def delete_email(email_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM email_message WHERE id = %s", (email_id,))
-        if cur.rowcount == 0:
+        cur.execute("SELECT status FROM email_message WHERE id = %s", (email_id,))
+        row = cur.fetchone()
+        if row is None:
             raise HTTPException(status_code=404, detail="email not found")
+        # AUTHZ-22: a filed email is the provenance row of a live list entry
+        # (withdrawal, late entry, hotel, doubles, …). The FK nulls that entry's
+        # origin, so the deletion would quietly destroy the audit link. Clear the
+        # entry first; then the email is deletable.
+        if row["status"] == "filed":
+            raise HTTPException(
+                status_code=409,
+                detail="this email is filed as the source of a live list row — "
+                       "clear that row first",
+            )
+        cur.execute("DELETE FROM email_message WHERE id = %s", (email_id,))
+        log_access(
+            cur, username=user["username"], action="delete_email",
+            resource_type="email", resource_id=email_id,
+        )
     return Response(status_code=204)
 
 
 # ---------- Retention (PII hardening H3) -----------------------------------
 
 @router.post("/purge")
-def purge_filed_bodies(older_than_days: int = 30, user=Depends(require_admin),
-                       conn=Depends(db_dep)):
+def purge_filed_bodies(older_than_days: int = 30, dry_run: bool = True,
+                       tournament_id: int | None = None,
+                       all_tournaments: bool = False,
+                       current_password: str | None = None,
+                       user=Depends(require_admin), conn=Depends(db_dep)):
     """Redact the free-text PII of FILED emails older than `older_than_days`:
     null body / subject / from_address while keeping the provenance row
     (message_id, classification, detected-player link, status) so the audit
     trail survives. Only `filed` emails are touched — unprocessed ('new') mail
-    is never auto-purged. Returns how many were redacted.
+    is never auto-purged. Returns how many were redacted (or would be, on a dry
+    run).
+
+    AUTHZ-23: this used to redact every tournament in one call with no preview.
+    A dry run is now the default, a write must name its scope, and outside a
+    demo deployment a write also needs the caller's password.
 
     Inbound email is the highest-risk minors'-PII store (unstructured), so a
     retention sweep here is the §312.10 deletion step (docs/pii-hardening-plan
     §H3). Wire to a schedule for automatic enforcement."""
     if older_than_days < 0:
         raise HTTPException(status_code=400, detail="older_than_days must be >= 0")
+    if not dry_run:
+        if tournament_id is None and not all_tournaments:
+            raise HTTPException(
+                status_code=400,
+                detail="choose a tournament or all_tournaments=true",
+            )
+        if tournament_id is not None and all_tournaments:
+            raise HTTPException(
+                status_code=400,
+                detail="tournament_id and all_tournaments are mutually exclusive",
+            )
+    demo = demo_credentials_allowed()
+    if not dry_run and not demo:
+        assert_reauth_allowed(user["id"])
+    scope_sql, scope_params = "", []
+    if tournament_id is not None:
+        scope_sql, scope_params = " AND tournament_id = %s", [tournament_id]
+    condition = (
+        "status = 'filed' "
+        "AND (body IS NOT NULL OR subject IS NOT NULL OR from_address IS NOT NULL) "
+        "AND received_at < now() - make_interval(days => %s)"
+    )
     with conn.cursor() as cur:
-        cur.execute(
-            "UPDATE email_message "
-            "SET body = NULL, subject = NULL, from_address = NULL "
-            "WHERE status = 'filed' "
-            "  AND (body IS NOT NULL OR subject IS NOT NULL OR from_address IS NOT NULL) "
-            "  AND received_at < now() - make_interval(days => %s) "
-            "RETURNING id",
-            (older_than_days,),
-        )
-        purged = len(cur.fetchall())
-        # AUTHZ-09: a database-wide redaction with a zero-day window must leave
-        # an attributable record; it used to leave none.
+        if not dry_run and not demo:
+            verify_caller_password(cur, user, current_password,
+                                   action="purge filed email bodies")
+        if dry_run:
+            cur.execute(
+                f"SELECT count(*) AS n FROM email_message WHERE {condition}{scope_sql}",
+                (older_than_days, *scope_params),
+            )
+            purged = cur.fetchone()["n"]
+        else:
+            cur.execute(
+                f"UPDATE email_message SET body = NULL, subject = NULL, from_address = NULL "
+                f"WHERE {condition}{scope_sql} RETURNING id",
+                (older_than_days, *scope_params),
+            )
+            purged = len(cur.fetchall())
+        # AUTHZ-09: a redaction must leave an attributable record; AUTHZ-23 also
+        # records what it was scoped to and whether it wrote.
         log_access(
             cur, username=user["username"], action="purge_email_bodies",
             resource_type="email_message",
-            detail={"older_than_days": older_than_days, "purged": purged},
+            detail={"older_than_days": older_than_days, "purged": purged,
+                    "dry_run": dry_run, "tournament_id": tournament_id,
+                    "all_tournaments": all_tournaments},
         )
-        return {"purged": purged}
+    if not dry_run and not demo:
+        clear_reauth_failures(user["id"])
+    return {"purged": purged, "dry_run": dry_run,
+            "tournament_id": tournament_id, "all_tournaments": all_tournaments}
 
 @router.post("/{email_id}/detect-player", response_model=EmailDetectResult)
 def detect_one_player(email_id: int, conn=Depends(db_dep)):

@@ -93,7 +93,7 @@ def create_pairing(tournament_id: int, body: PairingAvoidanceCreate, conn=Depend
                 "INSERT INTO pairing_avoidance_member (pairing_avoidance_id, player_id) VALUES (%s,%s)",
                 (gid, pid),
             )
-        mark_email_filed(cur, body.source_email_id, "pairing_avoidance")
+        mark_email_filed(cur, body.source_email_id, "pairing_avoidance", tournament_id)
         return _group(cur, gid)
 
 

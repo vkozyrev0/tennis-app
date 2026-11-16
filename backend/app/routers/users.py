@@ -8,6 +8,7 @@ mounted admin-only (require_admin) in main.py.
 Security notes (post-pentest):
 - A credential reset for *another* admin needs the caller to prove its own
   password, so a stolen session cannot silently take over a peer (AUTH-05).
+- A hard-delete of a peer needs the same proof (AUTH-10).
 - Nobody can grant the PII-export capability to themselves (AUTHZ-02).
 - The "keep one export-capable admin" invariant is checked under a row lock, and
   the delete path consults it too (AUTHZ-15).
@@ -23,10 +24,10 @@ from ..security import (
     assert_reauth_allowed,
     check_password_policy,
     clear_reauth_failures,
+    demo_credentials_allowed,
     get_current_user,
     hash_pw,
-    note_reauth_failure,
-    verify_pw,
+    verify_caller_password,
 )
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin-users"])
@@ -137,19 +138,6 @@ def _admin_or_404(cur, user_id: int) -> None:
         raise HTTPException(status_code=404, detail="admin account not found")
 
 
-def _verify_caller_password(cur, me: dict, supplied: str | None) -> None:
-    if not supplied:
-        raise HTTPException(
-            status_code=400,
-            detail="current_password is required to change another admin's password",
-        )
-    cur.execute("SELECT password_hash FROM user_account WHERE id = %s", (me["id"],))
-    row = cur.fetchone()
-    if row is None or not verify_pw(supplied, row["password_hash"]):
-        note_reauth_failure(me["id"])
-        raise HTTPException(status_code=403, detail="current password is incorrect")
-
-
 @router.post("/{user_id}/password", status_code=204)
 def reset_password(user_id: int, body: PasswordReset,
                    me=Depends(get_current_user), conn=Depends(db_dep)):
@@ -162,7 +150,8 @@ def reset_password(user_id: int, body: PasswordReset,
     assert_reauth_allowed(me["id"])
     with conn.cursor() as cur:
         _admin_or_404(cur, user_id)
-        _verify_caller_password(cur, me, body.current_password)
+        verify_caller_password(cur, me, body.current_password,
+                               action="change another admin's password")
         check_password_policy(body.password)
         cur.execute(
             "UPDATE user_account SET password_hash = %s WHERE id = %s",
@@ -178,12 +167,26 @@ def reset_password(user_id: int, body: PasswordReset,
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_admin(user_id: int, me=Depends(get_current_user), conn=Depends(db_dep)):
+def delete_admin(user_id: int, current_password: str | None = None,
+                 me=Depends(get_current_user), conn=Depends(db_dep)):
+    """Hard-delete a peer admin account.
+
+    AUTH-10: deleting a peer is irreversible and frees its username for a fresh
+    takeover, so it needs the caller's own password, throttled like the reset
+    path. Skipped only where demo credentials are explicitly allowed
+    (``COURTOPS_ALLOW_DEMO_CREDENTIALS=1``: the local demo and the test suite).
+    """
+    demo = demo_credentials_allowed()
+    if not demo:
+        assert_reauth_allowed(me["id"])
     with conn.cursor() as cur:
-        _lock_admin_rows(cur)
         _admin_or_404(cur, user_id)
         if user_id == me["id"]:
             raise HTTPException(status_code=400, detail="you can't delete your own account")
+        if not demo:
+            verify_caller_password(cur, me, current_password,
+                                   action="delete another admin account")
+        _lock_admin_rows(cur)
         cur.execute("SELECT count(*) AS n FROM user_account WHERE role = 'admin'")
         if cur.fetchone()["n"] <= 1:
             raise HTTPException(status_code=409, detail="can't delete the last admin account")
@@ -209,4 +212,5 @@ def delete_admin(user_id: int, me=Depends(get_current_user), conn=Depends(db_dep
             cur, username=me["username"], action="delete", resource_type="admin_account",
             resource_id=user_id,
         )
+    clear_reauth_failures(me["id"])
     return Response(status_code=204)

@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..clock import today_venue
 from ..db import db_dep
+from ..export_gate import FILED_TEXT_PII_FIELDS, pii_blind, redact_fields
 from ..models import LateEntryCreate, LateEntryOut, LateEntryUpdate
 from ..playerops import mark_email_filed, upsert_player
 from ..query_helpers import like_escape, paged_select, person_like_sql
+from ..security import require_admin
 
 router = APIRouter(tags=["late-entries"])
 
@@ -35,7 +37,8 @@ def _with_deadline(row: dict) -> dict:
 
 @router.get("/api/tournaments/{tournament_id}/late-entries", response_model=list[LateEntryOut])
 def list_late_entries(tournament_id: int, response: Response, q: str | None = None,
-                      limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                      limit: int | None = None, offset: int = 0,
+                      user=Depends(require_admin), conn=Depends(db_dep)):
     clauses, params = ["le.tournament_id = %s"], [tournament_id]
     if q:
         sql, n = person_like_sql("p")
@@ -47,7 +50,10 @@ def list_late_entries(tournament_id: int, response: Response, q: str | None = No
                             where=where, params=params,
                             order_by=" ORDER BY le.request_date, le.id",
                             limit=limit, offset=offset)
-        return [_with_deadline(r) for r in rows]
+    # AUTHZ-17: the source email's subject is the same text the inbox blinds.
+    blind = pii_blind(user)
+    return [redact_fields(_with_deadline(r), FILED_TEXT_PII_FIELDS, blind=blind)
+            for r in rows]
 
 
 @router.post("/api/tournaments/{tournament_id}/late-entries",
@@ -98,7 +104,7 @@ def create_late_entry(tournament_id: int, body: LateEntryCreate, conn=Depends(db
         new_id = cur.fetchone()["id"]
 
         # Audit F7: use the shared helper instead of an inline UPDATE.
-        mark_email_filed(cur, body.source_email_id, "late_entry")
+        mark_email_filed(cur, body.source_email_id, "late_entry", tournament_id)
 
         cur.execute(_SELECT + " WHERE le.id = %s", (new_id,))
         return _with_deadline(cur.fetchone())

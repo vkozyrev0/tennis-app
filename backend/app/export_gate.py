@@ -107,6 +107,12 @@ def require_can_export_pii(user: dict, *, redacted: bool = False) -> None:
 # leaving the operational workflow (names, divisions, statuses) intact.
 PLAYER_PII_FIELDS = ("birthdate", "birthdate_precision", "emails", "phones")
 EMAIL_PII_FIELDS = ("body", "from_address", "to_address")
+# AUTHZ-16: the roster grid and Player 360 shipped dietary / lodging verbatims
+# straight past the blind. They are minors' household detail, not operations.
+ROSTER_PII_FIELDS = ("dietary_preference", "lodging_plan", "lodging_plan_raw")
+# AUTHZ-17: a filed list row carried its source email's subject and the parsed
+# free-text reason, so the blind could be read back from the list it fed.
+FILED_TEXT_PII_FIELDS = ("source_subject", "reason")
 
 
 def pii_blind(user: dict | None) -> bool:

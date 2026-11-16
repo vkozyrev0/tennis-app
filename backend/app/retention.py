@@ -79,9 +79,14 @@ def policy() -> dict:
     }
 
 
-def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = True) -> dict:
+def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = True,
+                  tournament_id: int | None = None) -> dict:
     """Apply the retention policy. With dry_run=True, only counts what is eligible
-    (nothing is modified). Returns a count-only report."""
+    (nothing is modified). Returns a count-only report.
+
+    ``tournament_id`` scopes the sweep to one event. Import staging has no
+    tournament column, so a scoped sweep leaves it alone.
+    """
     days = DEFAULT_EMAIL_RETENTION_DAYS if older_than_days is None else older_than_days
     # Guard the footgun: a negative window makes the cutoff `current_date - (-N)`
     # = a FUTURE date, which would match (and, when not dry-run, redact) EVERY
@@ -91,13 +96,20 @@ def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = Tr
     if days < 0:
         raise ValueError("older_than_days must be >= 0")
     today = today_venue()
-    cur.execute(_ELIGIBLE_EMAIL_IDS, (today, days))
+    eligible_sql = _ELIGIBLE_EMAIL_IDS
+    eligible_params: list = [today, days]
+    if tournament_id is not None:
+        eligible_sql += " AND e.tournament_id = %s"
+        eligible_params.append(tournament_id)
+    cur.execute(eligible_sql, eligible_params)
     ids = [r["id"] for r in cur.fetchall()]
-    cur.execute(
-        "SELECT count(*) AS n FROM import_batch WHERE created_at < %s::date - %s::int",
-        (today, days),
-    )
-    import_batches = cur.fetchone()["n"]
+    import_batches = 0
+    if tournament_id is None:
+        cur.execute(
+            "SELECT count(*) AS n FROM import_batch WHERE created_at < %s::date - %s::int",
+            (today, days),
+        )
+        import_batches = cur.fetchone()["n"]
     inbox_people = 0
     if ids and not dry_run:
         cur.execute(
@@ -116,6 +128,7 @@ def run_retention(cur, *, older_than_days: int | None = None, dry_run: bool = Tr
     return {
         "dry_run": dry_run,
         "older_than_days": days,
+        "tournament_id": tournament_id,
         "results": [
             {"target": "email_bodies", "eligible": len(ids),
              "redacted": 0 if dry_run else len(ids)},

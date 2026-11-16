@@ -4,9 +4,11 @@ email) marks that email filed."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ..db import db_dep
+from ..export_gate import FILED_TEXT_PII_FIELDS, pii_blind, redact_fields
 from ..models import WithdrawalCreate, WithdrawalOut, WithdrawalUpdate
 from ..playerops import mark_email_filed, upsert_player
 from ..query_helpers import like_escape, paged_select, person_like_sql
+from ..security import require_admin
 
 router = APIRouter(tags=["withdrawals"])
 
@@ -27,7 +29,8 @@ _SELECT = f"SELECT {_COLS} {_FROM}"
 
 @router.get("/api/tournaments/{tournament_id}/withdrawals", response_model=list[WithdrawalOut])
 def list_withdrawals(tournament_id: int, response: Response, q: str | None = None,
-                     limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+                     limit: int | None = None, offset: int = 0,
+                     user=Depends(require_admin), conn=Depends(db_dep)):
     clauses, params = ["w.tournament_id = %s"], [tournament_id]
     if q:
         sql, n = person_like_sql("p")
@@ -35,10 +38,14 @@ def list_withdrawals(tournament_id: int, response: Response, q: str | None = Non
         params += [f"%{like_escape(q.strip())}%"] * n
     where = " WHERE " + " AND ".join(clauses)
     with conn.cursor() as cur:
-        return paged_select(cur, response, cols=_COLS, from_sql=_FROM,
+        rows = paged_select(cur, response, cols=_COLS, from_sql=_FROM,
                             where=where, params=params,
                             order_by=" ORDER BY w.id",
                             limit=limit, offset=offset)
+    # AUTHZ-17: the source subject and the parsed reason are the email's text;
+    # a blinded admin reads them back off the list the filing created.
+    blind = pii_blind(user)
+    return [redact_fields(r, FILED_TEXT_PII_FIELDS, blind=blind) for r in rows]
 
 
 @router.post("/api/tournaments/{tournament_id}/withdrawals",
@@ -90,7 +97,7 @@ def create_withdrawal(tournament_id: int, body: WithdrawalCreate, conn=Depends(d
         new_id = cur.fetchone()["id"]
 
         # Audit F7: use the shared helper instead of an inline UPDATE.
-        mark_email_filed(cur, body.source_email_id, "withdrawal")
+        mark_email_filed(cur, body.source_email_id, "withdrawal", tournament_id)
 
         cur.execute(_SELECT + " WHERE w.id = %s", (new_id,))
         return cur.fetchone()

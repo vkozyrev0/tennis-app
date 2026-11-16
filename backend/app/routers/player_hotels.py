@@ -69,7 +69,7 @@ def create_player_hotel(tournament_id: int, body: PlayerHotelCreate, conn=Depend
             (tournament_id, pid, hid, hname, lodging, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
-        mark_email_filed(cur, body.source_email_id, "hotel")
+        mark_email_filed(cur, body.source_email_id, "hotel", tournament_id)
         cur.execute(_PH + " WHERE s.id = %s", (new_id,))
         return cur.fetchone()
 

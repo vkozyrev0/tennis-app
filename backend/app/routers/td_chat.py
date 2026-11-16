@@ -95,7 +95,7 @@ def chat_turn(body: ChatTurnIn, user=Depends(require_admin), conn=Depends(db_dep
             continue
     reads = [p for p in resolved if not p.get("mutating")]
     writes = [p for p in resolved if p.get("mutating")]
-    executed = _run_handlers(conn, reads, confirm=False) if reads else []
+    executed = _run_handlers(conn, reads, confirm=False, user=user) if reads else []
     roster_rows = []
     for row in executed:
         if row.get("tool") == "list_roster" and isinstance(row.get("result"), list):
@@ -172,7 +172,7 @@ def chat_execute(body: ChatExecuteIn, request: Request,
                        "the returned confirm_token with the same calls",
             )
     executed = _run_handlers(conn, resolved, confirm=body.confirm,
-                             tournament_id=body.tournament_id)
+                             user=user, tournament_id=body.tournament_id)
     out = {"executed": executed, "applied": bool(body.confirm or not mutating)}
     if mutating and not body.confirm:
         from .. import confirm_plans
@@ -202,7 +202,7 @@ def _summarize_result(row: dict) -> str:
     return f"{tool}: ok"
 
 
-def _run_handlers(conn, resolved: list[dict], *, confirm: bool,
+def _run_handlers(conn, resolved: list[dict], *, confirm: bool, user: dict,
                   tournament_id: int | None = None) -> list[dict]:
     from fastapi import Response as _Resp
 
@@ -223,7 +223,8 @@ def _run_handlers(conn, resolved: list[dict], *, confirm: bool,
                 out.append({**c, "status": 200, "result": payload})
             elif method == "GET" and path.rstrip("/").endswith("/players"):
                 tid = int(path.split("/")[3])
-                payload = list_roster(tid, _Resp(), q=None, limit=None, offset=0, conn=conn)
+                payload = list_roster(tid, _Resp(), q=None, limit=None, offset=0,
+                                      user=user, conn=conn)
                 out.append({**c, "status": 200, "result": payload})
             elif method == "POST" and path.rstrip("/").endswith("/players"):
                 tid = int(path.split("/")[3])

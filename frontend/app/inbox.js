@@ -1624,15 +1624,21 @@ export function createInboxPanel(ctx) {
   // Retention sweep (PII hardening H3 / COPPA §312.10): redact body/subject/sender
   // of FILED emails past the threshold via POST /api/emails/purge. The provenance
   // row survives (classification, player link, status) so the audit trail holds;
-  // 'new' (unprocessed) mail is never touched. UI for the existing endpoint.
+  // 'new' (unprocessed) mail is never touched. The endpoint is a dry run unless
+  // dry_run=false and a scope are sent, so preview first and say what matched.
   {
     const purge = (days) => async () => {
-      if (!(await confirmDialog(
-        `Redact the text (body / subject / sender) of all FILED emails older than ${days} days, across all tournaments?\n` +
-        "The rows stay (classification, matched player, status) — only the free-text PII is erased. This cannot be undone.",
-        "Purge", "danger"))) return;
       try {
-        const res = await api(`/emails/purge?older_than_days=${days}`, { method: "POST" });
+        const preview = await api(
+          `/emails/purge?older_than_days=${days}&all_tournaments=true`, { method: "POST" });
+        if (!preview.purged) { toast(`Nothing filed is older than ${days} days`, true); return; }
+        if (!(await confirmDialog(
+          `Redact the text (body / subject / sender) of ${preview.purged} FILED email(s) older than ${days} days, across all tournaments?\n` +
+          "The rows stay (classification, matched player, status) — only the free-text PII is erased. This cannot be undone.",
+          "Purge", "danger"))) return;
+        const res = await api(
+          `/emails/purge?older_than_days=${days}&dry_run=false&all_tournaments=true`,
+          { method: "POST" });
         toast(`Retention sweep: ${res.purged} filed email(s) redacted`, true);
         await loadInbox();
       } catch (e) { toast(e.message, false); }

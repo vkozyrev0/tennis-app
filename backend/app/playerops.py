@@ -68,9 +68,25 @@ def upsert_hotel(cur, name):
     return r["id"], r["name"]
 
 
-def mark_email_filed(cur, email_id, classification) -> None:
-    if email_id:
-        cur.execute(
-            "UPDATE email_message SET status = 'filed', classification = %s WHERE id = %s",
-            (classification, email_id),
-        )
+def mark_email_filed(cur, email_id, classification, tournament_id=None) -> None:
+    """Flip a source email to filed, optionally asserting its tournament.
+
+    AUTHZ-21: filing for tournament 3 could stamp a tournament-2 email, so the
+    stamped email was provenance for a row in a different event. Callers that
+    know the target pass it; the check is skipped only when they genuinely do not.
+    """
+    if not email_id:
+        return
+    if tournament_id is not None:
+        cur.execute("SELECT tournament_id FROM email_message WHERE id = %s", (email_id,))
+        row = cur.fetchone()
+        if row is not None and row["tournament_id"] != tournament_id:
+            raise HTTPException(
+                status_code=409,
+                detail="the source email belongs to a different tournament — "
+                       "reassign it before filing",
+            )
+    cur.execute(
+        "UPDATE email_message SET status = 'filed', classification = %s WHERE id = %s",
+        (classification, email_id),
+    )

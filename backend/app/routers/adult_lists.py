@@ -72,7 +72,7 @@ def create_sched(tournament_id: int, body: SchedAvoidCreate, conn=Depends(db_dep
             (tournament_id, pid, body.avoid_day, body.avoid_time_range, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
-        mark_email_filed(cur, body.source_email_id, "scheduling_avoidance")
+        mark_email_filed(cur, body.source_email_id, "scheduling_avoidance", tournament_id)
         cur.execute(_SA + " WHERE a.id = %s", (new_id,))
         return cur.fetchone()
 
@@ -128,7 +128,7 @@ def create_divflex(tournament_id: int, body: DivFlexCreate, conn=Depends(db_dep)
             (tournament_id, pid, body.home_division, body.willing_divisions, body.source_email_id),
         )
         new_id = cur.fetchone()["id"]
-        mark_email_filed(cur, body.source_email_id, "division_flex")
+        mark_email_filed(cur, body.source_email_id, "division_flex", tournament_id)
         cur.execute(_DF + " WHERE d.id = %s", (new_id,))
         return cur.fetchone()
 

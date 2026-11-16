@@ -345,7 +345,7 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
                     cur.execute(target["sql"], (tid, pid, em["id"], *extras))
                     if cur.rowcount > 0:
                         filed_count += 1
-                        mark_email_filed(cur, em["id"], em["classification"])
+                        mark_email_filed(cur, em["id"], em["classification"], tid)
                     else:
                         skipped.append({"id": em["id"], "reason": f"{target['label']} already exists"})
             except psycopg.Error as e:

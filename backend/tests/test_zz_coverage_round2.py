@@ -254,7 +254,8 @@ def test_td_chat_remove_soft_and_handlers(monkeypatch):
     with gc() as conn:
         out = td_chat_r._run_handlers(conn, [{
             "tool": "x", "method": "PATCH", "path": "/api/nope", "mutating": False,
-        }], confirm=True)
+        }], confirm=True, user={"id": 1, "username": "admin", "role": "admin",
+                                "can_export_pii": True})
         assert out[0]["status"] == 400
         # summarize
         s = td_chat_r._summarize_result({"tool": "tournament_status", "status": 200,

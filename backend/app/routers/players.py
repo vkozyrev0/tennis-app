@@ -8,7 +8,7 @@ from ..coppa import refuse_under13_birthdate
 from ..crypto import decrypt as _dec_pii
 from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
-from ..export_gate import PLAYER_PII_FIELDS, pii_blind, redact_fields
+from ..export_gate import PLAYER_PII_FIELDS, ROSTER_PII_FIELDS, pii_blind, redact_fields
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 from ..query_helpers import like_escape, paged_select
 from ..security import require_admin
@@ -227,8 +227,19 @@ def player_overview(
             detail={"surface": "player_360"},
         )
 
-    return {"player": player, "tournament_id": tournament_id,
-            "entries": entries, "requests": reqs}
+    # AUTHZ-16: Player 360 unified the roster + hotels tabs, so it has to honour
+    # the same blind those lists now do.
+    blind = pii_blind(user)
+    return {
+        "player": player,
+        "tournament_id": tournament_id,
+        "entries": [redact_fields(e, ROSTER_PII_FIELDS, blind=blind) for e in entries],
+        "requests": {
+            **reqs,
+            "hotels": [redact_fields(r, ROSTER_PII_FIELDS, blind=blind)
+                       for r in reqs.get("hotels", [])],
+        },
+    }
 
 
 @router.get("/{player_id}/history", response_model=list[PlayerHistoryOut])

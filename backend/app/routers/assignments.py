@@ -467,6 +467,18 @@ def update_assignment(assignment_id: int, body: AssignmentCreate,
 @router.delete("/api/assignments/{assignment_id}", status_code=204)
 def delete_assignment(assignment_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
+        # AUTHZ-18: payroll_record.assignment_id is ON DELETE SET NULL, so a bare
+        # delete left a finalized (possibly paid) record orphaned and freed the
+        # UNIQUE(tournament_id, official_id) slot for a second row. Unfinalize first.
+        cur.execute(
+            "SELECT 1 FROM payroll_record WHERE assignment_id = %s", (assignment_id,)
+        )
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="this assignment has a finalized payroll record — "
+                       "unfinalize the payroll record first",
+            )
         _audit(cur, assignment_id, "deleted", None, user["username"])
         cur.execute("DELETE FROM assignment WHERE id = %s", (assignment_id,))
         if cur.rowcount == 0:

@@ -188,13 +188,22 @@ def payroll_export_csv(tournament_id: int, user=Depends(require_admin), conn=Dep
 
 
 @router.post("/api/assignments/{assignment_id}/finalize", status_code=201)
-def finalize_assignment(assignment_id: int, user=Depends(require_admin),
-                        conn=Depends(db_dep)):
+def finalize_assignment(assignment_id: int, override: bool = False,
+                        user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(_ASG_SELECT + " WHERE a.id = %s", (assignment_id,))
         a = cur.fetchone()
         if a is None:
             raise HTTPException(status_code=404, detail="assignment not found")
+        # AUTHZ-19: a trashed tournament's pay is not payable — same probe the
+        # finalize-all sweep runs. Without it a single finalize still froze money
+        # on an event the TD had already deleted.
+        cur.execute(
+            "SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (a["tournament_id"],),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute("SELECT 1 FROM payroll_record WHERE assignment_id = %s",
                     (assignment_id,))
         if cur.fetchone() is not None:
@@ -202,10 +211,19 @@ def finalize_assignment(assignment_id: int, user=Depends(require_admin),
                                 detail="already finalized — unfinalize first to recompute")
         # AUTHZ-07: a declined assignment is not payable — finalizing it paid a
         # job nobody worked (and the official could then re-decline it).
-        if (a.get("response_status") or "").lower() == "declined":
+        response_status = (a.get("response_status") or "").lower()
+        if response_status == "declined":
             raise HTTPException(
                 status_code=409,
                 detail="assignment was declined — reassign it before finalizing payroll",
+            )
+        # AUTHZ-20: pending means the official never confirmed the job. Paying it
+        # by mistake is unrecoverable, so the TD has to accept the risk explicitly.
+        if response_status != "accepted" and not override:
+            raise HTTPException(
+                status_code=409,
+                detail="assignment is not accepted — reassign or confirm the override "
+                       "(override=true) before finalizing payroll",
             )
         return _finalize_one(cur, a, user["username"])
 
