@@ -8,6 +8,7 @@ from ..coppa import refuse_under13_birthdate
 from ..crypto import decrypt as _dec_pii
 from ..crypto import encrypt as _enc_pii
 from ..db import db_dep
+from ..export_gate import PLAYER_PII_FIELDS, pii_blind, redact_fields
 from ..models import PlayerCreate, PlayerHistoryOut, PlayerOut
 from ..query_helpers import like_escape, paged_select
 from ..security import require_admin
@@ -102,7 +103,11 @@ def list_players(response: Response, q: str | None = None,
                        resource_type="player_list",
                        detail={"surface": "player_list", "limit": limit,
                                "offset": offset, "searched": bool(q)})
-        return [_decrypt_contact(r) for r in rows]
+        blind = pii_blind(user)
+        return [
+            redact_fields(_decrypt_contact(r), PLAYER_PII_FIELDS, blind=blind)
+            for r in rows
+        ]
 
 
 # NOTE: declared BEFORE GET /{player_id} so "/search" isn't swallowed as an id.
@@ -140,7 +145,7 @@ def get_player(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)
         log_access(cur, username=user["username"], action="view_player",
                    resource_type="player", resource_id=player_id,
                    detail={"surface": "player_get"})
-    return _decrypt_contact(row)
+    return redact_fields(_decrypt_contact(row), PLAYER_PII_FIELDS, blind=pii_blind(user))
 
 
 @router.get("/{player_id}/overview")
@@ -242,8 +247,9 @@ def player_history(player_id: int, user=Depends(require_admin), conn=Depends(db_
             log_access(cur, username=user["username"], action="view_player_history",
                        resource_type="player", resource_id=player_id,
                        detail={"surface": "player_history"})
+    blind = pii_blind(user)
     for r in rows:                          # decrypt the at-rest birthdate (PII H2)
-        r["birthdate"] = _dec_pii(r.get("birthdate"))
+        r["birthdate"] = None if blind else _dec_pii(r.get("birthdate"))
     return rows
 
 
@@ -361,7 +367,7 @@ def update_player(
 
 
 @router.delete("/{player_id}", status_code=204)
-def delete_player(player_id: int, conn=Depends(db_dep)):
+def delete_player(player_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     """Delete a player and ERASE their PII from the append-only history.
 
     `player_history` intentionally has no FK (audit rows outlive the record) and
@@ -388,6 +394,13 @@ def delete_player(player_id: int, conn=Depends(db_dep)):
         cur.execute("DELETE FROM player WHERE id = %s", (player_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="player not found")
+        # AUTHZ-09: erasing a minor's record is the most consequential PII action
+        # in the app and used to leave no attributable trace (reads did).
+        log_access(
+            cur, username=user["username"], action="delete_player",
+            resource_type="player", resource_id=player_id,
+            detail={"emails_unlinked": len(email_ids), "inbox_rows": len(inbox_ids)},
+        )
         # Runs AFTER the delete so the trigger's freshly-inserted 'delete' row is
         # redacted too.
         cur.execute(

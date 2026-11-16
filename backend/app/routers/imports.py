@@ -9,8 +9,11 @@ from psycopg.types.json import Json
 from pydantic import BaseModel
 
 from .. import importer
+from ..access_audit import log_access
 from ..db import db_dep
 from ..email_llm import pass_budget
+from ..export_gate import pii_blind
+from ..security import require_admin
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
@@ -76,7 +79,7 @@ async def upload(tournament_id: int, import_type: str,
     if cfg is None:
         raise HTTPException(status_code=404, detail="unknown import type")
     with conn.cursor() as cur:
-        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT id FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         # Parse failures (corrupt xlsx, binary garbage, etc.) used to surface
@@ -113,7 +116,7 @@ async def upload(tournament_id: int, import_type: str,
 
 
 @router.get("/batches/{batch_id}")
-def get_batch(batch_id: int, conn=Depends(db_dep)):
+def get_batch(batch_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute("SELECT id, tournament_id, import_type, filename, status, created_at "
                     "FROM import_batch WHERE id = %s", (batch_id,))
@@ -125,6 +128,13 @@ def get_batch(batch_id: int, conn=Depends(db_dep)):
         batch["rows"] = cur.fetchall()
         for r in batch["rows"]:
             r["data"] = importer.decrypt_staged(r["data"])
+            # AUTHZ-06: a staged roster row is a full player record (birthdate,
+            # parent emails/phones). A PII-blinded admin sees the operational
+            # columns only.
+            if pii_blind(user) and isinstance(r["data"], dict):
+                r["data"] = {k: (None if k in ("birthdate", "emails", "phones",
+                                               "birthdate_precision") else v)
+                             for k, v in r["data"].items()}
     return batch
 
 
@@ -139,6 +149,8 @@ def edit_row(batch_id: int, row_id: int, body: ImportRowUpdate, conn=Depends(db_
         batch = cur.fetchone()
         if batch is None:
             raise HTTPException(status_code=404, detail="batch not found")
+        # A partial merge keeps the leftover rows editable by design (the preview
+        # grid merges only the "ready" ids); only a sealed batch is closed.
         if batch["status"] == "merged":
             raise HTTPException(status_code=409, detail="this batch was already merged — re-upload to make changes")
         cfg = importer.TYPES.get(batch["import_type"])
@@ -183,6 +195,9 @@ def _batch_for_edit(cur, batch_id: int) -> dict:
     batch = cur.fetchone()
     if batch is None:
         raise HTTPException(status_code=404, detail="batch not found")
+    # A batch that is fully merged is closed for edits. A *partially* merged one
+    # stays editable (the merge preview lets a TD merge only some rows), but it
+    # can no longer be discarded — see discard_batch.
     if batch["status"] == "merged":
         raise HTTPException(status_code=409, detail="this batch was already merged — re-upload to make changes")
     cfg = importer.TYPES.get(batch["import_type"])
@@ -249,6 +264,17 @@ def preview_conflicts(batch_id: int, body: ImportMergeOptions | None = None, con
         batch = cur.fetchone()
         if batch is None:
             raise HTTPException(status_code=404, detail="batch not found")
+        # AUTHZ-13: the batch names a tournament and merge trusted it — staged
+        # rows merged into a trashed event. Require a live tournament.
+        cur.execute(
+            "SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (batch["tournament_id"],),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=409,
+                detail="tournament is trashed — restore it before merging this batch",
+            )
         merge = importer.TYPES[batch["import_type"]]["merge"]
         tid = batch["tournament_id"]
         only = body.row_ids if body else None
@@ -284,6 +310,17 @@ def merge_batch(batch_id: int, body: ImportMergeOptions | None = None, conn=Depe
         batch = cur.fetchone()
         if batch is None:
             raise HTTPException(status_code=404, detail="batch not found")
+        # AUTHZ-13: the batch names a tournament and merge trusted it — staged
+        # rows merged into a trashed event. Require a live tournament.
+        cur.execute(
+            "SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (batch["tournament_id"],),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(
+                status_code=409,
+                detail="tournament is trashed — restore it before merging this batch",
+            )
         merge = importer.TYPES[batch["import_type"]]["merge"]
         tid = batch["tournament_id"]
         only = body.row_ids if body else None
@@ -343,8 +380,26 @@ def merge_batch(batch_id: int, body: ImportMergeOptions | None = None, conn=Depe
 
 
 @router.delete("/batches/{batch_id}", status_code=204)
-def discard_batch(batch_id: int, conn=Depends(db_dep)):
+def discard_batch(batch_id: int, me=Depends(require_admin), conn=Depends(db_dep)):
+    """Discard a staging batch. A *merged* batch is the only record that the
+    import ever ran, so it cannot be deleted (AUTHZ-11); discarding is audited."""
     with conn.cursor() as cur:
+        cur.execute("SELECT status FROM import_batch WHERE id = %s", (batch_id,))
+        batch = cur.fetchone()
+        if batch is None:
+            raise HTTPException(status_code=404, detail="batch not found")
+        merged_rows = cur.execute("SELECT count(*) AS n FROM import_row WHERE batch_id = %s AND merged", (batch_id,)).fetchone()["n"]
+        if batch["status"] == "merged" or merged_rows:
+
+            raise HTTPException(
+                status_code=409,
+                detail="this batch was merged — its rows are live; the batch is the "
+                       "import record and can't be deleted",
+            )
+        log_access(
+            cur, username=me["username"], action="discard", resource_type="import_batch",
+            resource_id=batch_id, detail={"status": batch["status"]},
+        )
         cur.execute("DELETE FROM import_batch WHERE id = %s", (batch_id,))
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="batch not found")

@@ -117,7 +117,11 @@ _VERSIONED_ASSET = re.compile(r"(?:^|&)v=[\w.-]+")
 @app.middleware("http")
 async def _frontend_cache(request: Request, call_next):
     response = await call_next(request)
-    if not request.url.path.startswith("/api"):
+    if request.url.path.startswith("/api"):
+        # AUTH-07: authenticated JSON can carry minors' PII (names, birthdates,
+        # decrypted email bodies). Never let a browser or intermediary cache it.
+        response.headers["Cache-Control"] = "no-store"
+    else:
         if _VERSIONED_ASSET.search(request.url.query):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         else:
@@ -135,7 +139,13 @@ async def _frontend_cache(request: Request, call_next):
 async def _security_headers(request: Request, call_next):
     response = await call_next(request)
     if security_headers_enabled():
-        for name, value in build_security_headers(is_prod=settings.is_prod()).items():
+        # AUTH-04: HSTS when the request itself arrived over TLS, not only when
+        # ENV=prod — a TLS-terminating proxy in front of a dev deploy still
+        # needs the browser pinned to HTTPS.
+        is_tls = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+        for name, value in build_security_headers(
+            is_prod=settings.is_prod() or is_tls
+        ).items():
             # Don't clobber a more specific value set by a route or outer proxy.
             if name not in response.headers:
                 response.headers[name] = value

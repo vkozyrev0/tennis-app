@@ -2,6 +2,7 @@
 profile and availability. Officials never touch the admin routers."""
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from ..access_audit import log_access
 from ..clock import today_venue
 from ..db import db_dep
 from ..ical import build_schedule_ics
@@ -178,6 +179,33 @@ def respond_to_assignment(assignment_id: int, body: AssignmentResponse,
             raise HTTPException(status_code=404, detail="assignment not found")
         if row["official_id"] != oid:
             raise HTTPException(status_code=403, detail="not your assignment")
+        # AUTHZ-06: a settled or already-played assignment is not the official's
+        # to reopen. Without this, a paid job could be declined (freeing a room
+        # slot and dropping out of coverage) after the TD settled it.
+        cur.execute(
+            """
+            SELECT t.play_start_date, t.play_end_date,
+                   EXISTS (SELECT 1 FROM payroll_record p
+                           WHERE p.assignment_id = a.id) AS settled
+            FROM assignment a JOIN tournament t ON t.id = a.tournament_id
+            WHERE a.id = %s
+            """,
+            (assignment_id,),
+        )
+        state = cur.fetchone() or {}
+        if state.get("settled"):
+            raise HTTPException(
+                status_code=409,
+                detail="this assignment is already settled in payroll — ask the TD to reverse it",
+            )
+        # AUTHZ-17: responses for an event already played are bookkeeping noise —
+        # the room list, coverage and payroll have all been settled against them.
+        if state.get("play_end_date") and state["play_end_date"] < today_venue():
+            raise HTTPException(
+                status_code=409,
+                detail="this event has already been played — contact the TD to correct "
+                       "the record",
+            )
         cur.execute(
             "UPDATE assignment SET response_status = %s, "
             "responded_at = CASE WHEN %s = 'pending' THEN NULL ELSE now() END, "
@@ -227,6 +255,13 @@ def set_my_availability(tournament_id: int, body: MyAvailabilitySet,
         t = cur.fetchone()
         if t is None:
             raise HTTPException(status_code=404, detail="tournament not found")
+        # AUTHZ-17: an official can't (re)declare availability for an event that
+        # has already been played.
+        if t["play_end_date"] < today_venue():
+            raise HTTPException(
+                status_code=409,
+                detail="this event has already been played — availability is closed",
+            )
         bad = [d.isoformat() for d in body.dates
                if d < t["play_start_date"] or d > t["play_end_date"]]
         if bad:
@@ -244,4 +279,13 @@ def set_my_availability(tournament_id: int, body: MyAvailabilitySet,
                 "VALUES (%s, %s, %s, %s)",
                 (oid, tournament_id, d, body.hotel_needed),
             )
+        # AUTHZ-12: an official may declare availability for an upcoming event,
+        # but the write is now attributable (who set which dates, and whether the
+        # official was already linked to the event) — the TD's ranking reads it.
+        log_access(
+            cur, username=user["username"], action="set_availability",
+            resource_type="availability", tournament_id=tournament_id,
+            detail={"official_id": oid, "dates": len(body.dates),
+                    "hotel_needed": body.hotel_needed},
+        )
     return {"dates": [d.isoformat() for d in body.dates], "hotel_needed": body.hotel_needed}

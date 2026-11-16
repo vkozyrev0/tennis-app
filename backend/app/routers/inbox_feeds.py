@@ -11,6 +11,7 @@ from ..email_llm import probe_llm
 from ..email_stamp import list_window_ids
 from ..inbox_feeds import fetch_inbox_mails
 from ..outlook_feed import _redact
+from ..security import require_admin
 
 router = APIRouter(prefix="/api/inbox-feeds", tags=["inbox-feeds"])
 
@@ -126,6 +127,7 @@ def start_fetch_job(
     until: Optional[date] = None,
     tournament_id: Optional[int] = None,
     get_all: bool = False,
+    user=Depends(require_admin),
 ):
     """Start Get mails in the background; returns the job token to poll."""
     import threading
@@ -142,6 +144,7 @@ def start_fetch_job(
     token = job_progress.new_job(
         "fetch", tournament_id=tournament_id,
         window=(since.isoformat() if since else None, until.isoformat() if until else None),
+        created_by=user["username"],
     )
     threading.Thread(
         target=_run_fetch_job, args=(token,),
@@ -153,20 +156,31 @@ def start_fetch_job(
 
 
 @router.get("/jobs/{token}")
-def job_status(token: str):
+def job_status(token: str, user=Depends(require_admin)):
     """One job's state and counts. 404 once the store has dropped it."""
     from .. import job_progress
 
     snap = job_progress.get(token)
     if snap is None:
         raise HTTPException(status_code=404, detail="job not found")
+    # AUTHZ-14: a job token is not a capability shared by every admin. Only the
+    # admin who started the fetch may read (and see the error text of) its job.
+    owner = snap.get("created_by")
+    if owner and owner != user["username"]:
+        raise HTTPException(status_code=404, detail="job not found")
     return snap
 
 
 @router.post("/jobs/{token}/cancel")
-def job_cancel(token: str):
+def job_cancel(token: str, user=Depends(require_admin)):
     from .. import job_progress
 
+    snap = job_progress.get(token)
+    if snap is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    owner = snap.get("created_by")
+    if owner and owner != user["username"]:
+        raise HTTPException(status_code=404, detail="job not found")
     snap = job_progress.cancel(token)
     if snap is None:
         raise HTTPException(status_code=404, detail="job not found")

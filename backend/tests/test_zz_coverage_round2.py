@@ -220,22 +220,32 @@ def test_td_chat_remove_soft_and_handlers(monkeypatch):
     body = r.json()
     assert body["proposed"] or body["executed"]
 
-    # execute add + delete via handlers
+    # execute add + delete via handlers (plan first, then confirm with its token)
+    add_calls = [{
+        "tool": "add_player",
+        "args": {
+            "tournament_id": t["id"], "usta_number": "6" + uuid.uuid4().hex[:9],
+            "first_name": "Eve", "last_name": "Hall", "gender": "female",
+            "age_division": "G14",
+        },
+    }]
+    plan = client.post("/api/td-chat/execute", json={
+        "calls": add_calls, "confirm": False, "tournament_id": t["id"],
+    })
+    assert plan.status_code == 200, plan.text
     add = client.post("/api/td-chat/execute", json={
-        "calls": [{
-            "tool": "add_player",
-            "args": {
-                "tournament_id": t["id"], "usta_number": "6" + uuid.uuid4().hex[:9],
-                "first_name": "Eve", "last_name": "Hall", "gender": "female",
-                "age_division": "G14",
-            },
-        }],
-        "confirm": True, "tournament_id": t["id"],
+        "calls": add_calls, "confirm": True, "tournament_id": t["id"],
+        "confirm_token": plan.json().get("confirm_token"),
     })
     assert add.status_code == 200, add.text
+    rm_calls = [{"tool": "remove_player", "args": {"entry_id": entry["id"]}}]
+    rm_plan = client.post("/api/td-chat/execute", json={
+        "calls": rm_calls, "confirm": False, "tournament_id": t["id"],
+    })
+    assert rm_plan.status_code == 200, rm_plan.text
     rm = client.post("/api/td-chat/execute", json={
-        "calls": [{"tool": "remove_player", "args": {"entry_id": entry["id"]}}],
-        "confirm": True, "tournament_id": t["id"],
+        "calls": rm_calls, "confirm": True, "tournament_id": t["id"],
+        "confirm_token": rm_plan.json().get("confirm_token"),
     })
     assert rm.status_code == 200, rm.text
 

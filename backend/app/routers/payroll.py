@@ -86,7 +86,7 @@ def payroll_summary(tournament_id: int, conn=Depends(db_dep)):
     """One row per assignment: live computed numbers + the finalized record (if
     any) + a drift flag when the two disagree. This is the summary-tab feed."""
     with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s ORDER BY o.last_name",
@@ -200,6 +200,13 @@ def finalize_assignment(assignment_id: int, user=Depends(require_admin),
         if cur.fetchone() is not None:
             raise HTTPException(status_code=409,
                                 detail="already finalized — unfinalize first to recompute")
+        # AUTHZ-07: a declined assignment is not payable — finalizing it paid a
+        # job nobody worked (and the official could then re-decline it).
+        if (a.get("response_status") or "").lower() == "declined":
+            raise HTTPException(
+                status_code=409,
+                detail="assignment was declined — reassign it before finalizing payroll",
+            )
         return _finalize_one(cur, a, user["username"])
 
 
@@ -208,10 +215,11 @@ def finalize_all(tournament_id: int, user=Depends(require_admin), conn=Depends(d
     """Finalize every not-yet-finalized assignment. Already-finalized rows are
     skipped (idempotent — safe to re-run as stragglers get their days fixed)."""
     with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s "
+                    "AND a.response_status <> 'declined' "
                     "AND NOT EXISTS (SELECT 1 FROM payroll_record r "
                     "                WHERE r.assignment_id = a.id) "
                     "ORDER BY o.last_name", (tournament_id,))
@@ -233,11 +241,21 @@ def unfinalize(record_id: int, user=Depends(require_admin), conn=Depends(db_dep)
     """Re-open a finalized record so it can be recomputed. Refused once paid —
     walk the payment back (PUT paid=false) first, deliberately two steps."""
     with conn.cursor() as cur:
-        cur.execute("SELECT assignment_id, paid, total FROM payroll_record WHERE id = %s",
-                    (record_id,))
+        cur.execute(
+            "SELECT assignment_id, batch_id, paid, total FROM payroll_record WHERE id = %s",
+            (record_id,),
+        )
         rec = cur.fetchone()
         if rec is None:
             raise HTTPException(status_code=404, detail="payroll record not found")
+        # AUTHZ-07: a member of a settlement batch is part of that batch. Deleting
+        # it (after walking the payment back one record at a time) silently shrank
+        # a settled batch; the batch has to be dissolved as a unit.
+        if rec["batch_id"] is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="this record is part of a payment batch — dissolve the batch first",
+            )
         if rec["paid"]:
             raise HTTPException(status_code=409,
                                 detail="record is marked paid — unmark it before unfinalizing")
@@ -253,10 +271,35 @@ def unfinalize(record_id: int, user=Depends(require_admin), conn=Depends(db_dep)
 def mark_paid(record_id: int, body: PayrollMarkPaid, user=Depends(require_admin),
               conn=Depends(db_dep)):
     with conn.cursor() as cur:
-        cur.execute("SELECT assignment_id FROM payroll_record WHERE id = %s", (record_id,))
+        cur.execute(
+            "SELECT assignment_id, batch_id FROM payroll_record WHERE id = %s", (record_id,)
+        )
         rec = cur.fetchone()
         if rec is None:
             raise HTTPException(status_code=404, detail="payroll record not found")
+        # AUTHZ-07: un-paying one member of a settlement batch leaves a "paid"
+        # batch holding an unpaid record. Walk the batch back as a unit instead.
+        if rec["batch_id"] is not None and not body.paid:
+            raise HTTPException(
+                status_code=409,
+                detail="this record is part of a payment batch — dissolve the batch "
+                       "to walk the settlement back",
+            )
+        # AUTHZ-08: a batched record's date/method is the batch receipt. Re-stamping
+        # it (paid=true with a different paid_at/method) silently rewrote history.
+        if rec["batch_id"] is not None and body.paid:
+            cur.execute(
+                "SELECT paid_at, paid_method FROM payroll_record WHERE id = %s", (record_id,)
+            )
+            stamped = cur.fetchone() or {}
+            if (body.paid_at and stamped.get("paid_at") != body.paid_at) or (
+                body.paid_method and stamped.get("paid_method") != body.paid_method
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="this record is settled in a payment batch — its date and "
+                           "method come from the batch; dissolve the batch to change them",
+                )
         cur.execute(
             "UPDATE payroll_record SET "
             "  paid = %(paid)s, "
@@ -300,7 +343,7 @@ def list_batches(tournament_id: int, conn=Depends(db_dep)):
     summed total (LEFT JOIN so a batch whose records were unfinalized still
     lists, at count 0)."""
     with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
@@ -353,7 +396,7 @@ def create_batch(tournament_id: int, body: PaymentBatchCreate,
     a finalized record in THIS tournament that is not already paid or batched —
     otherwise the whole call is refused (409), so a batch is all-or-nothing."""
     with conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         # de-dupe ids; fetch the candidate records and validate as a set

@@ -31,6 +31,16 @@ class AdminUserPatch(BaseModel):
 
 class PasswordReset(BaseModel):
     password: str = Field(min_length=1, max_length=256)
+    # AUTH-05: proof of the caller's own password, required when an admin resets
+    # a *peer* (not itself). Optional in the schema so a self-reset stays simple.
+    current_password: str | None = Field(default=None, max_length=256)
+
+
+class OfficialAccountPut(AccountCreate):
+    """Create/reset an official's login. A reset of an existing account needs the
+    caller's own password (AUTH-09); creation of a new one does not."""
+
+    current_password: str | None = Field(default=None, max_length=256)
 
 
 class PasswordChange(BaseModel):

@@ -101,6 +101,29 @@ def require_can_export_pii(user: dict, *, redacted: bool = False) -> None:
         )
 
 
+# AUTHZ-01: the export capability was advisory — a revoked admin still read
+# every PII column straight off the list endpoints. Revocation now also blinds
+# the sensitive fields on read, so the capability actually reduces access while
+# leaving the operational workflow (names, divisions, statuses) intact.
+PLAYER_PII_FIELDS = ("birthdate", "birthdate_precision", "emails", "phones")
+EMAIL_PII_FIELDS = ("body", "from_address", "to_address")
+
+
+def pii_blind(user: dict | None) -> bool:
+    """True for an admin whose PII-export capability has been revoked."""
+    return bool(user) and user.get("role") == "admin" and user.get("can_export_pii") is False
+
+
+def redact_fields(row: dict, fields: Iterable[str], *, blind: bool) -> dict:
+    if not blind:
+        return row
+    out = dict(row)
+    for f in fields:
+        if f in out:
+            out[f] = None
+    return out
+
+
 def csv_safe(value: Any) -> Any:
     """Neutralize a spreadsheet formula in a server-generated CSV cell.
 

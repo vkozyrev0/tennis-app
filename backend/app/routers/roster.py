@@ -103,6 +103,14 @@ _SELECT = f"SELECT {_COLS} {_FROM}"
 @router.get("/api/tournaments/{tournament_id}/players", response_model=list[RosterEntryOut])
 def list_roster(tournament_id: int, response: Response, q: str | None = None,
                 limit: int | None = None, offset: int = 0, conn=Depends(db_dep)):
+    # AUTHZ-04: a soft-deleted tournament must not keep serving its roster.
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL",
+            (tournament_id,),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="tournament not found")
     clauses, params = ["e.tournament_id = %s"], [tournament_id]
     if q:
         sql, n = person_like_sql("p")
@@ -204,6 +212,13 @@ def add_roster_entry(tournament_id: int, body: RosterEntryCreate, conn=Depends(d
     body.t_shirt_size = _norm_shirt(body.t_shirt_size)  # canonical size (DB CHECK)
     try:
         with conn.cursor() as cur:
+            # AUTHZ-10: a trashed tournament must not accept new roster rows.
+            cur.execute(
+                "SELECT 1 FROM tournament WHERE id = %s AND deleted_at IS NULL",
+                (tournament_id,),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="tournament not found")
             # Inline-create the player if the form sent a USTA # but no player_id —
             # lets a TD add a walk-in directly from the Roster form.
             pid = body.player_id
@@ -236,6 +251,30 @@ def update_roster_entry(entry_id: int, body: RosterEntryCreate, conn=Depends(db_
     body.t_shirt_size = _norm_shirt(body.t_shirt_size)  # canonical size (DB CHECK)
     try:
         with conn.cursor() as cur:
+            # AUTHZ-08: this is a field edit, not an identity edit. Rewriting
+            # player_id re-pointed an entry at another tournament's player, and
+            # flipping a withdrawn entry back to selected silently reversed a
+            # recorded withdrawal that promote_alternate deliberately refuses.
+            cur.execute(
+                "SELECT player_id, selection_status FROM tournament_entry WHERE id = %s",
+                (entry_id,),
+            )
+            current = cur.fetchone()
+            if current is None:
+                raise HTTPException(status_code=404, detail="roster entry not found")
+            if body.player_id != current["player_id"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="player_id cannot be changed on an existing entry — delete the "
+                           "entry and add the correct player",
+                )
+            if (current["selection_status"] == "withdrawn"
+                    and body.selection_status != "withdrawn"):
+                raise HTTPException(
+                    status_code=409,
+                    detail="a withdrawn entry can't be reinstated by editing it — undo the "
+                           "withdrawal first, then use the alternate-promotion flow",
+                )
             cur.execute(
                 """
                 UPDATE tournament_entry SET

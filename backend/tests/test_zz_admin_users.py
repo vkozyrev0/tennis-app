@@ -62,8 +62,10 @@ def test_password_reset_invalidates_sessions():
     u = _ok(client.post("/api/admin/users", json={"username": uname, "password": "old"}))
     other = TestClient(app)
     _ok(other.post("/api/auth/login", json={"username": uname, "password": "old"}), 200)
-    # admin resets the password → the old session is invalidated, old password fails
-    _ok(client.post(f"/api/admin/users/{u['id']}/password", json={"password": "new"}), 204)
+    # admin resets the password → the old session is invalidated, old password fails.
+    # AUTH-05: resetting a peer needs the caller's own password.
+    _ok(client.post(f"/api/admin/users/{u['id']}/password",
+                    json={"password": "new", "current_password": "admin"}), 204)
     assert other.get("/api/tournaments").status_code == 401
     assert other.post("/api/auth/login", json={"username": uname, "password": "old"}).status_code == 401
     assert other.post("/api/auth/login", json={"username": uname, "password": "new"}).status_code == 200

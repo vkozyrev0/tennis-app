@@ -19,6 +19,13 @@ from pathlib import Path
 _TEST_DB_EXPLICIT = os.getenv("TEST_PGDATABASE")
 _TEST_DB = _TEST_DB_EXPLICIT or f"courtops_test_{os.getpid()}"
 os.environ["PGDATABASE"] = _TEST_DB
+# The suite logs in as the seeded admin/admin and creates short-password
+# fixtures. Demo credentials are opt-in server config (see app/security.py), so
+# the test harness opts in explicitly — never via a request header.
+os.environ.setdefault("COURTOPS_ALLOW_DEMO_CREDENTIALS", "1")
+# The suite drives the app over plain http (TestClient); a Secure cookie would
+# never come back. A real deployment keeps the secure-by-default behaviour.
+os.environ.setdefault("COURTOPS_SECURE_COOKIE", "0")
 
 _BACKEND = Path(__file__).resolve().parents[1]
 if str(_BACKEND) not in sys.path:

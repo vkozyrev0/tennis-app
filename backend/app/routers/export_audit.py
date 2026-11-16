@@ -6,10 +6,18 @@ from pydantic import BaseModel, Field
 
 from ..db import db_dep
 from ..export_audit import log_export
-from ..export_gate import is_minors_pii_resource, require_can_export_pii
+from ..export_gate import is_minors_pii_resource, normalize_resource, require_can_export_pii
 from ..security import require_admin
 
 router = APIRouter(prefix="/api/export-audit", tags=["export-audit"])
+
+# Exports that carry no minors' PII (settlement, rates, catalog). Everything
+# else — including an unrecognized label — needs can_export_pii (AUTHZ-03).
+_OPERATIONAL_EXPORTS = frozenset({
+    "payroll", "payment_batches", "payment-batches", "rates", "certifications",
+    "certs", "hotels", "distances", "divisions", "events", "sites", "staff",
+    "schedule", "officials", "room_blocks", "room-blocks",
+})
 
 
 class ExportAuditIn(BaseModel):
@@ -29,7 +37,11 @@ def record_export(body: ExportAuditIn, user=Depends(require_admin), conn=Depends
     """
     detail = body.detail or {}
     redacted = bool(detail.get("redacted"))
-    if is_minors_pii_resource(body.resource):
+    # AUTHZ-03: the gate used to trust the client's resource label, so naming a
+    # players export "payroll" skipped it. Fail closed: anything that is not a
+    # known operational export needs the capability.
+    operational = normalize_resource(body.resource) in _OPERATIONAL_EXPORTS
+    if is_minors_pii_resource(body.resource) or not operational:
         require_can_export_pii(user, redacted=False)
         if not redacted and not detail.get("confirmed"):
             raise HTTPException(

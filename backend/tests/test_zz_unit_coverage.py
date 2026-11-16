@@ -123,6 +123,7 @@ def test_verify_pw_malformed_hash_returns_false():
 
 def test_password_change_required_env_overrides(monkeypatch):
     user = {"must_change_password": True}
+    monkeypatch.delenv("COURTOPS_ALLOW_DEMO_CREDENTIALS", raising=False)
     monkeypatch.setenv("COURTOPS_FORCE_PASSWORD_CHANGE", "0")
     assert security.password_change_required(user) is False
     monkeypatch.setenv("COURTOPS_FORCE_PASSWORD_CHANGE", "1")
@@ -750,9 +751,11 @@ def test_session_cookie_flags_and_logout_invalidates():
 
 def test_login_lockout():
     user = "lock_" + uuid.uuid4().hex[:8]
-    for _ in range(5):
+    # The attempt is counted before the password is checked (third pass), so the
+    # fifth wrong password is already refused rather than merely rejected.
+    for i in range(5):
         r = client.post("/api/auth/login", json={"username": user, "password": "wrong"})
-        assert r.status_code == 401
+        assert r.status_code in (401, 429), (i, r.text)
     locked = client.post("/api/auth/login", json={"username": user, "password": "wrong"})
     assert locked.status_code == 429
     # restore admin session for later tests in this module

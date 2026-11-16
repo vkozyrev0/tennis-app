@@ -26,6 +26,13 @@ surface for officials.
 demo runs **`ENV=dev`** with the **DeepSeek** leftover-email pass enabled: it is
 a demo, not a COPPA-ready deployment, and leftover email text leaves the box.
 
+> **Demo credentials fail closed off-loopback.** `admin/admin` and the seeded
+> `official` password are refused (403) on any host that is not local, so an
+> internet-facing deployment needs real passwords before it can be signed into.
+> `COURTOPS_ALLOW_DEMO_CREDENTIALS=1` restores the old behaviour deliberately.
+> See [docs/security-review-2026-11-15.md](docs/security-review-2026-11-15.md)
+> for the pentest findings, fixes, and residual risk.
+
 ## Stack
 
 **Postgres 16** (Docker) · **FastAPI + psycopg 3** (Pydantic) · **vanilla

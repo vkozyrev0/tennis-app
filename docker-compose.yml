@@ -13,6 +13,13 @@ services:
     environment:
       ENV: dev
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      # Local demo only: the compose stack opts into the seeded admin/admin and
+      # official passwords. Any deployment without this flag refuses them and
+      # enforces the password floor (see docs/security-review-2026-11-15.md).
+      COURTOPS_ALLOW_DEMO_CREDENTIALS: ${COURTOPS_ALLOW_DEMO_CREDENTIALS:-1}
+      # This stack serves plain HTTP on localhost; a real deployment terminates
+      # TLS and keeps the Secure-by-default session cookie.
+      COURTOPS_SECURE_COOKIE: ${COURTOPS_SECURE_COOKIE:-0}
       EMAIL_LLM: ${EMAIL_LLM:-1}
       EMAIL_LLM_BASE_URL: http://llm:8080/v1
       EMAIL_LLM_TOKEN: ${EMAIL_LLM_TOKEN:-dev-local-llm}

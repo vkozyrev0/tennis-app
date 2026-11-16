@@ -49,6 +49,7 @@ from ..email_targets import (
     POPULATE_TARGETS,
     public_targets,
 )
+from ..export_gate import EMAIL_PII_FIELDS, pii_blind, redact_fields
 from ..models import (
     EmailAmend,
     EmailCreate,
@@ -176,7 +177,8 @@ def list_emails(response: Response, tournament_id: int | None = None,
                        resource_type="email",
                        detail={"surface": "inbox", "count": len(rows),
                                "tournament_id": tournament_id})
-    return rows
+    blind = pii_blind(user)
+    return [redact_fields(r, EMAIL_PII_FIELDS, blind=blind) for r in rows]
 
 
 @router.get("/status-counts")
@@ -210,7 +212,8 @@ def status_counts(tournament_id: int | None = None, conn=Depends(db_dep)):
 
 
 @router.get("/aging")
-def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(db_dep)):
+def inbox_aging(tournament_id: int | None = None, limit: int = 10,
+                user=Depends(require_admin), conn=Depends(db_dep)):
     """Oldest UNFILED emails first, with how many days each has been waiting — an
     SLA-style triage list so nothing languishes. Optionally scoped to one
     tournament. Subject/sender only (the body stays encrypted); the inbox opens
@@ -235,7 +238,8 @@ def inbox_aging(tournament_id: int | None = None, limit: int = 10, conn=Depends(
         rows = cur.fetchall()
     items = [{
         "id": r["id"], "tournament_id": r["tournament_id"],
-        "subject": r["subject"], "from_address": r["from_address"],
+        "subject": r["subject"],
+        "from_address": None if pii_blind(user) else r["from_address"],
         "classification": r["classification"],
         "received_at": r["received_at"].isoformat() if r["received_at"] else None,
         "age_days": r["age_days"],
@@ -294,7 +298,8 @@ def create_email(body: EmailCreate, conn=Depends(db_dep)):
 
 
 @router.put("/{email_id}", response_model=EmailOut)
-def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
+def update_email(email_id: int, body: EmailUpdate, user=Depends(require_admin),
+                 conn=Depends(db_dep)):
     if (body.classification in FILE_NEEDS_PLAYER
             and body.status == "filed"
             and not body.detected_player_id):
@@ -326,11 +331,14 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
                     WHEN %(classification)s <> 'pairing_avoidance' THEN NULL
                     WHEN %(detected_player_id)s::int IS NULL THEN NULL
                     ELSE detected_member_ids END
-            WHERE id = %(id)s RETURNING id, subject, body
+            WHERE id = %(id)s AND deleted_at IS NULL RETURNING id, subject, body
             """,
             {**body.model_dump(), "id": email_id},
         )
         row = cur.fetchone()
+        # AUTHZ-11: a cleared inbox row is hidden from the list, but every write
+        # path still rewrote it (and could file it into a tournament list). The
+        # clear is a boundary, so a write to a cleared row is a 404.
         if row is None:
             raise HTTPException(status_code=404, detail="email not found")
         # Classification / player change can flip which extractors apply
@@ -340,11 +348,15 @@ def update_email(email_id: int, body: EmailUpdate, conn=Depends(db_dep)):
             body.classification, body.detected_player_id,
         )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        return _finalize_email_row(cur, cur.fetchone())
+        out = _finalize_email_row(cur, cur.fetchone())
+    # AUTHZ-02: the response carries the decrypted body, so it honours the same
+    # PII blind as the list/detail reads.
+    return redact_fields(out, EMAIL_PII_FIELDS, blind=pii_blind(user))
 
 
 @router.post("/{email_id}/amends", response_model=EmailOut)
-def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
+def set_amendment(email_id: int, body: EmailAmend, user=Depends(require_admin),
+                   conn=Depends(db_dep)):
     """Mark this email as a correction of an earlier one (null clears the link).
     Both must be in the same tournament and an email can't amend itself. The
     earlier email is then reported as `superseded` so the TD revisits its row."""
@@ -371,11 +383,14 @@ def set_amendment(email_id: int, body: EmailAmend, conn=Depends(db_dep)):
             (target, email_id),
         )
         cur.execute(f"SELECT {_COLS} {_FROM} WHERE e.id = %s", (email_id,))
-        return _finalize_email_row(cur, cur.fetchone())
+        out = _finalize_email_row(cur, cur.fetchone())
+    # AUTHZ-04 (third pass): this endpoint also returns the decrypted row, so it
+    # honours the PII blind like the list/detail/PUT paths.
+    return redact_fields(out, EMAIL_PII_FIELDS, blind=pii_blind(user))
 
 
 @router.post("/{email_id}/apply-correction")
-def apply_correction(email_id: int, conn=Depends(db_dep)):
+def apply_correction(email_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     """Apply a correction email to the filed row of the email it amends: re-point
     that row to this email and re-apply the locally-parsed fields, instead of
     creating a duplicate. Requires the email to be linked (`amends_email_id`) and
@@ -391,6 +406,14 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
         if em is None:
             raise HTTPException(status_code=404, detail="email not found")
         em["body"] = _dec_body(em.get("body"))  # PII H2: decrypt for the extractors
+        if pii_blind(user):
+            # The extractors read subject/body; both are null for a blinded admin,
+            # so applying the correction would blank the live filed row.
+            raise HTTPException(
+                status_code=403,
+                detail="PII export is disabled for this account — a blinded mailbox "
+                       "cannot apply corrections",
+            )
         if em["amends_email_id"] is None:
             raise HTTPException(status_code=400,
                                 detail="not a correction — link the email it amends first")
@@ -398,6 +421,18 @@ def apply_correction(email_id: int, conn=Depends(db_dep)):
         if target is None or not target.get("amend_sql"):
             raise HTTPException(status_code=400,
                                 detail=f"'{em['classification']}' rows can't be auto-corrected")
+        # AUTHZ-15: a correction may only rewrite a filed row that belongs to the
+        # same tournament as the correction email itself.
+        cur.execute(
+            "SELECT tournament_id FROM email_message WHERE id = %s",
+            (em["amends_email_id"],),
+        )
+        amended = cur.fetchone()
+        if amended is None or amended["tournament_id"] != em["tournament_id"]:
+            raise HTTPException(
+                status_code=409,
+                detail="the amended email belongs to a different tournament",
+            )
         extras = [_EXTRACTORS[name](em) for name in target.get("extract", [])]
         cur.execute(target["amend_sql"], (em["id"], *extras, em["amends_email_id"]))
         row = cur.fetchone()
@@ -453,7 +488,7 @@ def suggest_classification(email_id: int, conn=Depends(db_dep)):
 
 
 @router.post("/clear")
-def clear_inbox(tournament_id: int, conn=Depends(db_dep)):
+def clear_inbox(tournament_id: int, user=Depends(require_admin), conn=Depends(db_dep)):
     """Hide CourtOps copies for one tournament (soft-delete).
 
     Sets ``deleted_at`` on ``email_message`` rows. Does not DELETE them, and
@@ -476,6 +511,12 @@ def clear_inbox(tournament_id: int, conn=Depends(db_dep)):
             """,
             (tournament_id,),
         )
+        # AUTHZ-09: hiding a tournament's mail is a destructive, attributable act.
+        log_access(
+            cur, username=user["username"], action="clear_inbox",
+            resource_type="email_message", tournament_id=tournament_id,
+            detail={"deleted": cur.rowcount},
+        )
         return {"deleted": cur.rowcount}
 
 
@@ -491,7 +532,8 @@ def delete_email(email_id: int, conn=Depends(db_dep)):
 # ---------- Retention (PII hardening H3) -----------------------------------
 
 @router.post("/purge")
-def purge_filed_bodies(older_than_days: int = 30, conn=Depends(db_dep)):
+def purge_filed_bodies(older_than_days: int = 30, user=Depends(require_admin),
+                       conn=Depends(db_dep)):
     """Redact the free-text PII of FILED emails older than `older_than_days`:
     null body / subject / from_address while keeping the provenance row
     (message_id, classification, detected-player link, status) so the audit
@@ -513,7 +555,15 @@ def purge_filed_bodies(older_than_days: int = 30, conn=Depends(db_dep)):
             "RETURNING id",
             (older_than_days,),
         )
-        return {"purged": len(cur.fetchall())}
+        purged = len(cur.fetchall())
+        # AUTHZ-09: a database-wide redaction with a zero-day window must leave
+        # an attributable record; it used to leave none.
+        log_access(
+            cur, username=user["username"], action="purge_email_bodies",
+            resource_type="email_message",
+            detail={"older_than_days": older_than_days, "purged": purged},
+        )
+        return {"purged": purged}
 
 @router.post("/{email_id}/detect-player", response_model=EmailDetectResult)
 def detect_one_player(email_id: int, conn=Depends(db_dep)):

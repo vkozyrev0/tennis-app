@@ -4,7 +4,7 @@ pairing avoidance, player hotel, scheduling avoidance, division flex
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from ._models_common import EmailStatus, Gender
 
@@ -34,9 +34,23 @@ class EmailUpdate(BaseModel):
     # NULL clears the link to a player; a real id assigns it. Set by the
     # auto-detection endpoint or the manual override picker in the detail pane.
     detected_player_id: Optional[int] = None
-    # Second slot (doubles partner) — manually assignable from the inbox grid
+    # Second slot (doubles partner) - manually assignable from the inbox grid
     # when detection can't resolve it. Omitting it clears (same as player).
     detected_partner_id: Optional[int] = None
+
+    @field_validator("classification")
+    @classmethod
+    def _known_classification(cls, v: str) -> str:
+        """AUTHZ-05: the store is what the filing fan-out dispatches on, so it
+        must be one of the server's classifications, not free text the client
+        invented (an unknown label would pick a target table by client choice)."""
+        from .email_targets import FILEABLE_KEYS
+
+        label = (v or "").strip()
+        allowed = set(FILEABLE_KEYS) | {"other", "unclassified"}
+        if label not in allowed:
+            raise ValueError(f"unknown classification {label!r}")
+        return label
 
 
 class EmailOut(BaseModel):

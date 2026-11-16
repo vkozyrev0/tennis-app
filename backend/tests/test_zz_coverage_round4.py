@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 import psycopg
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from fastapi.testclient import TestClient
 
 from app import assignment_ops, email_extract, security
@@ -60,6 +60,7 @@ def test_my_official_id_dep_and_change_password_missing():
         with pytest.raises(HTTPException) as ei:
             change_password(
                 PasswordChange(current_password="admin", new_password="newpass12"),
+                Response(),
                 sid="no-such",
                 user={"id": 9_666_001},
                 conn=conn,

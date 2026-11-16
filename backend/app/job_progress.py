@@ -48,7 +48,8 @@ def _clean(now: float) -> None:
         _jobs.pop(k, None)
 
 
-def new_job(kind: str, *, tournament_id: int | None = None, window=None) -> str:
+def new_job(kind: str, *, tournament_id: int | None = None, window=None,
+            created_by: str | None = None) -> str:
     """Register a running job and return its token."""
     global _next_id
     with _lock:
@@ -59,6 +60,7 @@ def new_job(kind: str, *, tournament_id: int | None = None, window=None) -> str:
         _jobs[token] = {
             "token": token,
             "kind": kind,
+            "created_by": created_by,
             "tournament_id": tournament_id,
             "window": list(window) if window else None,
             "state": _RUNNING,
@@ -187,6 +189,9 @@ def snapshot(job: dict) -> dict:
     return {
         "token": job["token"],
         "kind": job["kind"],
+        # AUTHZ-20: the router's ownership check reads this field; it has to be
+        # in the wire shape or the check silently passes for every admin.
+        "created_by": job.get("created_by"),
         "state": state,
         "stage": job["stage"],
         "reading": {

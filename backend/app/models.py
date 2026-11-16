@@ -20,6 +20,7 @@ from ._models_auth import (  # noqa: F401
     AdminUserOut,
     AdminUserPatch,
     LoginIn,
+    OfficialAccountPut,
     PasswordChange,
     PasswordReset,
 )

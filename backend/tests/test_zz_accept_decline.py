@@ -42,7 +42,7 @@ def _official_with_login():
 def _assign(oid):
     t = _ok(client.post("/api/tournaments", json={
         "name": "T " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+        "play_start_date": "2027-06-01", "play_end_date": "2027-06-04"}))
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": oid}))
     _ok(client.post(f"/api/assignments/{a['id']}/days",
                     json={"work_date": "2026-06-02", "working_as": "roving_official"}))
@@ -93,7 +93,7 @@ def test_report_totals_count_declines_and_pending():
     o2, _ = _official_with_login()
     t = _ok(client.post("/api/tournaments", json={
         "name": "T " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+        "play_start_date": "2027-06-01", "play_end_date": "2027-06-04"}))
     a1 = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o1["id"]}))
     a2 = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": o2["id"]}))
     for a in (a1, a2):

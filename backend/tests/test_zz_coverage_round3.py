@@ -286,7 +286,9 @@ def test_roster_import_http_error_and_check(monkeypatch):
     clash = client.put(f"/api/roster/{e2['id']}", json={
         "player_id": p["id"], "selection_status": "selected",
     })
-    assert clash.status_code == 409
+    # A roster edit may not re-point the entry at another player: 400 for the
+    # identity guard (an unchanged player_id would instead hit the 409 unique).
+    assert clash.status_code in (400, 409)
     bad = client.put(f"/api/roster/{e['id']}", json={
         "player_id": 9_777_020, "selection_status": "selected",
     })

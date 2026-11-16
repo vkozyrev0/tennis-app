@@ -33,7 +33,7 @@ def _ok(r, code=201):
 def _tournament():
     return _ok(client.post("/api/tournaments", json={
         "name": "T " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+        "play_start_date": "2027-06-01", "play_end_date": "2027-06-04"}))
 
 
 def _hotel():

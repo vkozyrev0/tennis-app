@@ -1,13 +1,14 @@
 import re
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from ..access_audit import log_access
 from ..db import db_dep
 from ..ical import build_schedule_ics
-from ..models import AccountCreate, OfficialCreate, OfficialOut
+from ..models import OfficialAccountPut, OfficialCreate, OfficialOut
 from ..query_helpers import like_escape, paged_select
-from ..security import hash_pw
+from ..security import check_password_policy, get_current_user, hash_pw, verify_pw
 
 router = APIRouter(prefix="/api/officials", tags=["officials"])
 
@@ -166,8 +167,14 @@ def delete_official(official_id: int, conn=Depends(db_dep)):
 
 
 @router.put("/{official_id}/account", status_code=200)
-def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_dep)):
-    """Admin: create or reset the login for an official (role=official)."""
+def set_official_account(official_id: int, body: OfficialAccountPut, request: Request,
+                         me=Depends(get_current_user), conn=Depends(db_dep)):
+    """Admin: create or reset the login for an official (role=official).
+
+    AUTH-09: replacing an existing credential is an impersonation primitive, so a
+    *reset* needs the caller to prove its own password; creating a first login
+    does not. The change is audited, and one official keeps one login.
+    """
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM official WHERE id = %s", (official_id,))
         if cur.fetchone() is None:
@@ -185,6 +192,29 @@ def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_
                          or (existing["official_id"] is not None
                              and existing["official_id"] != official_id)):
             raise HTTPException(status_code=409, detail="username already in use")
+        # One login per official: a second username must not silently shadow the
+        # first (it would leave two credentials for one person).
+        cur.execute(
+            "SELECT username FROM user_account WHERE official_id = %s AND username <> %s",
+            (official_id, body.username),
+        )
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="this official already has a login — reset that username instead",
+            )
+        if existing:
+            # Resetting a live credential: prove the caller's own password.
+            if not body.current_password:
+                raise HTTPException(
+                    status_code=400,
+                    detail="current_password is required to reset an official's password",
+                )
+            cur.execute("SELECT password_hash FROM user_account WHERE id = %s", (me["id"],))
+            caller = cur.fetchone()
+            if caller is None or not verify_pw(body.current_password, caller["password_hash"]):
+                raise HTTPException(status_code=403, detail="current password is incorrect")
+        check_password_policy(body.password)
         try:
             cur.execute(
                 """
@@ -203,4 +233,10 @@ def set_official_account(official_id: int, body: AccountCreate, conn=Depends(db_
         # Setting/resetting the login invalidates any existing sessions for that
         # account, so a credential change forces a fresh login (audit follow-up).
         cur.execute("DELETE FROM session WHERE user_id = %s", (row["id"],))
+        log_access(
+            cur, username=me["username"],
+            action="reset_password" if existing else "create",
+            resource_type="official_account", resource_id=row["id"],
+            detail={"official_id": official_id},
+        )
     return {"id": row["id"], "username": row["username"], "official_id": official_id}

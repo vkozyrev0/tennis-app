@@ -86,20 +86,21 @@ def test_retention_days_bad_env_falls_back():
 
 
 def test_secure_cookie_defaults_on_in_prod(monkeypatch):
-    """B1: Secure cookie auto-on when ENV is shared/hosted; override still works."""
+    """Secure by default (third pass): only an explicit opt-out allows a plain
+    HTTP cookie, and the override still wins in both directions."""
     from app.routers import auth as auth_mod
 
     monkeypatch.delenv("COURTOPS_SECURE_COOKIE", raising=False)
     monkeypatch.setenv("ENV", "prod")
     assert auth_mod._secure_cookie() is True
     monkeypatch.setenv("ENV", "dev")
-    assert auth_mod._secure_cookie() is False
-    monkeypatch.setenv("COURTOPS_SECURE_COOKIE", "1")
-    monkeypatch.setenv("ENV", "dev")
+    # Dev no longer relaxes it: the unsafe case has to be asked for.
     assert auth_mod._secure_cookie() is True
     monkeypatch.setenv("COURTOPS_SECURE_COOKIE", "0")
-    monkeypatch.setenv("ENV", "prod")
     assert auth_mod._secure_cookie() is False
+    monkeypatch.setenv("COURTOPS_SECURE_COOKIE", "1")
+    monkeypatch.setenv("ENV", "prod")
+    assert auth_mod._secure_cookie() is True
 
 
 def test_session_ttl_clamped(monkeypatch):
@@ -122,13 +123,20 @@ def test_session_ttl_clamped(monkeypatch):
 
 
 def test_password_change_required_enforcement(monkeypatch):
-    """D3: must_change_password only blocks API when ENV=prod (or force flag)."""
+    """Rotation is enforced unless the deployment explicitly opts into demo
+    credentials; the force flag still overrides both ways (review 2026-11-15)."""
     from app.security import password_change_required
 
     u = {"must_change_password": True}
     monkeypatch.delenv("COURTOPS_FORCE_PASSWORD_CHANGE", raising=False)
+    monkeypatch.delenv("COURTOPS_ALLOW_DEMO_CREDENTIALS", raising=False)
     monkeypatch.setenv("ENV", "dev")
+    # No demo opt-in -> enforced even in dev.
+    assert password_change_required(u) is True
+    # Explicit demo deployment -> the seeded fixture may keep working.
+    monkeypatch.setenv("COURTOPS_ALLOW_DEMO_CREDENTIALS", "1")
     assert password_change_required(u) is False
+    monkeypatch.delenv("COURTOPS_ALLOW_DEMO_CREDENTIALS", raising=False)
     monkeypatch.setenv("ENV", "prod")
     assert password_change_required(u) is True
     monkeypatch.setenv("COURTOPS_FORCE_PASSWORD_CHANGE", "0")

@@ -22,7 +22,7 @@ def missing_distances(tournament_id: int, conn=Depends(db_dep)):
     all from one place instead of card-by-card. Assignments with no site are
     skipped (mileage needs a venue)."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT id FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
@@ -55,7 +55,7 @@ def officials_without_login(tournament_id: int, conn=Depends(db_dep)):
     TD can create logins. Includes whether an email is on file (needed to send
     credentials) and their current response status."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT id FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
@@ -84,7 +84,7 @@ def dietary_summary(tournament_id: int, conn=Depends(db_dep)):
     the names for each, plus how many have none. Declined officials are excluded
     (they aren't being fed). Hand the counts to catering."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT id, name FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         t = cur.fetchone()
         if t is None:
             raise HTTPException(status_code=404, detail="tournament not found")
@@ -132,7 +132,7 @@ def day_schedule(tournament_id: int, conn=Depends(db_dep)):
     from datetime import timedelta
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT id, name, play_start_date, play_end_date FROM tournament WHERE id = %s",
+            "SELECT id, name, play_start_date, play_end_date FROM tournament WHERE id = %s AND deleted_at IS NULL",
             (tournament_id,),
         )
         t = cur.fetchone()
@@ -180,7 +180,7 @@ def rooming_list(tournament_id: int, conn=Depends(db_dep)):
     dietary restrictions). Declined assignments are excluded (their room is freed).
     Feeds the printable + CSV rooming-list export."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM tournament WHERE id = %s", (tournament_id,))
+        cur.execute("SELECT id, name FROM tournament WHERE id = %s AND deleted_at IS NULL", (tournament_id,))
         t = cur.fetchone()
         if t is None:
             raise HTTPException(status_code=404, detail="tournament not found")
@@ -243,7 +243,7 @@ def officials_report(tournament_id: int, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, name, type, play_start_date, play_end_date "
-            "FROM tournament WHERE id = %s",
+            "FROM tournament WHERE id = %s AND deleted_at IS NULL",
             (tournament_id,),
         )
         t = cur.fetchone()

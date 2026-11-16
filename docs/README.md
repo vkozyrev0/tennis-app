@@ -42,6 +42,8 @@ the public host uses a non-default `ADMIN_PASSWORD`.
 | 17 | [import-export-notes.md](import-export-notes.md) | Import/export audit notes and the reuse checklist. |
 | 18 | [import-page-redesign.md](import-page-redesign.md) | Import page redesign notes. |
 | 19 | [performance-notes.md](performance-notes.md) | Performance findings and measurements. |
+| 20 | [security-review-2026-11-15.md](security-review-2026-11-15.md) | External pentest (Shannon) of the local stack: 26 findings, fixes, accepted risk. |
+| 21 | [shannon.md](shannon.md) | The external pentester itself: install, the read-write mount patch and why, upgrade runbook. |
 
 Backend suite **1105** tests / **118** files (migrations through **0061**); see
 [test-coverage.md](test-coverage.md). Frontend ESM slices live under `frontend/app/`

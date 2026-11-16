@@ -60,7 +60,7 @@ def bulk_reassign(body: EmailBulkReassign, conn=Depends(db_dep)):
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(
-            "UPDATE email_message SET tournament_id = %s WHERE id = ANY(%s)",
+            "UPDATE email_message SET tournament_id = %s WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.tournament_id, body.email_ids),
         )
         return {"updated": cur.rowcount}
@@ -96,7 +96,7 @@ def bulk_status(body: EmailBulkStatus, conn=Depends(db_dep)):
                 raise HTTPException(status_code=400, detail=FILE_NEEDS_PLAYER_REASON)
             ids = keep
         cur.execute(
-            "UPDATE email_message SET status = %s WHERE id = ANY(%s)",
+            "UPDATE email_message SET status = %s WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.status, ids),
         )
         return {"updated": cur.rowcount, "skipped": skipped}
@@ -110,7 +110,7 @@ def bulk_detect_players(body: EmailBulkDetect, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, tournament_id, subject, body, from_address, classification "
-            "FROM email_message WHERE id = ANY(%s)",
+            "FROM email_message WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.email_ids,),
         )
         for em in cur.fetchall():
@@ -149,7 +149,7 @@ def bulk_confirm_suggestions(body: EmailBulkDetect, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, tournament_id, subject, body, from_address, classification "
-            "FROM email_message WHERE id = ANY(%s)",
+            "FROM email_message WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.email_ids,),
         )
         for em in cur.fetchall():
@@ -255,7 +255,7 @@ def bulk_classify(body: EmailBulkClassify, conn=Depends(db_dep)):
     # classified by the heuristic.
     with pass_budget() as budget, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, subject, body, classification FROM email_message WHERE id = ANY(%s)",
+            "SELECT id, subject, body, classification FROM email_message WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.email_ids,),
         )
         rows = cur.fetchall()
@@ -300,7 +300,7 @@ def bulk_populate(body: EmailBulkPopulate, conn=Depends(db_dep)):
     with conn.cursor() as cur:
         cur.execute(
             "SELECT id, tournament_id, classification, status, detected_player_id, subject, body "
-            "FROM email_message WHERE id = ANY(%s)",
+            "FROM email_message WHERE id = ANY(%s) AND deleted_at IS NULL",
             (body.email_ids,),
         )
         rows = cur.fetchall()

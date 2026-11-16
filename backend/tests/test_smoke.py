@@ -1569,7 +1569,9 @@ def test_account_reset_invalidates_sessions():
     off = TestClient(app)
     assert off.post("/api/auth/login", json={"username": uname, "password": "pw1"}).status_code == 200
     assert off.get("/api/me").status_code == 200
-    # admin resets the login -> the official's existing session is invalidated
+    # admin resets the login -> the official's existing session is invalidated.
+    # AUTH-09: a reset of an existing official login needs the caller's password.
     assert client.put(f"/api/officials/{o['id']}/account",
-                      json={"username": uname, "password": "pw2"}).status_code == 200
+                      json={"username": uname, "password": "pw2",
+                            "current_password": "admin"}).status_code == 200
     assert off.get("/api/me").status_code == 401

@@ -75,6 +75,7 @@ export function createTdChatPanel(ctx) {
   }
 
   let _lastProposed = [];
+  let _planToken = null;
 
   async function send() {
     const input = document.getElementById("td-chat-input");
@@ -108,6 +109,7 @@ export function createTdChatPanel(ctx) {
       _log("assistant", lines.join("\n"));
       const applied = applyTurnResult(r);
       _lastProposed = applied.executePayload;
+      _planToken = r.confirm_token || null;
       const bar = document.getElementById("td-chat-confirm-bar");
       if (bar) bar.hidden = !applied.showConfirm;
     } catch (e) {
@@ -133,7 +135,8 @@ export function createTdChatPanel(ctx) {
     try {
       const r = await api("/td-chat/execute", {
         method: "POST",
-        body: JSON.stringify({ calls: _lastProposed, confirm: true, tournament_id: tid || null }),
+        body: JSON.stringify({ calls: _lastProposed, confirm: true,
+          tournament_id: tid || null, confirm_token: _planToken }),
       });
       _log("assistant", r.applied ? "Applied." : "Not applied.");
       const bar = document.getElementById("td-chat-confirm-bar");

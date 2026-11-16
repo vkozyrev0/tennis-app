@@ -43,7 +43,7 @@ def _official_with_login():
 def _assign(oid, days=("2026-06-02", "2026-06-03")):
     t = _ok(client.post("/api/tournaments", json={
         "name": "Ical T " + uuid.uuid4().hex[:6], "type": "junior",
-        "play_start_date": "2026-06-01", "play_end_date": "2026-06-04"}))
+        "play_start_date": "2027-06-01", "play_end_date": "2027-06-04"}))
     a = _ok(client.post(f"/api/tournaments/{t['id']}/assignments", json={"official_id": oid}))
     for d in days:
         _ok(client.post(f"/api/assignments/{a['id']}/days",

@@ -224,7 +224,10 @@ def test_execute_http_re_resolves_and_ignores_client_mutating_flag():
     names = {p["usta_number"] for p in client.get(f"/api/tournaments/{tid}/players").json()}
     assert usta not in names
 
-    applied = client.post("/api/td-chat/execute", json={**spoof, "confirm": True})
+    applied = client.post("/api/td-chat/execute", json={
+        **spoof, "confirm": True,
+        "confirm_token": held.json().get("confirm_token"),
+    })
     assert applied.status_code == 200, applied.text
     assert applied.json()["applied"] is True
     assert applied.json()["executed"][0]["status"] in (200, 201)

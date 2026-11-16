@@ -19,6 +19,9 @@ class ChatExecuteIn(BaseModel):
     calls: list[dict]
     confirm: bool = False
     tournament_id: int | None = None
+    # AUTHZ-10: token minted for these exact calls by /turn (or a prior
+    # confirm=false execute). Required when confirm=true and the calls mutate.
+    confirm_token: str | None = None
 
 
 @router.get("/catalog")
@@ -39,7 +42,6 @@ def verdict():
 
 @router.post("/turn")
 def chat_turn(body: ChatTurnIn, user=Depends(require_admin), conn=Depends(db_dep)):
-    del user
     from ..main import app
     message = (body.message or "").strip()
     if not message:
@@ -114,27 +116,38 @@ def chat_turn(body: ChatTurnIn, user=Depends(require_admin), conn=Depends(db_dep
     )
     if not raw and llm != "ok" and not executed and not writes:
         reply = plan["say"]
-    return {
+    needs_confirm = any(
+        w.get("tool") == "add_player"
+        or (w.get("tool") == "remove_player" and (w.get("args") or {}).get("entry_id"))
+        for w in writes
+    )
+    out = {
         "reply": reply,
         "raw": raw[:2000],
         "proposed": writes,
         "unknown_tools": [],
         "executed": executed,
         "llm": llm,
-        "needs_confirm": any(
-            w.get("tool") == "add_player"
-            or (w.get("tool") == "remove_player" and (w.get("args") or {}).get("entry_id"))
-            for w in writes
-        ),
+        "needs_confirm": needs_confirm,
         "verdict": td_chat.TD_CHAT_VERDICT,
     }
+    if writes:
+        # AUTHZ-10: mint the approval token here, where the server decided the
+        # plan. The UI echoes it back with the same calls when the TD confirms.
+        from .. import confirm_plans
+
+        out["confirm_token"] = confirm_plans.mint(
+            user["username"], body.tournament_id,
+            [{"tool": w.get("tool"), "args": w.get("args") or {}} for w in writes],
+        )
+    return out
 
 
 @router.post("/execute")
 def chat_execute(body: ChatExecuteIn, request: Request,
                  user=Depends(require_admin), conn=Depends(db_dep)):
     """Re-resolve every call on the server (ignore client method/path/mutating)."""
-    del user, request
+    del request
     resolved = []
     for c in body.calls or []:
         tool = (c.get("tool") or "").strip()
@@ -145,8 +158,29 @@ def chat_execute(body: ChatExecuteIn, request: Request,
             tool, args, tournament_id=body.tournament_id,
         ))
     mutating = [c for c in resolved if c.get("mutating")]
-    executed = _run_handlers(conn, resolved, confirm=body.confirm)
-    return {"executed": executed, "applied": bool(body.confirm or not mutating)}
+    if mutating and body.confirm:
+        # AUTHZ-10: the approval must be a server-side record minted for these
+        # exact calls by this user, not a boolean the caller asserts.
+        from .. import confirm_plans
+
+        if not confirm_plans.consume(
+            body.confirm_token, user["username"], body.tournament_id, body.calls
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="plan not confirmed — request it first (confirm=false), then send "
+                       "the returned confirm_token with the same calls",
+            )
+    executed = _run_handlers(conn, resolved, confirm=body.confirm,
+                             tournament_id=body.tournament_id)
+    out = {"executed": executed, "applied": bool(body.confirm or not mutating)}
+    if mutating and not body.confirm:
+        from .. import confirm_plans
+
+        out["confirm_token"] = confirm_plans.mint(
+            user["username"], body.tournament_id, body.calls
+        )
+    return out
 
 
 def _summarize_result(row: dict) -> str:
@@ -168,7 +202,8 @@ def _summarize_result(row: dict) -> str:
     return f"{tool}: ok"
 
 
-def _run_handlers(conn, resolved: list[dict], *, confirm: bool) -> list[dict]:
+def _run_handlers(conn, resolved: list[dict], *, confirm: bool,
+                  tournament_id: int | None = None) -> list[dict]:
     from fastapi import Response as _Resp
 
     from .._models_workspace import RosterEntryCreate
@@ -197,6 +232,22 @@ def _run_handlers(conn, resolved: list[dict], *, confirm: bool) -> list[dict]:
                 out.append({**c, "status": 201, "result": payload})
             elif method == "DELETE" and path.startswith("/api/roster/"):
                 eid = int(path.rsplit("/", 1)[-1])
+                # AUTHZ-10: the plan must act inside the tournament the caller
+                # named. A missing tournament_id must not skip the check.
+                if tournament_id is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="tournament_id is required to execute a plan",
+                    )
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT tournament_id FROM tournament_entry WHERE id = %s",
+                        (eid,),
+                    )
+                    entry = cur.fetchone()
+                if entry is None or entry["tournament_id"] != tournament_id:
+                    raise HTTPException(status_code=404,
+                                        detail="roster entry not found in this tournament")
                 delete_roster_entry(eid, conn)
                 out.append({**c, "status": 204, "result": None})
             else:
