@@ -237,7 +237,7 @@ def finalize_all(tournament_id: int, user=Depends(require_admin), conn=Depends(d
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="tournament not found")
         cur.execute(_ASG_SELECT + " WHERE a.tournament_id = %s "
-                    "AND a.response_status <> 'declined' "
+                    "AND a.response_status = 'accepted' "
                     "AND NOT EXISTS (SELECT 1 FROM payroll_record r "
                     "                WHERE r.assignment_id = a.id) "
                     "ORDER BY o.last_name", (tournament_id,))

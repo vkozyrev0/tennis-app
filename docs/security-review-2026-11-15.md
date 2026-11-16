@@ -117,10 +117,25 @@ them would change how the tool is meant to be used:
 - **Export attestation trusts a client-chosen resource label** (`AUTHZ-10`).
   Unknown labels already fail closed; the rest is an attestation, not
   enforcement.
-- **Roster / player-overview dietary and lodging notes** (`AUTHZ-15`),
-  **withdrawal and late-entry free text** (`AUTHZ-16`), and **single-finalize
-  allowing `pending`** (`AUTHZ-17`) remain as reported; each is a small
-  follow-up rather than a design problem.
+- **Roster / player-overview dietary and lodging notes**, **withdrawal and
+  late-entry free text**, and **single-finalize allowing `pending`** were
+  follow-ups from the third pass. They are fixed in the follow-up commit below.
+
+## Follow-ups closed after the third pass
+
+The third pass left seven code-level findings open. They are fixed in
+`security/remaining-findings`, each with a test that fails on the pre-fix code
+(`backend/tests/test_zz_pentest_followups.py`):
+
+| Item | Guard |
+| --- | --- |
+| Roster, alternates and Player 360 leaked dietary / lodging | `ROSTER_PII_FIELDS` redacted in all three read paths, including the request tabs |
+| Withdrawal and late-entry lists leaked the source subject and parsed reason | `FILED_TEXT_PII_FIELDS` redacted on both lists |
+| Deleting an assignment orphaned its payroll record | 409 while a `payroll_record` exists; unfinalize first |
+| Single finalize froze pay for a pending or trashed tournament | Requires `accepted` (or explicit `override=true`), and a live tournament; the bulk sweep only finalizes accepted rows |
+| Peer admin hard-delete with no password proof | `current_password` required outside a demo deployment, throttled like the reset path |
+| Purge and retention were database-wide with no preview | Dry run by default, a write must name one scope, and a non-demo write needs the caller's password; the scope lands in the audit row |
+| Inbox hard-delete left no trace and filing could stamp another tournament's email | Filed emails are 409 on delete, deletes are audited, roster entry writes probe the tournament's `deleted_at`, and `mark_email_filed` asserts the target tournament |
 
 ## Residual risk / not claimed
 
